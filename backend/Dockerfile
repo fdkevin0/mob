@@ -31,6 +31,12 @@ RUN rm -rf mob_backend/gen && mkdir -p mob_backend/gen \
 ENV MOB_PORT=50051
 EXPOSE 50051
 
+# OpenCode gateway (Seam 2, ADR 0002) is configured at run time, not build time:
+#   OPENCODE_BASE_URL   OpenAI-compatible endpoint of the OpenCode gateway
+#   OPENCODE_API_KEY    handed in out of band (macOS Keychain), never persisted
+#   MOB_MODEL_T1..T4    optional per-tier model overrides (else ADR 0002 defaults)
+# The macOS supervisor injects these when it starts the container.
+
 # Health check via the standard grpc.health.v1 service.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD python -m mob_backend.healthcheck || exit 1

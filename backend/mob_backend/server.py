@@ -15,10 +15,18 @@ from .servicer import DeliberationServicer
 DEFAULT_PORT = 50051
 
 
-def build_server(port: int = DEFAULT_PORT) -> tuple[grpc.Server, int]:
-    """Build (but do not start) the gRPC server. Returns (server, bound_port)."""
+def build_server(
+    port: int = DEFAULT_PORT, gateway=None
+) -> tuple[grpc.Server, int]:
+    """Build (but do not start) the gRPC server. Returns (server, bound_port).
+
+    `gateway` overrides the model gateway (Seam 2); tests pass a deterministic
+    stub. Left None, the servicer uses the real OpenCode-backed gateway.
+    """
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
-    pb_grpc.add_DeliberationServicer_to_server(DeliberationServicer(), server)
+    pb_grpc.add_DeliberationServicer_to_server(
+        DeliberationServicer(gateway=gateway), server
+    )
 
     # Standard gRPC health service so the app can health-check the container.
     health_servicer = health.HealthServicer()
