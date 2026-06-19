@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package mob.v1;
+
+// The single cross-component interface for Mob (PRD #1).
+//
+// One bidirectional-streaming RPC carries an entire deliberation: the client
+// opens the stream with a StartDeliberation, then may send SteeringInput at any
+// time; the server streams DeliberationEvents (token deltas, speaker changes,
+// status transitions, and a terminal synthesis) until the deliberation ends.
+service Deliberation {
+  rpc Deliberate(stream ClientMessage) returns (stream DeliberationEvent);
+}
+
+// The moderator/orchestrator is addressable as a persona through the same
+// SpeakerChanged/TokenDelta channel as real personas, using this reserved id.
+// (Kept as a constant rather than an enum so it travels in the same string
+// persona_id field as authored personas.)
+//
+//   reserved persona_id = "__moderator__"
+
+// Task tiers (ADR 0002). The app references tiers, never concrete model names.
+enum TaskTier {
+  TASK_TIER_UNSPECIFIED = 0;
+  TASK_TIER_T1_FLAGSHIP = 1; // synthesis
+  TASK_TIER_T2_HIGH = 2;     // orchestrator / moderator
+  TASK_TIER_T3_STANDARD = 3; // persona debate turns (default)
+  TASK_TIER_T4_FAST = 4;     // utility
+}
+
+// Deliberation state machine (PRD #1). `steering` is modeled as a sub-state of
+// debating so the stream never stalls; `error` is reachable from any state.
+enum DeliberationStatus {
+  DELIBERATION_STATUS_UNSPECIFIED = 0;
+  DELIBERATION_STATUS_ASSEMBLING = 1;
+  DELIBERATION_STATUS_DEBATING = 2;
+  DELIBERATION_STATUS_STEERING = 3;
+  DELIBERATION_STATUS_SYNTHESIZING = 4;
+  DELIBERATION_STATUS_DONE = 5;
+  DELIBERATION_STATUS_ERROR = 6;
+}
+
+// A persona as shipped to the stateless backend on each deliberation. The app
+// owns the durable copy in SwiftData; the backend persists nothing.
+message Persona {
+  string id = 1;
+  string name = 2;
+  repeated string traits = 3;
+  string system_prompt = 4;
+  TaskTier tier = 5; // defaults to T3 when unspecified
+}
+
+// Run configuration for one deliberation.
+message RunConfig {
+  uint32 round_cap = 1;            // hard ceiling on rounds; 0 means backend default
+  string convergence_hint = 2;     // optional free-text nudge for the moderator
+}
+
+// --- Client -> Server ---------------------------------------------------------
+
+message ClientMessage {
+  oneof message {
+    StartDeliberation start = 1;
+    SteeringInput steering = 2;
+  }
+}
+
+// Must be the first message on the stream.
+message StartDeliberation {
+  repeated Persona cast = 1;
+  string problem = 2;
+  RunConfig config = 3;
+}
+
+// May be sent at any time after start. Best-effort, applied at the next safe
+// token boundary (PRD #1).
+message SteeringInput {
+  oneof input {
+    Interject interject = 1;
+    CallOn call_on = 2;
+    CutOff cut_off = 3;
+    EndDeliberation end = 4;
+  }
+}
+
+message Interject {
+  string text = 1;
+}
+
+message CallOn {
+  string persona_id = 1;
+}
+
+message CutOff {}
+
+message EndDeliberation {}
+
+// --- Server -> Client ---------------------------------------------------------
+
+message DeliberationEvent {
+  oneof event {
+    TokenDelta token_delta = 1;
+    SpeakerChanged speaker_changed = 2;
+    StatusChanged status_changed = 3;
+    Synthesis synthesis = 4;
+    Error error = 5;
+  }
+}
+
+// Incremental tokens for the current speaker.
+message TokenDelta {
+  string persona_id = 1;
+  string text = 2;
+}
+
+// A new persona (or the moderator) holds the floor.
+message SpeakerChanged {
+  string persona_id = 1;
+}
+
+// Carries the current state-machine state so the client mirrors it directly.
+message StatusChanged {
+  DeliberationStatus status = 1;
+}
+
+// Terminal structured synthesis. Its prose also streams as TokenDelta from the
+// moderator persona_id; this message carries the final structured parts.
+message Synthesis {
+  string recommendation = 1;
+  repeated string tensions = 2;
+  repeated string dissents = 3;
+}
+
+// Recoverable or terminal error; the stream may close after.
+message Error {
+  string code = 1;
+  string message = 2;
+}

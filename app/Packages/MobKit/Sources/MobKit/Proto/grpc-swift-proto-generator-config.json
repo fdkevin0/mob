@@ -1,0 +1,14 @@
+{
+  "generate": {
+    "clients": true,
+    "servers": true,
+    "messages": true
+  },
+  "generatedSource": {
+    "accessLevel": "public"
+  },
+  "protoc": {
+    "importPaths": ["."],
+    "executablePath": "/opt/homebrew/bin/protoc"
+  }
+}
