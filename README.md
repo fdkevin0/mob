@@ -25,7 +25,7 @@ the Settings Mini App, extracted from the private bot.
 | `src/features/email/{preview,auth}.ts`, `src/features/assets/types.ts`, `src/utils/{tool,hmac}.ts` | Shared helpers the Mini App imports (email preview rendering, SPF/DKIM/DMARC parsing, asset types) |
 | `src/core/env.ts` | Worker binding types |
 | `src/tests/` | Vitest suites for the modules above |
-| `docs/` | [Architecture overview](docs/architecture.md) and the [decision records](docs/adr/README.md) behind these modules |
+| `docs/` | [Documentation](docs/README.md): architecture overview, feature guides and decision records |
 
 ## Not included
 
@@ -35,9 +35,18 @@ These modules are imported but not published: `src/core/{bot,principal,cmd,callb
 
 ## Documentation
 
+Start at the [documentation index](docs/README.md).
+
 - [Architecture overview](docs/architecture.md): request flow, module map, limits
-- [Decision records](docs/adr/README.md): an index of the published ADRs, plus
-  the unpublished ones that code comments cite as `ADR-NNNN, unpublished`
+- Feature guides: [conversation agent](docs/features/conversation-agent.md),
+  [models](docs/features/models.md), [Telegram replies](docs/features/telegram-replies.md),
+  [tools](docs/features/tools.md), [code execution](docs/features/code-execution.md),
+  [memory](docs/features/memory.md), [scheduled turns](docs/features/scheduled-turns.md),
+  [deep tasks](docs/features/deep-tasks.md), [email triage](docs/features/email-triage.md),
+  [Settings Mini App](docs/features/mini-app.md), [debug traces and usage](docs/features/debugging-and-usage.md)
+- [Decision records](docs/adr/README.md): why things are built the way they are,
+  including the unpublished records that code comments cite as
+  `ADR-NNNN, unpublished`
 
 ## Build and test
 

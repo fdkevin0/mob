@@ -21,4 +21,4 @@ Chat Completions preserves the existing AI SDK streaming and tool loop.
 
 One model reduces configuration and compatibility paths; changing the provider
 or model now requires a code change. Native attachment storage and limits are
-recorded in the [architecture guide](../architecture.md#memory-and-assets).
+recorded in the [Conversation agent guide](../features/conversation-agent.md#attachments).

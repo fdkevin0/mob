@@ -21,5 +21,5 @@ Object avoids a second shared history store and custom retention machinery.
 
 Session APIs are experimental; check the installed Agents version when changing
 the integration. Node fakes do not verify SDK lifecycle or storage behavior.
-See [attachment limits](../architecture.md#memory-and-assets) and
+See [attachment limits](../features/conversation-agent.md#attachments) and
 [memory lifecycle](0038-layered-memory-auto-recall-and-fact-extraction.md).

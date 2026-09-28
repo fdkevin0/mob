@@ -21,5 +21,5 @@ Vectorize is eventually consistent, so immediate recall may miss a new fact.
 `fetch_url` requests Markdown directly and otherwise converts HTML with the
 chat's selected parser. This avoids requiring a browser-rendering service for
 ordinary URL reads. Parser behavior is described in the
-[architecture guide](../architecture.md#models-and-tools); tool APIs live in
+[Tools guide](../features/tools.md#fetch_url); tool APIs live in
 [the factory](../../src/features/agent/tools/index.ts).
