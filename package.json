@@ -1,0 +1,41 @@
+{
+  "name": "mob",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "AI core and Settings Mini App extracted from the Mob Telegram bot (reference code, not a standalone app).",
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.48",
+    "@cloudflare/sandbox": "^0.12.9",
+    "@mixmark-io/domino": "^2.2.0",
+    "@tma.js/init-data-node": "^2.0.8",
+    "agents": "^0.23.0",
+    "ai": "^7.0.99",
+    "croner": "^10.0.1",
+    "drizzle-orm": "^0.45.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "turndown": "^7.2.4",
+    "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "4.0.14",
+    "@cloudflare/workers-types": "^5.20260911.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.5.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/turndown": "^5.0.6",
+    "@vitejs/plugin-react": "^6.1.1",
+    "happy-dom": "^20.14.5",
+    "tailwindcss": "^4.3.3",
+    "telegram-bot-api-types": "^10.2.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  },
+  "scripts": {
+    "build": "vite build --config webapp/vite.config.ts",
+    "test:webapp": "tsc -p webapp && vitest run --config webapp/vitest.config.ts"
+  }
+}

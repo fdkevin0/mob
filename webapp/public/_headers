@@ -1,0 +1,8 @@
+# Mini App static response headers (docs/adr/0036).
+# Email iframe bodies inherit this CSP: allow inline CSS (style tags and
+# attributes, including the preview shim) and remote/data images, while the
+# iframe's empty sandbox blocks scripts, forms, and same-origin access.
+/*
+  content-security-policy: default-src 'none'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors https://web.telegram.org; img-src * data:
+  x-robots-tag: noindex
+  cache-control: private, no-store
