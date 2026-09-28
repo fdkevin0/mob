@@ -55,7 +55,7 @@ export class ChatSettings {
 		this.setRaw('debug', enabled ? '1' : '0');
 	}
 
-	// ── Language preference (docs/adr/0025) ────────────────────────────────────
+	// ── Language preference (ADR-0025, unpublished) ────────────────────────────────────
 	// `null` / blank → row deleted (chat uses default: mirror the user's language).
 
 	get language(): string | null {

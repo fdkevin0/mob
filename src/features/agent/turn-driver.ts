@@ -44,7 +44,7 @@ export interface TurnDriverDeps {
 	scheduledTurns: () => ScheduledTurns;
 	deepTaskLauncher: (chatId: number, userId: number) => DeepTaskLauncher;
 	bot: Bot;
-	/** The turn's initiating Principal (docs/adr/0031), injected so driver tests need no D1. */
+	/** The turn's initiating Principal (ADR-0031, unpublished), injected so driver tests need no D1. */
 	resolvePrincipal: (senderId: number, chatId: number) => Promise<Principal>;
 	recordUsage: (userId: number, kind: UsageKind, model: string, usage: UsageLike) => void;
 }
@@ -131,7 +131,7 @@ export async function runTurn(deps: TurnDriverDeps, input: TurnDriverInput): Pro
 	// new user turn, mapped to ModelMessages. The user message is appended to the
 	// Session only on a successful reply, so a failed turn leaves no orphan.
 	// The cached identity+scratchpad prompt, then — outside the freeze — the chat's
-	// Language preference (docs/adr/0025) so it is current every turn (no staleness if
+	// Language preference (ADR-0025, unpublished) so it is current every turn (no staleness if
 	// `/language` runs mid-conversation) while the cached prefix still hits the prompt
 	// cache. Unset → nothing appended; the identity's natural-mirror default stands.
 	const language = settings.language;

@@ -54,7 +54,7 @@ export interface BootstrapResponse {
 export type ReasoningEffort = AiReasoningEffort;
 
 export interface GlobalServiceDataResponse {
-	/** The email triage HTML→Markdown converter (docs/adr/0045). */
+	/** The email triage HTML→Markdown converter (ADR-0045, unpublished). */
 	emailHtmlParser: HtmlParserKind;
 }
 

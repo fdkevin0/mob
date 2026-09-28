@@ -36,7 +36,7 @@ export interface PreviewMeta {
 	from: string;
 	to: string;
 	date: string;
-	/** Inbound auth verdict (docs/adr/0009): drives the SPAM badge. */
+	/** Inbound auth verdict (ADR-0009, unpublished): drives the SPAM badge. */
 	spam: boolean;
 	/** Raw `Authentication-Results` header, parsed for the per-mechanism line. `null` on legacy rows. */
 	authResults: string | null;
@@ -62,7 +62,7 @@ export interface EmailPreviewData {
 	html: string | null;
 	text: string | null;
 	attachments: PreviewAttachmentSummary[];
-	/** True → the detail screen shows a SPAM badge (docs/adr/0009). */
+	/** True → the detail screen shows a SPAM badge (ADR-0009, unpublished). */
 	spam: boolean;
 	/** Per-mechanism auth verdicts for the detail screen; `null` on legacy rows with no stored header. */
 	auth: { spf: string | null; dkim: string | null; dmarc: string | null } | null;

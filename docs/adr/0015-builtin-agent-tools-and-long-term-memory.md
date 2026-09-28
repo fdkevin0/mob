@@ -1,5 +1,6 @@
 # 15. Built-in tools and chat-scoped semantic memory
 
+Date: not recorded (between ADR-0012, 2026-06-20, and ADR-0017, 2026-06-21)
 Status: Accepted
 
 Assemble built-in tools in one factory with injected dependencies, then pass the

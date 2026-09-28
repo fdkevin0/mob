@@ -44,7 +44,7 @@ async function authorizeMiniappRequest(request: Request, env: Env) {
 	const verified = await verifyInitData(env.TELEGRAM_API_TOKEN, body.initData);
 	if (!verified) return null;
 
-	// Private-chat convention (docs/adr/0031, `resolveAdminId`): a chat's id
+	// Private-chat convention (ADR-0031, unpublished; `resolveAdminId`): a chat's id
 	// equals the user's id. Group chats aren't reachable from the global Menu
 	// Button, so this is out of scope by construction (ADR-0036).
 	const principal = await resolvePrincipal(verified.userId, verified.userId, env);
@@ -138,7 +138,7 @@ async function handleChatMemoryTopKSet(auth: AuthorizedRequest): Promise<Respons
 async function handleLanguageSet(auth: AuthorizedRequest): Promise<Response> {
 	const { value } = auth.body;
 	if (typeof value !== 'string') return Response.json({ error: 'invalid value' }, { status: 400 });
-	// Free-form language instruction; blank, "reset", and "clear" unset it (docs/adr/0025).
+	// Free-form language instruction; blank, "reset", and "clear" unset it (ADR-0025, unpublished).
 	const trimmed = value.trim();
 	const stored = !trimmed || ['reset', 'clear'].includes(trimmed.toLowerCase()) ? null : trimmed;
 	await auth.agent.updateSettings({ language: stored });
@@ -172,7 +172,7 @@ async function handleScheduleCancel(auth: AuthorizedRequest): Promise<Response> 
 }
 
 /**
- * Manual "Sync commands" button in the Settings shell (docs/adr/0037): pushes
+ * Manual "Sync commands" button in the Settings shell (ADR-0037, unpublished): pushes
  * the current command registry to Telegram on demand, for when you don't want
  * to wait for the deploy-time auto-sync (`index.scheduled`). `admin_ops`-gated
  * (declared in `AUTHED_ROUTES`), matching the removed `/sync_commands` command's

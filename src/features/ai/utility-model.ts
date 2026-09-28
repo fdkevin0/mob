@@ -15,7 +15,7 @@ type UtilityGenerateResult = Awaited<ReturnType<typeof baseGenerateText>>;
  * `content-filter` means it refused. Empty for any other error type.
  *
  * The response text is reduced to a **length** — never logged — so an email
- * body can't reach the logs through a parse failure (docs/adr/0051).
+ * body can't reach the logs through a parse failure (ADR-0051, unpublished).
  */
 function structuredOutputFields(error: unknown, result?: UtilityGenerateResult): Record<string, unknown> {
 	const source = NoObjectGeneratedError.isInstance(error) ? error : NoOutputGeneratedError.isInstance(error) ? result : undefined;

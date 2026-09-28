@@ -14,5 +14,5 @@ credentials and inline image payloads are excluded. Size limits truncate large
 fields with markers rather than allowing an unbounded upload.
 
 The JSON document remains in Telegram after delivery. It is not a replacement
-for [operational logging](0051-native-workers-logging.md) or the compact
+for operational logging (ADR-0051, unpublished) or the compact
 [transcript](0021-transcript-reply-multi-message-agentic-turn.md).

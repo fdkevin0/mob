@@ -5,7 +5,7 @@
  * boundary** — the gated tool never executes in the requesting turn; approving
  * enqueues a new turn that executes the persisted argument snapshot. This module
  * is the pure heart plus the surface codecs/renderers and the **Callback family**
- * descriptor (docs/adr/0048) — its `act` is
+ * descriptor (ADR-0048, unpublished) — its `act` is
  * the only I/O this module does, run through the injected `CallbackCtx`.
  */
 import type * as Telegram from 'telegram-bot-api-types';

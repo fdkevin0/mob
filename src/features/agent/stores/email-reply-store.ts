@@ -8,7 +8,7 @@ const map = ({ id: _id, ...state }: typeof emailReply.$inferSelect): ReplyState 
 	status: state.status === 'drafted' ? 'drafted' : 'armed',
 });
 
-/** The pinned-row port over `email_reply` (docs/adr/0013): the **EmailReply module**'s single armed slot. */
+/** The pinned-row port over `email_reply` (ADR-0013, unpublished): the **EmailReply module**'s single armed slot. */
 export interface EmailReplyStore {
 	get(): ReplyState | null;
 	save(state: ReplyState): void;
@@ -17,7 +17,7 @@ export interface EmailReplyStore {
 
 /** @see conversation-agent.ts `emailReplyStore` */
 export function createEmailReplyStore(db: StoreDb): EmailReplyStore {
-	// At most one reply is armed per chat at a time (docs/adr/0009): a single
+	// At most one reply is armed per chat at a time (ADR-0009, unpublished): a single
 	// pinned row (id=1), replaced on each new refer, cleared on send/cancel.
 	return {
 		get: () => {

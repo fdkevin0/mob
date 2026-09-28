@@ -8,8 +8,8 @@ rather than executing snippets inside the Worker. A sandbox keyed by chat lets
 multi-step work reuse interpreter state, files, and installed packages while the
 container remains alive. Idle shutdown means this is not durable file storage.
 
-Use the published `-python` image, version-matched to the Sandbox package in
-[wrangler.toml](../../wrangler.toml). Referencing it directly avoids maintaining a
+Use the published `-python` image, version-matched to the Sandbox package in the
+Worker's `wrangler.toml` (not published). Referencing it directly avoids maintaining a
 custom image or a local Dockerfile build. Runtime package installation is slower
 and network-dependent. Tools return text; generated files and plots are not
 uploaded to Telegram.

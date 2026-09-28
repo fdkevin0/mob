@@ -765,7 +765,7 @@ export class ConversationAgent extends Agent<Env> {
 		this.toolApprovals().voidAll();
 	}
 
-	// ── Email tool: refer → draft → confirm → send (docs/adr/0009, 0013) ─────────
+	// ── Email tool: refer → draft → confirm → send (ADR-0009 and ADR-0013, unpublished) ─────────
 	//
 	// The state machine lives in the EmailReply module; the DO constructs it with
 	// injected deps, relays RPC, and owns the pinned `email_reply` SQL row.
@@ -808,7 +808,7 @@ export class ConversationAgent extends Agent<Env> {
 		await bot
 			.sendMessage({
 				chat_id: chatId,
-				// The plain `sendMessage` path keeps the real 4096 limit (docs/adr/0013).
+				// The plain `sendMessage` path keeps the real 4096 limit (ADR-0013, unpublished).
 				text: message.text.slice(0, SEND_MESSAGE_TEXT_LIMIT),
 				...(message.buttons ? { reply_markup: { inline_keyboard: message.buttons } } : {}),
 			})

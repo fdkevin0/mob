@@ -76,7 +76,7 @@ export async function handleEmailMessage(message: ForwardableEmailMessage, env: 
 
 /**
  * Convert an HTML email body to Markdown for the triage prompt, mirroring the
- * `fetch_url` tool's `'turndown' | 'ai'` switch (docs/adr/0045). `'turndown'`
+ * `fetch_url` tool's `'turndown' | 'ai'` switch (ADR-0045, unpublished). `'turndown'`
  * (default) is deterministic, free, and fast; `'ai'` delegates to
  * `env.AI.toMarkdown` for richer table preservation — pay-per-image-caption
  * and higher latency, but falls back to turndown on any error or `format:
@@ -100,7 +100,7 @@ async function processEmailContent(email: Email, env: Env, htmlParser: HtmlParse
 	if (email.html) {
 		const doc = createDocument(email.html);
 		for (const element of Array.from(doc.querySelectorAll('script, style, noscript'))) element.remove();
-		// `<table>` deliberately kept (docs/adr/0045): turndown flattens cells,
+		// `<table>` deliberately kept (ADR-0045, unpublished): turndown flattens cells,
 		// `'ai'` preserves the table as Markdown — both beat the old drop.
 		const html = doc.body.innerHTML || email.html;
 		const markdown = htmlParser === 'ai' && env.AI ? await convertEmailViaWorkersAi(env, html) : await convertViaTurndown(html);
@@ -128,7 +128,7 @@ async function convertEmailViaWorkersAi(env: Env, html: string): Promise<string>
 	return convertViaTurndown(html);
 }
 
-/** Character-heuristic ceiling (docs/adr/0045): bounds the text sent for email classification. */
+/** Character-heuristic ceiling (ADR-0045, unpublished): bounds the text sent for email classification. */
 function truncateByChars(text: string): string {
 	if (text.length <= MAX_EMAIL_CHARS) return text;
 	return `${text.slice(0, MAX_EMAIL_CHARS)}\n\n[Content too long — HTML content truncated]`;
@@ -145,7 +145,7 @@ async function extractContent(
 	const subject = email.subject || DEFAULT_SUBJECT;
 	const processedContent = await processEmailContent(email, env, htmlParser);
 
-	// Unset → summarize in the email's own language (docs/adr/0025, replacing the
+	// Unset → summarize in the email's own language (ADR-0025, unpublished; replacing the
 	// former hardcoded Chinese); a set preference overrides it.
 	const languageClause = language ? `in ${language}` : "in the email's own language";
 
@@ -256,8 +256,8 @@ async function sendMessageToUser(
 	].join('\n');
 
 	// Refer the email into chat. All buttons carry the stored email id:
-	// ✉️ Reply arms a threaded reply (docs/adr/0009); 💬 Ask saves the body as a
-	// `document` asset and starts a turn about it (docs/adr/0018); 🔍 View opens
+	// ✉️ Reply arms a threaded reply (ADR-0009, unpublished); 💬 Ask saves the body as a
+	// `document` asset and starts a turn about it (ADR-0018, unpublished); 🔍 View opens
 	// the Settings Mini App's Email detail screen as a `web_app` button
 	// (docs/adr/0035) —
 	// omitted unless the Mini App base URL is configured, so the DM never

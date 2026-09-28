@@ -41,4 +41,4 @@ memory is managed from the group itself.
 Saved source content uses the separate unified asset service and search index.
 Fact extraction does not automatically create assets.
 See [Session history](0017-conversation-history-on-agents-session-api.md) and
-[saved assets](0014-unified-saved-assets.md).
+saved assets (ADR-0014, unpublished).

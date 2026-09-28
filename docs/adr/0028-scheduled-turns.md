@@ -32,5 +32,5 @@ runs work concurrently would reintroduce history races, so it is omitted.
 A scheduled turn includes its provenance and persists in conversation history for
 follow-ups. Recheck the initiating Principal's access when work runs. Feed and
 email reader tools remain independently capability-gated; scheduling does not
-expand permission. See [Principal](0031-principal-module-invited-allowlist.md) and
+expand permission. See Principal (ADR-0031, unpublished) and
 [transcript delivery](0021-transcript-reply-multi-message-agentic-turn.md).

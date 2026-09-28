@@ -1,7 +1,7 @@
 /**
  * The **Memory** module (PRD #72, docs/adr/0015, docs/adr/0038) — owns
  * **Long-term memory** over three injected interfaces, mirroring the
- * **EmailReply module** (docs/adr/0013). The Conversation Agent constructs it with
+ * **EmailReply module** (ADR-0013, unpublished). The Conversation Agent constructs it with
  * concrete deps (a DO-SQLite-backed store, a Vectorize-backed index, a Workers-AI
  * embed); tests substitute three fakes and need no Durable Object.
  *

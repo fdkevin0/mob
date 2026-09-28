@@ -25,7 +25,7 @@ the Settings Mini App, extracted from the private bot.
 | `src/features/email/{preview,auth}.ts`, `src/features/assets/types.ts`, `src/utils/{tool,hmac}.ts` | Shared helpers the Mini App imports (email preview rendering, SPF/DKIM/DMARC parsing, asset types) |
 | `src/core/env.ts` | Worker binding types |
 | `src/tests/` | Vitest suites for the modules above |
-| `docs/adr/` | The architecture decisions behind these modules (numbering kept from the original repo, so gaps are expected and some cross-links point to unpublished ADRs) |
+| `docs/` | [Architecture overview](docs/architecture.md) and the [decision records](docs/adr/README.md) behind these modules |
 
 ## Not included
 
@@ -33,27 +33,54 @@ These modules are imported but not published: `src/core/{bot,principal,cmd,callb
 `src/core/sync-commands`, `src/db/schema`,
 `src/features/{assets,email,feed,queue,rich-message}` (apart from the shared helpers above).
 
-The Mini App frontend builds on its own:
+## Documentation
+
+- [Architecture overview](docs/architecture.md): request flow, module map, limits
+- [Decision records](docs/adr/README.md): an index of the published ADRs, plus
+  the unpublished ones that code comments cite as `ADR-NNNN, unpublished`
+
+## Build and test
+
+Requires Node and pnpm.
 
 ```bash
 pnpm install
-pnpm build         # webapp/dist
-pnpm test:webapp   # tsc + Vitest (happy-dom)
+pnpm build                # Mini App → webapp/dist (needs a Git checkout: embeds the short commit ID)
+pnpm test:webapp          # Mini App: tsc + Vitest (happy-dom)
+pnpm exec vitest run      # Worker-side suites in src/tests/ (Node)
 ```
 
-The build embeds the Git short commit ID, so it needs a Git checkout.
+The Mini App builds and its tests pass on their own. Of the Worker-side suites,
+the 8 that import unpublished modules fail to load (`builtin-tools`, `email-triage`,
+`outbound-queue`, `quote`, `read-tools`, `reply-surface`, `schedule-tools`,
+`turn-driver`). The other 22 run. There is no Worker build or deploy script.
 
 ## Configuration
 
-Secrets are never committed. The original deployment provides them as Worker
-secrets (`wrangler secret put …`):
+Secrets are never committed. The original deployment sets them with
+`wrangler secret put …`; locally `DEEPSEEK_API_KEY` comes from an ignored `.env`.
+Bindings are typed in [`src/core/env.ts`](src/core/env.ts). The ones the AI
+modules use:
 
-- `DEEPSEEK_API_KEY`: all LLM calls
-- `TELEGRAM_API_TOKEN`: Telegram Bot API
-- `TAVILY_API_KEY` (optional): enables `web_search`
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `DEEPSEEK_API_KEY` | secret | All LLM calls |
+| `TELEGRAM_API_TOKEN` | secret | Telegram Bot API |
+| `TAVILY_API_KEY` | secret, optional | Registers `web_search` |
+| `SANDBOX_DAILY_LIMIT_SECONDS` | var, optional | Sandbox time per user, chat and UTC day (default 120; `0` disables) |
+| `BOT_TIMEZONE` | var, optional | Default IANA timezone for the datetime tool (UTC when unset) |
+| `MINIAPP_BASE_URL` | var, optional | Public Mini App origin, also used for email deep links |
+| `ConversationAgent` | Durable Object | One agent per chat |
+| `Sandbox` | Durable Object | Per-chat container for `run_code` / `run_shell` |
+| `AI` | Workers AI | Embeddings (`@cf/baai/bge-m3`) and document conversion |
+| `MEMORIES` | Vectorize | 1024-dimension cosine index with a `chatId` metadata index |
+| `DB` | D1 | MCP server registry and email metadata |
+| `EMAIL_BUCKET` | R2 | Raw mail for the email preview |
+| `STATE` | KV | Global service config |
+| `ASSETS` | Static Assets | The Mini App build, served under `/miniapp/` |
 
-Workers AI (`AI` binding) provides embeddings and document conversion; the
-Vectorize index is 1024-dimension cosine with a `chatId` metadata index.
+`env.ts` also declares bindings that only unpublished features use (feeds, queue,
+bookmarks, downloads).
 
 ## License
 

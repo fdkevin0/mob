@@ -227,7 +227,7 @@ describe('handleEmailMessage — usage ledger (ADR-0041)', () => {
 	});
 });
 
-// ── HTML→Markdown converter (docs/adr/0045) ──────────────────────────────
+// ── HTML→Markdown converter (ADR-0045, unpublished) ──────────────────────────────
 
 const HTML_BODY = [
 	'<html><head><title>Order</title>',
