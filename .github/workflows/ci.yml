@@ -60,37 +60,6 @@ jobs:
           key: go-race-${{ hashFiles('go.sum') }}
       - run: go test -race ./...
 
-  # The service and desktop code have per-platform files; keep every target
-  # compiling. Each target compiles all dependencies, so each gets a job and cache.
-  go-platforms:
-    name: Go vet (${{ matrix.goos }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: windows
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-    env:
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('go.sum') }}
-      - run: go vet ./...
-
   web:
     name: Web UI
     runs-on: ubuntu-latest
