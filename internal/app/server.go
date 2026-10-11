@@ -39,7 +39,7 @@ type Server struct {
 }
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
-	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token}}
+	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
 	s.Commands.Register(s.pluginCommands()...)
 	s.register()
 	return s
@@ -139,9 +139,13 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")
-			if r.URL.Path != "/api/pairing/claim" && !s.authorized(r.Header.Get("Authorization")) {
-				http.Error(w, "unauthorized", 401)
-				return
+			if r.URL.Path != "/api/pairing/claim" {
+				revoked, ok := s.authorize(r.Header.Get("Authorization"))
+				if !ok {
+					http.Error(w, "unauthorized", 401)
+					return
+				}
+				r = revocable(r, revoked)
 			}
 		}
 		// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.

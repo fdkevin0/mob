@@ -79,3 +79,29 @@ it('explains an expired pairing link and offers the token form', async () => {
   expect(screen.getByLabelText('Local access token')).toBeTruthy();
   expect(localStorage.getItem('mob-token')).toBeNull();
 });
+
+it('returns to sign-in when a saved token was replaced', async () => {
+  localStorage.setItem('mob-token', 'revoked');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('unauthorized', { status: 401 })));
+  render(<App />);
+  expect((await screen.findByRole('alert')).textContent).toContain('Run mob open');
+  expect(screen.getByLabelText('Local access token')).toBeTruthy();
+  expect(localStorage.getItem('mob-token')).toBeNull();
+});
+
+it('signs out an open workspace when the token is rotated', async () => {
+  localStorage.setItem('mob-token', 'current');
+  let rotated = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (rotated) return new Response('unauthorized', { status: 401 });
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }]);
+    return Response.json({ messages: [], active: false, model: 'demo/echo' });
+  }));
+  render(<App />);
+  await screen.findByRole('button', { name: /disconnect/i });
+  rotated = true;
+  screen.getByRole('button', { name: /new/i }).click();
+  await screen.findByLabelText('Local access token');
+  expect(localStorage.getItem('mob-token')).toBeNull();
+});
