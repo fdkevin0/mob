@@ -302,3 +302,34 @@ func TestTUIRendersMarkdown(t *testing.T) {
 		t.Fatal("a width change kept output wrapped for the old width")
 	}
 }
+
+func TestTUIIgnoresSuggestionsForOlderText(t *testing.T) {
+	m := model{configured: true, id: "c", input: textarea.New(), viewport: viewport.New(), width: 80, ctx: context.Background()}
+	m.input.Focus()
+	m.input.SetValue("/mo")
+	updated, _ := m.Update(completions{Seq: m.completionSeq, Text: "/mo", List: []chat.Suggestion{{Value: "/model"}, {Value: "/models"}}})
+	m = updated.(model)
+	// The user finishes typing before the answer for "/models" arrives.
+	m.input.SetValue("/models")
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m = updated.(model); m.input.Value() != "/models" {
+		t.Fatalf("tab applied a suggestion for older text: %q", m.input.Value())
+	}
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m = updated.(model); !m.running || m.input.Value() != "" {
+		t.Fatalf("enter did not send /models; input %q", m.input.Value())
+	}
+}
+
+func TestCommandRequestsGetThePluginTimeout(t *testing.T) {
+	for path, want := range map[string]time.Duration{
+		"/api/commands/run":       60 * time.Second,
+		"/api/plugins/email/send": 60 * time.Second,
+		"/api/commands/complete":  10 * time.Second,
+		"/api/conversations":      10 * time.Second,
+	} {
+		if got := timeoutFor(path); got != want {
+			t.Errorf("%s: %s, want %s", path, got, want)
+		}
+	}
+}

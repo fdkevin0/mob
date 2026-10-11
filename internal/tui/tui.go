@@ -65,6 +65,7 @@ type model struct {
 	markdown            *markdown
 	width, height       int
 	suggestions         []chat.Suggestion
+	suggestionsFor      string
 	selected            int
 	completionSeq       uint64
 	events              chan streamEvent
@@ -128,12 +129,17 @@ func (m model) request(ctx context.Context, method, path string, body any) (*htt
 	return resp, nil
 }
 
-func (m model) json(method, path string, body, dest any) error {
-	timeout := 10 * time.Second
-	if strings.HasPrefix(path, "/api/plugins") {
-		timeout = 60 * time.Second
+// timeoutFor bounds a request. Plugin routes and command execution reach
+// remote services that the service itself allows up to 45 seconds.
+func timeoutFor(path string) time.Duration {
+	if strings.HasPrefix(path, "/api/plugins") || path == "/api/commands/run" {
+		return 60 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(m.ctx, timeout)
+	return 10 * time.Second
+}
+
+func (m model) json(method, path string, body, dest any) error {
+	ctx, cancel := context.WithTimeout(m.ctx, timeoutFor(path))
 	defer cancel()
 	resp, err := m.request(ctx, method, path, body)
 	if err != nil {
@@ -249,7 +255,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.render()
 	case completions:
 		if msg.Seq == m.completionSeq && msg.Text == m.input.Value() {
-			m.setSuggestions(msg.List)
+			m.setSuggestions(msg.List, msg.Text)
 		}
 	case snapshot:
 		if msg.Generation != m.generation {
@@ -370,7 +376,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.input.Reset()
 			m.completionSeq++
-			m.setSuggestions(nil)
+			m.setSuggestions(nil, "")
 			m.failure = ""
 			m.listText = ""
 			m.generation++

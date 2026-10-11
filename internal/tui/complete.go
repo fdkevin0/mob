@@ -23,7 +23,7 @@ func (m *model) refreshCompletion() tea.Cmd {
 	m.completionSeq++
 	text := m.input.Value()
 	if !strings.HasPrefix(text, "/") || strings.Contains(text, "\n") {
-		m.setSuggestions(nil)
+		m.setSuggestions(nil, "")
 		return nil
 	}
 	client, seq, request := *m, m.completionSeq, chat.CommandRequest{Client: chat.ClientTUI, ConversationID: m.id, Text: text}
@@ -35,8 +35,10 @@ func (m *model) refreshCompletion() tea.Cmd {
 	}
 }
 
-func (m *model) setSuggestions(list []chat.Suggestion) {
-	m.suggestions, m.selected = list, 0
+// setSuggestions shows suggestions computed for text. They stay visible while
+// a newer answer is on its way but apply only to the text they were made for.
+func (m *model) setSuggestions(list []chat.Suggestion, text string) {
+	m.suggestions, m.suggestionsFor, m.selected = list, text, 0
 	m.layout()
 }
 
@@ -48,7 +50,7 @@ func lastToken(text string) (head, token string) {
 
 // suggestionKey handles keys while suggestions are shown. Enter accepts only
 // a suggestion that changes a partly typed token, so a complete command still
-// sends.
+// sends; neither Tab nor Enter applies suggestions made for older text.
 func (m *model) suggestionKey(key string) (tea.Cmd, bool) {
 	if len(m.suggestions) == 0 {
 		return nil, false
@@ -60,12 +62,16 @@ func (m *model) suggestionKey(key string) (tea.Cmd, bool) {
 		m.selected = (m.selected + 1) % len(m.suggestions)
 	case "esc":
 		m.completionSeq++
-		m.setSuggestions(nil)
+		m.setSuggestions(nil, "")
 	case "enter", "tab":
 		head, token := lastToken(m.input.Value())
 		choice := m.suggestions[m.selected]
-		if key == "enter" && (token == "" || token == choice.Value) {
+		stale := m.input.Value() != m.suggestionsFor
+		if key == "enter" && (stale || token == "" || token == choice.Value) {
 			return nil, false
+		}
+		if stale {
+			return nil, true
 		}
 		m.input.SetValue(head + choice.Value + " ")
 		return m.refreshCompletion(), true
