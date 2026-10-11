@@ -381,8 +381,9 @@ mcp_servers:
 
 Only the owner's turns are offered MCP tools, and only while their server is
 connected. Every call waits for approval; **Always allow** (or
-`/approve ID always`) stops asking for that tool on that server, and `/grants`
-lists what is allowed. `/mcp` shows each server's status and tools. A command
+`/approve ID always`) stops asking for that tool until the server's
+configuration changes, and `/grants` lists what is allowed. `/mcp` shows each
+server's status and tools. Headers go only to the configured origin. A command
 inherits Mob's environment without the `MOB_*` variables, plus its `env`.
 It runs as you, outside the sandbox, so configure only servers you trust. Keep
 `config.yaml` owner-only (`chmod 600`) when it holds keys.

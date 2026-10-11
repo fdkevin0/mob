@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,23 +24,28 @@ type request struct {
 	Server    string         `json:"server"`
 	Tool      string         `json:"tool"`
 	Arguments map[string]any `json:"arguments,omitempty"`
-	// Target is the server's command line or URL when the user was asked;
-	// an approved call runs only while it is unchanged.
+	// Target shows the user the server's command line or URL.
 	Target string `json:"target"`
+	// Config is the server configuration's fingerprint when the user was
+	// asked; an approved call runs only while it is unchanged.
+	Config string `json:"config"`
 }
 
 // unsafe is what models do not accept in a tool name.
 var unsafe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
-// toolName is mcp__<server>__<tool> in the characters models accept, at most
-// 64 long; a longer name ends in a hash of the whole.
+// toolName is mcp__<server>__<tool> when that uses only the characters
+// models accept and is at most 64 long. Otherwise it is cut to fit, with
+// those characters replaced, and ends in a hash of the real name, so that
+// read.file and read_file stay apart.
 func toolName(server, tool string) string {
-	name := "mcp__" + server + "__" + unsafe.ReplaceAllString(tool, "_")
-	if len(name) <= 64 {
+	name := "mcp__" + server + "__" + tool
+	safe := unsafe.ReplaceAllString(name, "_")
+	if safe == name && len(name) <= 64 {
 		return name
 	}
 	sum := sha256.Sum256([]byte(name))
-	return name[:55] + "_" + hex.EncodeToString(sum[:4])
+	return safe[:min(len(safe), 47)] + "_" + hex.EncodeToString(sum[:8])
 }
 
 // Tools are the tools of every server Mob has connected to. A tool is offered
@@ -78,7 +84,7 @@ func (h *Hub) tool(server string, config Server, tool *sdk.Tool) chat.Tool {
 		OwnerOnly: true,
 		Available: func() bool { return h.connected(server) },
 		Run: func(_ context.Context, call chat.ToolCall) (any, error) {
-			return nil, call.RequestApproval(request{Server: server, Tool: tool.Name, Arguments: call.Input, Target: config.target()})
+			return nil, call.RequestApproval(request{Server: server, Tool: tool.Name, Arguments: call.Input, Target: config.target(), Config: config.fingerprint()})
 		},
 		Approved: func(ctx context.Context, call chat.ApprovedCall) (any, error) {
 			var r request
@@ -87,11 +93,12 @@ func (h *Hub) tool(server string, config Server, tool *sdk.Tool) chat.Tool {
 			}
 			return h.call(ctx, r)
 		},
-		// Always allowing a tool covers it only on the server it was allowed on.
+		// Always allowing a tool covers that tool only, on the server as it
+		// was configured when it was allowed.
 		Scope: func(input json.RawMessage) string {
 			var r request
 			json.Unmarshal(input, &r)
-			return r.Target
+			return strconv.Quote(r.Tool) + " on " + r.Server + " (" + r.Target + ", configuration " + r.Config + ")"
 		},
 	}
 }
@@ -129,7 +136,7 @@ func (h *Hub) call(ctx context.Context, r request) (any, error) {
 	switch {
 	case !configured:
 		return nil, errUnknown
-	case config.target() != r.Target:
+	case config.fingerprint() != r.Config:
 		return nil, errors.New("the MCP server " + r.Server + " was reconfigured after this call was approved; ask again")
 	case session == nil:
 		return nil, errors.New("the MCP server " + r.Server + " is not connected")

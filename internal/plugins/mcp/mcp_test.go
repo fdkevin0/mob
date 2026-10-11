@@ -87,7 +87,7 @@ func TestCommandServerTools(t *testing.T) {
 	if !strings.Contains(tools[0].Description, "Upper-case text.") {
 		t.Fatalf("description: %s", tools[0].Description)
 	}
-	call := request{Server: "echo", Tool: "shout", Arguments: map[string]any{"text": "hi"}, Target: server.target()}
+	call := request{Server: "echo", Tool: "shout", Arguments: map[string]any{"text": "hi"}, Target: server.target(), Config: server.fingerprint()}
 	if out, err := approve(t, h, "mcp__echo__shout", call); err != nil || out != "HI" {
 		t.Fatalf("call: %v %v", out, err)
 	}
@@ -96,13 +96,18 @@ func TestCommandServerTools(t *testing.T) {
 	if _, err := approve(t, h, "mcp__echo__shout", empty); err == nil || err.Error() != "nothing to shout" {
 		t.Fatalf("tool error: %v", err)
 	}
+	// A call approved while the server had another configuration, such as
+	// another account's credentials in its environment, does not run.
+	other := server
+	other.Env = []string{"MCP_TEST_SERVER=1", "ACCOUNT=b"}
 	moved := call
-	moved.Target = "something else"
+	moved.Config = other.fingerprint()
 	if _, err := approve(t, h, "mcp__echo__shout", moved); err == nil || !strings.Contains(err.Error(), "reconfigured") {
-		t.Fatalf("a call approved for another target ran: %v", err)
+		t.Fatalf("a call approved for another configuration ran: %v", err)
 	}
-	if scope := tools[0].Scope(json.RawMessage(`{"target":"x"}`)); scope != "x" {
-		t.Fatalf("scope: %q", scope)
+	raw, _ := json.Marshal(call)
+	if scope, otherScope := tools[0].Scope(raw), tools[0].Scope(func() []byte { raw, _ := json.Marshal(moved); return raw }()); !strings.Contains(scope, `"shout" on echo`) || scope == otherScope {
+		t.Fatalf("scope: %q, after reconfiguring: %q", scope, otherScope)
 	}
 	if !strings.Contains(h.describe(), "`mcp__echo__shout`") || h.Status() != "echo: 1 tools" {
 		t.Fatalf("describe: %s; status: %s", h.describe(), h.Status())
@@ -125,7 +130,7 @@ func TestURLServerGetsHeaders(t *testing.T) {
 	h := &Hub{}
 	h.Configure(Servers{"web": server})
 	running(t, h, "web")
-	out, err := approve(t, h, "mcp__web__shout", request{Server: "web", Tool: "shout", Arguments: map[string]any{"text": "ok"}, Target: server.target()})
+	out, err := approve(t, h, "mcp__web__shout", request{Server: "web", Tool: "shout", Arguments: map[string]any{"text": "ok"}, Target: server.target(), Config: server.fingerprint()})
 	if err != nil || out != "OK" || !authorized {
 		t.Fatalf("call: %v %v", out, err)
 	}
@@ -136,12 +141,13 @@ func TestDisconnectedAndRemovedServers(t *testing.T) {
 	if serve, err := Extension(h).Start(); serve != nil || err != nil {
 		t.Fatal("ran with no servers")
 	}
-	h.Configure(Servers{"gone": {Command: "mob-no-such-command"}})
-	if _, err := h.call(context.Background(), request{Server: "gone", Target: "mob-no-such-command"}); err == nil || !strings.Contains(err.Error(), "not connected") {
+	gone := Server{Command: "mob-no-such-command"}
+	h.Configure(Servers{"gone": gone})
+	if _, err := h.call(context.Background(), request{Server: "gone", Config: gone.fingerprint()}); err == nil || !strings.Contains(err.Error(), "not connected") {
 		t.Fatalf("disconnected: %v", err)
 	}
 	h.Configure(Servers{})
-	if _, err := h.call(context.Background(), request{Server: "gone", Target: "mob-no-such-command"}); !errors.Is(err, errUnknown) {
+	if _, err := h.call(context.Background(), request{Server: "gone", Config: gone.fingerprint()}); !errors.Is(err, errUnknown) {
 		t.Fatalf("removed: %v", err)
 	}
 }
@@ -169,11 +175,50 @@ func TestValidate(t *testing.T) {
 }
 
 func TestToolName(t *testing.T) {
-	if got := toolName("fs", "read.file"); got != "mcp__fs__read_file" {
+	if got := toolName("fs", "read_file"); got != "mcp__fs__read_file" {
 		t.Fatalf("got %s", got)
+	}
+	if got := toolName("fs", "read.file"); got == "mcp__fs__read_file" || !strings.HasPrefix(got, "mcp__fs__read_file_") || len(got) > 64 {
+		t.Fatalf("read.file took read_file's name: %s", got)
 	}
 	long := toolName("server", strings.Repeat("x", 80))
 	if len(long) != 64 || long == toolName("server", strings.Repeat("x", 81)) {
 		t.Fatalf("long names: %s", long)
+	}
+}
+
+func TestFingerprint(t *testing.T) {
+	base := Server{URL: "https://example.com/mcp", Headers: map[string]string{"authorization": "Bearer a"}}
+	other := base
+	other.Headers = map[string]string{"authorization": "Bearer b"}
+	if base.fingerprint() == other.fingerprint() || strings.Contains(base.fingerprint(), "Bearer") {
+		t.Fatal("the fingerprint ignores headers or shows them")
+	}
+	if (Server{Command: "a", Args: []string{"b c"}}).fingerprint() == (Server{Command: "a", Args: []string{"b", "c"}}).fingerprint() {
+		t.Fatal("arguments run together")
+	}
+	if (Server{Command: "a", Dir: "/x"}).fingerprint() == (Server{Command: "a", Dir: "/y"}).fingerprint() {
+		t.Fatal("the fingerprint ignores the directory")
+	}
+	if (Server{Command: "a", Args: []string{}}).fingerprint() != (Server{Command: "a"}).fingerprint() {
+		t.Fatal("an empty list and none differ")
+	}
+}
+
+func TestHeadersStayWithTheirOrigin(t *testing.T) {
+	leaked := false
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked = leaked || r.Header.Get("Authorization") != ""
+		http.Error(w, "no", http.StatusNotFound)
+	}))
+	t.Cleanup(elsewhere.Close)
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirecting.Close)
+	h := &Hub{}
+	_, err := h.connect(context.Background(), "web", Server{URL: redirecting.URL, Headers: map[string]string{"authorization": "Bearer secret"}})
+	if err == nil || leaked {
+		t.Fatalf("followed a redirect to another origin: %v, header leaked: %v", err, leaked)
 	}
 }
