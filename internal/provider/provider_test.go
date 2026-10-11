@@ -256,6 +256,24 @@ func TestAuditRegressions(t *testing.T) {
 	if err = r.Reload(); err == nil || r.Default() != "work/m" {
 		t.Fatalf("removal accepted: %v %q", err, r.Default())
 	}
+	// Saving after the removal starts from the providers in effect, not OpenCode.
+	if _, err = r.SetDefault("work/other"); err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := Load(path); f.Find("opencode") != nil || f.Find("work") == nil || f.Default != "work/other" {
+		t.Fatalf("rewrite after removal: %+v", f)
+	}
+
+	// Short credentials are never echoed either: the message is dropped.
+	short := Memory(File{Providers: []Provider{{ID: "short", Chat: echo.URL, Key: "abc", Headers: map[string]string{"X-Team": "xyz"}}}})
+	g = short.List(context.Background(), "")
+	m, _ = short.Resolve("short/x")
+	_, err = m.Stream(context.Background(), llm.Request{}, func(string, string) error { return nil })
+	for _, text := range []string{g[0].Error, err.Error()} {
+		if !strings.Contains(text, "HTTP 401") || strings.Contains(text, "abc") || strings.Contains(text, "xyz") {
+			t.Fatalf("short secret in error: %q", text)
+		}
+	}
 
 	// A short name for the demo model, or for a provider removed meanwhile, never panics.
 	r = Offline()

@@ -236,9 +236,19 @@ var ErrUnreadable = errors.New("providers.json is unreadable")
 
 // Load reads path; a missing file is the initial configuration.
 func Load(path string) (File, error) {
-	info, err := os.Lstat(path)
+	f, err := read(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return Initial(), nil
+	}
+	return f, err
+}
+
+// read loads an existing providers.json; a missing file is an error
+// wrapping os.ErrNotExist, never the initial configuration.
+func read(path string) (File, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return File{}, fmt.Errorf("providers.json was removed: %w", err)
 	}
 	fail := func(reason string) (File, error) { return File{}, fmt.Errorf("%w: %s", ErrUnreadable, reason) }
 	if err != nil {
@@ -252,7 +262,7 @@ func Load(path string) (File, error) {
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return fail(err.Error())
+		return fail("it changed while being read")
 	}
 	var f File
 	d := json.NewDecoder(bytes.NewReader(raw))

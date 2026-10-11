@@ -241,7 +241,13 @@ func StatusError(resp *http.Response, secrets ...string) error {
 		}
 	}
 	for _, secret := range secrets {
-		if len(secret) >= 4 {
+		switch {
+		case secret == "":
+		case len(secret) < 4:
+			// Masking every occurrence of a short value would leave nothing
+			// readable, and the value could still be recovered; drop it all.
+			message = ""
+		default:
 			message = strings.ReplaceAll(message, secret, "••••")
 		}
 	}
