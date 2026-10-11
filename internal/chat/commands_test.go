@@ -71,8 +71,13 @@ func TestModelCommands(t *testing.T) {
 	if got := say("/model", false); !strings.Contains(got, "alpha/one") || !strings.Contains(got, "(the default)") {
 		t.Fatalf("current model: %q", got)
 	}
-	if got := say("/models", false); !strings.Contains(got, "▸ alpha/one") || !strings.Contains(got, "beta/two") {
+	wantList := "**Current model:** `alpha/one`\n\n### alpha (Alpha)\n\n- **`alpha/one`** (current) — tools\n\n### beta (Beta)\n\n- `beta/two`\n\nSwitch with `/model NAME`, e.g. `/model alpha/one`."
+	if got := say("/models", false); got != wantList {
 		t.Fatalf("listing: %q", got)
+	}
+	history, err := s.History(c.ID)
+	if err != nil || Text(history[len(history)-1]) != wantList {
+		t.Fatalf("Markdown listing not saved: %v", err)
 	}
 	if got := say("/model two", false); !strings.Contains(got, "Only the owner") {
 		t.Fatalf("non-owner switched: %q", got)
@@ -98,7 +103,7 @@ func TestModelCommands(t *testing.T) {
 		t.Fatalf("retry switched the model back: %q", ref)
 	}
 	say("hello", true)
-	history, _ := s.History(c.ID)
+	history, _ = s.History(c.ID)
 	last := history[len(history)-1]
 	if last.Model != "beta/two" || last.Command || Text(last) == "" {
 		t.Fatalf("turn did not use the conversation's model: %+v", last)

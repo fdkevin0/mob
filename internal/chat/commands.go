@@ -94,7 +94,7 @@ func (s *ConversationService) models(ctx context.Context, id, filter string) (st
 	currentRef, _ := llm.ParseRef(current)
 	groups := s.Models.List(ctx, filter)
 	var b strings.Builder
-	fmt.Fprintf(&b, "Current model: %s\n", current)
+	fmt.Fprintf(&b, "**Current model:** `%s`\n", current)
 	if len(groups) == 0 {
 		if filter != "" {
 			fmt.Fprintf(&b, "\nNo model matches %q.", filter)
@@ -104,27 +104,27 @@ func (s *ConversationService) models(ctx context.Context, id, filter string) (st
 		return b.String(), nil
 	}
 	for _, g := range groups {
-		fmt.Fprintf(&b, "\n%s (%s)\n", g.Provider, g.Name)
+		fmt.Fprintf(&b, "\n### %s (%s)\n\n", g.Provider, g.Name)
 		if g.Error != "" {
-			fmt.Fprintf(&b, "  ! %s\n", g.Error)
+			fmt.Fprintf(&b, "> **Warning:** %s\n\n", g.Error)
 		}
 		for i, m := range g.Models {
 			if i == perProvider {
-				fmt.Fprintf(&b, "  … %d more; narrow with /models FILTER\n", len(g.Models)-perProvider)
+				fmt.Fprintf(&b, "\n*… %d more; narrow with `/models FILTER`.*\n", len(g.Models)-perProvider)
 				break
 			}
-			marker := "  "
+			ref := "`" + g.Provider + "/" + m.ID + "`"
 			if g.Provider == currentRef.Provider && m.ID == currentRef.Model {
-				marker = "▸ "
+				ref = "**" + ref + "** (current)"
 			}
-			line := marker + g.Provider + "/" + m.ID
+			line := "- " + ref
 			if d := describe(m); d != "" {
 				line += " — " + d
 			}
 			b.WriteString(line + "\n")
 		}
 	}
-	b.WriteString("\nSwitch with /model NAME, e.g. /model " + example(groups))
+	b.WriteString("\nSwitch with `/model NAME`, e.g. `/model " + example(groups) + "`.")
 	return b.String(), nil
 }
 
