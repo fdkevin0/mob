@@ -406,3 +406,54 @@ func TestPastesSurviveTheirOwnLabelsAndAddUp(t *testing.T) {
 		t.Fatalf("pastes past the input's limit were cut: %d bytes, want %d", len(got), len(want))
 	}
 }
+
+func TestTUIFollowsARunningTurn(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := app.NewServer(store, provider.Offline(), strings.Repeat("t", 32))
+	defer srv.Close()
+	httpSrv := httptest.NewServer(srv.Handler(nil))
+	defer httpSrv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c, _ := store.Create()
+	// Another client starts a turn and leaves.
+	run, err := srv.Start(chat.ChatRequest{ID: c.ID, Text: "from another client", RequestID: chat.NewID(), Owner: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token()}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), width: 80}
+	loaded := m.load(c.ID, false)().(snapshot)
+	if !loaded.Active {
+		t.Fatal("turn was not running")
+	}
+	updated, command := m.Update(loaded)
+	m = updated.(model)
+	batch, ok := command().(tea.BatchMsg)
+	if !m.busy || !ok || len(batch) != 2 {
+		t.Fatal("the terminal did not follow the running turn")
+	}
+	go batch[0]()
+	draft := ""
+	for {
+		event := batch[1]().(streamEvent)
+		updated, cmd := m.Update(event)
+		m = updated.(model)
+		if event.Done {
+			if event.Err != nil {
+				t.Fatal(event.Err)
+			}
+			break
+		}
+		draft = m.draft
+		batch[1] = cmd
+	}
+	<-run.Done()
+	history, _ := store.History(c.ID)
+	if want := chat.Text(history[len(history)-1]); draft != want || !strings.Contains(draft, "from another client") {
+		t.Fatalf("followed %q, saved %q", draft, want)
+	}
+}

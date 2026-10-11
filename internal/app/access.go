@@ -57,11 +57,20 @@ func revocable(r *http.Request, revoked <-chan struct{}) (_ *http.Request, done 
 		case <-ctx.Done():
 		}
 	}()
-	r = r.WithContext(ctx)
+	r = r.WithContext(context.WithValue(ctx, revocationKey{}, revoked))
 	if r.Body != nil {
 		r.Body = revocableBody{r.Body, revoked}
 	}
 	return r, func() { cancel(nil) }
+}
+
+type revocationKey struct{}
+
+// revocation closes when the token that authorized the request is replaced;
+// work that outlives the request uses it to stop with the request's authority.
+func revocation(ctx context.Context) <-chan struct{} {
+	revoked, _ := ctx.Value(revocationKey{}).(<-chan struct{})
+	return revoked
 }
 
 type revocableBody struct {

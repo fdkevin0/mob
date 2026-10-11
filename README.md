@@ -133,8 +133,9 @@ current foreground/UI owner and then run `mob start` with the same environment.
 - GUI and TUI share service-owned state; idle clients refresh history every two
   seconds. One active turn per conversation; a competing send gets HTTP 409.
 - Message checkpoints occur during generation approximately once per second;
-  forced termination can lose the final uncheckpointed second. Disconnection cancels
-  the current request; reconnect reloads the persisted snapshot, not an event replay.
+  forced termination can lose the final uncheckpointed second. A turn keeps running when
+  its client disconnects; reloading or opening the conversation elsewhere replays it and
+  follows it live (`GET /api/chat/{id}/stream`). Only stop ends it early.
 
 TUI: Enter sends, Alt+Enter / Ctrl+J inserts a newline, Ctrl+S stops the turn,
 PgUp/PgDn scroll, Ctrl+C exits. `/new`, `/list`, `/open ID`, `/approve ID`, `/deny ID`

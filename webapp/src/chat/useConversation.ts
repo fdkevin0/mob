@@ -24,7 +24,7 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
       return { body: { id, requestId: last?.id, text: last?.parts.filter(p => p.type === 'text').map(p => p.text).join('') } };
     },
   }), [connection, id]);
-  const { messages, setMessages, sendMessage, status, error, stop, clearError } = useChat<ChatMessage>({
+  const { messages, setMessages, sendMessage, resumeStream, status, error, stop, clearError } = useChat<ChatMessage>({
     id, messages: initial.messages, transport,
     onError: () => setInput(current => current || submittedText.current),
   });
@@ -38,6 +38,8 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
     const snapshot = await api<Snapshot>(connection, `/conversations/${id}`);
     if (generation !== refreshGeneration.current || busyRef.current) return;
     setMessages(snapshot.messages); setRemoteBusy(snapshot.active); setModel(snapshot.model);
+    // A running turn streams here too, whichever client started it; the replay replaces its saved draft.
+    if (snapshot.active) void resumeStream();
   }
   useEffect(() => {
     if (streaming || approvalBusy) return;
