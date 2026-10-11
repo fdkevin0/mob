@@ -2,82 +2,110 @@ package wechatilink
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/fdkevin0/mob/internal/channel"
 	"github.com/fdkevin0/mob/internal/chat"
 )
 
-// Service coordinates message polling, session tracking, and execution for WeChat iLink.
+// Service answers WeChat iLink messages.
 type Service struct {
 	Store        *chat.Store
 	Conversation *chat.ConversationService
 }
 
-// ProcessMessage processes a single WeChat message, interacts with the Agent, and returns the response.
+func (s *Service) bridge() *channel.Bridge {
+	return &channel.Bridge{Name: "WeChat iLink", Client: chat.ClientWeChat, Store: s.Store, Conversation: s.Conversation, Texts: texts}
+}
+
+var texts = channel.Texts{
+	Help:      "Mob 已连接，直接发消息即可聊天。这台电脑需要保持运行。",
+	Approvals: approvalPrompt,
+	Decided: func(a chat.Answer) string {
+		if !a.Approved {
+			return fmt.Sprintf("已拒绝操作（ID: %s）。", a.ID)
+		}
+		result := fmt.Sprintf("已批准操作（ID: %s）。", a.ID)
+		if a.Remember != "" {
+			result += "已记住这个决定，以后同类请求不再询问；可回复 /grants 查看，/revoke 撤销。"
+		}
+		return result
+	},
+	Stale: func(id string) string {
+		return fmt.Sprintf("⚠️ 审批指令无效或该审批已过期（ID: %s）", id)
+	},
+	Failed: func(err error) string {
+		if command := (*chat.CommandError)(nil); errors.As(err, &command) {
+			return "\n⚠️ " + command.Message
+		}
+		if errors.Is(err, context.Canceled) {
+			return "\n（对话已取消）"
+		}
+		return "\n⚠️ Mob 出错：" + err.Error() + "。完整结果可在桌面端或终端查看。"
+	},
+	Unsupported: "这个命令需要在桌面端或终端使用。",
+	Empty:       "（无回复内容）",
+}
+
+// message is what senderID wrote, as the bridge reads it; id is empty for a
+// message that is not delivered from WeChat.
+func message(c Config, id, senderID, text string) channel.Message {
+	return channel.Message{ID: id, Key: "wechat-ilink-conv:" + senderID, Owner: c.IsOwner(senderID), Text: strings.TrimSpace(text)}
+}
+
+// ProcessMessage answers a message from senderID.
 func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contextToken, text string) (string, error) {
+	reply, err := s.answer(ctx, c, senderID, message(c, "", senderID, text))
+	return reply.Text, err
+}
+
+// answer refuses senders not allowed to use the bot and reads 批准 and 拒绝
+// as /approve and /deny.
+func (s *Service) answer(ctx context.Context, c Config, senderID string, m channel.Message) (channel.Reply, error) {
 	if !c.IsUserAllowed(senderID) {
-		return "⚠️ 抱歉，当前微信账号未在授权白名单内。请在 Mob 桌面端或设置中添加您的用户 ID 并确认授权。", nil
+		return channel.Reply{Text: "⚠️ 抱歉，当前微信账号未在授权白名单内。请在 Mob 桌面端或设置中添加您的用户 ID 并确认授权。"}, nil
 	}
-
-	trimmed := strings.TrimSpace(text)
-
-	// 1. Natural language approval command check: "批准 <id>" / "拒绝 <id>"
-	if answer, ok := parseApprovalCommand(trimmed); ok {
-		return s.handleApproval(ctx, senderID, answer, c.IsOwner(senderID))
-	}
-
-	// 2. Normal conversation flow
-	var convID string
-	err := s.Store.Setting("wechat-ilink-conv:"+senderID, &convID)
-	if err != nil || len(convID) != 32 {
-		newConv, createErr := s.Store.Create()
-		if createErr != nil {
-			return "", fmt.Errorf("failed to create conversation: %w", createErr)
+	if answer, ok := parseApprovalCommand(m.Text); ok {
+		command, refusal := s.decision(m.Key, answer)
+		if command == "" {
+			return channel.Reply{Text: refusal}, nil
 		}
-		convID = newConv.ID
-		_ = s.Store.SaveSetting("wechat-ilink-conv:"+senderID, convID)
+		m.Text = command
 	}
+	return s.bridge().Answer(ctx, m)
+}
 
-	var reply strings.Builder
-	var approvals []chat.PendingApproval
-
-	input := chat.ChatRequest{
-		ID:        convID,
-		RequestID: chat.NewID(),
-		Text:      trimmed,
-		Owner:     c.IsOwner(senderID),
-	}
-
-	turnErr := s.Conversation.Execute(ctx, input, func(e chat.Event) error {
-		switch e.Kind {
-		case chat.SegmentDelta:
-			reply.WriteString(e.Text)
-		case chat.ApprovalRequested:
-			approvals = append(approvals, chat.PendingApproval{ID: e.ApprovalID, Tool: e.ToolName, Input: e.Input})
+// decision is the command for answer, or why there is none.
+func (s *Service) decision(key string, answer chat.Answer) (command, refusal string) {
+	if answer.ID == "" {
+		var convID string
+		_ = s.Store.Setting(key, &convID)
+		pending := s.Conversation.Pending(convID)
+		switch len(pending) {
+		case 0:
+			return "", "当前没有待审批的请求。"
+		case 1:
+			answer.ID = pending[0].ID
+		default:
+			var b strings.Builder
+			b.WriteString("有多个待审批请求，请回复「批准 ID」或「拒绝 ID」：")
+			for _, p := range pending {
+				fmt.Fprintf(&b, "\n%s: %s", p.Tool, p.ID)
+			}
+			return "", b.String()
 		}
-		return nil
-	})
-
-	if turnErr != nil {
-		if errors.Is(turnErr, context.Canceled) {
-			return "（对话已取消）", nil
-		}
-		return "", turnErr
 	}
-
-	result := reply.String()
-	if len(approvals) > 0 {
-		result += approvalPrompt(approvals, len(s.Conversation.Pending(convID)))
+	if len(answer.ID) != 32 {
+		return "", fmt.Sprintf("⚠️ 审批 ID 格式不正确（需为 32 位字符，当前: %s）", answer.ID)
 	}
-
-	if result == "" {
-		result = "（无回复内容）"
+	if !answer.Approved {
+		// A command is one line; a reason on several would be sent as chat.
+		return strings.TrimSpace("/deny " + answer.ID + " " + strings.Join(strings.Fields(answer.Reason), " ")), ""
 	}
-	return result, nil
+	return strings.TrimSpace("/approve " + answer.ID + " " + answer.Remember), ""
 }
 
 // Loop runs the long-polling loop against WeChat iLink getupdates.
@@ -121,12 +149,8 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 			}
 
 			if strings.TrimSpace(textContent) != "" && msg.FromUserID != "" {
-				// Show typing state while processing
-				_ = client.SendTyping(ctx, msg.FromUserID, msg.ContextToken)
-
-				replyText, procErr := s.ProcessMessage(ctx, c, msg.FromUserID, msg.ContextToken, textContent)
-				if procErr == nil && replyText != "" {
-					_ = client.SendMessage(ctx, msg.FromUserID, msg.ContextToken, replyText)
+				if err := s.deliver(ctx, c, client, msg, textContent); err != nil {
+					status(err.Error())
 				}
 			}
 		}
@@ -153,82 +177,25 @@ func approvalPrompt(approvals []chat.PendingApproval, pending int) string {
 	return b.String()
 }
 
-func (s *Service) handleApproval(ctx context.Context, senderID string, answer chat.Answer, owner bool) (string, error) {
-	approvalID, approved := answer.ID, answer.Approved
-	var convID string
-	_ = s.Store.Setting("wechat-ilink-conv:"+senderID, &convID)
-	if convID == "" {
-		return "未找到当前会话上下文", nil
+// deliver answers msg and sends the reply once. A message without an ID
+// cannot be recorded, so it is answered as it comes.
+func (s *Service) deliver(ctx context.Context, c Config, client *Client, msg InboundMessage, text string) error {
+	id := ""
+	if msg.MsgID != "" {
+		id = "wx:" + c.BotID + ":" + msg.MsgID
 	}
-
-	if approvalID == "" {
-		pending := s.Conversation.Pending(convID)
-		switch len(pending) {
-		case 0:
-			return "当前没有待审批的请求。", nil
-		case 1:
-			approvalID = pending[0].ID
-			answer.ID = approvalID
-		default:
-			var b strings.Builder
-			b.WriteString("有多个待审批请求，请回复「批准 ID」或「拒绝 ID」：")
-			for _, p := range pending {
-				fmt.Fprintf(&b, "\n%s: %s", p.Tool, p.ID)
-			}
-			return b.String(), nil
-		}
+	m := message(c, id, msg.FromUserID, text)
+	send := func(ctx context.Context, r channel.Reply) error {
+		return client.SendMessage(ctx, msg.FromUserID, msg.ContextToken, r.Text)
 	}
-
-	if len(approvalID) != 32 {
-		return fmt.Sprintf("⚠️ 审批 ID 格式不正确（需为 32 位字符，当前: %s）", approvalID), nil
+	// Typing is only a hint; the reply goes out without it.
+	_ = client.SendTyping(ctx, msg.FromUserID, msg.ContextToken)
+	answer := func(ctx context.Context) (channel.Reply, error) { return s.answer(ctx, c, msg.FromUserID, m) }
+	if id == "" {
+		reply, err := answer(ctx)
+		return errors.Join(send(ctx, reply), err)
 	}
-
-	input := chat.ChatRequest{
-		ID:       convID,
-		Owner:    owner,
-		Approval: &answer,
-	}
-
-	// The turn that follows a decision may ask for more approvals.
-	var reply strings.Builder
-	var approvals []chat.PendingApproval
-	err := s.Conversation.Execute(ctx, input, func(e chat.Event) error {
-		switch e.Kind {
-		case chat.SegmentDelta:
-			reply.WriteString(e.Text)
-		case chat.ApprovalRequested:
-			approvals = append(approvals, chat.PendingApproval{ID: e.ApprovalID, Tool: e.ToolName, Input: e.Input})
-		}
-		return nil
-	})
-
-	action := "已批准"
-	if !approved {
-		action = "已拒绝"
-	}
-
-	var command *chat.CommandError
-	if err != nil {
-		if errors.Is(err, chat.ErrStaleApproval) || errors.Is(err, sql.ErrNoRows) {
-			return fmt.Sprintf("⚠️ 审批指令无效或该审批已过期（ID: %s）", approvalID), nil
-		}
-		if errors.As(err, &command) {
-			return "⚠️ " + command.Message, nil
-		}
-		return "", err
-	}
-
-	result := fmt.Sprintf("%s操作（ID: %s）。", action, approvalID)
-	if answer.Remember != "" {
-		result += "已记住这个决定，以后同类请求不再询问；可在网页端或终端用 /grants 查看和撤销。"
-	}
-	if out := reply.String(); out != "" {
-		result += "\n\n" + out
-	}
-	if len(approvals) > 0 {
-		result += approvalPrompt(approvals, len(s.Conversation.Pending(convID)))
-	}
-	return result, nil
+	return s.bridge().Deliver(ctx, id, answer, send)
 }
 
 // parseApprovalCommand reads "批准 [ID] [总是|本会话]" or "拒绝 [ID] [原因]".

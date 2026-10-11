@@ -88,8 +88,8 @@ func TestRun(t *testing.T) {
 			t.Fatalf("%q must be sent as chat", text)
 		}
 	}
-	if run(ClientWeChat, "/new").Handled {
-		t.Fatal("/new ran in a client that does not support it")
+	if run(ClientWeChat, "/list").Handled {
+		t.Fatal("/list ran in a client that does not support it")
 	}
 	created := run(ClientWeb, "/new")
 	if !created.Handled || created.Action == nil || created.Action.Kind != OpenConversation {

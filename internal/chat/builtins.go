@@ -11,7 +11,7 @@ import (
 var (
 	everyClient = []string{ClientWeb, ClientTUI, ClientTelegram, ClientWeChat}
 	interactive = []string{ClientWeb, ClientTUI}
-	approving   = []string{ClientWeb, ClientTUI, ClientTelegram}
+	messaging   = []string{ClientTelegram, ClientWeChat}
 )
 
 // builtins are the commands about conversations and models.
@@ -19,14 +19,14 @@ func (s *ConversationService) builtins() []Command {
 	return []Command{
 		{CommandSpec: CommandSpec{"model", "/model [NAME | default [NAME]]", "Show or switch this conversation's model", everyClient, true}, Args: []Argument{s.modelOrDefault, s.defaultModel}},
 		{CommandSpec: CommandSpec{"models", "/models [FILTER]", "List available models", everyClient, true}},
-		{CommandSpec: CommandSpec{"new", "/new", "Start a new conversation", approving, false}, Run: s.newConversation},
+		{CommandSpec: CommandSpec{"new", "/new", "Start a new conversation", everyClient, false}, Run: s.newConversation},
 		{CommandSpec: CommandSpec{"list", "/list", "List conversations", interactive, false}, Run: s.listConversations},
 		{CommandSpec: CommandSpec{"open", "/open ID", "Switch to a conversation", interactive, false}, Args: []Argument{s.conversations}, Run: s.openConversation},
-		{CommandSpec: CommandSpec{"approve", "/approve [ID] [conversation|always]", "Approve a pending tool request, optionally remembering it", approving, false}, Args: []Argument{s.approvals, Choices(RememberConversation, RememberAlways)}, Run: s.decide(true)},
-		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", approving, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
-		{CommandSpec: CommandSpec{"grants", "/grants", "List remembered approvals", approving, false}, OwnerOnly: true, Run: s.listGrants},
-		{CommandSpec: CommandSpec{"revoke", "/revoke ID|all", "Forget a remembered approval", approving, false}, OwnerOnly: true, Args: []Argument{s.grantIDs}, Run: s.revokeGrant},
-		{CommandSpec: CommandSpec{"help", "/help", "Show commands", []string{ClientTelegram}, false}, Run: s.help},
+		{CommandSpec: CommandSpec{"approve", "/approve [ID] [conversation|always]", "Approve a pending tool request, optionally remembering it", everyClient, false}, Args: []Argument{s.approvals, Choices(RememberConversation, RememberAlways)}, Run: s.decide(true)},
+		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", everyClient, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
+		{CommandSpec: CommandSpec{"grants", "/grants", "List remembered approvals", everyClient, false}, OwnerOnly: true, Run: s.listGrants},
+		{CommandSpec: CommandSpec{"revoke", "/revoke ID|all", "Forget a remembered approval", everyClient, false}, OwnerOnly: true, Args: []Argument{s.grantIDs}, Run: s.revokeGrant},
+		{CommandSpec: CommandSpec{"help", "/help", "Show commands", messaging, false}, Run: s.help},
 	}
 }
 

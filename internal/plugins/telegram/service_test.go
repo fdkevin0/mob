@@ -44,7 +44,8 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 	if err := store.Setting("telegram-conversation:bot:7", &current); err != nil || current == "" {
 		t.Fatalf("/new did not become the bot's conversation: %v", err)
 	}
-	got, approvals, err := service.reply(context.Background(), config, "bot", chat.NewID(), "/remember 简洁")
+	answer, err := service.reply(context.Background(), config, "bot", chat.NewID(), "/remember 简洁")
+	got, approvals := answer.Text, answer.Approvals
 	if err != nil || !strings.Contains(got, "Approval needed: remember\nfact: 简洁") || !strings.Contains(got, "reply /approve, or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
 		t.Fatalf("approval request: %s %+v %v", got, approvals, err)
 	}

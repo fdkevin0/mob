@@ -2,14 +2,13 @@ package telegram
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"github.com/fdkevin0/mob/internal/chat"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fdkevin0/mob/internal/channel"
+	"github.com/fdkevin0/mob/internal/chat"
 )
 
 type Service struct {
@@ -123,140 +122,63 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 		}
 	}
 }
-func (s *Service) Message(ctx context.Context, c Config, botID string, u Update) error {
-	id := "tg:" + botID + ":" + strconv.FormatInt(u.ID, 10)
-	delivery, err := s.Store.Delivery(id)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return errors.New("Cannot read Telegram delivery state")
-	}
-	state, reply := delivery.State, delivery.Reply
-	var approvals []chat.PendingApproval
-	var processingErr error
-	switch state {
-	case "sent", "failed-or-unknown", "cancelled", "processing-failed", "processing":
-		return nil
-	case "sending":
-		err = s.Store.UpdateDelivery(id, "failed-or-unknown", reply, errors.New("service interrupted during send"))
-		if err != nil {
-			return err
-		}
-		return errors.New("Telegram reply delivery is uncertain; see local conversation history")
-	case "":
-		accepted, acceptErr := s.Store.AcceptDelivery(id, "processing")
-		if acceptErr != nil {
-			return errors.New("Cannot save Telegram update")
-		}
-		if !accepted {
-			return nil
-		}
-		reply, approvals, processingErr = s.reply(ctx, c, botID, id, u.Message.Text)
-	}
-	if ctx.Err() != nil {
-		return errors.Join(ctx.Err(), s.Store.UpdateDelivery(id, "cancelled", reply, ctx.Err()))
-	}
-	if err = s.Store.UpdateDelivery(id, "sending", reply, nil); err != nil {
-		return errors.New("Cannot save Telegram reply")
-	}
-	err = c.Send(ctx, u.Message.Chat.ID, reply, approvals...)
-	state = "sent"
-	if processingErr != nil {
-		state = "processing-failed"
-	}
-	if err != nil {
-		state = "failed-or-unknown"
-	}
-	saveErr := s.Store.UpdateDelivery(id, state, reply, errors.Join(err, processingErr))
-	if saveErr != nil {
-		return errors.New("Cannot save Telegram delivery status")
-	}
-	// ponytail: no automatic retry after an ambiguous send; the persisted reply and
-	// chat history remain available locally. Add a reviewable outbox before retries.
-	if err != nil {
-		return errors.New("Telegram reply delivery failed or is uncertain; see local conversation history")
-	}
-	return processingErr
-}
-func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text string) (string, error) {
-	reply, _, err := s.reply(ctx, c, botID, requestID, text)
-	return reply, err
+
+// bridge answers the owner's messages in the bot's conversation.
+func (s *Service) bridge() *channel.Bridge {
+	return &channel.Bridge{Name: "Telegram", Client: chat.ClientTelegram, Store: s.Store, Conversation: s.Conversation, Texts: texts, Limit: 32000}
 }
 
-// reply also returns the approvals the turn requested, which get buttons.
-func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text string) (string, []chat.PendingApproval, error) {
+var texts = channel.Texts{
+	Help: "Mob is connected. Send a message to chat. This computer must remain running.",
+	Approvals: func(approvals []chat.PendingApproval, pending int) string {
+		var b strings.Builder
+		for _, a := range approvals {
+			b.WriteString("\n\nApproval needed: " + chat.DescribeApproval(a.Tool, a.Input) + "\nID: " + a.ID)
+		}
+		return b.String() + "\n\n" + decideHint(pending)
+	},
+	Stale: func(id string) string { return "Approval " + id + " is unknown, expired, or already decided." },
+	Failed: func(err error) string {
+		return "\nMob: " + err.Error() + ". Open the desktop/TUI for the saved result."
+	},
+	Unsupported: "That command needs the desktop or terminal app.",
+	Empty:       "Done. Open the local conversation for details.",
+}
+
+// message is the owner's message in update u, as the bridge reads it.
+func message(c Config, botID string, u Update) channel.Message {
+	text := u.Message.Text
 	if text == "/start" {
 		text = "/help"
 	}
-	key := "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10)
-	var id string
-	if err := s.Store.Setting(key, &id); err != nil {
-		return "Cannot load the Telegram conversation.", nil, err
+	return channel.Message{
+		ID:  "tg:" + botID + ":" + strconv.FormatInt(u.ID, 10),
+		Key: "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10),
+		// The bot answers only its configured user, who owns this Mob.
+		Owner: true,
+		Text:  text,
 	}
-	if id == "" && text != "/new" && text != "/help" {
-		conversation, err := s.Store.Create()
-		if err != nil {
-			return "Cannot create a conversation.", nil, err
-		}
-		id = conversation.ID
-		if err = s.Store.SaveSetting(key, id); err != nil {
-			return "Cannot save the Telegram conversation.", nil, err
-		}
-	}
-	// The bot answers only its configured user, who owns this Mob.
-	result, err := s.Conversation.Commands.Run(ctx, chat.CommandRequest{Client: chat.ClientTelegram, ConversationID: id, Text: text}, true)
-	if err != nil {
-		return "Mob: " + err.Error(), nil, err
-	}
-	input := chat.ChatRequest{ID: id, Text: text, RequestID: requestID, Owner: true}
-	if result.Handled {
-		reply := result.Markdown
-		if text == "/help" {
-			reply = "Mob is connected. Send a message to chat. This computer must remain running.\n\n" + reply
-		}
-		switch a := result.Action; {
-		case a == nil:
-			return reply, nil, nil
-		case a.Kind == chat.OpenConversation:
-			if err := s.Store.SaveSetting(key, a.ConversationID); err != nil {
-				return "Cannot save the Telegram conversation.", nil, err
-			}
-			return reply, nil, nil
-		case a.Kind == chat.Decide:
-			input.Text = ""
-			input.Approval = &chat.Answer{ID: a.ApprovalID, Approved: a.Approved, Reason: a.Reason, Remember: a.Remember}
-		default:
-			return "That command needs the desktop or terminal app.", nil, nil
-		}
-	}
-	var reply strings.Builder
-	var approvals []chat.PendingApproval
-	err = s.Conversation.Execute(ctx, input, func(event chat.Event) error {
-		switch event.Kind {
-		case chat.SegmentDelta:
-			if event.Segment != "text" {
-				break
-			}
-			reply.WriteString(fmt.Sprint(event.Text))
-		case chat.ApprovalRequested:
-			approvals = append(approvals, chat.PendingApproval{ID: event.ApprovalID, Tool: event.ToolName, Input: event.Input})
-			reply.WriteString("\n\nApproval needed: " + chat.DescribeApproval(event.ToolName, event.Input) + "\nID: " + event.ApprovalID)
-		case chat.TurnFailed:
-			reply.WriteString("\nError: " + fmt.Sprint(event.Error))
-		}
-		if reply.Len() > 32000 {
-			return errors.New("reply exceeds Telegram bridge limit")
-		}
-		return nil
+}
+
+// Message answers the owner's message in update u and sends the reply once.
+func (s *Service) Message(ctx context.Context, c Config, botID string, u Update) error {
+	b, m := s.bridge(), message(c, botID, u)
+	answer := func(ctx context.Context) (channel.Reply, error) { return b.Answer(ctx, m) }
+	return b.Deliver(ctx, m.ID, answer, func(ctx context.Context, r channel.Reply) error {
+		return c.Send(ctx, u.Message.Chat.ID, r.Text, r.Approvals...)
 	})
-	if err != nil {
-		reply.WriteString("\nMob: " + err.Error() + ". Open the desktop/TUI for the saved result.")
-	}
-	if len(approvals) > 0 {
-		reply.WriteString("\n\n" + decideHint(len(s.Conversation.Pending(id))))
-	}
-	if reply.Len() == 0 {
-		return "Done. Open the local conversation for details.", nil, nil
-	}
-	return reply.String(), approvals, err
+}
+
+// Reply answers text as if the owner had sent it to the bot.
+func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text string) (string, error) {
+	reply, err := s.reply(ctx, c, botID, requestID, text)
+	return reply.Text, err
+}
+
+func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text string) (channel.Reply, error) {
+	m := message(c, botID, Update{Message: &Message{Text: text}})
+	m.ID = requestID
+	return s.bridge().Answer(ctx, m)
 }
 
 // decideHint tells the owner how to answer, given how many requests are pending.
