@@ -175,7 +175,7 @@ func TestCommandRoutes(t *testing.T) {
 	for _, spec := range specs {
 		names = append(names, spec.Name)
 	}
-	if got := strings.Join(names, " "); got != "model models new list open approve deny plugins mail email cloud test deliveries clear-secret" {
+	if got := strings.Join(names, " "); got != "model models new list open approve deny plugins test deliveries clear-secret mail email cloud" {
 		t.Fatalf("web commands: %s", got)
 	}
 	var suggestions []chat.Suggestion

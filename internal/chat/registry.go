@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -247,3 +248,18 @@ func Cell(text string) string {
 	text = strings.Join(strings.Fields(text), " ")
 	return strings.ReplaceAll(text, "|", "\\|")
 }
+
+// Reply is a command result that shows Markdown.
+func Reply(markdown string) (CommandResult, error) { return CommandResult{Markdown: markdown}, nil }
+
+// ReplyJSON shows value as indented JSON under title.
+func ReplyJSON(title string, value any) (CommandResult, error) {
+	raw, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return CommandResult{}, err
+	}
+	return Reply(title + "\n\n" + Fence("json", string(raw)))
+}
+
+// Interactive are the clients where people type commands into Mob itself.
+var Interactive = []string{ClientWeb, ClientTUI}

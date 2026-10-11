@@ -11,18 +11,18 @@ import (
 	"github.com/fdkevin0/mob/internal/llm"
 )
 
-// toolTimeout bounds one Cloudflare request made for the model.
-const toolTimeout = 45 * time.Second
+// requestTimeout bounds one Cloudflare operation.
+const requestTimeout = 45 * time.Second
 
 // toolOutput bounds the result the model reads, in bytes.
 const toolOutput = 32 << 10
 
-// readOperations only read; the others can cost money (Workers AI, which
-// vectorize.query uses to embed its text) or write (D1), so the user approves
-// each call.
+// operations are what /cloud and the cloudflare tool run. readOperations only
+// read; the others can cost money (Workers AI, which vectorize.query uses to
+// embed its text) or write (D1), so the model asks the user before each call.
 var (
+	operations     = []string{"ai.models", "ai.run", "vectorize.indexes", "vectorize.query", "d1.databases", "d1.query", "kv.namespaces", "kv.get", "r2.buckets", "r2.list", "r2.get"}
 	readOperations = []string{"ai.models", "vectorize.indexes", "d1.databases", "kv.namespaces", "kv.get", "r2.buckets", "r2.list", "r2.get"}
-	operations     = append(slices.Clone(readOperations), "ai.run", "vectorize.query", "d1.query")
 )
 
 // request is the cloudflare tool's input, as the user approves it.
@@ -51,7 +51,7 @@ func Tools(config func() (Config, error)) []chat.Tool {
 	// run uses the configuration c it is given, so an approved call runs with
 	// the configuration whose target was checked.
 	run := func(ctx context.Context, c Config, r request) (any, error) {
-		ctx, cancel := context.WithTimeout(ctx, toolTimeout)
+		ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 		defer cancel()
 		result, err := c.Do(ctx, Action{Operation: r.Operation, Text: r.Argument, Key: r.Argument, Cursor: r.Argument, SQL: r.Argument, Params: r.Params})
 		if err != nil {
