@@ -91,3 +91,52 @@ func TestHTTPAuthCancellationAndBusy(t *testing.T) {
 		t.Fatalf("retry accepted: %d", duplicate.StatusCode)
 	}
 }
+
+func TestDesktopOrigin(t *testing.T) {
+	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	handler := server.Handler(nil)
+	for _, origin := range []string{
+		"wails://wails", "http://wails.localhost",
+		"wails://wails.localhost:34115", "wails://wails.localhost:49152",
+		"wails://wails.localhost.evil.example:34115", "https://wails.localhost:34115",
+		"wails://evil@wails.localhost:34115", "wails://wails.localhost:34115/path",
+		"wails://wails.localhost:34115?query", "wails://wails.localhost:34115#fragment",
+		"wails://wails.localhost:invalid", "null",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			allowed := origin == "wails://wails" || origin == "http://wails.localhost" || origin == "wails://wails.localhost:34115" || origin == "wails://wails.localhost:49152"
+			for _, method := range []string{"OPTIONS", "GET"} {
+				for _, authenticated := range []bool{false, true} {
+					req := httptest.NewRequest(method, "http://127.0.0.1:8787/api/conversations", nil)
+					req.Header.Set("Origin", origin)
+					if authenticated {
+						req.Header.Set("Authorization", "Bearer "+server.Token)
+					}
+					r := httptest.NewRecorder()
+					handler.ServeHTTP(r, req)
+					want := http.StatusForbidden
+					if allowed {
+						want = http.StatusUnauthorized
+						if method == "OPTIONS" {
+							want = http.StatusNoContent
+						} else if authenticated {
+							want = http.StatusOK
+						}
+						if got := r.Header().Get("Access-Control-Allow-Origin"); got != origin {
+							t.Errorf("allow origin = %q, want %q", got, origin)
+						}
+					}
+					if r.Code != want {
+						t.Errorf("%s authenticated=%v: status %d, want %d", method, authenticated, r.Code, want)
+					}
+				}
+			}
+		})
+	}
+}

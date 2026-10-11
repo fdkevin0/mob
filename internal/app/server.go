@@ -17,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -138,6 +139,10 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 
 func allowedOrigin(origin, host string) bool {
 	if origin == "" || origin == "wails://wails" || origin == "http://wails.localhost" {
+		return true
+	}
+	// Wails adds a dynamic asset-server port to the macOS development origin.
+	if u, err := url.Parse(origin); err == nil && u.Port() != "" && origin == "wails://wails.localhost:"+u.Port() {
 		return true
 	}
 	if origin == "http://"+host {
