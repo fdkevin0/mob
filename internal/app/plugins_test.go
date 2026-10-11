@@ -34,7 +34,7 @@ func TestPluginConfiguration(t *testing.T) {
 	request := func(method, path, body string, status int) string {
 		t.Helper()
 		req := httptest.NewRequest(method, "http://127.0.0.1"+path, strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+srv.Token)
+		req.Header.Set("Authorization", "Bearer "+srv.Token())
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		if w.Code != status {
@@ -174,7 +174,7 @@ func TestEmailDuplicateSendDoesNotReconnect(t *testing.T) {
 	store.AcceptDelivery("email:"+id, "sending")
 	body, _ := json.Marshal(map[string]any{"requestId": id, "to": "a@example.org", "subject": "test", "text": "hello"})
 	req := httptest.NewRequest("POST", "http://127.0.0.1/api/plugins/email/send", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+srv.Token)
+	req.Header.Set("Authorization", "Bearer "+srv.Token())
 	w := httptest.NewRecorder()
 	srv.Handler(nil).ServeHTTP(w, req)
 	if w.Code != 409 {
@@ -205,7 +205,7 @@ func TestSavingAChannelRestartsIt(t *testing.T) {
 			WechatStatus   string `json:"wechatStatus"`
 		}
 		req := httptest.NewRequest("GET", "http://127.0.0.1/api/plugins", nil)
-		req.Header.Set("Authorization", "Bearer "+srv.Token)
+		req.Header.Set("Authorization", "Bearer "+srv.Token())
 		w := httptest.NewRecorder()
 		srv.Handler(nil).ServeHTTP(w, req)
 		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {

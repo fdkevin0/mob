@@ -105,6 +105,9 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	}
 	registry.Demo = c.Demo
 	server := app.NewServer(store, registry, connection.Token)
+	if os.Getenv("MOB_TOKEN") == "" {
+		server.PersistToken = func(token string) error { return writeToken(c.Dir, token) }
+	}
 	if err := server.ApplySandbox(c.Sandbox, c.Dir); err != nil {
 		cleanup()
 		return nil, err
@@ -223,4 +226,19 @@ func (a *App) ConfigError() string {
 	a.configMu.RLock()
 	defer a.configMu.RUnlock()
 	return strings.Trim(a.configError+"\n"+a.providers, "\n")
+}
+
+// writeToken replaces the token file atomically so readers never see a partial token.
+func writeToken(dir, token string) error {
+	file, err := os.CreateTemp(dir, ".token-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	_, err = file.WriteString(token)
+	err = errors.Join(err, file.Chmod(0600), file.Close())
+	if err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), filepath.Join(dir, "token"))
 }

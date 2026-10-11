@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,6 +20,7 @@ import (
 	"github.com/fdkevin0/mob/internal/tui"
 	"github.com/fdkevin0/mob/internal/version"
 	"github.com/fdkevin0/mob/webapp"
+	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
 
@@ -82,10 +84,8 @@ func newRootCommand() *cobra.Command {
 					nID = hostname
 				}
 			}
+			// The gateway never receives the local access token, which controls this Mob.
 			gwTok := os.Getenv("MOB_GATEWAY_TOKEN")
-			if gwTok == "" {
-				gwTok = os.Getenv("MOB_TOKEN")
-			}
 			nodeClient := node.NewClient(gwURL, nID, gwTok, app.Server.Handler(webapp.Assets()))
 			_ = nodeClient.Start(cmd.Context())
 			defer nodeClient.Close()
@@ -112,9 +112,6 @@ func newRootCommand() *cobra.Command {
 			token := gatewayToken
 			if token == "" {
 				token = os.Getenv("MOB_GATEWAY_TOKEN")
-				if token == "" {
-					token = os.Getenv("MOB_TOKEN")
-				}
 			}
 			gw := gateway.New(gateway.Config{
 				Token:  token,
@@ -182,6 +179,29 @@ func newRootCommand() *cobra.Command {
 			return tui.Run(connection)
 		}},
 	)
+	token := &cobra.Command{Use: "token", Short: "Manage the local access token"}
+	token.AddCommand(&cobra.Command{Use: "rotate", Short: "Replace the local access token and sign out every client", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		if err := local.RotateToken(config); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Access token replaced: %s\nSigned-in browsers, terminals and desktop windows must sign in again; run mob open for a browser.\n", filepath.Join(config.Dir, "token"))
+		return nil
+	}})
+	var printOnly bool
+	open := &cobra.Command{Use: "open", Short: "Sign a browser in to the running service with a one-time link", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		link, err := local.PairingURL(config)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Open this link within 5 minutes; it works once:\n%s\n", link)
+		if !printOnly {
+			browser.Stdout, browser.Stderr = io.Discard, io.Discard
+			_ = browser.OpenURL(link)
+		}
+		return nil
+	}}
+	open.Flags().BoolVar(&printOnly, "print", false, "Print the link without opening a browser")
+	root.AddCommand(token, open)
 	check := &cobra.Command{Use: "config", Short: "Inspect configuration without exposing secrets"}
 	check.AddCommand(&cobra.Command{Use: "check", Short: "Validate configuration and show its location", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := provider.Load(config.Loader.ProvidersPath()); err != nil {

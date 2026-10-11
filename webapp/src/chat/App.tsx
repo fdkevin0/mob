@@ -20,25 +20,53 @@ export function App() {
     const desktop = window.go?.main?.Desktop;
     if (desktop) {
       desktop.Connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => setLoading(false));
-    } else {
-      const saved = sessionStorage.getItem('mob-token');
-      if (saved) setConnection({ url: defaultURL(), token: saved });
-      setLoading(false);
+      return;
     }
+    const code = pairingCode();
+    const saved = savedToken();
+    const restore = code ? claimPairing(code) : saved ? Promise.resolve({ url: defaultURL(), token: saved }) : Promise.resolve(undefined);
+    restore.then(next => { if (next) { saveToken(next.token); setConnection(next); } })
+      .catch(e => { if (code) setError(errorText(e)); }).finally(() => setLoading(false));
   }, []);
   async function connect(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
     const next = { url: defaultURL(), token: token.trim() };
-    try { await api(next, '/config'); sessionStorage.setItem('mob-token', next.token); setConnection(next); }
+    try { await api(next, '/config'); saveToken(next.token); setConnection(next); }
     catch (e) { setError(errorText(e)); } finally { setLoading(false); }
   }
-  if (connection) return <Workspace connection={connection} disconnect={() => { sessionStorage.removeItem('mob-token'); setConnection(undefined); }} />;
+  if (connection) return <Workspace connection={connection} disconnect={() => { clearToken(); setConnection(undefined); }} />;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.go?.main?.Desktop) return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>
     <form onSubmit={connect}><label htmlFor="token">Local access token</label><input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
-      <p className="muted">Read the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</button></form>
+      <p className="muted">Run <code>mob open</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</button></form>
     {error && <p role="alert">{error}</p>}</main>;
+}
+
+// Storage can be unavailable, such as in a private window; the token form still works then.
+const tokenKey = 'mob-token';
+function savedToken() {
+  try { return localStorage.getItem(tokenKey) ?? sessionStorage.getItem(tokenKey); } catch { return null; }
+}
+function saveToken(token: string) {
+  try { localStorage.setItem(tokenKey, token); sessionStorage.removeItem(tokenKey); } catch { /* sign in again next time */ }
+}
+function clearToken() {
+  try { localStorage.removeItem(tokenKey); sessionStorage.removeItem(tokenKey); } catch { /* nothing stored */ }
+}
+
+// pairingCode takes a one-time code from the link mob open prints, removing it from the address bar.
+function pairingCode() {
+  const code = new URLSearchParams(window.location.hash.slice(1)).get('pair');
+  if (code) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  return code;
+}
+async function claimPairing(code: string): Promise<Connection> {
+  const url = defaultURL();
+  const response = await fetch(`${url}/api/pairing/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }), signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+  const { token } = await response.json() as { token: string };
+  return { url, token };
 }
 
 function Workspace({ connection, disconnect }: { connection: Connection; disconnect: () => void }) {

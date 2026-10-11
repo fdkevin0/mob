@@ -29,7 +29,7 @@ func TestTUIUsesSharedService(t *testing.T) {
 	defer httpSrv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), width: 80}
+	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token()}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), width: 80}
 	loaded := m.load("", false)().(snapshot)
 	if loaded.Err != nil {
 		t.Fatal(loaded.Err)
@@ -84,7 +84,7 @@ func TestTUIConnectsAndShowsModel(t *testing.T) {
 	defer httpSrv.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel}
+	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token()}, ctx: ctx, cancel: cancel}
 	msg := m.checkConfig()().(modelConfiguration)
 	if msg.Err != nil || msg.DefaultModel != "demo/echo" {
 		t.Fatalf("config %+v", msg)
@@ -113,7 +113,7 @@ func TestTUIPluginWizardMasksAndSaves(t *testing.T) {
 	defer httpSrv.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New()}
+	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token()}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New()}
 	updated, _ := m.Update(m.loadPlugins()())
 	m = updated.(model)
 	// The menu lists the plugins the service describes with fields.
@@ -170,7 +170,7 @@ func TestTUICompletesCommands(t *testing.T) {
 	styles.Cursor.Blink = false // a blink tick would stall the command loop below
 	input.SetStyles(styles)
 	input.Focus()
-	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: input, viewport: viewport.New(), width: 80}
+	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token()}, ctx: ctx, cancel: cancel, input: input, viewport: viewport.New(), width: 80}
 	updated, _ := m.Update(m.load("", false)())
 	m = updated.(model)
 	press := func(key tea.KeyPressMsg) {
@@ -243,7 +243,7 @@ func TestTUIRunsCommandsThroughService(t *testing.T) {
 	defer httpSrv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), width: 80}
+	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token()}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), width: 80}
 	updated, _ := m.Update(m.load("", false)())
 	m = updated.(model)
 	first := m.id

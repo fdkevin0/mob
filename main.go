@@ -12,12 +12,23 @@ import (
 )
 
 type Desktop struct {
+	config     local.Config
 	connection local.Connection
 	err        error
 }
 
 // Connection is the local service, or why the desktop could not reach it.
-func (d *Desktop) Connection() (local.Connection, error) { return d.connection, d.err }
+// The token is read again so a reloaded window follows mob token rotate.
+func (d *Desktop) Connection() (local.Connection, error) {
+	if d.err != nil {
+		return local.Connection{}, d.err
+	}
+	connection := d.connection
+	if current, err := local.Credentials(d.config); err == nil {
+		connection.Token = current.Token
+	}
+	return connection, nil
+}
 
 func main() {
 	if err := runDesktop(); err != nil {
@@ -32,7 +43,7 @@ func runDesktop() error {
 	}
 	// The window opens even when the service cannot start, such as for a
 	// database from an unsupported release, so the reason reaches the user.
-	desktop := &Desktop{}
+	desktop := &Desktop{config: config}
 	connection, close, err := local.ConnectOrStart(config, webapp.Assets())
 	if err != nil {
 		desktop.err = err

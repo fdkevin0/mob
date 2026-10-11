@@ -44,7 +44,7 @@ func TestHTTPAuthCancellationAndBusy(t *testing.T) {
 	for _, test := range []struct {
 		origin, token string
 		status        int
-	}{{"", "", 401}, {"https://evil.example", server.Token, 403}, {"", server.Token, 200}} {
+	}{{"", "", 401}, {"https://evil.example", server.Token(), 403}, {"", server.Token(), 200}} {
 		r := request("GET", "/api/conversations", test.origin, test.token, nil)
 		r.Body.Close()
 		if r.StatusCode != test.status {
@@ -52,17 +52,17 @@ func TestHTTPAuthCancellationAndBusy(t *testing.T) {
 		}
 	}
 	body := chat.ChatRequest{ID: c.ID, Text: strings.Repeat("hello ", 100), RequestID: "once"}
-	r := request("POST", "/api/chat", "", server.Token, body)
+	r := request("POST", "/api/chat", "", server.Token(), body)
 	defer r.Body.Close()
 	if r.StatusCode != 200 {
 		t.Fatal(r.Status)
 	}
-	busy := request("POST", "/api/chat", "", server.Token, chat.ChatRequest{ID: c.ID, Text: "other", RequestID: "twice"})
+	busy := request("POST", "/api/chat", "", server.Token(), chat.ChatRequest{ID: c.ID, Text: "other", RequestID: "twice"})
 	busy.Body.Close()
 	if busy.StatusCode != 409 {
 		t.Fatalf("concurrent turn accepted: %d", busy.StatusCode)
 	}
-	stop := request("POST", "/api/conversations/"+c.ID+"/stop", "", server.Token, map[string]any{})
+	stop := request("POST", "/api/conversations/"+c.ID+"/stop", "", server.Token(), map[string]any{})
 	stop.Body.Close()
 	stream, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestHTTPAuthCancellationAndBusy(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	duplicate := request("POST", "/api/chat", "", server.Token, body)
+	duplicate := request("POST", "/api/chat", "", server.Token(), body)
 	duplicate.Body.Close()
 	if duplicate.StatusCode != 409 {
 		t.Fatalf("retry accepted: %d", duplicate.StatusCode)
@@ -116,7 +116,7 @@ func TestDesktopOrigin(t *testing.T) {
 					req := httptest.NewRequest(method, "http://127.0.0.1:8787/api/conversations", nil)
 					req.Header.Set("Origin", origin)
 					if authenticated {
-						req.Header.Set("Authorization", "Bearer "+server.Token)
+						req.Header.Set("Authorization", "Bearer "+server.Token())
 					}
 					r := httptest.NewRecorder()
 					handler.ServeHTTP(r, req)
@@ -156,7 +156,7 @@ func TestCommandRoutes(t *testing.T) {
 		t.Helper()
 		raw, _ := json.Marshal(body)
 		req, _ := http.NewRequest(method, httpServer.URL+path, bytes.NewReader(raw))
-		req.Header.Set("Authorization", "Bearer "+server.Token)
+		req.Header.Set("Authorization", "Bearer "+server.Token())
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
