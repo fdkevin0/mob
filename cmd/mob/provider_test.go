@@ -71,6 +71,32 @@ func TestProviderCommands(t *testing.T) {
 	if f, _ = provider.Load(path); f.Find("work").Key != "sk-from-stdin-1234" || f.Find("work").Name != "Work relay" {
 		t.Fatalf("update %+v", f.Find("work"))
 	}
+	// A new destination never receives the old credentials.
+	var leaked int
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Team") != "" {
+			leaked++
+		}
+		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "m3"}}})
+	}))
+	defer other.Close()
+	if _, err = run("", "provider", "add", "work", "--chat", other.URL); err == nil || !strings.Contains(err.Error(), "--clear-key") {
+		t.Fatalf("key followed the endpoint: %v", err)
+	}
+	f, _ = provider.Load(path)
+	f.Find("work").Headers = map[string]string{"X-Team": "team-secret"}
+	if err = provider.Save(path, f); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = run("", "provider", "add", "work", "--chat", other.URL, "--clear-key"); err == nil || !strings.Contains(err.Error(), "--clear-headers") {
+		t.Fatalf("headers followed the endpoint: %v", err)
+	}
+	if _, err = run("", "provider", "add", "work", "--chat", other.URL, "--clear-key", "--clear-headers"); err != nil {
+		t.Fatal(err)
+	}
+	if f, _ = provider.Load(path); f.Find("work").Key != "" || f.Find("work").Headers != nil || leaked != 0 {
+		t.Fatalf("credentials kept or sent: %+v, %d leaks", f.Find("work"), leaked)
+	}
 	if out, err = run("", "provider", "rm", "work"); err != nil || !strings.Contains(out, "held the default") {
 		t.Fatalf("%s %v", out, err)
 	}

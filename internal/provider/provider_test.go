@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/fdkevin0/mob/internal/catalog"
@@ -297,5 +298,29 @@ func TestAuditRegressions(t *testing.T) {
 	}
 	if g := r.List(context.Background(), ""); len(g[0].Models) != 1 || g[0].Models[0].ID != "new-model" {
 		t.Fatalf("stale list after endpoint change: %+v", g)
+	}
+}
+
+func TestConcurrentWritersKeepEveryChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "providers.json")
+	service, _ := Open(path, &catalog.Catalog{}, File{})
+	cli, _ := Open(path, &catalog.Catalog{}, File{})
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func(r *Registry) {
+			defer wg.Done()
+			if err := r.Update(func(f *File) error {
+				f.Providers = append(f.Providers, Provider{ID: fmt.Sprintf("p%d", i), Chat: "https://example.com/v1"})
+				return nil
+			}); err != nil {
+				t.Error(err)
+			}
+		}([]*Registry{service, cli}[i%2])
+	}
+	wg.Wait()
+	f, err := Load(path)
+	if err != nil || len(f.Providers) != 21 {
+		t.Fatalf("lost writes: %d providers, %v", len(f.Providers), err)
 	}
 }

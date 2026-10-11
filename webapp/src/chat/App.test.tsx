@@ -19,3 +19,20 @@ it('opens chat without key setup and shows the conversation model', async () => 
   expect(screen.queryByLabelText('API key')).toBeNull();
   expect(fetchMock.mock.calls.some(([, options]) => String(options?.body ?? '').includes('apiKey'))).toBe(false);
 });
+
+it('promises no model calls only when the conversation uses the demo model', async () => {
+  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  let model = 'demo/echo';
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }]);
+    return Response.json({ messages: [], active: false, model });
+  }));
+  render(<App />);
+  await screen.findByText('Demo mode · no model calls');
+  cleanup();
+  model = 'deepseek/deepseek-chat';
+  render(<App />);
+  await screen.findByText('deepseek/deepseek-chat');
+  expect(screen.queryByText('Demo mode · no model calls')).toBeNull();
+});
