@@ -138,7 +138,7 @@ type Model interface {
 const (
 	MaxResponseBytes  = 2 << 20
 	MaxToolCalls      = 16
-	MaxToolArguments  = 16384
+	MaxToolArguments  = 1 << 20
 	MaxToolCallID     = 200
 	MaxToolNameLength = 100
 )

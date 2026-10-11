@@ -66,3 +66,31 @@ func TestMessagesStream(t *testing.T) {
 		t.Fatalf("%+v %s", result, got)
 	}
 }
+
+func TestThinkingStaysWithinTheOutputLimit(t *testing.T) {
+	var body struct {
+		MaxTokens int            `json:"max_tokens"`
+		Thinking  map[string]any `json:"thinking"`
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer upstream.Close()
+	for _, c := range []struct {
+		output, request, want, budget int
+	}{
+		{64000, 32000, 64000, 32000},
+		{32000, 32000, 32000, 16000},
+		{0, 0, defaultOutput + 32000, 32000},
+	} {
+		m := New(llm.Ref{Provider: "a", Model: "claude", Effort: "max"}, llm.Info{Output: c.output}, Config{BaseURL: upstream.URL})
+		if _, err := m.Stream(context.Background(), llm.Request{MaxTokens: c.request, Messages: []llm.Message{{Role: "user", Text: "hi"}}}, func(string, string) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if body.MaxTokens != c.want || body.Thinking["budget_tokens"] != float64(c.budget) {
+			t.Errorf("output %d: max_tokens %d, budget %v", c.output, body.MaxTokens, body.Thinking["budget_tokens"])
+		}
+	}
+}

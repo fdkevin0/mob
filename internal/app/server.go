@@ -184,9 +184,13 @@ func allowedOrigin(origin, host string) bool {
 	return origin == "http://localhost:5173" || origin == "http://127.0.0.1:5173"
 }
 
+// chatBody bounds a chat request body.
+const chatBody = 8 << 20
+
 func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	var input chat.ChatRequest
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	// Only a defence against runaway bodies: the model's context bounds a message.
+	r.Body = http.MaxBytesReader(w, r.Body, chatBody)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {

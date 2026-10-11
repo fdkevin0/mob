@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	// outputCap bounds a reply; unknownOutput is used when the catalog gives no limit.
-	outputCap     = 8192
-	unknownOutput = 4096
+	// outputCap bounds a reply below the model's own limit, as other agents
+	// do, so that a model with a huge limit still leaves room for history.
+	outputCap = 32000
 	// recentMessages bounds history for models whose context window is unknown.
 	recentMessages = 40
 )
@@ -62,7 +62,7 @@ type Hooks struct {
 // Run owns the model loop and message persistence; transports serialize its events.
 func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conversationID string, message Message, note string, emit func(Event) error) (runErr error) {
 	info := model.Info()
-	turn := &Turn{ConversationID: conversationID, Model: info, Request: &llm.Request{System: systemPrompt, MaxTokens: unknownOutput}}
+	turn := &Turn{ConversationID: conversationID, Model: info, Request: &llm.Request{System: systemPrompt}}
 	lastSave := time.Now()
 	send := func(e Event) error {
 		if err := ctx.Err(); err != nil {
@@ -100,8 +100,16 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		return err
 	}
 	req := turn.Request
+	// Without a known limit the driver picks the reply size; history still
+	// leaves room for one of outputCap.
+	reserve := outputCap
 	if info.Output > 0 {
 		req.MaxTokens = min(info.Output, outputCap)
+		reserve = req.MaxTokens
+	}
+	if info.Context > 0 && reserve > info.Context/4 {
+		reserve = info.Context / 4
+		req.MaxTokens = min(req.MaxTokens, reserve)
 	}
 	offered := map[string]Tool{}
 	if info.Tools {
@@ -122,7 +130,11 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		}
 	}
 	var omitted bool
-	req.Messages, omitted = Prompt(history, message.ID, info.Context-req.MaxTokens-tokens(req.System))
+	budget := info.Context - reserve - tokens(req.System)
+	req.Messages, omitted = Prompt(history, message.ID, budget)
+	if size := promptTokens(req.Messages); info.Context > 0 && size > budget {
+		return fmt.Errorf("the latest message is about %d tokens, more than %s has room for (%d); shorten it or pick a model with a larger context", size, info.ID, max(budget, 0))
+	}
 	if omitted {
 		req.System += "\nOlder conversation messages were omitted."
 	}
@@ -279,6 +291,18 @@ func add(total *llm.Usage, u llm.Usage) *llm.Usage {
 // exact as this needs to be.
 func tokens(s string) int { return len(s)/3 + 1 }
 
+// promptTokens estimates the prompt tokens of model messages.
+func promptTokens(messages []llm.Message) int {
+	size := 0
+	for _, m := range messages {
+		size += tokens(m.Text) + tokens(m.Reasoning)
+		for _, c := range m.ToolCalls {
+			size += tokens(c.Arguments)
+		}
+	}
+	return size
+}
+
 // Prompt replays stored history as model messages. Tool calls go back as
 // calls with their results, so any model can continue another's work;
 // earlier turns' reasoning is never replayed, as it belongs to its model.
@@ -298,13 +322,7 @@ func Prompt(history []Message, current string, budget int) (messages []llm.Messa
 	if budget > 0 {
 		used := 0
 		for start = len(turns); start > 0; start-- {
-			size := 0
-			for _, m := range turns[start-1] {
-				size += tokens(m.Text) + tokens(m.Reasoning)
-				for _, c := range m.ToolCalls {
-					size += tokens(c.Arguments)
-				}
-			}
+			size := promptTokens(turns[start-1])
 			if used+size > budget && start < len(turns) {
 				break
 			}
