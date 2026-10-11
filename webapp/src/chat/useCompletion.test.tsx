@@ -61,3 +61,14 @@ it('sends a complete command on Enter and ignores free text', async () => {
   expect(requests).not.toContain('hello /mo');
   expect(result.current.suggestions).toHaveLength(0);
 });
+
+it('does not apply suggestions computed for older text', async () => {
+  const { hook: { result } } = setup();
+  act(() => result.current.setInput('/mo'));
+  await waitFor(() => expect(result.current.suggestions).toHaveLength(2));
+  // The user finishes typing before the answer for "/models" arrives.
+  act(() => result.current.setInput('/models'));
+  act(() => { expect(result.current.onKeyDown(key('Enter'))).toBe(false); });
+  act(() => { result.current.onKeyDown(key('Tab')); });
+  expect(result.current.input).toBe('/models');
+});
