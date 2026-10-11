@@ -7,7 +7,7 @@ a real machine end to end. Results so far:
 | --- | --- | --- |
 | Linux | containerd 2.3.6, nerdctl 2.1.6 | all checks pass |
 | macOS 27.0.1, Apple silicon | Apple container 1.5.0 | all checks pass |
-| Windows | wslc | not yet run on a real machine |
+| Windows 11 (10.0.26100) | WSL 2.9.3 containers (`wslc`) | all checks pass |
 
 Each script builds `mob` from the
 checkout, then checks the following and prints `PASS`/`FAIL` per check:

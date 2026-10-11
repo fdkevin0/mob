@@ -45,6 +45,10 @@ VM, while each platform now has a first-party container runtime of its own.
   run while the runtime answers, so a local image still works offline.
 - `mob container status|pull|run` uses the same runtime directly, so a user can
   confirm it works before enabling the sandbox.
+- `scripts/verify-sandbox.sh` and `scripts/verify-sandbox.ps1` check a machine
+  end to end. They pass on Linux (containerd 2.3, nerdctl 2.1), macOS 27 (Apple
+  container 1.5) and Windows 11 (WSL 2.9.3 `wslc`); see
+  [docs/sandbox-verification.md](../sandbox-verification.md).
 
 ## Consequences
 
