@@ -45,7 +45,7 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 		t.Fatalf("/new did not become the bot's conversation: %v", err)
 	}
 	got, approvals, err := service.reply(context.Background(), config, "bot", chat.NewID(), "/remember 简洁")
-	if err != nil || !strings.Contains(got, "Approval needed: remember\nfact: 简洁") || !strings.Contains(got, "reply /approve or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
+	if err != nil || !strings.Contains(got, "Approval needed: remember\nfact: 简洁") || !strings.Contains(got, "reply /approve, or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
 		t.Fatalf("approval request: %s %+v %v", got, approvals, err)
 	}
 	if got := reply("/approve"); !strings.Contains(got, "approved remember and it ran") {
@@ -53,6 +53,17 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 	}
 	if got := reply("/approve"); !strings.Contains(got, "0 requests are pending") {
 		t.Fatalf("second /approve: %s", got)
+	}
+	reply("/remember 冗长")
+	if got := reply("/approve " + chat.NewID() + " please"); got != "Use `/approve ID`." {
+		t.Fatalf("/approve with a reason: %s", got)
+	}
+	// The demo model echoes what it last received: the denial and its reason.
+	if got := reply("/deny 太长了"); !strings.Contains(got, "The user denied the remember request and said: 太长了") {
+		t.Fatalf("/deny with a reason: %s", got)
+	}
+	if got := reply("/deny"); !strings.Contains(got, "0 requests are pending; use `/deny ID [reason]`") {
+		t.Fatalf("/deny with nothing pending: %s", got)
 	}
 }
 

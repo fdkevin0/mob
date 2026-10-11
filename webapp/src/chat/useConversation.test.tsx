@@ -82,3 +82,15 @@ it('sends a slash command the service does not run as chat', async () => {
   act(() => result.current.submit({ preventDefault() {} } as FormEvent));
   await waitFor(() => expect(chats.some(c => c.includes('"text":"/models"'))).toBe(true));
 });
+it('sends the reason a /deny gives with the denial', async () => {
+  const chats: string[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+    if (url.endsWith('/commands/run')) return Promise.resolve(Response.json({ handled: true, action: { kind: 'decide', approvalId: 'a1', approved: false, reason: 'too long' } }));
+    if (url.endsWith('/chat')) { chats.push(String(options?.body)); return new Promise<Response>(() => {}); }
+    return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
+  }));
+  const { result } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
+  act(() => result.current.setInput('/deny too long'));
+  act(() => result.current.submit({ preventDefault() {} } as FormEvent));
+  await waitFor(() => expect(chats.some(c => c.includes('"approval":{"id":"a1","approved":false,"reason":"too long"}'))).toBe(true));
+});

@@ -59,14 +59,14 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if facts, _ := s.Memories(c.ID); len(facts) != 0 {
 		t.Fatal("executed without approval")
 	}
-	if _, err = s.Decide(NewID(), approval, true); !errors.Is(err, ErrStaleApproval) {
+	if _, err = s.Decide(NewID(), approval, true, ""); !errors.Is(err, ErrStaleApproval) {
 		t.Fatalf("cross-conversation approval: %v", err)
 	}
-	decision, err := s.Decide(c.ID, approval, true)
+	decision, err := s.Decide(c.ID, approval, true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Decide(c.ID, approval, true); !errors.Is(err, ErrStaleApproval) {
+	if _, err = s.Decide(c.ID, approval, true, ""); !errors.Is(err, ErrStaleApproval) {
 		t.Fatalf("repeated approval: %v", err)
 	}
 	if facts, _ := s.Memories(c.ID); len(facts) != 0 {
@@ -136,11 +136,11 @@ func TestDenialAndExpiry(t *testing.T) {
 			if _, err = s.db.Exec("UPDATE approvals SET expires_at=0 WHERE id=?", id); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.Decide(c.ID, id, true); !errors.Is(err, ErrStaleApproval) {
+			if _, err = s.Decide(c.ID, id, true, ""); !errors.Is(err, ErrStaleApproval) {
 				t.Fatal(err)
 			}
 		} else {
-			if _, err = s.Decide(c.ID, id, false); err != nil {
+			if _, err = s.Decide(c.ID, id, false, ""); err != nil {
 				t.Fatal(err)
 			}
 		}

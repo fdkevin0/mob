@@ -26,8 +26,8 @@ func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contex
 	trimmed := strings.TrimSpace(text)
 
 	// 1. Natural language approval command check: "批准 <id>" / "拒绝 <id>"
-	if approvalID, approved, ok := parseApprovalCommand(trimmed); ok {
-		return s.handleApproval(ctx, senderID, approvalID, approved, c.IsOwner(senderID))
+	if approvalID, reason, approved, ok := parseApprovalCommand(trimmed); ok {
+		return s.handleApproval(ctx, senderID, approvalID, reason, approved, c.IsOwner(senderID))
 	}
 
 	// 2. Normal conversation flow
@@ -146,14 +146,14 @@ func approvalPrompt(approvals []chat.PendingApproval, pending int) string {
 		fmt.Fprintf(&b, "\n\n⚠️ 【操作审批】%s\n审批 ID: %s", chat.DescribeApproval(a.Tool, a.Input), a.ID)
 	}
 	if pending > 1 {
-		b.WriteString("\n\n有多个待审批请求，请回复「批准 ID」或「拒绝 ID」。")
+		b.WriteString("\n\n有多个待审批请求，请回复「批准 ID」或「拒绝 ID 原因」，原因可省略。")
 	} else {
-		b.WriteString("\n\n允许请回复「批准」，拒绝请回复「拒绝」。")
+		b.WriteString("\n\n允许请回复「批准」，拒绝请回复「拒绝」，可在后面写上原因。")
 	}
 	return b.String()
 }
 
-func (s *Service) handleApproval(ctx context.Context, senderID, approvalID string, approved, owner bool) (string, error) {
+func (s *Service) handleApproval(ctx context.Context, senderID, approvalID, reason string, approved, owner bool) (string, error) {
 	var convID string
 	_ = s.Store.Setting("wechat-ilink-conv:"+senderID, &convID)
 	if convID == "" {
@@ -182,15 +182,9 @@ func (s *Service) handleApproval(ctx context.Context, senderID, approvalID strin
 	}
 
 	input := chat.ChatRequest{
-		ID:    convID,
-		Owner: owner,
-		Approval: &struct {
-			ID       string `json:"id"`
-			Approved bool   `json:"approved"`
-		}{
-			ID:       approvalID,
-			Approved: approved,
-		},
+		ID:       convID,
+		Owner:    owner,
+		Approval: &chat.Answer{ID: approvalID, Approved: approved, Reason: reason},
 	}
 
 	var reply strings.Builder
@@ -220,7 +214,9 @@ func (s *Service) handleApproval(ctx context.Context, senderID, approvalID strin
 	return fmt.Sprintf("%s操作（ID: %s）。", action, approvalID), nil
 }
 
-func parseApprovalCommand(text string) (approvalID string, approved bool, ok bool) {
+// parseApprovalCommand reads "批准 [ID]" or "拒绝 [ID] [原因]". A denial
+// without an ID answers the only pending request, and its text is the reason.
+func parseApprovalCommand(text string) (approvalID, reason string, approved bool, ok bool) {
 	lower := strings.ToLower(text)
 	prefixes := []struct {
 		prefix   string
@@ -235,16 +231,24 @@ func parseApprovalCommand(text string) (approvalID string, approved bool, ok boo
 	}
 
 	for _, p := range prefixes {
-		if lower == p.prefix {
-			// A bare word answers the only pending request.
-			return "", p.approved, true
+		if !strings.HasPrefix(lower, p.prefix) {
+			continue
 		}
-		if strings.HasPrefix(lower, p.prefix) {
-			rest := strings.TrimSpace(text[len(p.prefix):])
-			if rest != "" {
-				return rest, p.approved, true
-			}
+		rest := strings.TrimSpace(text[len(p.prefix):])
+		fields := strings.Fields(rest)
+		switch {
+		case rest == "":
+			// A bare word answers the only pending request.
+			return "", "", p.approved, true
+		case len(fields[0]) == 32 && p.approved:
+			return fields[0], "", true, true
+		case len(fields[0]) == 32:
+			return fields[0], strings.TrimSpace(strings.TrimPrefix(rest, fields[0])), false, true
+		case p.approved:
+			return rest, "", true, true
+		default:
+			return "", rest, false, true
 		}
 	}
-	return "", false, false
+	return "", "", false, false
 }

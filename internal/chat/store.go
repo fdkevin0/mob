@@ -278,9 +278,9 @@ type Decision struct {
 }
 
 // Decide records the user's decision, at most once. A denial completes the
-// call and tells the model; an approved call is left for Complete, so a retry
-// never carries it out twice.
-func (s *Store) Decide(conversationID, approvalID string, approved bool) (Decision, error) {
+// call and tells the model, with the user's reason when they gave one; an
+// approved call is left for Complete, so a retry never carries it out twice.
+func (s *Store) Decide(conversationID, approvalID string, approved bool, reason string) (Decision, error) {
 	d := Decision{ApprovalID: approvalID}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -320,6 +320,9 @@ func (s *Store) Decide(conversationID, approvalID string, approved bool) (Decisi
 	}
 	if !approved {
 		note := "The user denied the " + d.Tool + " request. Do not retry unless asked."
+		if reason != "" {
+			note = "The user denied the " + d.Tool + " request and said: " + reason
+		}
 		body, _ := json.Marshal([]Part{{"type": "text", "text": note}})
 		if _, err = tx.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", NewID(), conversationID, string(body)); err != nil {
 			return d, err
