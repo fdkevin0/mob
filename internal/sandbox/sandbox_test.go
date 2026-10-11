@@ -153,3 +153,19 @@ func TestTimeoutRemovesTheContainer(t *testing.T) {
 		t.Fatal("cancelled turn reported as a result")
 	}
 }
+
+func TestSaveWritesIntoTheWorkspace(t *testing.T) {
+	box := &Sandbox{Root: t.TempDir()}
+	path, err := box.Save(conversation, "out.txt", "whole output")
+	if err != nil || path != Workdir+"/.mob/outputs/out.txt" {
+		t.Fatalf("saved at %q: %v", path, err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(box.Root, conversation, ".mob", "outputs", "out.txt")); err != nil || string(raw) != "whole output" {
+		t.Fatalf("workspace file: %q %v", raw, err)
+	}
+	for _, name := range []string{"", "../x", "a/b", ".hidden"} {
+		if _, err := box.Save(conversation, name, "x"); err == nil {
+			t.Fatalf("saved as %q", name)
+		}
+	}
+}

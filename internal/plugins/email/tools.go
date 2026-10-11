@@ -18,9 +18,6 @@ import (
 // toolTimeout bounds one mail server round trip made for the model.
 const toolTimeout = 45 * time.Second
 
-// mailText bounds the message text the model reads, in runes.
-const mailText = 24000
-
 // Tools let the model read INBOX and, once the user approves, send mail while
 // the plugin is enabled. config reads the saved configuration.
 func Tools(config func() (Config, error)) []chat.Tool {
@@ -69,11 +66,8 @@ func Tools(config func() (Config, error)) []chat.Tool {
 				}
 				ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 				defer cancel()
-				m, err := c.Read(ctx, uid, validity)
-				if text := []rune(m.Text); len(text) > mailText {
-					m.Text = string(text[:mailText]) + "\n[truncated]"
-				}
-				return m, err
+				// The conversation decides how much of a long message the model reads.
+				return c.Read(ctx, uid, validity)
 			},
 		},
 		{

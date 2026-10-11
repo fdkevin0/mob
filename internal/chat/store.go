@@ -331,8 +331,9 @@ func (s *Store) Decide(conversationID, approvalID string, approved bool, reason 
 	return d, tx.Commit()
 }
 
-// Complete records what an approved call returned.
-func (s *Store) Complete(d Decision, output any, failure error) error {
+// Complete records what an approved call returned and where a large output
+// was saved, if it was.
+func (s *Store) Complete(d Decision, output any, file string, failure error) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -345,6 +346,9 @@ func (s *Store) Complete(d Decision, output any, failure error) error {
 		} else {
 			p["state"] = "output-available"
 			p["output"] = output
+			if file != "" {
+				p["outputFile"] = file
+			}
 		}
 	})
 	if err != nil {

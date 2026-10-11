@@ -157,14 +157,17 @@ func (s *ConversationService) carryOut(ctx context.Context, conversationID strin
 	default:
 		output, err = tools[i].Approved(ctx, ApprovedCall{ConversationID: conversationID, ApprovalID: d.ApprovalID, Input: d.Input, Store: s.Store})
 	}
-	if saveErr := s.Store.Complete(d, output, err); saveErr != nil {
+	file := ""
+	if err == nil {
+		file = save(s.saver(), conversationID, d.ToolCallID, output)
+	}
+	if saveErr := s.Store.Complete(d, output, file, err); saveErr != nil {
 		return "", errors.Join(err, saveErr)
 	}
 	if err != nil {
 		return "The user approved " + d.Tool + ", but it failed: " + err.Error() + ". Tell the user.", nil
 	}
-	result, _ := json.Marshal(output)
-	return "The user approved " + d.Tool + " and it ran. Result: " + string(result) + ". Confirm the result.", nil
+	return "The user approved " + d.Tool + " and it ran. Result: " + modelOutput(output, file) + ". Confirm the result.", nil
 }
 
 // rememberable reports whether a's Remember is one an answer may carry.
@@ -200,7 +203,16 @@ func (s *ConversationService) agent(owner bool) Agent {
 	if box != nil {
 		tools = append(tools, sandboxTool(box))
 	}
-	return Agent{Tools: tools, Hooks: s.Hooks, Owner: owner, Steps: steps}
+	saver, _ := box.(Saver)
+	return Agent{Tools: tools, Hooks: s.Hooks, Owner: owner, Steps: steps, Saver: saver}
+}
+
+// saver keeps large tool outputs in the sandbox's workspace, if it can.
+func (s *ConversationService) saver() Saver {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	saver, _ := s.sandbox.(Saver)
+	return saver
 }
 
 // recall gives the model the conversation's saved facts.

@@ -32,6 +32,9 @@ type Agent struct {
 	Owner bool
 	// Steps bounds the model calls of a turn; zero means DefaultSteps.
 	Steps int
+	// Saver, when set, keeps tool outputs too large to read in place where
+	// the model can read them; without one the model reads their ends.
+	Saver Saver
 }
 
 // DefaultSteps is how many model calls a turn makes at most unless its agent
@@ -234,12 +237,15 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			} else {
 				part["state"] = "output-available"
 				part["output"] = output
+				if file := save(agent.Saver, conversationID, call.ID, output); file != "" {
+					part["outputFile"] = file
+				}
 				if err := send(Event{Kind: ToolOutput, ToolCallID: call.ID, Output: output}); err != nil {
 					return err
 				}
 			}
-			body, _ := json.Marshal(output)
-			req.Messages = append(req.Messages, llm.Message{Role: "tool", Text: string(body), ToolCallID: call.ID, ToolName: call.Name})
+			file, _ := part["outputFile"].(string)
+			req.Messages = append(req.Messages, llm.Message{Role: "tool", Text: modelOutput(output, file), ToolCallID: call.ID, ToolName: call.Name})
 		}
 		if err := send(Event{Kind: StepFinished}); err != nil {
 			return err
@@ -384,7 +390,8 @@ func outcome(part Part) string {
 	var v any
 	switch part["state"] {
 	case "output-available":
-		v = part["output"]
+		file, _ := part["outputFile"].(string)
+		return modelOutput(part["output"], file)
 	case "output-error":
 		v = map[string]any{"error": part["errorText"]}
 	case "output-denied":

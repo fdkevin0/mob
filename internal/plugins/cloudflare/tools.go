@@ -15,9 +15,6 @@ import (
 // requestTimeout bounds one Cloudflare operation.
 const requestTimeout = 45 * time.Second
 
-// toolOutput bounds the result the model reads, in bytes.
-const toolOutput = 32 << 10
-
 // operations are what /cloud and the cloudflare tool run. readOperations only
 // read; the others can cost money (Workers AI, which vectorize.query uses to
 // embed its text) or write (D1), so the model asks the user before each call.
@@ -63,15 +60,12 @@ func Tools(config func() (Config, error)) []chat.Tool {
 	run := func(ctx context.Context, c Config, r request) (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 		defer cancel()
+		// The conversation decides how much of a large result the model reads.
 		result, err := c.Do(ctx, Action{Operation: r.Operation, Text: r.Argument, Key: r.Argument, Cursor: r.Argument, SQL: r.Argument, Params: r.Params})
 		if err != nil {
 			return nil, err
 		}
-		raw, err := json.Marshal(result)
-		if err != nil || len(raw) <= toolOutput {
-			return result, err
-		}
-		return map[string]any{"truncated": true, "result": string(raw[:toolOutput])}, nil
+		return result, nil
 	}
 	return []chat.Tool{{
 		Tool: llm.Tool{
