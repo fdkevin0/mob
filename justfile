@@ -43,9 +43,3 @@ vet:
 
 generate:
     bun run generate:contracts
-
-build-legacy:
-    bun run build:legacy
-
-test-legacy:
-    bun run test:legacy

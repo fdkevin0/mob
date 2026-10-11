@@ -92,20 +92,3 @@ jobs:
       # with the AI SDK client the web UI uses.
       - name: Check chat, commands and approvals end to end
         run: bun run test:integration
-
-  legacy:
-    name: Legacy Telegram/Cloudflare code
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - run: bun install --frozen-lockfile
-      - name: Mini App typecheck and tests
-        run: bun run test:legacy
-      - name: Mini App build
-        run: bun run build:legacy
-      - name: Worker reference tests
-        run: bunx vitest run --config vitest.config.ts

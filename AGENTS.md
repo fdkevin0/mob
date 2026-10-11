@@ -7,7 +7,6 @@ Mob is a local Go assistant with SQLite persistence, a React web UI, a Wails des
 - `cmd/mob/` contains the CLI; `main.go` launches the desktop app.
 - `internal/` contains application services, chat, providers, configuration, plugins, and TUI packages. Go tests sit beside their implementation.
 - `webapp/src/chat/` contains the current UI; `webapp/src/components/ai-elements/` holds shared UI components. Built assets in `webapp/dist/` are embedded into Go binaries.
-- `src/` and `webapp/src/miniapp/` retain legacy Telegram/Cloudflare code; their checks are separate from the current application.
 - `docs/adr/` records architecture decisions; `scripts/check-chat.ts` exercises the Go/AI SDK integration.
 
 ## Build, Test, and Development Commands
@@ -22,7 +21,6 @@ Use Go 1.26+ and Bun 1.3.10. Desktop development also needs Wails platform prere
 - `just test`: run Go, current UI, and integration checks.
 - `bun run test:webapp`: typecheck and run UI tests.
 - `go test ./...` and `go vet ./...`: test and inspect Go packages.
-- `bun run test:legacy`: typecheck and test the legacy Mini App.
 - `bun run generate:contracts`: regenerate UI contracts after changing their Go definitions.
 
 ## Coding Style & Naming Conventions
