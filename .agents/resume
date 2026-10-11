@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# No authentication or external database is required. Never install on resume.
+export PATH="$HOME/.local/share/mob-orb/go/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+go version
+bun --version
+just --version
