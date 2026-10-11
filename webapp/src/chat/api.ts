@@ -21,11 +21,15 @@ export function timeoutFor(path: string) {
   return path.startsWith('/plugins') || path === '/commands/run' ? 60_000 : 10_000;
 }
 
-// A 401 means the token was replaced, such as by mob token rotate; the app then signs out.
+// A 401 means the token was replaced, such as by mob token rotate. The event names
+// the rejected token so a late response for an older token cannot sign out a newer one.
 export const unauthorizedEvent = 'mob:unauthorized';
 export const authorizedFetch: typeof fetch = async (input, init) => {
   const response = await fetch(input, init);
-  if (response.status === 401) window.dispatchEvent(new Event(unauthorizedEvent));
+  if (response.status === 401) {
+    const token = new Headers(init?.headers).get('Authorization')?.replace(/^Bearer /, '') ?? '';
+    window.dispatchEvent(new CustomEvent<string>(unauthorizedEvent, { detail: token }));
+  }
   return response;
 };
 

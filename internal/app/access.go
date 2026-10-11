@@ -46,8 +46,9 @@ var errRevoked = errors.New("access token was replaced")
 
 // revocable ties a request to its token: rotation cancels its context, so
 // streams and turns stop, and fails body reads, so a request still waiting
-// for its body never starts work.
-func revocable(r *http.Request, revoked <-chan struct{}) *http.Request {
+// for its body never starts work. The caller runs done when the handler
+// returns, since requests built outside net/http.Server are never cancelled.
+func revocable(r *http.Request, revoked <-chan struct{}) (_ *http.Request, done func()) {
 	ctx, cancel := context.WithCancelCause(r.Context())
 	go func() {
 		select {
@@ -60,7 +61,7 @@ func revocable(r *http.Request, revoked <-chan struct{}) *http.Request {
 	if r.Body != nil {
 		r.Body = revocableBody{r.Body, revoked}
 	}
-	return r
+	return r, func() { cancel(nil) }
 }
 
 type revocableBody struct {

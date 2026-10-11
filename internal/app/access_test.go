@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -204,5 +205,37 @@ func TestRotationEndsRequestsOfTheOldToken(t *testing.T) {
 			t.Fatalf("turn kept running after rotation: %+v", h)
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// Requests built outside net/http.Server, such as the gateway relay's, are never
+// cancelled by a server; finishing the handler must still release the revocation watch.
+func TestFinishedRequestsReleaseTheirRevocationWatch(t *testing.T) {
+	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	handler := server.Handler(nil)
+	serve := func() {
+		req, _ := http.NewRequest("GET", "/api/config", nil)
+		req.Host = "localhost"
+		req.Header.Set("Authorization", "Bearer "+server.Token())
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	serve()
+	time.Sleep(50 * time.Millisecond)
+	before := runtime.NumGoroutine()
+	for range 80 {
+		serve()
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for runtime.NumGoroutine() > before+5 {
+		if time.Now().After(deadline) {
+			t.Fatalf("goroutines grew from %d to %d after finished requests", before, runtime.NumGoroutine())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
