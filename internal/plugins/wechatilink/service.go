@@ -27,7 +27,7 @@ func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contex
 
 	// 1. Natural language approval command check: "批准 <id>" / "拒绝 <id>"
 	if approvalID, approved, ok := parseApprovalCommand(trimmed); ok {
-		return s.handleApproval(ctx, senderID, approvalID, approved)
+		return s.handleApproval(ctx, senderID, approvalID, approved, c.IsOwner(senderID))
 	}
 
 	// 2. Normal conversation flow
@@ -142,7 +142,7 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 	}
 }
 
-func (s *Service) handleApproval(ctx context.Context, senderID, approvalID string, approved bool) (string, error) {
+func (s *Service) handleApproval(ctx context.Context, senderID, approvalID string, approved, owner bool) (string, error) {
 	var convID string
 	_ = s.Store.Setting("wechat-ilink-conv:"+senderID, &convID)
 	if convID == "" {
@@ -154,7 +154,8 @@ func (s *Service) handleApproval(ctx context.Context, senderID, approvalID strin
 	}
 
 	input := chat.ChatRequest{
-		ID: convID,
+		ID:    convID,
+		Owner: owner,
 		Approval: &struct {
 			ID       string `json:"id"`
 			Approved bool   `json:"approved"`

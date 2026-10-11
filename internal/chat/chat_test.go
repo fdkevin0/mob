@@ -62,11 +62,18 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if _, err = s.Decide(NewID(), approval, true); !errors.Is(err, ErrStaleApproval) {
 		t.Fatalf("cross-conversation approval: %v", err)
 	}
-	if _, err = s.Decide(c.ID, approval, true); err != nil {
+	decision, err := s.Decide(c.ID, approval, true)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Decide(c.ID, approval, true); !errors.Is(err, ErrStaleApproval) {
 		t.Fatalf("repeated approval: %v", err)
+	}
+	if facts, _ := s.Memories(c.ID); len(facts) != 0 {
+		t.Fatal("deciding carried out the call")
+	}
+	if note, err := NewConversation(s, nil).carryOut(context.Background(), c.ID, decision, true); err != nil || !strings.Contains(note, `approved remember and it ran. Result: {"saved":true}`) {
+		t.Fatalf("carry out: %q %v", note, err)
 	}
 	facts, err := s.Memories(c.ID)
 	if err != nil || len(facts) != 1 || facts[0] != "喜欢中文" {

@@ -40,6 +40,7 @@ type Server struct {
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), Token: token}
 	s.Commands.Register(s.pluginCommands()...)
+	s.Tools.Register(s.tools()...)
 	s.extensions.Register(s.channels()...)
 	return s
 }

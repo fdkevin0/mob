@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -24,9 +25,29 @@ type Sandbox interface {
 type Tool struct {
 	llm.Tool
 	Prompt string
+	// OwnerOnly tools are offered, and their approved calls carried out, only
+	// for the person who owns this Mob.
+	OwnerOnly bool
+	// Available reports whether turns offer the tool now, e.g. while its
+	// plugin is enabled; nil offers it always.
+	Available func() bool
 	// Run's output goes back to the model; so does its error, unless it is
 	// ErrAwaitingApproval or made by Abort.
 	Run func(ctx context.Context, call ToolCall) (any, error)
+	// Approved carries out a call the user approved after Run asked with
+	// ToolCall.RequestApproval; its output or error goes to the model.
+	Approved func(ctx context.Context, call ApprovedCall) (any, error)
+}
+
+// ApprovedCall is a call the user approved.
+type ApprovedCall struct {
+	ConversationID string
+	// ApprovalID is unique to the call; an effect outside Mob can use it to
+	// happen at most once.
+	ApprovalID string
+	// Input is what Run passed to RequestApproval.
+	Input json.RawMessage
+	Store *Store
 }
 
 // ToolCall is one invocation of a tool within a turn.
@@ -39,6 +60,20 @@ type ToolCall struct {
 	Message *Message
 	Store   *Store
 	Send    func(Event) error
+}
+
+// RequestApproval asks the user to approve input, which the call records as
+// its input; Run returns the error, and Approved carries the call out.
+func (c ToolCall) RequestApproval(input any) error {
+	c.Part["input"] = input
+	id, err := c.Store.RequestApproval(c.ConversationID, *c.Message, c.ID, input)
+	if err != nil {
+		return Abort(err)
+	}
+	if err := c.Send(Event{Kind: ApprovalRequested, ApprovalID: id, ToolCallID: c.ID}); err != nil {
+		return Abort(err)
+	}
+	return ErrAwaitingApproval
 }
 
 // ErrAwaitingApproval ends the turn after a tool has requested approval; the
@@ -86,8 +121,9 @@ func DefaultTools() []Tool {
 			Run:  datetime,
 		},
 		{
-			Tool: llm.Tool{Name: "remember", Description: "Request permission to save one durable fact locally for this conversation. Stops the turn until the user approves.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}},
-			Run:  remember,
+			Tool:     llm.Tool{Name: "remember", Description: "Request permission to save one durable fact locally for this conversation. Stops the turn until the user approves.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}},
+			Run:      remember,
+			Approved: saveFact,
 		},
 	}
 }
@@ -112,15 +148,18 @@ func remember(_ context.Context, call ToolCall) (any, error) {
 	if !ok || fact == "" || len(fact) > 2000 {
 		return nil, errors.New("fact must be 1–2000 bytes")
 	}
-	call.Part["input"] = map[string]string{"fact": fact}
-	approvalID, err := call.Store.RequestApproval(call.ConversationID, *call.Message, call.ID, call.Part["input"])
-	if err != nil {
-		return nil, Abort(err)
+	return nil, call.RequestApproval(map[string]string{"fact": fact})
+}
+
+func saveFact(_ context.Context, call ApprovedCall) (any, error) {
+	var input struct{ Fact string }
+	if err := json.Unmarshal(call.Input, &input); err != nil {
+		return nil, err
 	}
-	if err := call.Send(Event{Kind: ApprovalRequested, ApprovalID: approvalID, ToolCallID: call.ID}); err != nil {
-		return nil, Abort(err)
+	if err := call.Store.SaveFact(call.ApprovalID, call.ConversationID, input.Fact); err != nil {
+		return nil, err
 	}
-	return nil, ErrAwaitingApproval
+	return map[string]any{"saved": true}, nil
 }
 
 // offline is implemented by a sandbox whose commands have no network.
