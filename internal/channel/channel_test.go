@@ -9,6 +9,7 @@ import (
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/llm"
+	"github.com/fdkevin0/mob/internal/provider"
 )
 
 // thinker reasons before it answers.
@@ -131,5 +132,17 @@ func TestDeliverAnswersAndSendsOnce(t *testing.T) {
 	}
 	if d, _ := b.Store.Delivery("m4"); d.State != "processing-failed" {
 		t.Fatalf("failed answer's delivery: %+v", d)
+	}
+}
+
+func TestApprovalPromptCountsTowardTheLimit(t *testing.T) {
+	b := bridge(t)
+	b.Conversation = chat.NewConversation(b.Store, provider.Offline())
+	t.Cleanup(b.Conversation.Close)
+	b.Texts.Approvals = func([]chat.PendingApproval, int) string { return strings.Repeat("a", 1000) }
+	b.Limit = 900
+	reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/remember tea"})
+	if err == nil || !strings.Contains(err.Error(), "Test bridge limit") || len(reply.Approvals) != 1 {
+		t.Fatalf("reply %q %+v (err: %v)", reply.Text, reply.Approvals, err)
 	}
 }
