@@ -62,14 +62,26 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 }
 
 // Start admits a turn that keeps running whoever started it, until it
-// finishes, Stop or Close. Errors before the turn emits anything, such as a
-// busy conversation or a repeated request, are returned instead.
-func (s *ConversationService) Start(input ChatRequest) (*Running, error) {
+// finishes, Stop, Close, or stop closes; stop is watched from admission, so it
+// also ends work done before the first event, such as an approved call. Errors
+// before the turn emits anything, such as a busy conversation or a repeated
+// request, are returned instead.
+func (s *ConversationService) Start(input ChatRequest, stop <-chan struct{}) (*Running, error) {
 	admitted := make(chan *Running, 1)
 	var early error
 	go func() {
 		var run *Running
-		err := s.execute(context.Background(), input, func(Event) error { return nil }, func(r *Running) { run = r; admitted <- r })
+		err := s.execute(context.Background(), input, func(Event) error { return nil }, func(r *Running) {
+			run = r
+			go func() {
+				select {
+				case <-stop:
+					r.Stop()
+				case <-r.Done():
+				}
+			}()
+			admitted <- r
+		})
 		if run == nil {
 			early = err
 			close(admitted)

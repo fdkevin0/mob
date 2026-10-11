@@ -15,6 +15,8 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
   const [commandResult, setCommandResult] = useState<string>();
   const submittedText = useRef('');
   const approvalController = useRef<AbortController | null>(null);
+  const followController = useRef<AbortController | null>(null);
+  const [following, setFollowing] = useState(false);
   const refreshGeneration = useRef(0);
   const transport = useMemo(() => new DefaultChatTransport<ChatMessage>({
     api: `${connection.url}/api/chat`, headers: { Authorization: `Bearer ${connection.token}` }, fetch: authorizedFetch,
@@ -24,30 +26,46 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
       return { body: { id, requestId: last?.id, text: last?.parts.filter(p => p.type === 'text').map(p => p.text).join('') } };
     },
   }), [connection, id]);
-  const { messages, setMessages, sendMessage, resumeStream, status, error, stop, clearError } = useChat<ChatMessage>({
+  const { messages, setMessages, sendMessage, status, error, stop, clearError } = useChat<ChatMessage>({
     id, messages: initial.messages, transport,
     onError: () => setInput(current => current || submittedText.current),
   });
   const streaming = status === 'submitted' || status === 'streaming';
-  const busy = streaming || approvalBusy || remoteBusy || running;
-  const busyRef = useRef(false); busyRef.current = streaming || approvalBusy;
+  const busy = streaming || approvalBusy || remoteBusy || running || following;
+  const busyRef = useRef(false); busyRef.current = streaming || approvalBusy || following;
   useEffect(() => { onBusy(busy); return () => onBusy(false); }, [busy, onBusy]);
-  useEffect(() => () => { approvalController.current?.abort(); }, []);
+  useEffect(() => () => { approvalController.current?.abort(); followController.current?.abort(); }, []);
   async function refresh() {
     const generation = refreshGeneration.current;
     const snapshot = await api<Snapshot>(connection, `/conversations/${id}`);
     if (generation !== refreshGeneration.current || busyRef.current) return;
     setMessages(snapshot.messages); setRemoteBusy(snapshot.active); setModel(snapshot.model);
-    // A running turn streams here too, whichever client started it; the replay replaces its saved draft.
-    if (snapshot.active) void resumeStream();
+    if (snapshot.active) void follow(snapshot.messages);
+  }
+  // follow streams a running turn here too, whichever client started it. The
+  // service replays it from the start, so each attempt builds the reply afresh
+  // and replaces its saved draft; polling pauses until it ends.
+  async function follow(baseline: ChatMessage[]) {
+    if (followController.current) return;
+    const controller = new AbortController(); followController.current = controller; busyRef.current = true; setFollowing(true);
+    try {
+      const stream = await transport.reconnectToStream({ chatId: id, abortSignal: controller.signal });
+      if (!stream) return;
+      setFailure('');
+      const earlier = baseline.filter(m => m.metadata?.status !== 'streaming');
+      for await (const message of readUIMessageStream<ChatMessage>({ stream, terminateOnError: true })) {
+        if (!controller.signal.aborted) setMessages([...earlier.filter(m => m.id !== message.id), message]);
+      }
+    } catch (e) { if (!controller.signal.aborted) setFailure(errorText(e)); }
+    finally { followController.current = null; setFollowing(false); }
   }
   useEffect(() => {
-    if (streaming || approvalBusy) return;
+    if (streaming || approvalBusy || following) return;
     let live = true;
     const reload = () => { if (live) void refresh().catch(e => { if (live) setFailure(errorText(e)); }); };
     reload(); const timer = setInterval(reload, 2000); onChanged();
     return () => { live = false; clearInterval(timer); };
-  }, [streaming, approvalBusy, connection, id]);
+  }, [streaming, approvalBusy, following, connection, id]);
   function submit(event: FormEvent) {
     event.preventDefault(); if (!input.trim() || busy) return;
     const text = input.trim(); setInput(''); setFailure(''); clearError(); setCommandResult(undefined);
@@ -85,7 +103,7 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
     finally { setApprovalBusy(false); busyRef.current = false; approvalController.current = null; }
   }
   async function cancel() {
-    try { await api(connection, `/conversations/${id}/stop`, {}); approvalController.current?.abort(); await stop(); }
+    try { await api(connection, `/conversations/${id}/stop`, {}); approvalController.current?.abort(); followController.current?.abort(); await stop(); }
     catch (e) { setFailure(errorText(e)); }
   }
  return { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel, commandResult, dismissCommand: () => setCommandResult(undefined) };
