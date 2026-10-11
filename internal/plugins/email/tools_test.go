@@ -62,8 +62,18 @@ func TestTools(t *testing.T) {
 	if _, err := call("email_send", map[string]any{"to": "you@example.org", "subject": "Hi", "text": "Hello"}); !errors.Is(err, chat.ErrAwaitingApproval) {
 		t.Fatalf("send did not ask first: %v", err)
 	}
+	if schema := tools["email_inbox"].Parameters; schema["required"] != nil {
+		t.Fatalf("a tool without arguments lists required ones: %v", schema)
+	}
 	approved := chat.ApprovedCall{ConversationID: conversation.ID, ApprovalID: chat.NewID(), Store: store}
-	approved.Input, _ = json.Marshal(Draft{To: "you@example.org", Subject: "Hi", Text: "Hello"})
+	approved.Input, _ = json.Marshal(outgoing{Draft{To: "you@example.org", Subject: "Hi", Text: "Hello"}, sender(config)})
+	changed := config
+	changed.SMTP.Username = "someone-else"
+	config, changed = changed, config
+	if _, err := tools["email_send"].Approved(context.Background(), approved); err == nil || !strings.Contains(err.Error(), "configuration changed") {
+		t.Fatalf("sent from another account than the user approved: %v", err)
+	}
+	config = changed
 	config.Enabled = false
 	if _, err := tools["email_send"].Approved(context.Background(), approved); err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatalf("sent while disabled: %v", err)
