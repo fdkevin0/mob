@@ -91,6 +91,7 @@ var sections = []Section{
 		{"enabled", "Enable email (true/false)", "bool"}, {"from", "From address", "text"},
 		{"imap.host", "IMAP host", "text"}, {"imap.port", "IMAP port (993 TLS / 143 STARTTLS)", "int"}, {"imap.security", "IMAP security (tls/starttls)", "text"}, {"imap.username", "IMAP username", "text"}, {"imap.password", "IMAP password (blank keeps existing for same host/user)", "secret"},
 		{"smtp.host", "SMTP host", "text"}, {"smtp.port", "SMTP port (465 TLS / 587 STARTTLS)", "int"}, {"smtp.security", "SMTP security (tls/starttls)", "text"}, {"smtp.username", "SMTP username", "text"}, {"smtp.password", "SMTP password (blank keeps existing for same host/user)", "secret"},
+		{"channel.enabled", "Answer the owner's mail (true/false)", "bool"}, {"channel.owner", "Owner's address", "text"}, {"channel.verifier", "Provider's authserv-id in Authentication-Results (e.g. mx.google.com)", "text"},
 	}, func(p *Plugins) *email.Config { return &p.Email },
 		func(c email.Config) bool { return c.Enabled },
 		func(c email.Config, ctx context.Context) (any, error) {

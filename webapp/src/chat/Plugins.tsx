@@ -12,13 +12,15 @@ export function Plugins({ connection, close }: { connection: Connection; close: 
   const [config, setConfig] = useState<Configs>();
   const [tab, setTab] = useState<keyof Configs | 'deliveries'>('email');
   const [status, setStatus] = useState('');
+  const [mailStatus, setMailStatus] = useState('');
   const [error, setError] = useState('');
 
   async function load() {
     try {
-      const data = await api<{ config: Configs; telegramStatus: string }>(connection, '/plugins');
+      const data = await api<{ config: Configs; telegramStatus: string; emailStatus: string }>(connection, '/plugins');
       setConfig(data.config);
       setStatus(data.telegramStatus);
+      setMailStatus(data.emailStatus);
       setError('');
     } catch (e) {
       setError(errorText(e));
@@ -31,8 +33,11 @@ export function Plugins({ connection, close }: { connection: Connection; close: 
 
   useEffect(() => {
     const timer = setInterval(() => {
-      void api<{ telegramStatus: string }>(connection, '/plugins')
-        .then(d => setStatus(d.telegramStatus))
+      void api<{ telegramStatus: string; emailStatus: string }>(connection, '/plugins')
+        .then(d => {
+          setStatus(d.telegramStatus);
+          setMailStatus(d.emailStatus);
+        })
         .catch(() => {});
     }, 5000);
     return () => clearInterval(timer);
@@ -73,7 +78,7 @@ export function Plugins({ connection, close }: { connection: Connection; close: 
         <button onClick={() => void load()}>Retry</button>
       ) : (
         <>
-          <EmailPlugin connection={connection} initial={config.email} active={tab === 'email'} />
+          <EmailPlugin connection={connection} initial={config.email} active={tab === 'email'} status={mailStatus} />
           <TelegramPlugin connection={connection} initial={config.telegram} active={tab === 'telegram'} status={status} />
           <WeChatILinkPlugin connection={connection} initial={config.wechat_ilink} active={tab === 'wechat_ilink'} />
           <CloudflarePlugin connection={connection} initial={config.cloudflare} active={tab === 'cloudflare'} />

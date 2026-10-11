@@ -103,15 +103,15 @@ its provider plugins and gateway middleware included, from a gateway on this mac
 checks that magpie answers there, and lists the models turned on in magpie. Calls
 carry the key `magpie-mob`, so magpie's usage and routing rules see them as Mob's.
 
-In any conversation, in the web UI, TUI, Telegram or WeChat:
+In any conversation, in the web UI, TUI, Telegram, WeChat or email:
 
 - `/models [FILTER]` lists the models of every provider, with what each can do.
 - `/model NAME` switches this conversation. NAME may be `provider/model`, a model ID,
   or a unique fragment (`/model sonnet`); `:low`/`:high`… picks a reasoning level.
 - `/model default NAME` sets the default for conversations without their own choice.
 
-Only the owner switches models from channels: Telegram's configured user and the
-first allowed WeChat user. Model capabilities and prices come from
+Only the owner switches models from channels: Telegram's configured user, the
+first allowed WeChat user and email's owner address. Model capabilities and prices come from
 [models.dev](https://models.dev), cached in XDG cache home + `mob/models.json`.
 Conversations and saved facts are sent to the chosen model's provider.
 The default free model may use collected data to improve the model; see
@@ -292,6 +292,22 @@ Typical ports: IMAP 993/TLS or 143/STARTTLS; SMTP 465/TLS or 587/STARTTLS.
   this version does not append a copy to an IMAP Sent folder.
 - The plugin can be disabled independently of chat. Its protocol/MIME code lives in
   `internal/plugins/email`; it is a built-in optional plugin, not a downloaded code loader.
+
+**Answer mail** makes the mailbox a channel like Telegram. Enter the owner's
+address and the authserv-id your provider writes first in the
+`Authentication-Results` header of mail it receives (`mx.google.com` for Gmail;
+open a received message's original source to find yours). Mob then watches INBOX
+with IMAP IDLE and answers mail that the owner alone sent and that header says
+passed DMARC, or DKIM for the owner's domain. Other mail, auto-replies, bounces and
+mailing lists are ignored, as is mail already in INBOX when the channel first starts.
+Each mail thread is its own conversation; replies keep the thread's `References`.
+Write a command such as `/approve` or `/new` as the first line of a reply.
+Mob never marks mail read. The provider must remove `Authentication-Results`
+headers that claim its authserv-id from incoming mail, as RFC 8601 asks.
+
+Channel replies (Telegram, WeChat, email) carry the turn's conclusion, the text the
+model writes after its last tool call, plus a line naming the tools it used; the
+commentary between tool calls stays in the local conversation.
 
 TUI: `/email` lists messages, `/email UID VALIDITY` reads one,
 `/email analyze UID VALIDITY` requests AI analysis, `/mail` opens the send wizard,

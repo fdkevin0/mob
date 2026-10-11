@@ -5,7 +5,7 @@ import type { Configs } from './plugins/types';
 
 const connection = { url: 'http://localhost', token: 'local-token' };
 const initial = (): Configs => ({
-  email: { enabled: true, from: 'a@example.org', imap: { host: 'imap.example.org', port: 993, security: 'tls', username: 'a', hasPassword: true }, smtp: { host: 'smtp.example.org', port: 587, security: 'starttls', username: 'a', hasPassword: true } },
+  email: { enabled: true, from: 'a@example.org', imap: { host: 'imap.example.org', port: 993, security: 'tls', username: 'a', hasPassword: true }, smtp: { host: 'smtp.example.org', port: 587, security: 'starttls', username: 'a', hasPassword: true }, channel: { enabled: false, owner: '', verifier: '' } },
   telegram: { enabled: false, userId: 0 },
   cloudflare: { enabled: false, accountId: '', model: '', embeddingModel: '', index: '', databaseId: '', namespaceId: '', bucket: '' },
   wechat_ilink: { enabled: false, baseUrl: '', allowedUsers: [] },
@@ -37,6 +37,22 @@ it('keeps saved passwords hidden, saves configuration and requires review before
   expect(send).toHaveBeenCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchObject({ to: 'recipient@example.org', subject: 'hello', text: 'body' });
   expect(send.mock.calls[0][0].requestId).toHaveLength(32);
+});
+it('saves who Mob answers mail from and shows the channel status', async () => {
+  let config = initial();
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith('/plugins/email')) { config = { ...config, email: JSON.parse(options!.body as string) }; return Response.json(config); }
+    return Response.json({ config, telegramStatus: 'Disabled', emailStatus: 'Connected · answering mail from me@example.org' });
+  }));
+  render(<Plugins connection={connection} close={() => {}} />);
+  fireEvent.click(await screen.findByLabelText("Answer the owner's mail"));
+  fireEvent.change(screen.getByLabelText("Owner's address"), { target: { value: 'me@example.org' } });
+  fireEvent.change(screen.getByLabelText(/Provider's authserv-id/), { target: { value: 'mx.example.org' } });
+  fireEvent.click(screen.getByText('Save configuration'));
+  await screen.findByText('Configuration saved.');
+  expect(config.email.channel).toEqual({ enabled: true, owner: 'me@example.org', verifier: 'mx.example.org' });
+  expect(config.email.from).toBe('a@example.org');
+  await screen.findByText('Connected · answering mail from me@example.org');
 });
 it('tests Telegram and runs a Cloudflare operation using only saved configuration', async () => {
   const config = initial(); config.telegram = { enabled: true, userId: 42 }; config.cloudflare.enabled = true;
