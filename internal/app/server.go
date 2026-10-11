@@ -145,7 +145,9 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 					http.Error(w, "unauthorized", 401)
 					return
 				}
-				r = revocable(r, revoked)
+				var done func()
+				r, done = revocable(r, revoked)
+				defer done()
 			}
 		}
 		// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.

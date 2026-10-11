@@ -105,3 +105,18 @@ it('signs out an open workspace when the token is rotated', async () => {
   await screen.findByLabelText('Local access token');
   expect(localStorage.getItem('mob-token')).toBeNull();
 });
+
+it('ignores a late 401 for a token that was already replaced', async () => {
+  localStorage.setItem('mob-token', 'replacement');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([]);
+    return Response.json({ messages: [], active: false, model: 'demo/echo' });
+  }));
+  render(<App />);
+  await screen.findByRole('button', { name: /disconnect/i });
+  window.dispatchEvent(new CustomEvent('mob:unauthorized', { detail: 'old' }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(screen.getByRole('button', { name: /disconnect/i })).toBeTruthy();
+  expect(localStorage.getItem('mob-token')).toBe('replacement');
+});

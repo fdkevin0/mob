@@ -1,7 +1,7 @@
 import { isToolUIPart } from 'ai';
 import { useConversation } from './useConversation';
 import { useCompletion } from './useCompletion';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
 import { api, defaultURL, unauthorizedEvent, type Connection, type Conversation, type Snapshot } from './api';
@@ -29,8 +29,12 @@ export function App() {
       .catch(e => setError(current => current || errorText(e))).finally(() => setLoading(false));
   }, []);
   // A replaced token signs this window out; the desktop reads the new token instead.
+  const active = useRef<Connection | undefined>(undefined); active.current = connection;
   useEffect(() => {
-    const signOut = () => {
+    const signOut = (event: Event) => {
+      const rejected = (event as CustomEvent<string>).detail;
+      const current = active.current?.token ?? savedToken();
+      if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
       clearToken(); setConnection(undefined); setError('The access token was replaced. Run mob open to sign in again.');
