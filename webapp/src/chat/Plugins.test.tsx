@@ -74,6 +74,25 @@ it('tests WeChat iLink plugin tab and configuration rendering', async () => {
   await screen.findByText('Connection test passed.');
 });
 
+it('encodes the WeChat login link as a local QR image', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/qrcode')) return Response.json({
+      qrcode: 'qr_test_abc',
+      qrcode_img_content: 'https://liteapp.weixin.qq.com/q/?k=fixture',
+    });
+    return Response.json({ config: initial(), telegramStatus: 'Disabled' });
+  }));
+  render(<Plugins connection={connection} close={() => {}} />);
+  await screen.findByLabelText('From address');
+  fireEvent.click(screen.getByText('WeChat (iLink)', { selector: 'button' }));
+  fireEvent.click(screen.getByText('Get Login QR Code'));
+  const qr = await screen.findByRole('img', { name: 'WeChat Login QR Code' });
+  expect(qr.tagName.toLowerCase()).toBe('svg');
+  expect(qr.querySelector('path')?.getAttribute('d')).toBeTruthy();
+  expect(qr.getAttribute('src')).toBeNull();
+  expect(screen.getByRole('status').textContent).toContain('Please scan');
+});
+
 it('preserves email edits across plugin navigation and displays durable delivery state', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/deliveries')) return Response.json([{ id: 'email:fixture', state: 'failed-or-unknown', error: 'connection interrupted', reply: '', updatedAt: 1 }]);

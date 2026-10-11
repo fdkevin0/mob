@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { api, type Connection } from '../api';
 import { Field, Toggle, Feedback, Result, Actions, usePlugin } from './shared';
 import type { WeChatILinkConfig } from './types';
@@ -10,7 +11,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
     connection
   );
 
-  const [qrCode, setQrCode] = useState<{ qrcode: string; img: string } | null>(null);
+  const [qrCode, setQrCode] = useState<{ qrcode: string; content: string } | null>(null);
   const [qrStatus, setQrStatus] = useState<string>('');
   const [fetchingQR, setFetchingQR] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -35,7 +36,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
       const res = await api<{ qrcode: string; qrcode_img_content: string }>(connection, '/plugins/wechat_ilink/qrcode', {
         method: 'POST',
       });
-      setQrCode({ qrcode: res.qrcode, img: res.qrcode_img_content });
+      setQrCode({ qrcode: res.qrcode, content: res.qrcode_img_content });
       setQrStatus('Please scan the QR code using WeChat on your mobile device...');
 
       timerRef.current = setInterval(async () => {
@@ -94,9 +95,9 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
               {fetchingQR ? 'Generating QR Code...' : 'Get Login QR Code'}
             </button>
             {qrStatus && <p role="status" style={{ marginTop: '0.5rem', fontWeight: 500 }}>{qrStatus}</p>}
-            {qrCode && qrCode.img && (
+            {qrCode && qrCode.content && (
               <div style={{ marginTop: '0.5rem' }}>
-                <img src={qrCode.img} alt="WeChat Login QR Code" style={{ maxWidth: '200px', display: 'block' }} />
+                <QRCodeSVG value={qrCode.content} size={200} marginSize={4} role="img" title="WeChat Login QR Code" />
               </div>
             )}
           </div>
