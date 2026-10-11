@@ -17,6 +17,7 @@ import (
 	"github.com/fdkevin0/mob/internal/node"
 	"github.com/fdkevin0/mob/internal/provider"
 	"github.com/fdkevin0/mob/internal/tui"
+	"github.com/fdkevin0/mob/internal/version"
 	"github.com/fdkevin0/mob/webapp"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +39,7 @@ func newRootCommand() *cobra.Command {
 	var gatewayAddr string
 	var gatewayToken string
 
-	root := &cobra.Command{Use: "mob", Short: "Local assistant with desktop, terminal and background service", Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Use: "mob", Short: "Local assistant with desktop, terminal and background service", Version: version.Current, Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true}
 	configuration.AddFlags(root.PersistentFlags())
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		loader, err := configuration.NewLoader(root.PersistentFlags())

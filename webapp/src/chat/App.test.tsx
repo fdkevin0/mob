@@ -36,3 +36,12 @@ it('promises no model calls only when the conversation uses the demo model', asy
   await screen.findByText('deepseek/deepseek-chat');
   expect(screen.queryByText('Demo mode · no model calls')).toBeNull();
 });
+
+it('shows why the desktop could not start instead of asking for a token', async () => {
+  const reason = 'This database has schema 1, last opened by an unknown release. Install Mob 20261011.bbbbbbb from https://github.com/fdkevin0/mob/releases/tag/20261011.bbbbbbb, start it once to upgrade the database, then start Mob 20261101.ddddddd again.';
+  window.go = { main: { Desktop: { Connection: async () => { throw reason; } } } };
+  render(<App />);
+  expect((await screen.findByRole('alert')).textContent).toBe(reason);
+  expect(screen.getByText('Mob could not start.')).toBeTruthy();
+  expect(screen.queryByLabelText('Local access token')).toBeNull();
+});

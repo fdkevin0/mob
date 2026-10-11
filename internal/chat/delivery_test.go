@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func TestLegacyMigrationAndDeliveryRecovery(t *testing.T) {
+func TestUnversionedMigrationAndDeliveryRecovery(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mob.sqlite")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.Exec(migrations[0]); err != nil {
+	if _, err = db.Exec(history.steps[0].SQL); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = db.Exec(`INSERT INTO settings VALUES('api_key','keep-secret'); INSERT INTO conversations VALUES('conversation','keep-title',1); INSERT INTO deliveries(id,state,reply) VALUES('email:old','sending','keep-reply');

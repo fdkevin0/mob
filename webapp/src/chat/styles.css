@@ -45,6 +45,7 @@ header strong { font-size: 14px; font-weight: 500; }.eyebrow { margin: 0 0 5px; 
 .suggestions li small { color: #858b7c; font-size: 11px; }.suggestions [aria-selected='true'] { background: #e9ede5; }
 .composer-hint { text-align: center; font-size: 10px; color: #92978a; margin: 8px 0 0; }
 .muted { color: #858b7c; font-size: 12px; }.error { color: #914838; font-size: 12px; padding: 10px 18px; overflow-wrap: anywhere; }.loading { margin: auto; color: #858b7c; }
+.startup-error { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .connect { max-width: 460px; margin: 14vh auto; padding: 24px; }.connect h1 { font-size: 34px; font-weight: 500; margin: 20px 0; }.connect p { color: #737c68; font-size: 14px; line-height: 1.7; }.connect form { margin-top: 30px; }.connect label { display: block; font-size: 12px; }.connect input { width: 100%; border: 1px solid #ced6c4; border-radius: 8px; background: white; padding: 10px; margin: 8px 0; }
 @media (max-width: 720px) { .sidebar { width: 180px; padding: 20px 10px; } header { padding: 18px; }.badge { display: none; }.conversation-content { padding: 20px 16px; }.composer-area { padding: 10px 16px; } }
 @media (max-width: 480px) { .workspace { flex-direction: column; }.sidebar { width: 100%; padding: 8px 12px; flex-direction: row; gap: 10px; align-items: center; }.brand { margin: 0; font-size: 22px; }.brand span,.sidebar-footer { display: none; }.new-chat { margin: 0; }.sidebar nav { max-height: 80px; }.chat-main { min-height: 0; } }

@@ -33,6 +33,8 @@ export function App() {
     catch (e) { setError(errorText(e)); } finally { setLoading(false); }
   }
   if (connection) return <Workspace connection={connection} disconnect={() => { sessionStorage.removeItem('mob-token'); setConnection(undefined); }} />;
+  // The desktop connects by itself, so a failure there has no token form to retry.
+  if (error && window.go?.main?.Desktop) return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>
     <form onSubmit={connect}><label htmlFor="token">Local access token</label><input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
       <p className="muted">Read the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</button></form>
