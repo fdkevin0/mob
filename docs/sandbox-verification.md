@@ -6,6 +6,7 @@ a real machine end to end. Results so far:
 | Platform | Runtime | Result |
 | --- | --- | --- |
 | Linux | containerd 2.3.6, nerdctl 2.1.6 | all checks pass |
+| Linux, `MOB_SANDBOX_ISOLATION=gvisor` | the same, with runsc release-20261005.0 | all checks pass |
 | macOS 27.0.1, Apple silicon | Apple container 1.5.0 | all checks pass |
 | Windows 11 (10.0.26100) | WSL 2.9.3 containers (`wslc`) | all checks pass |
 
@@ -27,6 +28,7 @@ checkout, then checks the following and prints `PASS`/`FAIL` per check:
 | nonzero exit, output capped | the tool reports `exitCode` and `truncated` |
 | limits apply | `sandbox.network`, `cpus` and `memory` reach the tool's containers |
 | stop removes the container | `--name` plus the runtime's force-remove work |
+| runs under gVisor (with `MOB_SANDBOX_ISOLATION=gvisor`) | `dmesg` in the container reports gVisor, through the CLI and the tool |
 
 A failed run keeps its work directory (config, `serve.log`, workspaces) and
 prints its path.
@@ -81,6 +83,18 @@ includes WSL containers, Go 1.26+, Git.
 
 3. Repeat with your normal user profile path (`%LOCALAPPDATA%\mob` by default),
    as in step 3 for macOS, and send `/sandbox ls /mnt/c` — it must fail.
+
+## Linux with gVisor
+
+Requirements: containerd with nerdctl and CNI plugins, and `runsc` from
+[gVisor's install guide](https://gvisor.dev/docs/user_guide/install/) on
+containerd's `PATH`.
+
+```bash
+runsc --version
+sudo nerdctl run --rm --runtime runsc alpine:3.20 dmesg   # prints "Starting gVisor..."
+MOB_SANDBOX_ISOLATION=gvisor scripts/verify-sandbox.sh
+```
 
 ## What to send back
 

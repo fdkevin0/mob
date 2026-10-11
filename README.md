@@ -127,7 +127,7 @@ images and attachments are not implemented in this first version.
 | `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
 | `MOB_TOKEN` | Optional existing local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
 | `MOB_DEMO` | `1` makes the offline `demo/echo` model the default |
-| `MOB_SANDBOX_ENABLED`, `MOB_SANDBOX_RUNTIME`, `MOB_SANDBOX_IMAGE` | Override the `sandbox` section; see [Sandbox](#sandbox) |
+| `MOB_SANDBOX_ENABLED`, `MOB_SANDBOX_RUNTIME`, `MOB_SANDBOX_IMAGE`, `MOB_SANDBOX_NETWORK`, `MOB_SANDBOX_CPUS`, `MOB_SANDBOX_MEMORY`, `MOB_SANDBOX_ISOLATION` | Override the `sandbox` section; see [Sandbox](#sandbox) |
 
 The CLI uses [Cobra](https://github.com/spf13/cobra), paths use
 [adrg/xdg](https://github.com/adrg/xdg), and configuration merging uses
@@ -185,7 +185,9 @@ container, without asking: install packages, run code, fetch from the network.
 Only the conversation's workspace (`data_dir/sandbox/<conversation>`, mounted
 at `/workspace`) persists between commands, and it is the only host path the
 container sees (ADR 0055). Optional limits cut off the network and cap each
-command's CPUs and memory (ADR 0056).
+command's CPUs and memory (ADR 0056). On Linux, `isolation: gvisor` runs
+commands under [gVisor](https://gvisor.dev) instead of directly on the host
+kernel (ADR 0057).
 
 ```yaml
 sandbox:
@@ -195,10 +197,12 @@ sandbox:
   network: ""            # none: no network; empty: the runtime's default
   cpus: 0                # whole CPUs per command; 0: the runtime's default
   memory: ""             # e.g. 512m or 2g, at least 64m; empty: the runtime's default
+  isolation: ""          # gvisor: run under gVisor's runsc (containerd only); empty: the runtime's own
 ```
 
 Linux uses containerd through `nerdctl` (with CNI plugins; rootless is
-recommended), macOS uses Apple's [container](https://github.com/apple/container)
+recommended; install [runsc](https://gvisor.dev/docs/user_guide/install/) for
+`isolation: gvisor`), macOS uses Apple's [container](https://github.com/apple/container)
 after `container system start`, and Windows uses WSL containers (`wslc`). Check
 the runtime before enabling it:
 
@@ -210,7 +214,7 @@ mob container run -v "$PWD:/work" -w /work alpine:3.20 ls -la
 
 A command stops after 2 minutes by default (at most 5) and its container is
 removed; output is cut at 16 KiB per stream. Network access and CPU/memory are
-not limited.
+not limited unless set above.
 
 `scripts/verify-sandbox.sh` (macOS, Linux) and `scripts/verify-sandbox.ps1`
 (Windows) check a machine end to end; see

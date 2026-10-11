@@ -29,7 +29,8 @@ func TestDisabledAndInvalidSettings(t *testing.T) {
 		t.Fatalf("disabled sandbox built: %v %v", box, err)
 	}
 	for _, s := range []Settings{{Enabled: true, Runtime: "docker", Image: DefaultImage}, {Enabled: true, Image: ""}, {Enabled: true, Image: "--privileged"}, {Enabled: true, Image: "a b"},
-		{Enabled: true, Image: DefaultImage, Network: "host"}, {Enabled: true, Image: DefaultImage, CPUs: -1}, {Enabled: true, Image: DefaultImage, Memory: "512"}, {Enabled: true, Image: DefaultImage, Memory: "32m"}} {
+		{Enabled: true, Image: DefaultImage, Network: "host"}, {Enabled: true, Image: DefaultImage, CPUs: -1}, {Enabled: true, Image: DefaultImage, Memory: "512"}, {Enabled: true, Image: DefaultImage, Memory: "32m"},
+		{Enabled: true, Image: DefaultImage, Isolation: "kata"}, {Enabled: true, Runtime: container.Apple, Image: DefaultImage, Isolation: container.GVisor}, {Enabled: true, Runtime: container.WSLC, Image: DefaultImage, Isolation: container.GVisor}} {
 		if _, err := New(s, t.TempDir()); err == nil {
 			t.Errorf("accepted %+v", s)
 		}
@@ -56,6 +57,23 @@ func TestLimitsReachTheRun(t *testing.T) {
 	}
 	if fake(t, nil).Offline() {
 		t.Fatal("default network reported offline")
+	}
+}
+
+func TestGVisorReachesTheRun(t *testing.T) {
+	var run string
+	box, err := New(Settings{Enabled: true, Runtime: container.Containerd, Image: "alpine:3.20", Isolation: container.GVisor}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	box.Runtime.Run = func(_ context.Context, _ string, args []string, _ io.Reader, _, _ io.Writer) (int, error) {
+		if args[2] == "run" {
+			run = strings.Join(args, " ")
+		}
+		return 0, nil
+	}
+	if _, err := box.Exec(context.Background(), conversation, "ls", 0); err != nil || !strings.Contains(run, "-w /workspace --runtime runsc -v ") {
+		t.Fatalf("isolation not passed: %q %v", run, err)
 	}
 }
 
@@ -97,15 +115,20 @@ func TestExecMountsOnlyTheWorkspace(t *testing.T) {
 }
 
 func TestTimeoutRemovesTheContainer(t *testing.T) {
-	var removed string
+	var removed, stopped string
 	box := fake(t, func(ctx context.Context, _ string, args []string, _ io.Reader, stdout, _ io.Writer) (int, error) {
 		switch args[2] {
 		case "run":
 			io.WriteString(stdout, "partial")
 			<-ctx.Done()
 			return -1, ctx.Err()
+		case "stop":
+			stopped = args[len(args)-1]
 		case "rm":
-			removed = args[len(args)-1]
+			// containerd stops first: gVisor leaves a container rm -f alone killed.
+			if stopped == args[len(args)-1] {
+				removed = stopped
+			}
 		}
 		return 0, nil
 	})

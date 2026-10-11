@@ -105,6 +105,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	v.SetDefault("sandbox.network", "")
 	v.SetDefault("sandbox.cpus", 0)
 	v.SetDefault("sandbox.memory", "")
+	v.SetDefault("sandbox.isolation", "")
 	raw, mode, err := readConfigFile(l.path)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) || required {
@@ -134,7 +135,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 			return Environment{}, err
 		}
 	}
-	for _, key := range []string{"sandbox.enabled", "sandbox.runtime", "sandbox.image", "sandbox.network", "sandbox.cpus", "sandbox.memory"} {
+	for _, key := range []string{"sandbox.enabled", "sandbox.runtime", "sandbox.image", "sandbox.network", "sandbox.cpus", "sandbox.memory", "sandbox.isolation"} {
 		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(strings.ReplaceAll(key, ".", "_"))); err != nil {
 			return Environment{}, err
 		}

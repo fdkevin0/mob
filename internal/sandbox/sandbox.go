@@ -45,6 +45,9 @@ type Settings struct {
 	// the runtime's defaults.
 	CPUs   int    `mapstructure:"cpus"`
 	Memory string `mapstructure:"memory"`
+	// Isolation "gvisor" runs commands under gVisor on containerd; empty
+	// keeps the runtime's own isolation.
+	Isolation string `mapstructure:"isolation"`
 }
 
 // Validate rejects settings that could never run, without naming their values.
@@ -57,8 +60,21 @@ func (s Settings) Validate() error {
 	if s.Image == "" || strings.HasPrefix(s.Image, "-") || strings.ContainsAny(s.Image, " \t\r\n") {
 		return errors.New("sandbox.image must be an image reference")
 	}
-	_, err := s.limits()
-	return err
+	if _, err := s.limits(); err != nil {
+		return err
+	}
+	switch s.Isolation {
+	case "":
+	case container.GVisor:
+		// An empty runtime is this platform's own, so gvisor on macOS or
+		// Windows fails here rather than on the first command.
+		if r, err := container.New(s.Runtime); err != nil || r.Name != container.Containerd {
+			return errors.New(`sandbox.isolation "gvisor" needs the containerd runtime (Linux)`)
+		}
+	default:
+		return errors.New(`sandbox.isolation must be "gvisor" or empty`)
+	}
+	return nil
 }
 
 func (s Settings) limits() (container.Limits, error) {
@@ -93,6 +109,8 @@ type Sandbox struct {
 	Runtime *container.Runtime
 	Image   string
 	Limits  container.Limits
+	// Isolation is passed to every container; see container.Spec.
+	Isolation string
 	// Root holds one workspace directory per conversation.
 	Root string
 
@@ -113,7 +131,7 @@ func New(s Settings, dataDir string) (*Sandbox, error) {
 		return nil, err
 	}
 	limits, _ := s.limits()
-	return &Sandbox{Runtime: r, Image: s.Image, Limits: limits, Root: filepath.Join(dataDir, "sandbox")}, nil
+	return &Sandbox{Runtime: r, Image: s.Image, Limits: limits, Isolation: s.Isolation, Root: filepath.Join(dataDir, "sandbox")}, nil
 }
 
 // Offline reports whether commands run without any network.
@@ -145,7 +163,7 @@ func (b *Sandbox) Exec(ctx context.Context, conversationID, command string, time
 		return Result{}, err
 	}
 	name := "mob-" + random()
-	spec := container.Spec{Name: name, Image: b.Image, Command: []string{"sh", "-c", command}, Mounts: []container.Mount{{Source: workspace, Target: Workdir}}, Workdir: Workdir, Limits: b.Limits}
+	spec := container.Spec{Name: name, Image: b.Image, Command: []string{"sh", "-c", command}, Mounts: []container.Mount{{Source: workspace, Target: Workdir}}, Workdir: Workdir, Limits: b.Limits, Isolation: b.Isolation}
 	run, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	stdout, stderr := &capped{}, &capped{}

@@ -14,7 +14,7 @@ import (
 
 func cleanEnvironment(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY"} {
+	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY", "MOB_SANDBOX_ISOLATION"} {
 		t.Setenv(name, "")
 	}
 }
@@ -64,6 +64,17 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 	t.Setenv("MOB_SANDBOX_NETWORK", "")
 	t.Setenv("MOB_SANDBOX_CPUS", "")
 	t.Setenv("MOB_SANDBOX_MEMORY", "")
+	// gvisor needs containerd, so the file's apple runtime refuses it.
+	t.Setenv("MOB_SANDBOX_ISOLATION", "gvisor")
+	if _, err = loader.Read(); err == nil || !strings.Contains(err.Error(), "containerd") {
+		t.Fatalf("gvisor accepted on apple: %v", err)
+	}
+	t.Setenv("MOB_SANDBOX_RUNTIME", "containerd")
+	if got, err = loader.Read(); err != nil || got.Sandbox.Isolation != "gvisor" {
+		t.Fatalf("sandbox isolation not read from the environment: %+v %v", got.Sandbox, err)
+	}
+	t.Setenv("MOB_SANDBOX_RUNTIME", "")
+	t.Setenv("MOB_SANDBOX_ISOLATION", "")
 	// Freeze parsed flags: later changes to a caller's FlagSet cannot alter the loader.
 	flags.Set("addr", "127.0.0.1:1004")
 	got, err = loader.Read()
@@ -78,7 +89,7 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 		os.Chmod(path, 0600)
 	}
 	// Providers and keys live in providers.json; the old fields are refused.
-	for _, body := range []string{"demo: [secret-invalid", "unknown_field: secret-unknown", "data_dir: ''", "api_key: secret-key", "base_url: https://example.org", "model: secret-model", "sandbox:\n  runtime: secret-docker", "sandbox:\n  image: --secret", "sandbox:\n  secret_field: 1", "sandbox:\n  network: secret-host", "sandbox:\n  cpus: -1", "sandbox:\n  memory: secret-512", strings.Repeat("#", (64<<10)+1)} {
+	for _, body := range []string{"demo: [secret-invalid", "unknown_field: secret-unknown", "data_dir: ''", "api_key: secret-key", "base_url: https://example.org", "model: secret-model", "sandbox:\n  runtime: secret-docker", "sandbox:\n  image: --secret", "sandbox:\n  secret_field: 1", "sandbox:\n  network: secret-host", "sandbox:\n  cpus: -1", "sandbox:\n  memory: secret-512", "sandbox:\n  isolation: secret-kata", strings.Repeat("#", (64<<10)+1)} {
 		write(body)
 		_, err = loader.Read()
 		if err == nil || strings.Contains(err.Error(), "secret-") {

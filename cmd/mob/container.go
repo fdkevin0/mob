@@ -44,6 +44,7 @@ func containerCommand(name func() string) *cobra.Command {
 		network      string
 		cpus         int
 		memory       string
+		isolation    string
 	}
 	run := &cobra.Command{
 		Use:   "run [flags] IMAGE [COMMAND...]",
@@ -54,7 +55,7 @@ func containerCommand(name func() string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			spec := container.Spec{Image: args[0], Command: args[1:], Env: opts.env, Workdir: opts.workdir, Limits: container.Limits{Network: opts.network, CPUs: opts.cpus}}
+			spec := container.Spec{Image: args[0], Command: args[1:], Env: opts.env, Workdir: opts.workdir, Limits: container.Limits{Network: opts.network, CPUs: opts.cpus}, Isolation: opts.isolation}
 			if opts.memory != "" {
 				if spec.Limits.MemoryMiB, err = container.ParseMemory(opts.memory); err != nil {
 					return err
@@ -90,6 +91,7 @@ func containerCommand(name func() string) *cobra.Command {
 	run.Flags().StringVar(&opts.network, "network", "", `"none" to give the container no network`)
 	run.Flags().IntVar(&opts.cpus, "cpus", 0, "Limit the container to this many whole CPUs")
 	run.Flags().StringVarP(&opts.memory, "memory", "m", "", "Limit the container's memory, such as 512m or 2g")
+	run.Flags().StringVar(&opts.isolation, "isolation", "", `"gvisor" to run under gVisor (containerd only)`)
 
 	root.AddCommand(status, pull, run)
 	return root

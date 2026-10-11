@@ -68,6 +68,9 @@ func TestContainerCommand(t *testing.T) {
 	if _, err = execute("container", "run", "alpine", "fail"); err == nil || !strings.Contains(err.Error(), "status 2") {
 		t.Fatalf("nonzero exit not reported: %v", err)
 	}
+	if _, err = execute("container", "run", "--isolation", "gvisor", "alpine", "ls"); err != nil || calls[len(calls)-1] != "nerdctl --namespace mob run --rm --runtime runsc alpine ls" {
+		t.Fatalf("run with gvisor: %v %q", err, calls)
+	}
 	t.Setenv("MOB_SANDBOX_RUNTIME", "docker")
 	if _, err = execute("container", "status"); err == nil {
 		t.Fatal("unknown runtime accepted")
