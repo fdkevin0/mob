@@ -1,7 +1,7 @@
 # 38. Layered memory, extraction, and auto-recall
 
 Date: 2026-07-08
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Tool-only memory was rarely recalled or written. Extract facts from Session
 compaction summaries and retrieve relevant facts for incoming messages, accepting

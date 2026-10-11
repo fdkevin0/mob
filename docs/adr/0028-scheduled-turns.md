@@ -1,7 +1,7 @@
 # 28. Scheduled prompts run as serial chat turns
 
 Date: 2026-07-02
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 A scheduled turn is a stored prompt run once or recurrently through the normal
 agentic path. This permits reminders that also use tools without separate briefing

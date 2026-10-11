@@ -1,7 +1,7 @@
 # 22. Web search and weather tools
 
 Date: 2026-06-25
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Provide search and weather as built-ins so ordinary chat does not require an
 admin-managed MCP server for these capabilities.

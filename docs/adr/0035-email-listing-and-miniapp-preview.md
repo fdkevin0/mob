@@ -1,7 +1,7 @@
 # 35. Email listing and preview inside the Mini App
 
 Date: 2026-07-04
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Email uses the same Telegram `initData` authentication and Principal capability
 checks as Settings. Removing bearer preview links avoids a second authentication

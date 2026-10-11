@@ -1,7 +1,7 @@
 # 17. Conversation history on the Agents SDK Session API
 
 Date: 2026-06-21
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Use the Session API for SQLite-backed history, context providers, attachment
 storage, and non-destructive compaction. Keeping this in the chat's Durable

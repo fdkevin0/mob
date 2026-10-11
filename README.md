@@ -353,11 +353,11 @@ attachments, MCP, cloud sandbox/shell, automatic semantic memory retrieval/extra
 compaction, scheduled turns, deep tasks and usage accounting. Local saved facts are included directly in model context; they
 are not a replacement for Vectorize. Recent model context is capped at 40 messages;
 older history remains visible in the UI. Requests in progress are marked interrupted
-on restart, not automatically rerun. There is no durable background queue yet. The retired Cloudflare Worker, kept at
-the `legacy-worker` tag, has reference implementations of most of these.
+on restart, not automatically rerun. There is no durable background queue yet.
+The retired Cloudflare Worker, kept at the `legacy-worker` tag, has reference
+implementations of most of these.
 
-See [migration research](docs/go-bun-migration-research.md) and
-[chat UI comparison](docs/chat-ui-research.md). AI Elements source adaptations keep
+AI Elements source adaptations keep
 [their Apache-2.0 license and provenance](webapp/src/components/ai-elements/SOURCE.md);
 the rest of this repository retains its MIT license.
 

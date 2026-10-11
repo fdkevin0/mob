@@ -1,7 +1,7 @@
 # 11. Admin-only JSON debug traces
 
 Date: 2026-06-20
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Debug mode emits a per-turn JSON document so the admin can inspect model inputs,
 tool activity, limits, and usage without expanding the visible conversation.

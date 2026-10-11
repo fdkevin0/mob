@@ -1,7 +1,7 @@
 # 36. React Settings Mini App on the Worker
 
 Date: 2026-07-05
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Use React, TypeScript, and Vite for the Mini App. A separate frontend makes
 navigation and interactions testable without embedding a browser program in a

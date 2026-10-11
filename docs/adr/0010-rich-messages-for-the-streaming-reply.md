@@ -1,7 +1,7 @@
 # 10. Rich Messages for streamed chat replies
 
 Date: 2026-06-20
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Use Telegram Rich Messages for both drafts and finalized chat segments. This
 keeps formatting consistent while streaming and removes the MarkdownV2 escaping,

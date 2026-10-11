@@ -1,7 +1,7 @@
 # 19. Sandbox-backed code execution
 
 Date: 2026-06-21
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Use a Cloudflare Sandbox for model-authored Python, JavaScript, and TypeScript
 rather than executing snippets inside the Worker. A sandbox keyed by chat lets

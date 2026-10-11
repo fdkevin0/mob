@@ -1,7 +1,7 @@
 # 39. Tool approval is a turn boundary
 
 Date: 2026-07-10
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 A tool waiting for a human must release the serial turn queue. Suspending the
 current stream could block unrelated conversation for hours and require durable

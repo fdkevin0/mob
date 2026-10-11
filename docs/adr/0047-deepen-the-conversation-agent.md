@@ -1,7 +1,7 @@
 # 47. Conversation Agent module boundaries
 
 Date: 2026-07-18
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Keep platform lifecycle in the Conversation Agent and put turn orchestration
 behind an injected interface. The former monolithic agent mixed SQL, settings,

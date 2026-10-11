@@ -1,7 +1,7 @@
 # 40. Deep tasks run in the Conversation Agent
 
 Date: 2026-07-10
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Run longer model work in a background fiber inside the chat's Durable Object.
 Memory and sandbox budgets are chat-local; asset access is bound to the initiating Principal; moving the loop
