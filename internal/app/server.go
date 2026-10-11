@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
+	"github.com/fdkevin0/mob/internal/extension"
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/protocol"
 	"github.com/fdkevin0/mob/internal/provider"
@@ -30,7 +31,7 @@ type Server struct {
 	ConfigurationError func() string
 	Configuration      *configuration.Service
 	Providers          *provider.Registry
-	plugins            pluginRuntime
+	extensions         extension.Manager
 	sandbox            sandbox.Settings
 	*chat.ConversationService
 	Token string
@@ -39,6 +40,7 @@ type Server struct {
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), Token: token}
 	s.Commands.Register(s.pluginCommands()...)
+	s.extensions.Register(s.channels()...)
 	return s
 }
 
