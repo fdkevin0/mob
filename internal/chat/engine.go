@@ -97,6 +97,9 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	offered := map[string]Tool{}
 	if info.Tools {
 		for _, t := range agent.Tools {
+			if _, twice := offered[t.Name]; twice {
+				return fmt.Errorf("tool offered twice: %s", t.Name)
+			}
 			offered[t.Name] = t
 			req.Tools = append(req.Tools, t.Tool)
 			if t.Prompt != "" {

@@ -56,10 +56,17 @@ func Abort(err error) error { return abort{err} }
 // ToolRegistry holds the tools every turn offers. Register all tools before serving.
 type ToolRegistry struct{ tools []Tool }
 
+// sandboxName is reserved for the sandbox tool, which ConversationService adds
+// per turn while a sandbox is set.
+const sandboxName = "sandbox"
+
 func (r *ToolRegistry) Register(tools ...Tool) {
 	for _, t := range tools {
 		if t.Name == "" || t.Run == nil {
 			panic("tool needs a name and Run: " + t.Name)
+		}
+		if t.Name == sandboxName {
+			panic("tool name is reserved: " + t.Name)
 		}
 		if slices.ContainsFunc(r.tools, func(o Tool) bool { return o.Name == t.Name }) {
 			panic("tool registered twice: " + t.Name)
@@ -128,7 +135,7 @@ func sandboxTool(box Sandbox) Tool {
 	}
 	return Tool{
 		Tool: llm.Tool{
-			Name: "sandbox",
+			Name: sandboxName,
 			Description: "Run a shell command (sh -c) in an isolated Linux container. " + allowed +
 				"Only /workspace, the working directory, persists between calls in this conversation; the user's own files and machine are not reachable.",
 			Parameters: map[string]any{"type": "object", "properties": map[string]any{
