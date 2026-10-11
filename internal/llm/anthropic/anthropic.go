@@ -98,13 +98,13 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	if req.System != "" {
 		body["system"] = req.System
 	}
-	if budget := budgets[m.ref.Effort]; budget > 0 {
-		maxTokens += budget
-		// Thinking counts toward the model's output limit and must leave room for the answer.
-		if limit := m.info.Output; limit > 0 && maxTokens > limit {
-			maxTokens = limit
-			budget = min(budget, max(limit/2, 1024))
-		}
+	if limit := m.info.Output; limit > 0 {
+		maxTokens = min(maxTokens, limit)
+	}
+	// Thinking shares the requested tokens, which the caller reserved in the
+	// context, and leaves at least half of them for the answer. Anthropic
+	// requires at least 1024 thinking tokens, so a small reply goes without.
+	if budget := min(budgets[m.ref.Effort], maxTokens/2); budget >= 1024 {
 		body["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
 	}
 	body["max_tokens"] = maxTokens

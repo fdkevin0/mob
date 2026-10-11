@@ -72,6 +72,8 @@ type model struct {
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	streamCancel        context.CancelFunc
+	// pastes hold long pasted texts the input shows as placeholders.
+	pastes []string
 }
 
 func Run(connection local.Connection) error {
@@ -249,6 +251,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.load("", false)
 		}
 		return m, nil
+	case tea.PasteMsg:
+		if m.plugin == nil && m.configured && strings.Count(msg.Content, "\n") >= pasteLines {
+			m.input.InsertString(m.collapse(msg.Content))
+			return m, nil
+		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.input.SetWidth(max(20, msg.Width-4))
@@ -284,7 +291,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.failure = msg.Err.Error()
 			if m.input.Value() == "" {
-				m.input.SetValue(msg.Text)
+				m.restore(msg.Text)
 			}
 			return m, nil
 		}
@@ -372,11 +379,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.busy || m.remoteBusy || m.running || m.id == "" {
 				return m, nil
 			}
-			text := strings.TrimSpace(m.input.Value())
+			text := strings.TrimSpace(m.expand(m.input.Value()))
 			if text == "" {
 				return m, nil
 			}
 			m.input.Reset()
+			m.pastes = nil
 			m.completionSeq++
 			m.setSuggestions(nil, "")
 			m.failure = ""
@@ -403,6 +411,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, m.refreshCompletion())
 	}
 	return m, cmd
+}
+
+// pasteLines is where a paste is held aside and shown as a placeholder: the
+// input component keeps at most 10000 lines, and a long paste is unreadable
+// in a three-line box anyway.
+const pasteLines = 100
+
+// collapse holds a long text aside and returns the placeholder that stands for it.
+func (m *model) collapse(text string) string {
+	m.pastes = append(m.pastes, text)
+	return placeholder(len(m.pastes)-1, text)
+}
+
+func placeholder(i int, text string) string {
+	return fmt.Sprintf("[Pasted text #%d · %d lines]", i+1, strings.Count(text, "\n")+1)
+}
+
+// expand replaces each placeholder still in s with its pasted text.
+func (m *model) expand(s string) string {
+	for i, text := range m.pastes {
+		s = strings.Replace(s, placeholder(i, text), text, 1)
+	}
+	return s
+}
+
+// restore puts unsent text back in the input, holding it aside if long.
+func (m *model) restore(text string) {
+	m.pastes = nil
+	if strings.Count(text, "\n") >= pasteLines {
+		text = m.collapse(text)
+	}
+	m.input.SetValue(text)
 }
 
 // Strip terminal control characters from model/user content before rendering.

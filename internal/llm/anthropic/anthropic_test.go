@@ -26,7 +26,7 @@ func TestMessagesStream(t *testing.T) {
 		}
 		// Results answering one assistant turn arrive in one user message; foreign IDs are adapted.
 		if body.System != "sys" || len(body.Messages) != 3 || body.Messages[2]["role"] != "user" || len(body.Messages[2]["content"].([]any)) != 2 ||
-			body.Thinking["budget_tokens"] != float64(2048) || body.MaxTokens != 100+2048 || body.Tools[0]["input_schema"] == nil {
+			body.Thinking["budget_tokens"] != float64(2048) || body.MaxTokens != 10000 || body.Tools[0]["input_schema"] == nil {
 			t.Errorf("bad body %+v", body)
 		}
 		if id := body.Messages[1]["content"].([]any)[1].(map[string]any)["id"]; id != "call_1_x" {
@@ -52,7 +52,7 @@ func TestMessagesStream(t *testing.T) {
 	defer upstream.Close()
 	m := New(llm.Ref{Provider: "a", Model: "claude", Effort: "low"}, llm.Info{}, Config{BaseURL: upstream.URL, Key: "key"})
 	var got string
-	result, err := m.Stream(context.Background(), llm.Request{System: "sys", MaxTokens: 100, Tools: []llm.Tool{{Name: "datetime", Parameters: map[string]any{"type": "object"}}},
+	result, err := m.Stream(context.Background(), llm.Request{System: "sys", MaxTokens: 10000, Tools: []llm.Tool{{Name: "datetime", Parameters: map[string]any{"type": "object"}}},
 		Messages: []llm.Message{
 			{Role: "user", Text: "hi"},
 			{Role: "assistant", Text: "a", ToolCalls: []llm.ToolCall{{ID: "call:1.x", Name: "t", Arguments: "{}"}, {ID: "b", Name: "t", Arguments: "oops"}}},
@@ -78,18 +78,23 @@ func TestThinkingStaysWithinTheOutputLimit(t *testing.T) {
 		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
 	}))
 	defer upstream.Close()
+	// max_tokens never exceeds what the caller reserved, so history fitted to
+	// it still fits; thinking takes at most half.
 	for _, c := range []struct {
 		output, request, want, budget int
 	}{
-		{64000, 32000, 64000, 32000},
-		{32000, 32000, 32000, 16000},
-		{0, 0, defaultOutput + 32000, 32000},
+		{64000, 32000, 32000, 16000},
+		{8000, 32000, 8000, 4000},
+		{0, 0, defaultOutput, 16000},
+		{0, 1500, 1500, 0},
 	} {
 		m := New(llm.Ref{Provider: "a", Model: "claude", Effort: "max"}, llm.Info{Output: c.output}, Config{BaseURL: upstream.URL})
+		body.Thinking = nil
 		if _, err := m.Stream(context.Background(), llm.Request{MaxTokens: c.request, Messages: []llm.Message{{Role: "user", Text: "hi"}}}, func(string, string) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
-		if body.MaxTokens != c.want || body.Thinking["budget_tokens"] != float64(c.budget) {
+		budget, _ := body.Thinking["budget_tokens"].(float64)
+		if body.MaxTokens != c.want || budget != float64(c.budget) {
 			t.Errorf("output %d: max_tokens %d, budget %v", c.output, body.MaxTokens, body.Thinking["budget_tokens"])
 		}
 	}

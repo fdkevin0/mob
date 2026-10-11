@@ -2,11 +2,16 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/fdkevin0/mob/internal/llm"
+	"github.com/fdkevin0/mob/internal/llm/anthropic"
 )
 
 // sized answers at once with the limits it is given, recording each request.
@@ -92,5 +97,48 @@ func TestLongMessagesAreAccepted(t *testing.T) {
 	}
 	if len(model.requests) != 1 || model.requests[0].Messages[0].Text != strings.TrimSpace(text) {
 		t.Fatalf("long message did not reach the model: %d requests", len(model.requests))
+	}
+}
+
+// Thinking comes out of the reply's reserved tokens, so the prompt the turn
+// accepted and the max_tokens the driver sends fit the window together.
+func TestThinkingFitsTheReservedReply(t *testing.T) {
+	var sent struct {
+		MaxTokens int `json:"max_tokens"`
+		Messages  []struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&sent)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer upstream.Close()
+	s, err := OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c, _ := s.Create()
+	m, err := s.Begin(c.ID, NewID(), strings.Repeat("长", 163000), "a/claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := llm.Info{ID: "claude", Context: 200000, Output: 64000}
+	model := anthropic.New(llm.Ref{Provider: "a", Model: "claude", Effort: "max"}, info, anthropic.Config{BaseURL: upstream.URL})
+	if err := Run(context.Background(), s, model, Agent{}, c.ID, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	prompt := tokens(systemPrompt)
+	for _, message := range sent.Messages {
+		for _, block := range message.Content {
+			prompt += tokens(block.Text)
+		}
+	}
+	if prompt+sent.MaxTokens > info.Context {
+		t.Fatalf("prompt of about %d tokens plus max_tokens %d exceeds the %d window", prompt, sent.MaxTokens, info.Context)
 	}
 }
