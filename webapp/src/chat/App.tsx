@@ -1,0 +1,145 @@
+import { isToolUIPart } from 'ai';
+import { useConversation } from './useConversation';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
+import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
+import { api, defaultURL, type Config, type Connection, type Conversation, type Snapshot } from './api';
+
+import { Plugins } from './Plugins';
+
+const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+export function App() {
+  const [connection, setConnection] = useState<Connection>();
+  const [token, setToken] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const desktop = window.go?.main?.Desktop;
+    if (desktop) {
+      desktop.Connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => setLoading(false));
+    } else {
+      const saved = sessionStorage.getItem('mob-token');
+      if (saved) setConnection({ url: defaultURL(), token: saved });
+      setLoading(false);
+    }
+  }, []);
+  async function connect(event: FormEvent) {
+    event.preventDefault(); setLoading(true); setError('');
+    const next = { url: defaultURL(), token: token.trim() };
+    try { await api(next, '/config'); sessionStorage.setItem('mob-token', next.token); setConnection(next); }
+    catch (e) { setError(errorText(e)); } finally { setLoading(false); }
+  }
+  if (connection) return <ConfiguredWorkspace connection={connection} disconnect={() => { sessionStorage.removeItem('mob-token'); setConnection(undefined); }} />;
+  return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>
+    <form onSubmit={connect}><label htmlFor="token">Local access token</label><input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
+      <p className="muted">Read the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</button></form>
+    {error && <p role="alert">{error}</p>}</main>;
+}
+
+function ConfiguredWorkspace({ connection, disconnect }: { connection: Connection; disconnect: () => void }) {
+  const [plugins, setPlugins] = useState(false);
+  const [config, setConfig] = useState<Config>();
+  const [key, setKey] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  async function check() {
+    try { setConfig(await api<Config>(connection, '/config')); setError(''); }
+    catch (e) { setError(errorText(e)); }
+  }
+  useEffect(() => { void check(); }, [connection]);
+  async function save(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setError('');
+    try { setConfig(await api<Config>(connection, '/config', { apiKey: key.trim() })); setKey(''); }
+    catch (e) { setError(errorText(e)); } finally { setSaving(false); }
+  }
+  if (plugins) return <Plugins connection={connection} close={() => { setPlugins(false); void check(); }} />;
+  if (config?.configured) return <Workspace connection={connection} disconnect={disconnect} onPlugins={() => setPlugins(true)} />;
+  return <main className="connect"><p className="eyebrow">MOB / SETUP</p>
+    <h1>{config ? 'Set up your model.' : 'Checking configuration…'}</h1>
+    {config && <><p>Add the missing DEEPSEEK_API_KEY (or MOB_API_KEY) to start chatting.</p>
+      <p>Get your key from <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek</a>. It will be saved on this computer.</p>
+      <form onSubmit={save}><label htmlFor="api-key">API key</label>
+        <input id="api-key" type="password" autoComplete="off" autoFocus value={key} maxLength={4096} disabled={saving} onChange={e => setKey(e.target.value)} required />
+        <p className="muted">Saving checks the key format. Your first message checks access to the model.</p>
+        <button disabled={saving || !key.trim()}>{saving ? 'Saving…' : 'Save and continue'}</button>
+      </form></>}
+    {error && <p role="alert">{error}</p>}
+    <button className="plain" disabled={saving} onClick={() => setPlugins(true)}>Plugins & cloud services</button><br />
+    <button className="plain" disabled={saving} onClick={() => void check()}>Check configuration again</button>
+  </main>;
+}
+
+function Workspace({ connection, disconnect, onPlugins }: { connection: Connection; disconnect: () => void; onPlugins: () => void }) {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
+  const [config, setConfig] = useState<Config>();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [background,setBackground]=useState(false);
+  async function refreshList() { setConversations(await api(connection, '/conversations')); }
+  async function open(id: string) {
+    setSwitching(true); setError('');
+    try { const snapshot = await api<Snapshot>(connection, `/conversations/${id}`); setSelected({ id, snapshot }); }
+    catch (e) { setError(errorText(e)); } finally { setSwitching(false); }
+  }
+  async function create() {
+    setSwitching(true);
+    try { const next = await api<Conversation>(connection, '/conversations', {}); await refreshList(); await open(next.id); }
+    catch (e) { setError(errorText(e)); } finally { setSwitching(false); }
+  }
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const [configuration, list, runtime] = await Promise.all([api<Config>(connection, '/config'), api<Conversation[]>(connection, '/conversations'), api<{background:boolean}>(connection, '/runtime')]);
+        if (!live) return; setConfig(configuration); setConversations(list); setBackground(runtime.background);
+        if (list.length) await open(list[0].id); else await create();
+      } catch (e) { if (live) setError(errorText(e)); }
+    })();
+    return () => { live = false; };
+  }, [connection]);
+  return <div className="workspace">
+    <aside className="sidebar"><div className="brand">mob<span>LOCAL</span></div><button className="new-chat" disabled={busy || switching} onClick={() => void create()}>＋ New conversation</button>
+      <nav aria-label="Conversations">{conversations.map(c => <button className="conversation-link" key={c.id} aria-current={selected?.id === c.id ? 'page' : undefined} disabled={busy || switching} onClick={() => void open(c.id)}>{c.title}</button>)}</nav>
+      <button className="plain" disabled={busy} onClick={onPlugins}>Plugins & cloud services</button>
+      <div className="sidebar-footer"><span className="status-dot" /> History · on this computer<button className="plain" onClick={disconnect} disabled={busy}>Disconnect</button></div>
+    </aside>
+    <main className="chat-main"><header><div><p className="eyebrow">YOUR WORKSPACE</p><strong>{config?.demo ? 'Demo mode · no model calls' : config?.model ?? 'Connecting…'}</strong></div><span className="badge" title={background ? "Continues after this window closes" : "Lifetime is controlled by the process that started the service"}>{background ? "Background service" : "Session service"}</span></header>
+      {error && <div className="error" role="alert">{error}<button className="plain" onClick={() => void refreshList().catch(e => setError(errorText(e)))}>Refresh</button></div>}
+      {selected ? <Thread key={selected.id} connection={connection} id={selected.id} initial={selected.snapshot} configured={!!config?.configured} onBusy={setBusy} onChanged={() => { void refreshList().catch(e => setError(errorText(e))); }} /> : <div className="loading" role="status">Opening workspace…</div>}
+    </main>
+  </div>;
+}
+
+function Thread({ connection, id, initial, configured, onBusy, onChanged }: { connection: Connection; id: string; initial: Snapshot; configured: boolean; onBusy: (busy: boolean) => void; onChanged: () => void }) {
+  const { input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel } = useConversation({ connection, id, initial, onBusy, onChanged });
+  return <>
+    <ChatConversation className="conversation"><ConversationContent className="conversation-content">
+      {messages.length === 0 && <ConversationEmptyState title="What’s on your mind?" description="Ask a question, explore an idea, or save something to remember." />}
+      {messages.map(message => <Message key={message.id} from={message.role}>
+        <p className="message-role">{message.role === 'user' ? 'YOU' : 'MOB'}</p><MessageContent>
+          {message.parts.map((part, index) => {
+            if (part.type === 'text') return <MessageResponse key={index} isAnimating={streaming && message === messages.at(-1)}>{part.text}</MessageResponse>;
+            if (part.type === 'reasoning') return <details className="reasoning" key={index}><summary>Reasoning</summary><p>{part.text}</p></details>;
+            if (isToolUIPart(part)) return <section className="tool-card" key={part.toolCallId}><strong>{part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5)}</strong><span className="tool-state">{part.state}</span>
+              <pre>{JSON.stringify(part.input, null, 2)}</pre>
+              {part.state === 'approval-requested' && <div><p>Save this fact locally? Approval expires after one hour.</p><button disabled={busy} onClick={() => void decide(part.approval.id, true)}>Approve</button><button className="secondary" disabled={busy} onClick={() => void decide(part.approval.id, false)}>Deny</button></div>}
+              {part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+              {part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
+            </section>;
+            return null;
+          })}
+          {message.metadata?.error && <p className="error" role="status">{message.metadata.status}: {message.metadata.error}</p>}
+        </MessageContent></Message>)}
+      {busy && <p className="muted" role="status">{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}</p>}
+    </ConversationContent><ConversationScrollButton /></ChatConversation>
+    <div className="composer-area">{(failure || error) && <p className="error" role="alert">{failure || error?.message}</p>}
+      <form className="composer" onSubmit={submit}><label className="sr-only" htmlFor="message">Message</label><textarea id="message" placeholder="Message Mob…" value={input} onChange={e => setInput(e.target.value)} maxLength={16000} rows={2}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} />
+        {busy ? <button type="button" onClick={() => void cancel()}>Stop</button> : <button disabled={!input.trim() || !configured}>Send ↑</button>}
+      </form><p className="composer-hint">Enter to send · Shift+Enter for a new line · Stored locally</p>
+    </div>
+  </>;
+}
