@@ -86,6 +86,17 @@ func TestModelCommands(t *testing.T) {
 	if ref, _ := s.ConversationModel(c.ID); ref != "beta/two" {
 		t.Fatalf("conversation model %q", ref)
 	}
+	// Retrying an accepted command must not undo a later switch.
+	first := NewID()
+	service.Execute(context.Background(), ChatRequest{ID: c.ID, Text: "/model one", RequestID: first, Owner: true}, func(Event) error { return nil })
+	say("/model two", true)
+	var command *CommandError
+	if err := service.Execute(context.Background(), ChatRequest{ID: c.ID, Text: "/model one", RequestID: first, Owner: true}, func(Event) error { return nil }); !errors.As(err, &command) || command.Status != 409 {
+		t.Fatalf("retry accepted: %v", err)
+	}
+	if ref, _ := s.ConversationModel(c.ID); ref != "beta/two" {
+		t.Fatalf("retry switched the model back: %q", ref)
+	}
 	say("hello", true)
 	history, _ := s.History(c.ID)
 	last := history[len(history)-1]

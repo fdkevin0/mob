@@ -21,6 +21,10 @@ func isCommand(text string) bool {
 }
 
 func (s *ConversationService) command(ctx context.Context, input ChatRequest, emit func(Event) error) error {
+	// A retried request must not switch models again after later choices.
+	if s.Store.HasRequest(input.RequestID) {
+		return &CommandError{409, "request already accepted; refresh history"}
+	}
 	name, args, _ := strings.Cut(input.Text, " ")
 	args = strings.TrimSpace(args)
 	var reply string

@@ -3,11 +3,15 @@ package provider
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -38,10 +42,36 @@ type Registry struct {
 	lists map[string]list
 }
 
+// list is a vendor's model list, valid only for the endpoint and
+// credentials it was fetched with (of).
 type list struct {
 	ids []string
 	at  time.Time
 	err error
+	of  string
+}
+
+// fingerprint identifies what a model list depends on, so a provider whose
+// endpoint or key changes under the same ID is asked again.
+func fingerprint(p Provider) string {
+	h := sha256.New()
+	for _, v := range []string{p.Preset, p.Endpoint(Chat), p.Endpoint(Anthropic), p.ModelsURL, p.Key} {
+		h.Write([]byte(v + "\x00"))
+	}
+	for _, k := range slices.Sorted(maps.Keys(p.Headers)) {
+		h.Write([]byte(k + "\x00" + p.Headers[k] + "\x00"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// listOf is the provider's cached list, if it still matches the provider.
+func (r *Registry) listOf(p Provider) list {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if l := r.lists[p.ID]; l.of == fingerprint(p) {
+		return l
+	}
+	return list{}
 }
 
 // Open loads path, or holds file in memory when path is empty.
@@ -51,16 +81,23 @@ func Open(path string, c *catalog.Catalog, file File) (*Registry, error) {
 	}
 	r := &Registry{Path: path, Catalog: c, file: file, lists: map[string]list{}}
 	if path != "" {
-		if err := r.Reload(); err != nil {
+		f, err := Load(path) // a missing file is the initial configuration
+		if err != nil {
 			return nil, err
 		}
+		r.file = f
 	}
 	return r, nil
 }
 
 // Reload rereads providers.json; a file that cannot be used leaves the
-// providers in effect unchanged.
+// providers in effect unchanged. A file removed while running is refused
+// too: falling back to the initial configuration would quietly send
+// conversations to another provider.
 func (r *Registry) Reload() error {
+	if _, err := os.Lstat(r.Path); errors.Is(err, os.ErrNotExist) {
+		return errors.New("providers.json was removed")
+	}
 	f, err := Load(r.Path)
 	if err != nil {
 		return err
@@ -139,10 +176,7 @@ func (r *Registry) SetDefault(query string) (llm.Ref, error) {
 // available lists a provider's model IDs without asking the vendor: the
 // user's picks, else its last fetched list, else its catalog entry.
 func (r *Registry) available(p Provider) []string {
-	r.mu.RLock()
-	live := r.lists[p.ID].ids
-	r.mu.RUnlock()
-	ids := Picks(p, live)
+	ids := Picks(p, r.listOf(p).ids)
 	if len(ids) == 0 && p.preset() != nil && p.preset().Catalog != "" {
 		for _, i := range r.Catalog.Models(p.preset().Catalog) {
 			ids = append(ids, i.ID)
@@ -284,17 +318,8 @@ func (r *Registry) Resolve(query string) (llm.Model, error) {
 	if query == "" {
 		return nil, errors.New("no model given")
 	}
-	if ref, ok := llm.ParseRef(query); ok {
-		if ref.Provider == demo.ID {
-			return demo.Model{}, nil
-		}
-		f := r.File()
-		if p := f.Find(ref.Provider); p != nil {
-			if p.Off {
-				return nil, fmt.Errorf("provider %s is switched off", p.ID)
-			}
-			return r.build(*p, ref)
-		}
+	if ref, ok := llm.ParseRef(query); ok && (ref.Provider == demo.ID || r.File().Find(ref.Provider) != nil) {
+		return r.model(ref)
 	}
 	effort := ""
 	if i := strings.LastIndex(query, ":"); i > 0 && slices.Contains(llm.Efforts, query[i+1:]) {
@@ -317,8 +342,7 @@ func (r *Registry) Resolve(query string) (llm.Model, error) {
 	for _, found := range [][]llm.Ref{exact, partial} {
 		switch {
 		case len(found) == 1:
-			p := r.File().Find(found[0].Provider)
-			return r.build(*p, found[0])
+			return r.model(found[0])
 		case len(found) > 1:
 			names := make([]string, 0, min(len(found), 10))
 			for _, ref := range found[:min(len(found), 10)] {
@@ -328,6 +352,22 @@ func (r *Registry) Resolve(query string) (llm.Model, error) {
 		}
 	}
 	return nil, fmt.Errorf("no model matches %q; /models lists them", query)
+}
+
+// model builds a reference to the demo model or a configured, enabled
+// provider; the provider may have been removed since the reference was found.
+func (r *Registry) model(ref llm.Ref) (llm.Model, error) {
+	if ref.Provider == demo.ID {
+		return demo.Model{}, nil
+	}
+	p := r.File().Find(ref.Provider)
+	switch {
+	case p == nil:
+		return nil, fmt.Errorf("no provider %s", ref.Provider)
+	case p.Off:
+		return nil, fmt.Errorf("provider %s is switched off", p.ID)
+	}
+	return r.build(*p, ref)
 }
 
 // groups describes every enabled provider's models from what is known now.
@@ -350,11 +390,9 @@ func (r *Registry) groups(query string) []llm.Group {
 				g.Models = append(g.Models, r.info(p, id))
 			}
 		}
-		r.mu.RLock()
-		if err := r.lists[p.ID].err; err != nil {
+		if err := r.listOf(p).err; err != nil {
 			g.Error = err.Error()
 		}
-		r.mu.RUnlock()
 		if query != "" && !strings.Contains(p.ID, query) && !strings.Contains(strings.ToLower(g.Name), query) {
 			g.Models = slices.DeleteFunc(g.Models, func(i llm.Info) bool {
 				return !strings.Contains(strings.ToLower(i.ID), query) && !strings.Contains(strings.ToLower(i.Name), query)
@@ -373,21 +411,19 @@ func (r *Registry) groups(query string) []llm.Group {
 func (r *Registry) List(ctx context.Context, query string) []llm.Group {
 	var wg sync.WaitGroup
 	for _, p := range r.File().Providers {
-		r.mu.RLock()
-		fresh := time.Since(r.lists[p.ID].at) < listFresh
-		r.mu.RUnlock()
-		if p.Off || fresh {
+		if p.Off || time.Since(r.listOf(p).at) < listFresh {
 			continue
 		}
 		wg.Add(1)
 		go func(p Provider) {
 			defer wg.Done()
 			ids, err := r.Fetch(ctx, p)
-			r.mu.Lock()
+			of := fingerprint(p)
 			if err != nil {
-				ids = r.lists[p.ID].ids // keep the last good list
+				ids = r.listOf(p).ids // keep the last good list for the same endpoint
 			}
-			r.lists[p.ID] = list{ids: ids, at: time.Now(), err: err}
+			r.mu.Lock()
+			r.lists[p.ID] = list{ids: ids, at: time.Now(), err: err, of: of}
 			r.mu.Unlock()
 		}(p)
 	}
@@ -435,7 +471,7 @@ func (r *Registry) Fetch(ctx context.Context, p Provider) ([]string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: %w", p.ID, openai.StatusError(resp))
+		return nil, fmt.Errorf("%s: %w", p.ID, openai.StatusError(resp, openai.Secrets(key, p.Headers)...))
 	}
 	var body struct {
 		Data []struct {
