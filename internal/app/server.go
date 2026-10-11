@@ -94,6 +94,17 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/conversations/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"stopped": s.Stop(r.PathValue("id"))})
 	})
+	mux.HandleFunc("GET /api/commands", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, chat.Commands(r.URL.Query().Get("client")))
+	})
+	mux.HandleFunc("POST /api/commands/complete", func(w http.ResponseWriter, r *http.Request) {
+		var input chat.CompletionRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&input); err != nil {
+			http.Error(w, "invalid completion request", 400)
+			return
+		}
+		writeJSON(w, 200, s.Complete(r.Context(), input))
+	})
 	mux.HandleFunc("POST /api/chat", s.chat)
 	if assets != nil {
 		mux.Handle("/", http.FileServerFS(assets))

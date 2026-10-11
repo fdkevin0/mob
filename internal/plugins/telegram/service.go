@@ -133,7 +133,7 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 }
 func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text string) (string, error) {
 	if text == "/start" || text == "/help" {
-		return "Mob is connected. Send a message to chat. /new starts a conversation. /approve ID or /deny ID resolves a memory request. /models lists models and /model NAME switches this conversation's model. This computer must remain running.", nil
+		return "Mob is connected. Send a message to chat. This computer must remain running.\n\n" + chat.Help(chat.ClientTelegram), nil
 	}
 	key := "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10)
 	var id string

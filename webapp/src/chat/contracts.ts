@@ -63,3 +63,19 @@ export type Delivery = {
   error: string;
   updatedAt: number;
 };
+export type CommandSpec = {
+  name: string;
+  usage: string;
+  summary: string;
+  clients: string[];
+};
+export type Suggestion = {
+  value: string;
+  label: string;
+  detail?: string;
+};
+export type CompletionRequest = {
+  client: string;
+  conversationId?: string;
+  text: string;
+};

@@ -145,3 +145,81 @@ func TestTUIPluginWizardMasksAndSaves(t *testing.T) {
 		t.Fatal("wizard did not close")
 	}
 }
+
+func TestTUICompletesCommands(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := app.NewServer(store, provider.Offline(), strings.Repeat("t", 32))
+	defer srv.Close()
+	httpSrv := httptest.NewServer(srv.Handler(nil))
+	defer httpSrv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	input := textarea.New()
+	styles := input.Styles()
+	styles.Cursor.Blink = false // a blink tick would stall the command loop below
+	input.SetStyles(styles)
+	input.Focus()
+	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: input, viewport: viewport.New(), width: 80}
+	updated, _ := m.Update(m.load("", false)())
+	m = updated.(model)
+	press := func(key tea.KeyPressMsg) {
+		t.Helper()
+		updated, cmd := m.Update(key)
+		m = updated.(model)
+		// Run completion requests the way Bubble Tea would.
+		for cmd != nil {
+			msg := cmd()
+			if batch, ok := msg.(tea.BatchMsg); ok {
+				cmd = nil
+				for _, c := range batch {
+					if c == nil {
+						continue
+					}
+					if result, ok := c().(completions); ok {
+						updated, _ = m.Update(result)
+						m = updated.(model)
+					}
+				}
+				continue
+			}
+			result, ok := msg.(completions)
+			if !ok {
+				break
+			}
+			updated, cmd = m.Update(result)
+			m = updated.(model)
+		}
+	}
+	for _, r := range "/mo" {
+		press(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if len(m.suggestions) != 2 || m.suggestions[0].Value != "/model" || !strings.Contains(m.View().Content, "Show or switch") {
+		t.Fatalf("command suggestions: %+v", m.suggestions)
+	}
+	press(tea.KeyPressMsg{Code: tea.KeyDown})
+	press(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.input.Value() != "/models " || len(m.suggestions) != 0 {
+		t.Fatalf("tab accepted %q, left %+v", m.input.Value(), m.suggestions)
+	}
+	m.input.Reset()
+	for _, r := range "/model " {
+		press(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if len(m.suggestions) < 2 || m.suggestions[0].Value != "default" || m.suggestions[1].Value != "demo/echo" {
+		t.Fatalf("model suggestions: %+v", m.suggestions)
+	}
+	press(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if len(m.suggestions) != 0 {
+		t.Fatal("escape kept suggestions")
+	}
+	m.input.SetValue("/models")
+	m.suggestions = []chat.Suggestion{{Value: "/models"}}
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m = updated.(model); !m.busy || m.suggestions != nil {
+		t.Fatal("enter on a complete command did not send it")
+	}
+}

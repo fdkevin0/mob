@@ -51,7 +51,9 @@ try {
   assert(reply?.parts.some(p => p.type === 'text' && p.text.includes('你好，Mob')));
   assert.equal((await request('/chat', { id, text: 'repeat', requestId: 'hello' })).status, 409);
   const models = await turn(id, { text: '/models', requestId: 'models' });
-  assert(models?.parts.some(p => p.type === 'text' && p.text.includes('▸ demo/echo')), '/models did not list the current model');
+  assert(models?.parts.some(p => p.type === 'text' && p.text.includes('**`demo/echo`** (current)')), '/models did not list the current model');
+  const suggestions = await (await request('/commands/complete', { client: 'web', conversationId: id, text: '/model d' })).json() as { value: string }[];
+  assert.deepEqual(suggestions.map(s => s.value), ['default', 'demo/echo'], '/model did not complete its argument');
   const current = await (await request(`/conversations/${id}`)).json() as { model: string };
   assert.equal(current.model, 'demo/echo');
   const pending = await turn(id, { text: '/remember 喜欢简洁的回复', requestId: 'memory' });

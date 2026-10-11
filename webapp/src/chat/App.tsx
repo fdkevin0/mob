@@ -1,5 +1,6 @@
 import { isToolUIPart } from 'ai';
 import { useConversation } from './useConversation';
+import { useCompletion } from './useCompletion';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
@@ -84,6 +85,7 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
 
 function Thread({ connection, id, initial, onModel, onBusy, onChanged }: { connection: Connection; id: string; initial: Snapshot; onModel: (model: string) => void; onBusy: (busy: boolean) => void; onChanged: () => void }) {
   const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel } = useConversation({ connection, id, initial, onBusy, onChanged });
+  const completion = useCompletion({ connection, id, input, setInput });
   useEffect(() => { onModel(model); }, [model, onModel]);
   return <>
     <ChatConversation className="conversation"><ConversationContent className="conversation-content">
@@ -106,10 +108,15 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged }: { conne
       {busy && <p className="muted" role="status">{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}</p>}
     </ConversationContent><ConversationScrollButton /></ChatConversation>
     <div className="composer-area">{(failure || error) && <p className="error" role="alert">{failure || error?.message}</p>}
+      {completion.suggestions.length > 0 && <ul className="suggestions" id="command-suggestions" role="listbox" aria-label="Command suggestions">
+        {completion.suggestions.map((s, i) => <li key={`${i}-${s.value}`} id={`suggestion-${i}`} role="option" aria-selected={i === completion.selected} onMouseDown={e => { e.preventDefault(); completion.accept(i); }}>
+          <span>{s.label}</span>{s.detail && <small>{s.detail}</small>}</li>)}
+      </ul>}
       <form className="composer" onSubmit={submit}><label className="sr-only" htmlFor="message">Message</label><textarea id="message" placeholder="Message Mob…" value={input} onChange={e => setInput(e.target.value)} maxLength={16000} rows={2}
-        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} />
+        aria-autocomplete="list" aria-controls={completion.suggestions.length ? 'command-suggestions' : undefined} aria-activedescendant={completion.suggestions.length ? `suggestion-${completion.selected}` : undefined}
+        onKeyDown={e => { if (completion.onKeyDown(e)) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} />
         {busy ? <button type="button" onClick={() => void cancel()}>Stop</button> : <button disabled={!input.trim()}>Send ↑</button>}
-      </form><p className="composer-hint">/models lists models · /model NAME switches · Enter to send · Shift+Enter for a new line</p>
+      </form><p className="composer-hint">Type / for commands · Tab completes · Enter to send · Shift+Enter for a new line</p>
     </div>
   </>;
 }
