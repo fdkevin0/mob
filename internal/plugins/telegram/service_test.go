@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -43,14 +44,60 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 	if err := store.Setting("telegram-conversation:bot:7", &current); err != nil || current == "" {
 		t.Fatalf("/new did not become the bot's conversation: %v", err)
 	}
-	if got := reply("/remember 简洁"); !strings.Contains(got, "/approve") {
-		t.Fatalf("approval request: %s", got)
+	got, approvals, err := service.reply(context.Background(), config, "bot", chat.NewID(), "/remember 简洁")
+	if err != nil || !strings.Contains(got, "Approval needed: remember\nfact: 简洁") || !strings.Contains(got, "reply /approve or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
+		t.Fatalf("approval request: %s %+v %v", got, approvals, err)
 	}
 	if got := reply("/approve"); !strings.Contains(got, "approved remember and it ran") {
 		t.Fatalf("/approve: %s", got)
 	}
 	if got := reply("/approve"); !strings.Contains(got, "0 requests are pending") {
 		t.Fatalf("second /approve: %s", got)
+	}
+}
+
+func TestApprovalButtonsAndTaps(t *testing.T) {
+	a, b := chat.NewID(), chat.NewID()
+	var sent []map[string]any
+	var answered []string
+	c := Config{Token: "1:x", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/sendMessage"):
+			sent = append(sent, body)
+		case strings.HasSuffix(r.URL.Path, "/answerCallbackQuery"):
+			answered = append(answered, body["callback_query_id"].(string))
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
+	})}
+	if err := c.Send(context.Background(), 7, strings.Repeat("x", 2001), chat.PendingApproval{ID: a, Tool: "email_send"}, chat.PendingApproval{ID: b, Tool: "remember"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 2 || sent[0]["reply_markup"] != nil {
+		t.Fatalf("buttons belong under the last chunk only: %v", sent)
+	}
+	rows, _ := json.Marshal(sent[1]["reply_markup"])
+	if want := `{"inline_keyboard":[[{"callback_data":"/approve ` + a + `","text":"Approve email_send"},{"callback_data":"/deny ` + a + `","text":"Deny email_send"}],[{"callback_data":"/approve ` + b + `","text":"Approve remember"},{"callback_data":"/deny ` + b + `","text":"Deny remember"}]]}`; string(rows) != want {
+		t.Fatalf("buttons: %s", rows)
+	}
+
+	tap := func(from int64, data string) Update {
+		var u Update
+		json.Unmarshal([]byte(`{"update_id":9,"callback_query":{"id":"q","data":"`+data+`","from":{"id":`+fmt.Sprint(from)+`}}}`), &u)
+		return c.tapped(context.Background(), u)
+	}
+	if m := tap(7, "/approve "+a).Message; m == nil || m.Text != "/approve "+a || m.From.ID != 7 || m.Chat.ID != 7 || m.Chat.Type != "private" {
+		t.Fatalf("owner tap: %+v", m)
+	}
+	if m := tap(8, "/approve "+a).Message; m != nil {
+		t.Fatalf("a stranger's tap became a message: %+v", m)
+	}
+	if m := tap(7, "/new").Message; m != nil {
+		t.Fatalf("a tap became another command: %+v", m)
+	}
+	if len(answered) != 2 {
+		t.Fatalf("owner taps answered: %v", answered)
 	}
 }
 

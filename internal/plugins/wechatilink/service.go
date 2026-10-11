@@ -43,8 +43,7 @@ func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contex
 	}
 
 	var reply strings.Builder
-	var pendingApprovalID string
-	var pendingToolName string
+	var approvals []chat.PendingApproval
 
 	input := chat.ChatRequest{
 		ID:        convID,
@@ -58,8 +57,7 @@ func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contex
 		case chat.SegmentDelta:
 			reply.WriteString(e.Text)
 		case chat.ApprovalRequested:
-			pendingApprovalID = e.ApprovalID
-			pendingToolName = e.ToolName
+			approvals = append(approvals, chat.PendingApproval{ID: e.ApprovalID, Tool: e.ToolName, Input: e.Input})
 		}
 		return nil
 	})
@@ -72,10 +70,8 @@ func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contex
 	}
 
 	result := reply.String()
-	if pendingApprovalID != "" {
-		prompt := fmt.Sprintf("\n\n⚠️ 【操作审批提醒】\nAgent 申请执行操作: %s\n审批 ID: %s\n如需允许，请回复: 批准 %s\n如需拒绝，请回复: 拒绝 %s",
-			pendingToolName, pendingApprovalID, pendingApprovalID, pendingApprovalID)
-		result += prompt
+	if len(approvals) > 0 {
+		result += approvalPrompt(approvals, len(s.Conversation.Pending(convID)))
 	}
 
 	if result == "" {
@@ -142,11 +138,43 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 	}
 }
 
+// approvalPrompt shows what each requested call would do and how to answer,
+// given how many requests the conversation has pending.
+func approvalPrompt(approvals []chat.PendingApproval, pending int) string {
+	var b strings.Builder
+	for _, a := range approvals {
+		fmt.Fprintf(&b, "\n\n⚠️ 【操作审批】%s\n审批 ID: %s", chat.DescribeApproval(a.Tool, a.Input), a.ID)
+	}
+	if pending > 1 {
+		b.WriteString("\n\n有多个待审批请求，请回复「批准 ID」或「拒绝 ID」。")
+	} else {
+		b.WriteString("\n\n允许请回复「批准」，拒绝请回复「拒绝」。")
+	}
+	return b.String()
+}
+
 func (s *Service) handleApproval(ctx context.Context, senderID, approvalID string, approved, owner bool) (string, error) {
 	var convID string
 	_ = s.Store.Setting("wechat-ilink-conv:"+senderID, &convID)
 	if convID == "" {
 		return "未找到当前会话上下文", nil
+	}
+
+	if approvalID == "" {
+		pending := s.Conversation.Pending(convID)
+		switch len(pending) {
+		case 0:
+			return "当前没有待审批的请求。", nil
+		case 1:
+			approvalID = pending[0].ID
+		default:
+			var b strings.Builder
+			b.WriteString("有多个待审批请求，请回复「批准 ID」或「拒绝 ID」：")
+			for _, p := range pending {
+				fmt.Fprintf(&b, "\n%s: %s", p.Tool, p.ID)
+			}
+			return b.String(), nil
+		}
 	}
 
 	if len(approvalID) != 32 {
@@ -207,6 +235,10 @@ func parseApprovalCommand(text string) (approvalID string, approved bool, ok boo
 	}
 
 	for _, p := range prefixes {
+		if lower == p.prefix {
+			// A bare word answers the only pending request.
+			return "", p.approved, true
+		}
 		if strings.HasPrefix(lower, p.prefix) {
 			rest := strings.TrimSpace(text[len(p.prefix):])
 			if rest != "" {

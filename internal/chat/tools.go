@@ -70,7 +70,7 @@ func (c ToolCall) RequestApproval(input any) error {
 	if err != nil {
 		return Abort(err)
 	}
-	if err := c.Send(Event{Kind: ApprovalRequested, ApprovalID: id, ToolCallID: c.ID}); err != nil {
+	if err := c.Send(Event{Kind: ApprovalRequested, ApprovalID: id, ToolCallID: c.ID, ToolName: c.Name, Input: input}); err != nil {
 		return Abort(err)
 	}
 	return ErrAwaitingApproval

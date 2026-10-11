@@ -64,30 +64,9 @@ func (s *ConversationService) conversations(context.Context, CommandCall, []stri
 
 // pending are the conversation's tool requests still awaiting a decision.
 func (s *ConversationService) pending(id string) []Suggestion {
-	if id == "" {
-		return nil
-	}
-	history, err := s.Store.History(id)
-	if err != nil {
-		return nil
-	}
 	var list []Suggestion
-	for _, m := range history {
-		for _, p := range m.Parts {
-			if p["state"] != "approval-requested" {
-				continue
-			}
-			var approval string
-			switch a := p["approval"].(type) {
-			case map[string]any:
-				approval = fmt.Sprint(a["id"])
-			case map[string]string:
-				approval = a["id"]
-			}
-			if approval != "" {
-				list = append(list, Suggestion{Value: approval, Label: approval, Detail: strings.TrimPrefix(fmt.Sprint(p["type"]), "tool-")})
-			}
-		}
+	for _, p := range s.Pending(id) {
+		list = append(list, Suggestion{Value: p.ID, Label: p.ID, Detail: p.Tool})
 	}
 	return list
 }

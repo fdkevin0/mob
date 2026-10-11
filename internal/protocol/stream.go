@@ -52,5 +52,10 @@ func Encode(e chat.Event) Chunk {
 	default:
 		panic("unknown conversation event")
 	}
+	if e.Kind == chat.ApprovalRequested {
+		// The tool-input-available chunk already carried the call; the AI SDK
+		// approval chunk names only the approval and the call.
+		return Chunk{Type: kind, ToolCallID: e.ToolCallID, ApprovalID: e.ApprovalID}
+	}
 	return Chunk{Type: kind, MessageID: e.MessageID, FinishReason: e.Reason, ErrorText: e.Error, ID: e.ID, Delta: e.Text, Data: e.Usage, ToolCallID: e.ToolCallID, ToolName: e.ToolName, Input: e.Input, Output: e.Output, ApprovalID: e.ApprovalID}
 }

@@ -9,7 +9,10 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
+
+	"github.com/fdkevin0/mob/internal/chat"
 )
 
 type Config struct {
@@ -81,34 +84,86 @@ func (c Config) Test(ctx context.Context) (any, error) {
 	return me, nil
 }
 
+type Message struct {
+	Text string `json:"text"`
+	From struct {
+		ID int64 `json:"id"`
+	} `json:"from"`
+	Chat struct {
+		ID   int64  `json:"id"`
+		Type string `json:"type"`
+	} `json:"chat"`
+}
+
 type Update struct {
-	ID      int64 `json:"update_id"`
-	Message *struct {
-		Text string `json:"text"`
+	ID      int64    `json:"update_id"`
+	Message *Message `json:"message"`
+	// CallbackQuery is a tap on an approval button.
+	CallbackQuery *struct {
+		ID   string `json:"id"`
+		Data string `json:"data"`
 		From struct {
 			ID int64 `json:"id"`
 		} `json:"from"`
-		Chat struct {
-			ID   int64  `json:"id"`
-			Type string `json:"type"`
-		} `json:"chat"`
-	} `json:"message"`
+	} `json:"callback_query"`
+}
+
+// tapped makes the owner's tap on an approval button the private message it
+// stands for, answering the tap so Telegram stops showing it as loading.
+func (c Config) tapped(ctx context.Context, u Update) Update {
+	q := u.CallbackQuery
+	if q == nil || q.From.ID != c.UserID {
+		return u
+	}
+	// Best effort: an unanswered tap only keeps its spinner a little longer.
+	_ = c.Call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID}, nil)
+	if !strings.HasPrefix(q.Data, "/approve ") && !strings.HasPrefix(q.Data, "/deny ") {
+		return u
+	}
+	m := &Message{Text: q.Data}
+	m.From.ID, m.Chat.ID, m.Chat.Type = c.UserID, c.UserID, "private"
+	u.Message = m
+	return u
 }
 
 func (c Config) Updates(ctx context.Context, offset int64) ([]Update, error) {
 	var result []Update
-	err := c.Call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": 25, "limit": 20, "allowed_updates": []string{"message"}}, &result)
+	err := c.Call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": 25, "limit": 20, "allowed_updates": []string{"message", "callback_query"}}, &result)
 	return result, err
 }
-func (c Config) Send(ctx context.Context, chatID int64, text string) error {
+
+// Send sends text, with Approve and Deny buttons under its last chunk for
+// each pending approval.
+func (c Config) Send(ctx context.Context, chatID int64, text string, approvals ...chat.PendingApproval) error {
 	// Chunk below Telegram's UTF-16 limit even when every character is supplementary.
 	runes := []rune(text)
 	for len(runes) > 0 {
 		n := min(2000, len(runes))
-		if err := c.Call(ctx, "sendMessage", map[string]any{"chat_id": chatID, "text": string(runes[:n])}, nil); err != nil {
+		message := map[string]any{"chat_id": chatID, "text": string(runes[:n])}
+		if n == len(runes) && len(approvals) > 0 {
+			message["reply_markup"] = map[string]any{"inline_keyboard": buttons(approvals)}
+		}
+		if err := c.Call(ctx, "sendMessage", message, nil); err != nil {
 			return err
 		}
 		runes = runes[n:]
 	}
 	return nil
+}
+
+// buttons is one Approve/Deny row per approval; a tap arrives as a callback
+// query whose data is the matching command.
+func buttons(approvals []chat.PendingApproval) [][]map[string]string {
+	rows := make([][]map[string]string, len(approvals))
+	for i, a := range approvals {
+		label := ""
+		if len(approvals) > 1 {
+			label = " " + a.Tool
+		}
+		rows[i] = []map[string]string{
+			{"text": "Approve" + label, "callback_data": "/approve " + a.ID},
+			{"text": "Deny" + label, "callback_data": "/deny " + a.ID},
+		}
+	}
+	return rows
 }

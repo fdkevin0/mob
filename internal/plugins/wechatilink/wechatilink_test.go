@@ -184,7 +184,19 @@ func TestWeChatILinkServiceProcessing(t *testing.T) {
 		t.Fatalf("expected successful reply, got empty or err: %v", err)
 	}
 
-	// 3. Approval command handling
+	// 3. An approval request shows what it would do; a bare reply answers it
+	reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "/remember 喜欢喝茶")
+	if err != nil || !strings.Contains(reply, "【操作审批】remember\nfact: 喜欢喝茶") || !strings.Contains(reply, "允许请回复「批准」") {
+		t.Fatalf("approval request: %s (err: %v)", reply, err)
+	}
+	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "批准"); err != nil || !strings.Contains(reply, "已批准") {
+		t.Fatalf("bare approval: %s (err: %v)", reply, err)
+	}
+	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "拒绝"); err != nil || !strings.Contains(reply, "当前没有待审批的请求") {
+		t.Fatalf("nothing pending: %s (err: %v)", reply, err)
+	}
+
+	// 4. Approval command handling
 	approvalReply, err := svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "批准 12345678901234567890123456789012")
 	if err != nil || !strings.Contains(approvalReply, "审批指令无效或该审批已过期") {
 		t.Fatalf("expected stale approval response, got: %s (err: %v)", approvalReply, err)

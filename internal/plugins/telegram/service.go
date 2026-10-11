@@ -100,6 +100,7 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 				if update.ID < offset {
 					continue
 				}
+				update = c.tapped(ctx, update)
 				m := update.Message
 				if m != nil && m.From.ID == c.UserID && m.Chat.ID == c.UserID && m.Chat.Type == "private" && m.Text != "" {
 					if err = s.Message(ctx, c, botID, update); err != nil {
@@ -129,6 +130,7 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 		return errors.New("Cannot read Telegram delivery state")
 	}
 	state, reply := delivery.State, delivery.Reply
+	var approvals []chat.PendingApproval
 	var processingErr error
 	switch state {
 	case "sent", "failed-or-unknown", "cancelled", "processing-failed", "processing":
@@ -147,7 +149,7 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 		if !accepted {
 			return nil
 		}
-		reply, processingErr = s.Reply(ctx, c, botID, id, u.Message.Text)
+		reply, approvals, processingErr = s.reply(ctx, c, botID, id, u.Message.Text)
 	}
 	if ctx.Err() != nil {
 		return errors.Join(ctx.Err(), s.Store.UpdateDelivery(id, "cancelled", reply, ctx.Err()))
@@ -155,7 +157,7 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 	if err = s.Store.UpdateDelivery(id, "sending", reply, nil); err != nil {
 		return errors.New("Cannot save Telegram reply")
 	}
-	err = c.Send(ctx, u.Message.Chat.ID, reply)
+	err = c.Send(ctx, u.Message.Chat.ID, reply, approvals...)
 	state = "sent"
 	if processingErr != nil {
 		state = "processing-failed"
@@ -175,28 +177,34 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 	return processingErr
 }
 func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text string) (string, error) {
+	reply, _, err := s.reply(ctx, c, botID, requestID, text)
+	return reply, err
+}
+
+// reply also returns the approvals the turn requested, which get buttons.
+func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text string) (string, []chat.PendingApproval, error) {
 	if text == "/start" {
 		text = "/help"
 	}
 	key := "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10)
 	var id string
 	if err := s.Store.Setting(key, &id); err != nil {
-		return "Cannot load the Telegram conversation.", err
+		return "Cannot load the Telegram conversation.", nil, err
 	}
 	if id == "" && text != "/new" && text != "/help" {
 		conversation, err := s.Store.Create()
 		if err != nil {
-			return "Cannot create a conversation.", err
+			return "Cannot create a conversation.", nil, err
 		}
 		id = conversation.ID
 		if err = s.Store.SaveSetting(key, id); err != nil {
-			return "Cannot save the Telegram conversation.", err
+			return "Cannot save the Telegram conversation.", nil, err
 		}
 	}
 	// The bot answers only its configured user, who owns this Mob.
 	result, err := s.Conversation.Commands.Run(ctx, chat.CommandRequest{Client: chat.ClientTelegram, ConversationID: id, Text: text}, true)
 	if err != nil {
-		return "Mob: " + err.Error(), err
+		return "Mob: " + err.Error(), nil, err
 	}
 	input := chat.ChatRequest{ID: id, Text: text, RequestID: requestID, Owner: true}
 	if result.Handled {
@@ -206,12 +214,12 @@ func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text st
 		}
 		switch a := result.Action; {
 		case a == nil:
-			return reply, nil
+			return reply, nil, nil
 		case a.Kind == chat.OpenConversation:
 			if err := s.Store.SaveSetting(key, a.ConversationID); err != nil {
-				return "Cannot save the Telegram conversation.", err
+				return "Cannot save the Telegram conversation.", nil, err
 			}
-			return reply, nil
+			return reply, nil, nil
 		case a.Kind == chat.Decide:
 			input.Text = ""
 			input.Approval = &struct {
@@ -219,10 +227,11 @@ func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text st
 				Approved bool   `json:"approved"`
 			}{a.ApprovalID, a.Approved}
 		default:
-			return "That command needs the desktop or terminal app.", nil
+			return "That command needs the desktop or terminal app.", nil, nil
 		}
 	}
 	var reply strings.Builder
+	var approvals []chat.PendingApproval
 	err = s.Conversation.Execute(ctx, input, func(event chat.Event) error {
 		switch event.Kind {
 		case chat.SegmentDelta:
@@ -231,7 +240,8 @@ func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text st
 			}
 			reply.WriteString(fmt.Sprint(event.Text))
 		case chat.ApprovalRequested:
-			reply.WriteString("\nMemory approval required. Review the fact in the desktop/TUI, then /approve " + fmt.Sprint(event.ApprovalID) + " or /deny " + fmt.Sprint(event.ApprovalID) + ".")
+			approvals = append(approvals, chat.PendingApproval{ID: event.ApprovalID, Tool: event.ToolName, Input: event.Input})
+			reply.WriteString("\n\nApproval needed: " + chat.DescribeApproval(event.ToolName, event.Input) + "\nID: " + event.ApprovalID)
 		case chat.TurnFailed:
 			reply.WriteString("\nError: " + fmt.Sprint(event.Error))
 		}
@@ -243,8 +253,19 @@ func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text st
 	if err != nil {
 		reply.WriteString("\nMob: " + err.Error() + ". Open the desktop/TUI for the saved result.")
 	}
-	if reply.Len() == 0 {
-		return "Done. Open the local conversation for details.", nil
+	if len(approvals) > 0 {
+		reply.WriteString("\n\n" + decideHint(len(s.Conversation.Pending(id))))
 	}
-	return reply.String(), err
+	if reply.Len() == 0 {
+		return "Done. Open the local conversation for details.", nil, nil
+	}
+	return reply.String(), approvals, err
+}
+
+// decideHint tells the owner how to answer, given how many requests are pending.
+func decideHint(pending int) string {
+	if pending > 1 {
+		return "Tap Approve or Deny, or reply /approve ID or /deny ID."
+	}
+	return "Tap Approve or Deny, or reply /approve or /deny."
 }
