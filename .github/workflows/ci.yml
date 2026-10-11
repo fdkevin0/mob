@@ -17,7 +17,7 @@ jobs:
   go:
     name: Go
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -35,14 +35,61 @@ jobs:
         run: go mod tidy -diff
       - name: go vet
         run: go vet ./...
-      # The desktop and service code has per-platform files; keep every target compiling.
-      - name: go vet (Windows and macOS)
-        run: |
-          GOOS=windows GOARCH=amd64 go vet ./...
-          GOOS=darwin GOARCH=arm64 go vet ./...
-      # Also checks that webapp/src/chat/contracts.ts matches the Go definitions.
+      # Reuses what vet compiled. Also checks that webapp/src/chat/contracts.ts
+      # matches the Go definitions.
       - name: go test
-        run: go test -race ./...
+        run: go test ./...
+
+  # The race detector compiles every package again with instrumentation, so it
+  # runs beside the plain tests with a cache of its own.
+  go-race:
+    name: Go race detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-race-${{ hashFiles('go.sum') }}
+      - run: go test -race ./...
+
+  # The service and desktop code have per-platform files; keep every target
+  # compiling. Each target compiles all dependencies, so each gets a job and cache.
+  go-platforms:
+    name: Go vet (${{ matrix.goos }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('go.sum') }}
+      - run: go vet ./...
 
   web:
     name: Web UI
@@ -72,8 +119,8 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - name: Build the CLI with embedded assets
-        run: bun run build:cli
+      # The script builds the CLI itself, starts it in demo mode and drives it
+      # with the AI SDK client the web UI uses.
       - name: Check chat, commands and approvals end to end
         run: bun run test:integration
 
