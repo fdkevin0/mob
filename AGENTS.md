@@ -11,7 +11,7 @@ Mob is a local Go assistant with SQLite persistence, a React web UI, a Wails des
 
 ## Build, Test, and Development Commands
 
-Use Go 1.26+ and Bun 1.3.10. Desktop development also needs Wails platform prerequisites.
+Use Go 1.26+ and Bun 1.4.3. Desktop development also needs Wails platform prerequisites.
 
 - `bun install --frozen-lockfile`: install workspace dependencies.
 - `bun run build:cli`: build frontend assets and `build/mob`.
