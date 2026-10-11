@@ -59,6 +59,26 @@ func TestToolRegistryRejectsDuplicates(t *testing.T) {
 	r.Register(DefaultTools()[0])
 }
 
+func TestToolRegistryReservesSandbox(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("registered a tool named sandbox")
+		}
+	}()
+	var r ToolRegistry
+	r.Register(echoTool("sandbox", func(context.Context, ToolCall) (any, error) { return nil, nil }))
+}
+
+func TestToolOfferedTwiceFailsTheTurn(t *testing.T) {
+	s, id, m := turnFixture(t)
+	model := &scripted{}
+	echo := echoTool("echo", func(context.Context, ToolCall) (any, error) { return nil, nil })
+	err := Run(context.Background(), s, model, Agent{Tools: []Tool{echo, echo}}, id, m, "", func(Event) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "tool offered twice: echo") || len(model.requests) != 0 {
+		t.Fatalf("duplicate tools: %v, %d requests", err, len(model.requests))
+	}
+}
+
 func TestRegisteredToolRunsWithHooks(t *testing.T) {
 	s, id, m := turnFixture(t)
 	model := &scripted{call: llm.ToolCall{ID: "c1", Name: "echo", Arguments: `{"word":"hi"}`}}

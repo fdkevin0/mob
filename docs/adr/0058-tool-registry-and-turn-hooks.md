@@ -22,7 +22,8 @@ cannot unload, and Mob ships as one binary).
   cancellation ends the turn as cancelled.
 - `ConversationService.Tools` is a `ToolRegistry`: `datetime` and `remember`
   register in `NewConversation`, and more may register before serving. Names
-  are unique. The sandbox tool is added per turn when a sandbox is set.
+  are unique, and `sandbox` is reserved: the sandbox tool is added per turn
+  when a sandbox is set. A turn offered two tools with one name fails.
 - `ConversationService.Hooks` runs around every turn, in registration order:
   `BeforeTurn` may add to the request's system prompt before history is fitted
   to the context window, `BeforeTool` may refuse an offered call (its error is
@@ -35,5 +36,5 @@ cannot unload, and Mob ships as one binary).
 The prompt, the tools offered and their results are unchanged, except that a
 call to the sandbox while none is set reads `unsupported tool: sandbox`. A
 capability, such as a plugin's tool or an MCP server's, now registers beside
-its own code instead of in the engine. Later steps give plugins one lifecycle interface and
-let them register tools, commands and channels through it.
+its own code instead of in the engine. Later steps give plugins one lifecycle
+interface and let them register tools, commands and channels through it.
