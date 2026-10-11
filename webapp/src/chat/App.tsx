@@ -37,7 +37,7 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
-      clearToken(); setConnection(undefined); setError('The access token was replaced. Run mob open to sign in again.');
+      clearToken(rejected); setConnection(undefined); setError('The access token was replaced. Run mob open to sign in again.');
     };
     window.addEventListener(unauthorizedEvent, signOut);
     return () => window.removeEventListener(unauthorizedEvent, signOut);
@@ -65,8 +65,11 @@ function savedToken() {
 function saveToken(token: string) {
   try { localStorage.setItem(tokenKey, token); sessionStorage.removeItem(tokenKey); } catch { /* sign in again next time */ }
 }
-function clearToken() {
-  try { localStorage.removeItem(tokenKey); sessionStorage.removeItem(tokenKey); } catch { /* nothing stored */ }
+// clearToken forgets the saved token; given one, it keeps a different token another tab saved since.
+function clearToken(only?: string) {
+  try {
+    for (const storage of [localStorage, sessionStorage]) if (only === undefined || storage.getItem(tokenKey) === only) storage.removeItem(tokenKey);
+  } catch { /* nothing stored */ }
 }
 
 // pairingCode takes a one-time code from the link mob open prints, removing it from the address bar.
