@@ -2,7 +2,7 @@
   "name": "mob",
   "version": "0.0.0",
   "license": "MIT",
-  "description": "Local Go assistant with Wails, AI SDK UI and Bubble Tea; legacy Telegram AI modules retained as reference.",
+  "description": "Local Go assistant with Wails, AI SDK UI and Bubble Tea.",
   "dependencies": {
     "@ai-sdk/react": "4.0.130",
     "ai": "7.0.127",
@@ -36,12 +36,7 @@
     "build:desktop": "go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0 build",
     "test:go": "go test ./...",
     "test:integration": "bun scripts/check-chat.ts",
-    "build:legacy": "vite build --config webapp/vite.legacy.config.ts",
-    "generate:contracts": "go run ./cmd/contracts > webapp/src/chat/contracts.ts",
-    "test:legacy": "tsc -p webapp/tsconfig.legacy.json && vitest run --config webapp/vitest.legacy.config.ts"
+    "generate:contracts": "go run ./cmd/contracts > webapp/src/chat/contracts.ts"
   },
-  "packageManager": "bun@1.3.10",
-  "workspaces": [
-    "src"
-  ]
+  "packageManager": "bun@1.3.10"
 }

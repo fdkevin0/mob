@@ -14,7 +14,7 @@ app is locally signed for development, not notarized for distribution.
 
 With `just` installed, run `just` to list tasks. Common commands are `just install`,
 `just build`, `just test`, and `just desktop`. Use `just mob serve --demo` to run
-the built CLI in offline mode; `just test-legacy` checks the legacy modules.
+the built CLI in offline mode.
 
 ```bash
 bun install --frozen-lockfile
@@ -326,10 +326,9 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
   Each plugin panel owns its form, operation and busy state; the shell handles
   navigation. Hidden panels retain unsaved drafts across navigation.
 
-The ADRs in `docs/adr/` document the retained Cloudflare/Telegram implementation.
-They remain historical decisions, including DO session storage, stream reply
-surfaces and cloud tool approval boundaries; they do not prescribe the local Go
-runtime above. Their original text and numbering are preserved.
+ADRs 0006–0050 in `docs/adr/` record the retired Cloudflare Worker and Telegram Mini
+App, whose code is kept at the `legacy-worker` tag; they are superseded and do not
+prescribe the runtime above. ADR 0051 onwards describe this runtime.
 
 ## Verification and remaining migration
 
@@ -337,8 +336,6 @@ runtime above. Their original text and numbering are preserved.
 bun run test:webapp
 bun run test:go
 bun run test:integration
-bun run test:legacy
-bun run build:legacy
 ```
 
 Go tests cover provider stream parsing, truncation, approval isolation/idempotency,
@@ -351,81 +348,18 @@ secret masking, Telegram user isolation/deduplication, Cloudflare request routin
 GUI send review and the TUI configuration wizard. These tests use local fixtures and
 fake providers, not paid models or real email/Telegram recipients.
 
-Not yet migrated: bookmarks, mail OAuth/multiple accounts/background ingestion,
+Not yet implemented: bookmarks, mail OAuth/multiple accounts/background ingestion,
 attachments, MCP, cloud sandbox/shell, automatic semantic memory retrieval/extraction,
 compaction, scheduled turns, deep tasks and usage accounting. Local saved facts are included directly in model context; they
 are not a replacement for Vectorize. Recent model context is capped at 40 messages;
 older history remains visible in the UI. Requests in progress are marked interrupted
-on restart, not automatically rerun. There is no durable background queue yet.
-The default build/typecheck/tests cover the local chat application only. Legacy
-Mini App commands are `bun run build:legacy` and `bun run test:legacy`; their output is
-`webapp/dist-legacy/miniapp/`. Its old API is not supplied by the Go server, and its
-assets are not embedded in the desktop or CLI. Legacy-only JavaScript dependencies
-are declared in the `src` workspace; the shared Bun lock pins both workspaces.
+on restart, not automatically rerun. There is no durable background queue yet. The retired Cloudflare Worker, kept at
+the `legacy-worker` tag, has reference implementations of most of these.
 
 See [migration research](docs/go-bun-migration-research.md) and
 [chat UI comparison](docs/chat-ui-research.md). AI Elements source adaptations keep
 [their Apache-2.0 license and provenance](webapp/src/components/ai-elements/SOURCE.md);
 the rest of this repository retains its MIT license.
-
----
-
-# Legacy Telegram AI modules
-
-The AI parts of **Mob**, a personal Telegram bot that runs as a single
-[Cloudflare Worker](https://workers.cloudflare.com/). This repository holds the
-agentic chat turn, its tools, long-term memory, MCP client, AI email triage and
-the Settings Mini App, extracted from the private bot.
-
-> **Reference code, not a standalone app.** Only the AI modules are published.
-> The Telegram plumbing, persistence schema and non-AI features they import
-> (listed below) are not included, so the code does not build or deploy as is.
-
-## What's here
-
-| Path | Contents |
-| --- | --- |
-| `src/features/ai/` | Model resolution (DeepSeek via `@ai-sdk/openai-compatible`), the `streamText` agentic loop, session messages and compaction, reasoning effort, utility model |
-| `src/features/agent/` | `ConversationAgent` Durable Object (Cloudflare Agents SDK), turn driver, transcript / streaming reply surface, outbound queue, tool approvals, scheduled turns, deep tasks, usage ledger, debug traces, Telegram attachments |
-| `src/features/agent/tools/` | Built-in tools: datetime, fetch URL, web search, weather, sandboxed `run_code` / `run_shell`, memory, schedules, deep task, read tools |
-| `src/features/agent/stores/` | Durable Object SQLite stores (Drizzle) |
-| `src/features/memory/` | Long-term memory on Vectorize (`@cf/baai/bge-m3`), auto-recall and fact extraction |
-| `src/features/mcp/` | MCP server registry and client parsing |
-| `src/ai/email.ts` | AI email triage (importance / category classification) |
-| `src/features/miniapp/` | Mini App HTTP API: Telegram `initData` auth, request/response contract, routes |
-| `webapp/` | Settings Mini App SPA (React + Vite + Tailwind): chat settings, memory, bookmarks, email list/preview, global service |
-| `src/features/email/{preview,auth}.ts`, `src/features/assets/types.ts`, `src/utils/{tool,hmac}.ts` | Shared helpers the Mini App imports (email preview rendering, SPF/DKIM/DMARC parsing, asset types) |
-| `src/core/env.ts` | Worker binding types |
-| `src/tests/` | Vitest suites for the modules above |
-| `docs/adr/` | The architecture decisions behind these modules (numbering kept from the original repo, so gaps are expected and some cross-links point to unpublished ADRs) |
-
-## Not included
-
-These modules are imported but not published: `src/core/{bot,principal,cmd,callback-family}`,
-`src/core/sync-commands`, `src/db/schema`,
-`src/features/{assets,email,feed,queue,rich-message}` (apart from the shared helpers above).
-
-The Mini App frontend builds on its own:
-
-```bash
-bun install --frozen-lockfile
-bun run build:legacy  # webapp/dist-legacy/miniapp
-bun run test:legacy   # legacy tsc + Vitest (happy-dom)
-```
-
-The build embeds the Git short commit ID, so it needs a Git checkout.
-
-## Configuration
-
-Secrets are never committed. The original deployment provides them as Worker
-secrets (`wrangler secret put …`):
-
-- `DEEPSEEK_API_KEY`: all LLM calls
-- `TELEGRAM_API_TOKEN`: Telegram Bot API
-- `TAVILY_API_KEY` (optional): enables `web_search`
-
-Workers AI (`AI` binding) provides embeddings and document conversion; the
-Vectorize index is 1024-dimension cosine with a `chatId` metadata index.
 
 ## License
 
