@@ -7,13 +7,14 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
+	"github.com/fdkevin0/mob/internal/extension"
 	"github.com/fdkevin0/mob/internal/plugins/cloudflare"
 	"github.com/fdkevin0/mob/internal/plugins/email"
+	"github.com/fdkevin0/mob/internal/plugins/telegram"
 	"github.com/fdkevin0/mob/internal/plugins/wechatilink"
 )
 
@@ -25,50 +26,32 @@ func (s *Server) pluginConfig() (configuration.Plugins, error) {
 	return c, err
 }
 
-type pluginRuntime struct {
-	mu           sync.Mutex
-	cancel       context.CancelFunc
-	done         chan struct{}
-	status       string
-	generation   uint64
-	wechatCancel context.CancelFunc
-	wechatDone   chan struct{}
-	wechatStatus string
-	wechatGen    uint64
-	closed       bool
+// channels are the plugins that run in the background: each polls its
+// service while its configuration has it on.
+func (s *Server) channels() []extension.Extension {
+	return []extension.Extension{
+		{Name: "telegram", Start: func() (extension.Serve, error) {
+			c, err := s.pluginConfig()
+			if err != nil || !c.Telegram.Enabled {
+				return nil, err
+			}
+			service := &telegram.Service{Store: s.Store, Conversation: s.ConversationService}
+			return func(ctx context.Context, status func(string)) { service.Loop(ctx, c.Telegram, status) }, nil
+		}},
+		{Name: "wechat_ilink", Start: func() (extension.Serve, error) {
+			c, err := s.pluginConfig()
+			if err != nil || !c.WeChatILink.Enabled || c.WeChatILink.BotToken == "" {
+				return nil, err
+			}
+			service := &wechatilink.Service{Store: s.Store, Conversation: s.ConversationService}
+			return func(ctx context.Context, status func(string)) { service.Loop(ctx, c.WeChatILink, status) }, nil
+		}},
+	}
 }
 
-func (s *Server) StartPlugins() error {
-	s.plugins.mu.Lock()
-	defer s.plugins.mu.Unlock()
-	c, err := s.pluginConfig()
-	if err != nil {
-		return err
-	}
-	s.restartTelegram(c.Telegram)
-	s.restartWechat(c.WeChatILink)
-	return nil
-}
+func (s *Server) StartPlugins() error { return s.extensions.StartAll() }
 
-func (s *Server) closePlugins() {
-	s.plugins.mu.Lock()
-	s.plugins.closed = true
-	if s.plugins.cancel != nil {
-		s.plugins.cancel()
-	}
-	if s.plugins.wechatCancel != nil {
-		s.plugins.wechatCancel()
-	}
-	done := s.plugins.done
-	wechatDone := s.plugins.wechatDone
-	s.plugins.mu.Unlock()
-	if done != nil {
-		<-done
-	}
-	if wechatDone != nil {
-		<-wechatDone
-	}
-}
+func (s *Server) closePlugins() { s.extensions.Close() }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, dest any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
@@ -97,11 +80,7 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 			respond(w, nil, err)
 			return
 		}
-		s.plugins.mu.Lock()
-		status := s.plugins.status
-		wechatStatus := s.plugins.wechatStatus
-		s.plugins.mu.Unlock()
-		writeJSON(w, 200, map[string]any{"config": c.Public(), "telegramStatus": status, "wechatStatus": wechatStatus})
+		writeJSON(w, 200, map[string]any{"config": c.Public(), "telegramStatus": s.extensions.Status("telegram"), "wechatStatus": s.extensions.Status("wechat_ilink")})
 	})
 	mux.HandleFunc("POST /api/plugins/{plugin}", s.savePlugin)
 	mux.HandleFunc("POST /api/plugins/{plugin}/test", func(w http.ResponseWriter, r *http.Request) {
@@ -325,23 +304,18 @@ func (s *Server) savePlugin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, c.Public())
 }
 
-// updatePlugin saves one plugin's configuration and restarts its channel.
+// updatePlugin saves one plugin's configuration and restarts it if it runs in
+// the background.
 func (s *Server) updatePlugin(name string, raw []byte) (configuration.Plugins, error) {
-	s.plugins.mu.Lock()
-	defer s.plugins.mu.Unlock()
-	if s.plugins.closed {
+	if s.extensions.Closed() {
 		return configuration.Plugins{}, &chat.CommandError{Status: 503, Message: "service is stopping"}
 	}
 	c, err := s.Configuration.UpdatePlugin(name, raw)
 	if err != nil {
 		return c, err
 	}
-	if name == "telegram" {
-		c.Telegram.Transport = s.HTTPTransport
-		s.restartTelegram(c.Telegram)
-	}
-	if name == "wechat_ilink" {
-		s.restartWechat(c.WeChatILink)
+	if err := s.extensions.Reload(name); err != nil && !errors.Is(err, extension.ErrClosed) {
+		return c, err
 	}
 	return c, nil
 }

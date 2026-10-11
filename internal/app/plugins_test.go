@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/provider"
 	"io"
@@ -178,5 +179,65 @@ func TestEmailDuplicateSendDoesNotReconnect(t *testing.T) {
 	srv.Handler(nil).ServeHTTP(w, req)
 	if w.Code != 409 {
 		t.Fatalf("duplicate send should not connect to SMTP: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSavingAChannelRestartsIt(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := NewServer(store, provider.Memory(provider.File{}), strings.Repeat("t", 32))
+	defer srv.Close()
+	var polls atomic.Int32
+	srv.HTTPTransport = pluginTransport(func(r *http.Request) (*http.Response, error) {
+		polls.Add(1)
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+	if err := srv.StartPlugins(); err != nil {
+		t.Fatal(err)
+	}
+	status := func() string {
+		var body struct {
+			TelegramStatus string `json:"telegramStatus"`
+			WechatStatus   string `json:"wechatStatus"`
+		}
+		req := httptest.NewRequest("GET", "http://127.0.0.1/api/plugins", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.Token)
+		w := httptest.NewRecorder()
+		srv.Handler(nil).ServeHTTP(w, req)
+		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.WechatStatus != "Disabled" {
+			t.Fatalf("wechat status: %q", body.WechatStatus)
+		}
+		return body.TelegramStatus
+	}
+	if got := status(); got != "Disabled" {
+		t.Fatalf("before saving: %q", got)
+	}
+	if _, err := srv.updatePlugin("telegram", []byte(`{"enabled":true,"token":"123:secret","userId":42}`)); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for polls.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if polls.Load() == 0 || status() == "Disabled" {
+		t.Fatalf("enabled channel did not start: %d polls, %q", polls.Load(), status())
+	}
+	if _, err := srv.updatePlugin("telegram", []byte(`{"enabled":false,"userId":42}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got := status(); got != "Disabled" {
+		t.Fatalf("after disabling: %q", got)
+	}
+	srv.closePlugins()
+	var stopping *chat.CommandError
+	if _, err := srv.updatePlugin("telegram", []byte(`{"enabled":false,"userId":42}`)); !errors.As(err, &stopping) || stopping.Status != 503 {
+		t.Fatalf("saved while stopping: %v", err)
 	}
 }
