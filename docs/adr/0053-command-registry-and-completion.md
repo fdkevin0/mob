@@ -47,5 +47,14 @@ A command is written once, in Go, and every client that lists it gets help,
 completion and execution; the web UI gained `/new`, `/list`, `/open`,
 `/approve`, `/deny`, `/email`, `/cloud`, `/test`, `/deliveries` and
 `/clear-secret`, and the TUI lost its own command parser. Clients still own
-their forms (plugin settings, mail compose); an action opens them. Publishing
-Telegram's command menu from the registry remains to do.
+their forms (plugin settings, mail compose); an action opens them.
+
+Telegram's `/` menu comes from the registry too: after each connection the bot
+calls `setMyCommands`, scoped to the owner's private chat, with the commands it
+lists for `telegram` (names Telegram rejects are left out). A failure leaves
+polling running and is retried on the next connection.
+
+The TUI renders assistant replies and command results as Markdown with glamour
+(dark or light from the terminal background), so results read the same as in the
+web UI. Text is stripped of terminal control bytes before rendering; a reply
+stays plain while it streams.
