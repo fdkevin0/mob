@@ -421,7 +421,7 @@ func TestTUIFollowsARunningTurn(t *testing.T) {
 	defer cancel()
 	c, _ := store.Create()
 	// Another client starts a turn and leaves.
-	run, err := srv.Start(chat.ChatRequest{ID: c.ID, Text: "from another client", RequestID: chat.NewID(), Owner: true})
+	run, err := srv.Start(chat.ChatRequest{ID: c.ID, Text: "from another client", RequestID: chat.NewID(), Owner: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

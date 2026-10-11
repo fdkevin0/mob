@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -204,26 +205,21 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// Holders of the local token run this Mob.
 	input.Owner = true
-	run, err := s.Start(input)
+	// The turn belongs to the service now, but a replaced token still ends it.
+	run, err := s.Start(input, revocation(r.Context()))
 	if err != nil {
 		var command *chat.CommandError
 		if errors.As(err, &command) {
 			http.Error(w, command.Message, command.Status)
 		} else if errors.Is(err, chat.ErrStaleApproval) {
 			http.Error(w, err.Error(), 409)
+		} else if errors.Is(err, context.Canceled) {
+			http.Error(w, "the turn was stopped before it began", 409)
 		} else {
 			respond(w, nil, err)
 		}
 		return
 	}
-	// The turn belongs to the service now, but a replaced token still ends it.
-	go func() {
-		select {
-		case <-revocation(r.Context()):
-			run.Stop()
-		case <-run.Done():
-		}
-	}()
 	follow(w, r, run, 0)
 }
 
