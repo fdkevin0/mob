@@ -230,7 +230,7 @@ func (s *Server) testPlugin(ctx context.Context, name string) (any, error) {
 			return nil, disabled("Cloudflare")
 		}
 		return c.Cloudflare.Test(ctx)
-	case "wechat_ilink", "wechatilink":
+	case "wechat_ilink":
 		if !c.WeChatILink.Enabled {
 			return nil, disabled("WeChat iLink")
 		}
@@ -340,7 +340,7 @@ func (s *Server) updatePlugin(name string, raw []byte) (configuration.Plugins, e
 		c.Telegram.Transport = s.HTTPTransport
 		s.restartTelegram(c.Telegram)
 	}
-	if name == "wechat_ilink" || name == "wechatilink" {
+	if name == "wechat_ilink" {
 		s.restartWechat(c.WeChatILink)
 	}
 	return c, nil

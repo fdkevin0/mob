@@ -172,7 +172,7 @@ func (s *Server) deliveriesCommand(context.Context, chat.CommandCall) (chat.Comm
 	var b strings.Builder
 	b.WriteString("| Delivery | State | Updated | Error |\n| --- | --- | --- | --- |\n")
 	for _, d := range rows {
-		updated := "before migration"
+		updated := "unknown"
 		if d.UpdatedAt > 0 {
 			updated = time.UnixMilli(d.UpdatedAt).Format(time.DateTime)
 		}
