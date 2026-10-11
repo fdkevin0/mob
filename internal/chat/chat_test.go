@@ -43,7 +43,7 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events []Event
-	err = Run(context.Background(), s, demo.Model{}, nil, c.ID, m, "", func(e Event) error { events = append(events, e); return nil })
+	err = Run(context.Background(), s, demo.Model{}, Agent{Tools: DefaultTools()}, c.ID, m, "", func(e Event) error { events = append(events, e); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestEngineContinuesAfterTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := openai.New(llm.Ref{Provider: "test", Model: "test"}, llm.Info{ID: "test", Tools: true}, openai.Config{BaseURL: upstream.URL, Key: "test"})
-	err = Run(context.Background(), s, model, nil, c.ID, m, "", func(Event) error { return nil })
+	err = Run(context.Background(), s, model, Agent{Tools: DefaultTools()}, c.ID, m, "", func(Event) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,13 +225,13 @@ func TestSandboxRunsWithoutApproval(t *testing.T) {
 	c, _ := s.Create()
 	m, _ := s.Begin(c.ID, NewID(), "/sandbox uname", "demo/echo")
 	// Without a sandbox the tool is not offered, so the demo model just echoes.
-	if err = Run(context.Background(), s, demo.Model{}, nil, c.ID, m, "", func(Event) error { return nil }); err != nil {
+	if err = Run(context.Background(), s, demo.Model{}, Agent{Tools: DefaultTools()}, c.ID, m, "", func(Event) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	m, _ = s.Begin(c.ID, NewID(), "/sandbox uname", "demo/echo")
 	box := &fakeSandbox{}
 	var kinds []EventKind
-	if err = Run(context.Background(), s, demo.Model{}, box, c.ID, m, "", func(e Event) error { kinds = append(kinds, e.Kind); return nil }); err != nil {
+	if err = Run(context.Background(), s, demo.Model{}, Agent{Tools: append(DefaultTools(), sandboxTool(box))}, c.ID, m, "", func(e Event) error { kinds = append(kinds, e.Kind); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	history, _ := s.History(c.ID)
