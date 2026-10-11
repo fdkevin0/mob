@@ -50,3 +50,30 @@ func TestStartStopsAnApprovedCallBeforeTheFirstEvent(t *testing.T) {
 		t.Fatal("the turn is still running")
 	}
 }
+
+func TestStartDoesNothingWithAlreadyWithdrawnAuthority(t *testing.T) {
+	service, c := testService(t)
+	tool := echoTool("deploy", func(context.Context, ToolCall) (any, error) { return nil, nil })
+	tool.Approved = func(context.Context, ApprovedCall) (any, error) {
+		t.Error("ran an approved call after stop closed")
+		return nil, nil
+	}
+	service.Tools.Register(tool)
+	stop := make(chan struct{})
+	close(stop)
+	for range 30 {
+		m, _ := service.Store.Begin(c.ID, NewID(), "deploy", "alpha/one")
+		m.Parts = []Part{{"type": "tool-deploy", "toolCallId": "call", "input": map[string]string{"target": "prod"}}}
+		approval, err := service.Store.RequestApproval(c.ID, m, "call", map[string]string{"target": "prod"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Start(ChatRequest{ID: c.ID, Owner: true, Approval: &Answer{ID: approval, Approved: true}}, stop); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Start with withdrawn authority: %v", err)
+		}
+		// The approval is still pending: nothing was decided for a stopped turn.
+		if _, err := service.Store.Decide(c.ID, approval, false, ""); err != nil {
+			t.Fatalf("approval was decided: %v", err)
+		}
+	}
+}
