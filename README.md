@@ -303,10 +303,12 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
   calls the same executor in-process. Tool definitions and implementations live
   together in `tools.go`.
 - `internal/chat/store.go`, `delivery.go`, `migrations.go`: SQLite persistence,
-  durable send receipts and sequential transactional `user_version` migrations.
-  Existing unversioned databases upgrade in place; unknown future versions are
-  rejected. SQLite remains the concrete persistence dependency, with no generic
-  repository or external queue.
+  durable send receipts and transactional `user_version` migrations kept for a
+  migration window. A database too old or too new for this release is refused
+  with the release to install instead (ADR 0054). SQLite remains the concrete
+  persistence dependency, with no generic repository or external queue.
+- `internal/version`: the `{date}.{sha}` release version, read from Go's VCS build
+  stamp; `mob --version` and `GET /api/runtime` report it.
 - `internal/plugins/email`: mail reading, analysis, send deduplication, SMTP/IMAP
   and MIME. `internal/plugins/telegram`: polling, private-user filtering, offset
   acknowledgement, conversation mapping and reply delivery. Neither imports the

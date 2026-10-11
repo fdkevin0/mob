@@ -12,6 +12,7 @@ import (
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/protocol"
 	"github.com/fdkevin0/mob/internal/provider"
+	"github.com/fdkevin0/mob/internal/version"
 	"io"
 	"io/fs"
 	"log"
@@ -53,7 +54,7 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		if s.ConfigurationError != nil {
 			failure = s.ConfigurationError()
 		}
-		writeJSON(w, 200, map[string]any{"background": s.Shutdown != nil, "configError": failure})
+		writeJSON(w, 200, map[string]any{"background": s.Shutdown != nil, "configError": failure, "version": version.Current})
 	})
 	mux.HandleFunc("POST /api/runtime/stop", func(w http.ResponseWriter, r *http.Request) {
 		if s.Shutdown == nil {

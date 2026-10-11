@@ -25,7 +25,7 @@ Use Go 1.26+ and Bun 1.3.10. Desktop development also needs Wails platform prere
 
 ## Coding Style & Naming Conventions
 
-Format Go with `gofmt`; use lowercase package names and exported PascalCase identifiers. Follow `.editorconfig`: tabs with width two, LF endings, and final newlines. `.prettierrc` specifies tabs, single quotes, semicolons, and a 140-character print width. Use PascalCase React components and `use`-prefixed hooks. Keep generated contracts synchronized through the generator.
+Change the database schema only by adding a migration to `internal/chat/migrations.go` with `Added` set to today's UTC date (`YYYYMMDD`); migrations are retired after their window (`docs/adr/0054`). Format Go with `gofmt`; use lowercase package names and exported PascalCase identifiers. Follow `.editorconfig`: tabs with width two, LF endings, and final newlines. `.prettierrc` specifies tabs, single quotes, semicolons, and a 140-character print width. Use PascalCase React components and `use`-prefixed hooks. Keep generated contracts synchronized through the generator.
 
 ## Testing Guidelines
 

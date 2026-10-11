@@ -1,10 +1,26 @@
 package chat
 
-import "fmt"
+import (
+	"database/sql"
+	"errors"
+	"fmt"
 
-// Version zero includes existing installations with an unversioned schema.
-var migrations = []string{
-	`CREATE TABLE IF NOT EXISTS deliveries(id TEXT PRIMARY KEY, state TEXT NOT NULL, reply TEXT NOT NULL DEFAULT '');
+	"github.com/fdkevin0/mob/internal/version"
+)
+
+// The schema version lives in PRAGMA user_version; the meta table records the
+// release that last opened the database.
+//
+// Migrations are kept for one migration window (docs/adr/0054). Closing a
+// window removes its oldest migrations: the baseline is rewritten to create the
+// schema they produced, first moves up to that schema, and the last release that
+// still had them is appended to retired, so an older database can be upgraded
+// with that release before this one.
+var history = schemaHistory{
+	first: 0,
+	steps: []migration{
+		// Version zero includes installations from before migrations existed.
+		{"20261011", `CREATE TABLE IF NOT EXISTS deliveries(id TEXT PRIMARY KEY, state TEXT NOT NULL, reply TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, title TEXT NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS messages(seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
@@ -15,41 +31,108 @@ CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, conversation_id TEXT N
  message_id TEXT NOT NULL REFERENCES messages(id), tool_call_id TEXT NOT NULL, input TEXT NOT NULL,
  status TEXT NOT NULL DEFAULT 'pending', expires_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS memories(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), fact TEXT NOT NULL);
-`,
-	`ALTER TABLE deliveries ADD COLUMN error TEXT NOT NULL DEFAULT '';
-ALTER TABLE deliveries ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;`,
-	// Models are chosen per conversation; keys live in providers.json.
-	`ALTER TABLE conversations ADD COLUMN model TEXT NOT NULL DEFAULT '';
+`},
+		{"20261011", `ALTER TABLE deliveries ADD COLUMN error TEXT NOT NULL DEFAULT '';
+ALTER TABLE deliveries ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;`},
+		// Models are chosen per conversation; keys live in providers.json.
+		{"20261011", `ALTER TABLE conversations ADD COLUMN model TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN model TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN usage TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT '';
-DELETE FROM settings WHERE key IN ('api_key','api_key_origin');`,
+DELETE FROM settings WHERE key IN ('api_key','api_key_origin');`},
+	},
 }
 
-func (s *Store) migrate() error {
-	var version int
-	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+// migration upgrades the schema by one version. Added is the UTC date it was
+// written (YYYYMMDD), which starts its migration window.
+type migration struct{ Added, SQL string }
+
+// retiredWindow sends databases older than Below to Release, the last release
+// whose migrations upgrade them.
+type retiredWindow struct {
+	Below   int
+	Release string
+}
+
+type schemaHistory struct {
+	// baseline creates schema first in an empty database; empty while first is 0.
+	baseline string
+	first    int
+	steps    []migration
+	retired  []retiredWindow
+}
+
+func (h schemaHistory) latest() int { return h.first + len(h.steps) }
+
+// SchemaError explains why this release cannot open a database and which
+// release to install instead.
+type SchemaError struct{ Message string }
+
+func (e *SchemaError) Error() string { return e.Message }
+
+func (s *Store) migrate() error { return history.apply(s.db, version.Current) }
+
+func (h schemaHistory) apply(db *sql.DB, current string) error {
+	var schema, tables, meta int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&schema); err != nil {
 		return err
 	}
-	if version > len(migrations) {
-		return fmt.Errorf("database version %d is newer than this application", version)
+	if err := db.QueryRow("SELECT count(*) FILTER (WHERE name NOT IN ('meta','sqlite_sequence')), count(*) FILTER (WHERE name = 'meta') FROM sqlite_master WHERE type='table'").Scan(&tables, &meta); err != nil {
+		return err
 	}
-	for version < len(migrations) {
-		tx, err := s.db.Begin()
-		if err != nil {
+	var opened string
+	if meta > 0 {
+		if err := db.QueryRow("SELECT value FROM meta WHERE key='service_version'").Scan(&opened); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		if _, err = tx.Exec(migrations[version]); err == nil {
-			_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", version+1))
+	}
+	lastOpened, newer := "an unknown release", "a newer release"
+	if opened != "" {
+		lastOpened, newer = "Mob "+opened, "Mob "+opened+" or newer"
+	}
+	switch {
+	case schema > h.latest():
+		return &SchemaError{fmt.Sprintf("This database has schema %d, last opened by %s. Mob %s reads schema %d and older; install %s.", schema, lastOpened, current, h.latest(), newer)}
+	case tables == 0:
+		if err := step(db, h.baseline, h.first); err != nil {
+			return err
 		}
-		if err != nil {
+		schema = h.first
+	case schema < h.first:
+		release := h.retired[0].Release
+		for _, w := range h.retired {
+			if schema < w.Below {
+				release = w.Release
+				break
+			}
+		}
+		return &SchemaError{fmt.Sprintf("This database has schema %d, last opened by %s. Mob %s upgrades schema %d and newer. Install Mob %s from %s, start it once to upgrade the database, then start Mob %s again.", schema, lastOpened, current, h.first, release, version.DownloadURL(release), current)}
+	}
+	for ; schema < h.latest(); schema++ {
+		if err := step(db, h.steps[schema-h.first].SQL, schema+1); err != nil {
+			return fmt.Errorf("upgrade database to schema %d: %w", schema+1, err)
+		}
+	}
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO meta(key,value) VALUES('service_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, current)
+	return err
+}
+
+// step runs statements and records the schema they reach in one transaction.
+func step(db *sql.DB, statements string, schema int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	if statements != "" {
+		if _, err = tx.Exec(statements); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-		version++
 	}
-	return nil
+	if _, err = tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", schema)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
