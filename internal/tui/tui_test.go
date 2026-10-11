@@ -116,12 +116,19 @@ func TestTUIPluginWizardMasksAndSaves(t *testing.T) {
 	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New()}
 	updated, _ := m.Update(m.loadPlugins()())
 	m = updated.(model)
+	// The menu lists the plugins the service describes with fields.
+	if menu := m.plugin.view(); !strings.Contains(menu, "1 Email plugin · SMTP / IMAP\n2 Telegram Bot API\n3 Cloudflare services\n") || strings.Contains(menu, "WeChat") || !strings.Contains(menu, "Choose 1–3") {
+		t.Fatalf("menu: %q", menu)
+	}
+	if updated, _ = m.Update(tea.KeyPressMsg{Code: '4'}); updated.(model).plugin.index >= 0 {
+		t.Fatal("chose a plugin outside the menu")
+	}
 	updated, _ = m.Update(tea.KeyPressMsg{Code: '3'})
 	m = updated.(model)
 	values := []string{"true", strings.Repeat("a", 32), "secret-token", "@cf/chat", "@cf/embed", "index", "db", "ns", "bucket", "access-key", "secret-r2"}
 	for i, value := range values {
 		m.plugin.input.SetValue(value)
-		if m.plugin.fields[i].kind == "secret" && strings.Contains(m.plugin.input.View(), value) {
+		if m.plugin.fields[i].Kind == "secret" && strings.Contains(m.plugin.input.View(), value) {
 			t.Fatal("wizard exposed secret")
 		}
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})

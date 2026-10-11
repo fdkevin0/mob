@@ -18,14 +18,6 @@ import (
 
 var interactive = []string{chat.ClientWeb, chat.ClientTUI}
 
-// secretFields are the credentials each plugin can clear.
-var secretFields = map[string][]string{
-	"email":        {"imap.password", "smtp.password"},
-	"telegram":     {"token"},
-	"cloudflare":   {"token", "secretKey"},
-	"wechat_ilink": {"botToken"},
-}
-
 var cloudOperations = []string{"ai.models", "ai.run", "vectorize.indexes", "vectorize.query", "d1.databases", "d1.query", "kv.namespaces", "kv.get", "r2.buckets", "r2.list", "r2.get"}
 
 // pluginCommands are the commands about plugins and cloud services.
@@ -33,7 +25,11 @@ func (s *Server) pluginCommands() []chat.Command {
 	spec := func(name, usage, summary string) chat.CommandSpec {
 		return chat.CommandSpec{Name: name, Usage: usage, Summary: summary, Clients: interactive}
 	}
-	plugins := chat.Choices("email", "telegram", "cloudflare", "wechat_ilink")
+	var names []string
+	for _, section := range configuration.Sections() {
+		names = append(names, section.Name)
+	}
+	plugins := chat.Choices(names...)
 	return []chat.Command{
 		{CommandSpec: spec("plugins", "/plugins", "Configure plugins and cloud services"), Run: action(chat.OpenPlugins)},
 		{CommandSpec: spec("mail", "/mail", "Compose an email"), OwnerOnly: true, Run: action(chat.ComposeMail)},
@@ -52,7 +48,8 @@ func action(kind string) func(context.Context, chat.CommandCall) (chat.CommandRe
 }
 
 func secretChoices(ctx context.Context, call chat.CommandCall, prior []string) []chat.Suggestion {
-	return chat.Choices(secretFields[prior[0]]...)(ctx, call, prior)
+	section, _ := configuration.Lookup(prior[0])
+	return chat.Choices(section.Secrets...)(ctx, call, prior)
 }
 
 func usage(text string) (chat.CommandResult, error) { return chat.CommandResult{Markdown: text}, nil }
@@ -188,7 +185,7 @@ func (s *Server) clearSecretCommand(_ context.Context, call chat.CommandCall) (c
 		return usage(help)
 	}
 	name, field := call.Fields[0], call.Fields[1]
-	if _, ok := secretFields[name]; !ok {
+	if _, ok := configuration.Lookup(name); !ok {
 		return usage(help)
 	}
 	c, err := s.pluginConfig()
