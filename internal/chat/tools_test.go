@@ -246,11 +246,17 @@ func TestApprovedToolCalls(t *testing.T) {
 			err := Run(context.Background(), s, &scripted{call: llm.ToolCall{ID: "c1", Name: c.name, Arguments: `{}`}}, service.agent(true), id, m, "", func(e Event) error {
 				if e.Kind == ApprovalRequested {
 					approval = e.ApprovalID
+					if e.ToolName != c.name || DescribeApproval(e.ToolName, e.Input) != c.name+"\ntarget: prod" {
+						t.Errorf("approval event names %q with %v", e.ToolName, e.Input)
+					}
 				}
 				return nil
 			})
 			if err != nil || approval == "" {
 				t.Fatalf("request: %q %v", approval, err)
+			}
+			if p := service.Pending(id); len(p) != 1 || p[0].ID != approval || p[0].Tool != c.name {
+				t.Fatalf("pending: %+v", p)
 			}
 			decision, err := s.Decide(id, approval, c.decide)
 			if err != nil || decision.Tool != c.name {
