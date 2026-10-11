@@ -1,8 +1,3 @@
-import { toHex } from './hmac';
-
-export const md5 = async (text: string): Promise<string> =>
-	toHex(await crypto.subtle.digest('MD5', new TextEncoder().encode(text)));
-
 export function formatFileSize(bytes: number): string {
 	if (bytes === 0) return '0 B';
 	const units = ['B', 'KB', 'MB', 'GB', 'TB'];

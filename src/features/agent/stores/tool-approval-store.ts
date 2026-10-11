@@ -1,16 +1,7 @@
 import { eq } from 'drizzle-orm';
-import type { ApprovalStore, PendingApproval } from '../tool-approvals';
+import type { ApprovalStore } from '../tool-approvals';
 import { pendingApprovals } from './schema';
 import type { StoreDb } from './db';
-
-const map = (row: typeof pendingApprovals.$inferSelect): PendingApproval => ({
-	id: row.id,
-	toolName: row.toolName,
-	argsJson: row.argsJson,
-	requestedBy: row.requestedBy,
-	createdAt: row.createdAt,
-	expiresAt: row.expiresAt,
-});
 
 export function createToolApprovalStore(db: StoreDb): ApprovalStore {
 	// Tool approvals (docs/adr/0039): pending argument snapshots awaiting a human
@@ -23,10 +14,7 @@ export function createToolApprovalStore(db: StoreDb): ApprovalStore {
 				set: values,
 			}).run();
 		},
-		getById: (id) => {
-			const row = db.select().from(pendingApprovals).where(eq(pendingApprovals.id, id)).get();
-			return row ? map(row) : null;
-		},
+		getById: (id) => db.select().from(pendingApprovals).where(eq(pendingApprovals.id, id)).get() ?? null,
 		deleteById: (id) => {
 			db.delete(pendingApprovals).where(eq(pendingApprovals.id, id)).run();
 		},

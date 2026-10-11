@@ -11,9 +11,23 @@ import path from 'node:path';
 // `webapp/**` exclude keeps the SPA's tests under their own config.
 export default defineConfig({
 	root: __dirname,
+	resolve: {
+		alias: { '../../assets/tools': path.resolve(__dirname, 'src/tests/fixtures/asset-tools.ts') },
+	},
 	test: {
 		environment: 'node',
 		include: [path.resolve(__dirname, 'src/**/*.test.{ts,tsx}')],
-		exclude: ['node_modules/**', 'webapp/**'],
+		exclude: [
+			'node_modules/**',
+			'**/node_modules/**',
+			'webapp/**',
+			// The following suites depend on private/unextracted Telegram/db modules left as reference:
+			'src/tests/email-triage.test.ts',
+			'src/tests/outbound-queue.test.ts',
+			'src/tests/quote.test.ts',
+			'src/tests/read-tools.test.ts',
+			'src/tests/reply-surface.test.ts',
+			'src/tests/turn-driver.test.ts',
+		],
 	},
 });

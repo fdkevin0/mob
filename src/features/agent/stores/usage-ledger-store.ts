@@ -10,16 +10,7 @@ export function createUsageLedgerStore(db: StoreDb): UsageLedgerStore {
 	return {
 		accumulate: (row) => {
 			db.insert(usageLedger)
-				.values({
-					day: row.day,
-					userId: row.userId,
-					kind: row.kind,
-					model: row.model,
-					inputTokens: row.inputTokens,
-					outputTokens: row.outputTokens,
-					cacheReadTokens: row.cacheReadTokens,
-					reasoningTokens: row.reasoningTokens,
-				})
+				.values(row)
 				.onConflictDoUpdate({
 					target: [usageLedger.day, usageLedger.userId, usageLedger.kind, usageLedger.model],
 					set: {
@@ -37,15 +28,6 @@ export function createUsageLedgerStore(db: StoreDb): UsageLedgerStore {
 				.from(usageLedger)
 				.where(gte(usageLedger.day, sinceDay))
 				.all()
-				.map((row): UsageRow => ({
-					day: row.day,
-					userId: row.userId,
-					kind: row.kind as UsageRow['kind'],
-					model: row.model,
-					inputTokens: row.inputTokens,
-					outputTokens: row.outputTokens,
-					cacheReadTokens: row.cacheReadTokens,
-					reasoningTokens: row.reasoningTokens,
-				})),
+				.map((row): UsageRow => ({ ...row, kind: row.kind as UsageRow['kind'] })),
 	};
 }

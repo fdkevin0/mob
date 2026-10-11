@@ -73,8 +73,6 @@ export interface SandboxUsageDeps {
 export interface SandboxUsageGate {
 	/** Whether another execution is permitted under today's budget. */
 	allows(): boolean;
-	/** Milliseconds of budget left today (>= 0). */
-	remainingMs(): number;
 	/** Charge `elapsedMs` of execution against today's budget. */
 	record(elapsedMs: number): void;
 }

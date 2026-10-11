@@ -103,7 +103,7 @@ describe('run_code tool', () => {
 		let ranWhenBlocked = false;
 		const blocked = runCodeTool(
 			{ runCode: async () => { ranWhenBlocked = true; return { logs: { stdout: [], stderr: [] }, results: [] }; } },
-			{ usage: { allows: () => false, remainingMs: () => 0, record: () => {} } }
+			{ usage: { allows: () => false, record: () => {} } }
 		);
 		const blockedOut = await run(blocked, { code: 'print(1)' });
 		expect(ranWhenBlocked).toBe(false);
@@ -116,7 +116,7 @@ describe('run_code tool', () => {
 		let clock = 1000;
 		const allowed = runCodeTool(
 			{ runCode: async () => ({ logs: { stdout: ['ok'], stderr: [] }, results: [] }) },
-			{ usage: { allows: () => true, remainingMs: () => 5000, record: (ms) => { recorded = ms; } }, now: () => clock += 250 }
+			{ usage: { allows: () => true, record: (ms) => { recorded = ms; } }, now: () => clock += 250 }
 		);
 		const out = await run(allowed, { code: 'print(1)' });
 		expect(out.stdout).toBe('ok');
@@ -155,7 +155,7 @@ describe('run_shell tool', () => {
 		let ranWhenBlocked = false;
 		const blocked = runShellTool(
 			{ exec: async () => { ranWhenBlocked = true; return { stdout: '', stderr: '', exitCode: 0 }; } },
-			{ usage: { allows: () => false, remainingMs: () => 0, record: () => {} } }
+			{ usage: { allows: () => false, record: () => {} } }
 		);
 		const blockedOut = await run(blocked, { command: 'ls' });
 		expect(ranWhenBlocked).toBe(false);
@@ -168,7 +168,7 @@ describe('run_shell tool', () => {
 		let clock = 0;
 		const allowed = runShellTool(
 			{ exec: async () => ({ stdout: 'ok', stderr: '', exitCode: 0 }) },
-			{ usage: { allows: () => true, remainingMs: () => 5000, record: (ms) => { recorded = ms; } }, now: () => (clock += 250) }
+			{ usage: { allows: () => true, record: (ms) => { recorded = ms; } }, now: () => (clock += 250) }
 		);
 		const out = await run(allowed, { command: 'echo ok' });
 		expect(out.stdout).toBe('ok');
