@@ -17,6 +17,9 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
   const approvalController = useRef<AbortController | null>(null);
   const followController = useRef<AbortController | null>(null);
   const [following, setFollowing] = useState(false);
+  // A failed follow waits for the next poll instead of retrying at once.
+  const followRetry = useRef(0);
+  const mounted = useRef(true);
   const refreshGeneration = useRef(0);
   const transport = useMemo(() => new DefaultChatTransport<ChatMessage>({
     api: `${connection.url}/api/chat`, headers: { Authorization: `Bearer ${connection.token}` }, fetch: authorizedFetch,
@@ -34,11 +37,11 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
   const busy = streaming || approvalBusy || remoteBusy || running || following;
   const busyRef = useRef(false); busyRef.current = streaming || approvalBusy || following;
   useEffect(() => { onBusy(busy); return () => onBusy(false); }, [busy, onBusy]);
-  useEffect(() => () => { approvalController.current?.abort(); followController.current?.abort(); }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; approvalController.current?.abort(); followController.current?.abort(); }; }, []);
   async function refresh() {
     const generation = refreshGeneration.current;
     const snapshot = await api<Snapshot>(connection, `/conversations/${id}`);
-    if (generation !== refreshGeneration.current || busyRef.current) return;
+    if (!mounted.current || generation !== refreshGeneration.current || busyRef.current) return;
     setMessages(snapshot.messages); setRemoteBusy(snapshot.active); setModel(snapshot.model);
     if (snapshot.active) void follow(snapshot.messages);
   }
@@ -46,7 +49,7 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
   // service replays it from the start, so each attempt builds the reply afresh
   // and replaces its saved draft; polling pauses until it ends.
   async function follow(baseline: ChatMessage[]) {
-    if (followController.current) return;
+    if (followController.current || !mounted.current || Date.now() < followRetry.current) return;
     const controller = new AbortController(); followController.current = controller; busyRef.current = true; setFollowing(true);
     try {
       const stream = await transport.reconnectToStream({ chatId: id, abortSignal: controller.signal });
@@ -56,7 +59,7 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
       for await (const message of readUIMessageStream<ChatMessage>({ stream, terminateOnError: true })) {
         if (!controller.signal.aborted) setMessages([...earlier.filter(m => m.id !== message.id), message]);
       }
-    } catch (e) { if (!controller.signal.aborted) setFailure(errorText(e)); }
+    } catch (e) { if (!controller.signal.aborted) { setFailure(errorText(e)); followRetry.current = Date.now() + 2000; } }
     finally { followController.current = null; setFollowing(false); }
   }
   useEffect(() => {

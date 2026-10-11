@@ -12,9 +12,10 @@ phone's connection drops far more often than a local tab's.
 ## Decision
 
 - `ConversationService.Start` admits a turn and runs it on the service's own
-  context. Only `POST /api/conversations/{id}/stop`, `Close`, the five-minute
-  turn limit, or replacing the access token that started it end it early;
-  the token is watched from admission, so its replacement also stops an
+  context. Only `POST /api/conversations/{id}/stop`, `Close`, or replacing
+  the access token that started it end it early;
+  the token is checked at admission and watched after it, so a turn started
+  with a replaced token does nothing, and a replacement also stops an
   approved call that runs before the turn's first event.
   Errors before the turn emits anything (busy, repeated request, stale
   approval, no model) are still returned as HTTP errors.
@@ -29,8 +30,8 @@ phone's connection drops far more often than a local tab's.
   is active. It reads the replay itself (`reconnectToStream` and
   `readUIMessageStream`) rather than through `resumeStream`, so every attempt
   builds the reply from fresh state and replaces the saved draft; one reconnect
-  is in flight at a time and polling pauses until it ends. The terminal follows
-  the same way.
+  is in flight at a time, polling pauses until it ends, and a failed attempt
+  waits for the next poll. The terminal follows the same way.
 
 ## Consequences
 

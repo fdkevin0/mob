@@ -73,6 +73,12 @@ func (s *ConversationService) Start(input ChatRequest, stop <-chan struct{}) (*R
 		var run *Running
 		err := s.execute(context.Background(), input, func(Event) error { return nil }, func(r *Running) {
 			run = r
+			// Authority already withdrawn stops the turn before it does anything.
+			select {
+			case <-stop:
+				r.Stop()
+			default:
+			}
 			go func() {
 				select {
 				case <-stop:
@@ -155,6 +161,9 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 	}()
 	if admitted != nil {
 		admitted(run)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 	}
 	caller := emit
 	emit = func(e Event) error { run.record(e); return caller(e) }

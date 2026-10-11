@@ -151,3 +151,28 @@ it('keeps one reconnect waiting however slowly the stream answers', async () => 
   expect(signals).toHaveLength(1);
   expect(signals[0].aborted).toBe(false);
 }, 10000);
+it('waits for the next poll before following again after a failure', async () => {
+  let reconnects = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('/chat/one/stream')) { reconnects++; return new Promise<Response>((_, reject) => setTimeout(() => reject(new TypeError('network error')), 10)); }
+    return Promise.resolve(Response.json({ messages: [], active: true, model: 'demo/echo' }));
+  }));
+  const { result } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: true, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
+  await waitFor(() => expect(result.current.failure).toBe('network error'));
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  expect(reconnects).toBe(1);
+}, 10000);
+it('does not follow a turn after the conversation closes', async () => {
+  let resolveSnapshot!: (value: Response) => void;
+  let reconnects = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('/chat/one/stream')) { reconnects++; return new Promise<Response>(() => {}); }
+    return new Promise<Response>(resolve => { resolveSnapshot = resolve; });
+  }));
+  const { unmount } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
+  await waitFor(() => expect(resolveSnapshot).toBeDefined());
+  unmount();
+  await act(async () => resolveSnapshot(Response.json({ messages: [], active: true, model: 'demo/echo' })));
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(reconnects).toBe(0);
+});
