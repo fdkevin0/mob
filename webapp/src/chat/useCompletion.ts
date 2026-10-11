@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { api, type Connection } from './api';
-import type { CompletionRequest, Suggestion } from './contracts';
+import type { CommandRequest, Suggestion } from './contracts';
 
 // lastToken splits text into the part kept and the token a suggestion replaces.
 export function lastToken(text: string): [string, string] {
@@ -16,7 +16,7 @@ export function useCompletion({ connection, id, input, setInput }: { connection:
   useEffect(() => {
     if (!input.startsWith('/') || /[\r\n]/.test(input) || input === dismissed) { setSuggestions([]); return; }
     let live = true;
-    const request: CompletionRequest = { client: 'web', conversationId: id, text: input };
+    const request: CommandRequest = { client: 'web', conversationId: id, text: input };
     const timer = setTimeout(() => {
       // Completion is a convenience; a failure only leaves the list empty.
       api<Suggestion[]>(connection, '/commands/complete', request).then(list => { if (live) { setSuggestions(list); setSelected(0); } }, () => { if (live) setSuggestions([]); });

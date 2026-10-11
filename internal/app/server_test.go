@@ -147,11 +147,12 @@ func TestCommandRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	c, _ := s.Create()
 	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
 	defer server.Close()
 	httpServer := httptest.NewServer(server.Handler(nil))
 	defer httpServer.Close()
-	call := func(method, path string, body any, dest any) {
+	call := func(method, path string, body any, dest any) int {
 		t.Helper()
 		raw, _ := json.Marshal(body)
 		req, _ := http.NewRequest(method, httpServer.URL+path, bytes.NewReader(raw))
@@ -161,25 +162,60 @@ func TestCommandRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			t.Fatal(resp.Status)
+		if resp.StatusCode == 200 {
+			if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-			t.Fatal(err)
-		}
+		return resp.StatusCode
 	}
 	var specs []chat.CommandSpec
 	call("GET", "/api/commands?client=web", nil, &specs)
-	if len(specs) != 2 || specs[0].Name != "model" || specs[1].Name != "models" {
-		t.Fatalf("web commands: %+v", specs)
+	var names []string
+	for _, spec := range specs {
+		names = append(names, spec.Name)
+	}
+	if got := strings.Join(names, " "); got != "model models new list open approve deny plugins mail email cloud test deliveries clear-secret" {
+		t.Fatalf("web commands: %s", got)
 	}
 	var suggestions []chat.Suggestion
-	call("POST", "/api/commands/complete", chat.CompletionRequest{Client: "web", Text: "/models"}, &suggestions)
+	call("POST", "/api/commands/complete", chat.CommandRequest{Client: "web", Text: "/models"}, &suggestions)
 	if len(suggestions) != 1 || suggestions[0].Value != "/models" || suggestions[0].Detail == "" {
 		t.Fatalf("suggestions: %+v", suggestions)
 	}
-	call("POST", "/api/commands/complete", chat.CompletionRequest{Client: "web", Text: "hello"}, &suggestions)
+	call("POST", "/api/commands/complete", chat.CommandRequest{Client: "web", Text: "/clear-secret email "}, &suggestions)
+	if len(suggestions) != 2 || suggestions[0].Value != "imap.password" {
+		t.Fatalf("secret fields: %+v", suggestions)
+	}
+	call("POST", "/api/commands/complete", chat.CommandRequest{Client: "web", Text: "hello"}, &suggestions)
 	if suggestions == nil || len(suggestions) != 0 {
 		t.Fatalf("free text must complete to an empty list: %+v", suggestions)
+	}
+	run := func(text string) (chat.CommandResult, int) {
+		t.Helper()
+		var result chat.CommandResult
+		status := call("POST", "/api/commands/run", chat.CommandRequest{Client: "web", ConversationID: c.ID, Text: text}, &result)
+		return result, status
+	}
+	for text, want := range map[string]string{
+		"/deliveries":                  "No deliveries yet.",
+		"/test email":                  "email plugin is disabled.",
+		"/test nope":                   "unknown plugin nope.",
+		"/cloud":                       "D1 executes your SQL",
+		"/clear-secret telegram token": "Cleared the saved token of telegram.",
+		"/clear-secret telegram nope":  "unknown secret field",
+	} {
+		if result, status := run(text); status != 200 || !result.Handled || !strings.Contains(result.Markdown, want) {
+			t.Fatalf("%s: %d %+v", text, status, result)
+		}
+	}
+	if _, status := run("/email"); status != 409 {
+		t.Fatalf("/email with the plugin disabled: %d", status)
+	}
+	if result, _ := run("/plugins"); result.Action == nil || result.Action.Kind != chat.OpenPlugins {
+		t.Fatalf("/plugins: %+v", result)
+	}
+	if result, status := run("/model"); status != 200 || result.Handled {
+		t.Fatalf("/model must stay a chat command: %+v", result)
 	}
 }

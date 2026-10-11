@@ -3,7 +3,6 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
-	configcontract "github.com/fdkevin0/mob/internal/configuration"
 	"strconv"
 	"strings"
 
@@ -198,80 +197,4 @@ func (f *pluginForm) view() string {
 		b.WriteString("\nEnter SAVE CONFIGURATION · Ctrl+B edit · Esc cancel")
 	}
 	return safe(b.String())
-}
-func (m model) pluginCommand(text string) (tea.Cmd, bool) {
-	fields := strings.Fields(text)
-	if len(fields) == 0 {
-		return nil, false
-	}
-	switch fields[0] {
-	case "/clear-secret":
-		if len(fields) != 3 {
-			return func() tea.Msg {
-				return listing{Text: "/clear-secret email|telegram|cloudflare FIELD (disable the plugin first; e.g. imap.password, token, secretKey)"}
-			}, true
-		}
-		name, key := fields[1], fields[2]
-		return func() tea.Msg {
-			var loaded pluginsLoaded
-			if err := m.json("GET", "/api/plugins", nil, &loaded); err != nil {
-				return listing{Err: err}
-			}
-			body, ok := loaded.Config[name]
-			if !ok {
-				return listing{Text: "Unknown plugin"}
-			}
-			body["secrets"] = map[string]configcontract.SecretUpdate{key: {Mode: "clear"}}
-			var result configcontract.Plugins
-			err := m.json("POST", "/api/plugins/"+name, body, &result)
-			return listing{Text: "Credential clear request completed.", Err: err}
-		}, true
-	case "/deliveries":
-		return m.pluginRequest("GET", "/api/deliveries", nil), true
-	case "/plugins":
-		return m.loadPlugins(), true
-	case "/test":
-		if len(fields) != 2 {
-			return func() tea.Msg { return listing{Text: "/test email|telegram|cloudflare"} }, true
-		}
-		switch fields[1] {
-		case "email", "telegram", "cloudflare":
-			return m.pluginRequest("POST", "/api/plugins/"+fields[1]+"/test", map[string]any{}), true
-		}
-		return func() tea.Msg { return listing{Text: "Unknown plugin"} }, true
-	case "/email":
-		if len(fields) == 1 {
-			return m.pluginRequest("GET", "/api/plugins/email/inbox", nil), true
-		}
-		if len(fields) == 3 {
-			return m.pluginRequest("GET", "/api/plugins/email/messages/"+fields[1]+"?validity="+fields[2], nil), true
-		}
-		if len(fields) == 4 && fields[1] == "analyze" {
-			uid, e1 := strconv.ParseUint(fields[2], 10, 32)
-			v, e2 := strconv.ParseUint(fields[3], 10, 32)
-			if e1 == nil && e2 == nil {
-				return m.pluginRequest("POST", "/api/plugins/email/analyze", map[string]any{"uid": uid, "validity": v}), true
-			}
-		}
-		return func() tea.Msg {
-			return listing{Text: "/email lists INBOX; /email UID VALIDITY reads; /email analyze UID VALIDITY summarizes with your model."}
-		}, true
-	case "/cloud":
-		if len(fields) < 2 {
-			return func() tea.Msg {
-				return listing{Text: "/cloud ai.models|ai.run|vectorize.indexes|vectorize.query|d1.databases|d1.query|kv.namespaces|kv.get|r2.buckets|r2.list|r2.get [prompt/search/key/SQL]\nD1 executes your SQL, including writes. Workers AI calls may incur charges."}
-			}, true
-		}
-		argument := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(text, "/cloud")), fields[1]))
-		return m.pluginRequest("POST", "/api/plugins/cloudflare/action", map[string]any{"operation": fields[1], "text": argument, "key": argument, "sql": argument}), true
-	}
-	return nil, false
-}
-func (m model) pluginRequest(method, path string, body any) tea.Cmd {
-	return func() tea.Msg {
-		var result any
-		err := m.json(method, path, body, &result)
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		return listing{Text: string(raw), Err: err}
-	}
 }

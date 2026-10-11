@@ -26,7 +26,7 @@ func (m *model) refreshCompletion() tea.Cmd {
 		m.setSuggestions(nil)
 		return nil
 	}
-	client, seq, request := *m, m.completionSeq, chat.CompletionRequest{Client: chat.ClientTUI, ConversationID: m.id, Text: text}
+	client, seq, request := *m, m.completionSeq, chat.CommandRequest{Client: chat.ClientTUI, ConversationID: m.id, Text: text}
 	return func() tea.Msg {
 		var list []chat.Suggestion
 		// Completion is a convenience; a failure only leaves the list empty.
@@ -106,4 +106,57 @@ func (m *model) layout() {
 		return
 	}
 	m.viewport.SetHeight(max(3, m.height-10-min(len(m.suggestions), shownSuggestions)))
+}
+
+// runCommand asks the service to run a slash command; one it does not run
+// comes back unhandled and is sent as chat.
+func (m model) runCommand(text string) tea.Cmd {
+	request := chat.CommandRequest{Client: chat.ClientTUI, ConversationID: m.id, Text: text}
+	return func() tea.Msg {
+		var result chat.CommandResult
+		err := m.json("POST", "/api/commands/run", request, &result)
+		return commandRan{Text: text, Result: result, Err: err}
+	}
+}
+
+// apply carries out what a command asked of this client.
+func (m model) apply(a *chat.Action) (tea.Model, tea.Cmd) {
+	if a == nil {
+		return m, nil
+	}
+	switch a.Kind {
+	case chat.OpenConversation:
+		m.generation++
+		return m, m.load(a.ConversationID, false)
+	case chat.Decide:
+		request := chat.ChatRequest{ID: m.id, RequestID: chat.NewID()}
+		request.Approval = &struct {
+			ID       string `json:"id"`
+			Approved bool   `json:"approved"`
+		}{a.ApprovalID, a.Approved}
+		cmd := m.stream(request)
+		m.render()
+		return m, cmd
+	case chat.OpenPlugins:
+		return m, m.loadPlugins()
+	case chat.ComposeMail:
+		m.plugin = newPluginForm()
+		m.plugin.name = "compose"
+		m.plugin.config = map[string]map[string]any{"compose": {}}
+		m.plugin.fields = fieldsFor("compose")
+		m.plugin.index = 0
+		m.plugin.requestID = chat.NewID()
+		m.plugin.focus()
+	}
+	return m, nil
+}
+
+// send starts a chat turn with text.
+func (m *model) send(text string) tea.Cmd {
+	request := chat.ChatRequest{ID: m.id, Text: text, RequestID: chat.NewID()}
+	m.messages = append(m.messages, chat.Message{ID: request.RequestID, Role: "user", Parts: []chat.Part{{"type": "text", "text": text}}})
+	cmd := m.stream(request)
+	m.viewport.GotoBottom()
+	m.render()
+	return cmd
 }

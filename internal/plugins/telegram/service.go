@@ -132,15 +132,15 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 	return processingErr
 }
 func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text string) (string, error) {
-	if text == "/start" || text == "/help" {
-		return "Mob is connected. Send a message to chat. This computer must remain running.\n\n" + chat.Help(chat.ClientTelegram), nil
+	if text == "/start" {
+		text = "/help"
 	}
 	key := "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10)
 	var id string
 	if err := s.Store.Setting(key, &id); err != nil {
 		return "Cannot load the Telegram conversation.", err
 	}
-	if id == "" || text == "/new" {
+	if id == "" && text != "/new" && text != "/help" {
 		conversation, err := s.Store.Create()
 		if err != nil {
 			return "Cannot create a conversation.", err
@@ -149,25 +149,38 @@ func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text st
 		if err = s.Store.SaveSetting(key, id); err != nil {
 			return "Cannot save the Telegram conversation.", err
 		}
-		if text == "/new" {
-			return "New conversation started.", nil
-		}
 	}
 	// The bot answers only its configured user, who owns this Mob.
+	result, err := s.Conversation.Commands.Run(ctx, chat.CommandRequest{Client: chat.ClientTelegram, ConversationID: id, Text: text}, true)
+	if err != nil {
+		return "Mob: " + err.Error(), err
+	}
 	input := chat.ChatRequest{ID: id, Text: text, RequestID: requestID, Owner: true}
-	if strings.HasPrefix(text, "/approve ") || strings.HasPrefix(text, "/deny ") {
-		fields := strings.Fields(text)
-		if len(fields) != 2 {
-			return "Use /approve ID or /deny ID.", nil
+	if result.Handled {
+		reply := result.Markdown
+		if text == "/help" {
+			reply = "Mob is connected. Send a message to chat. This computer must remain running.\n\n" + reply
 		}
-		input.Text = ""
-		input.Approval = &struct {
-			ID       string `json:"id"`
-			Approved bool   `json:"approved"`
-		}{fields[1], fields[0] == "/approve"}
+		switch a := result.Action; {
+		case a == nil:
+			return reply, nil
+		case a.Kind == chat.OpenConversation:
+			if err := s.Store.SaveSetting(key, a.ConversationID); err != nil {
+				return "Cannot save the Telegram conversation.", err
+			}
+			return reply, nil
+		case a.Kind == chat.Decide:
+			input.Text = ""
+			input.Approval = &struct {
+				ID       string `json:"id"`
+				Approved bool   `json:"approved"`
+			}{a.ApprovalID, a.Approved}
+		default:
+			return "That command needs the desktop or terminal app.", nil
+		}
 	}
 	var reply strings.Builder
-	err := s.Conversation.Execute(ctx, input, func(event chat.Event) error {
+	err = s.Conversation.Execute(ctx, input, func(event chat.Event) error {
 		switch event.Kind {
 		case chat.SegmentDelta:
 			if event.Segment != "text" {

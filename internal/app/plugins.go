@@ -105,41 +105,10 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/plugins/{plugin}", s.savePlugin)
 	mux.HandleFunc("POST /api/plugins/{plugin}/test", func(w http.ResponseWriter, r *http.Request) {
-		c, err := s.pluginConfig()
-		if err != nil {
-			respond(w, nil, err)
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-		var result any = map[string]bool{"ok": true}
-		switch r.PathValue("plugin") {
-		case "email":
-			if !c.Email.Enabled {
-				http.Error(w, "email plugin is disabled", 409)
-				return
-			}
-			err = c.Email.Test(ctx)
-		case "telegram":
-			if !c.Telegram.Enabled {
-				http.Error(w, "Telegram is disabled", 409)
-				return
-			}
-			result, err = c.Telegram.Test(ctx)
-		case "cloudflare":
-			if !c.Cloudflare.Enabled {
-				http.Error(w, "Cloudflare is disabled", 409)
-				return
-			}
-			result, err = c.Cloudflare.Test(ctx)
-		case "wechat_ilink", "wechatilink":
-			if !c.WeChatILink.Enabled {
-				http.Error(w, "WeChat iLink is disabled", 409)
-				return
-			}
-			result, err = c.WeChatILink.Test(ctx)
-		default:
-			http.NotFound(w, r)
+		result, err := s.testPlugin(r.Context(), r.PathValue("plugin"))
+		var command *chat.CommandError
+		if errors.As(err, &command) {
+			http.Error(w, command.Message, command.Status)
 			return
 		}
 		pluginResult(w, result, err)
@@ -235,17 +204,63 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 	})
 }
 
-func (s *Server) emailConfig(w http.ResponseWriter) (email.Config, bool) {
+// testPlugin checks an enabled plugin's connection. A disabled or unknown
+// plugin is a *chat.CommandError.
+func (s *Server) testPlugin(ctx context.Context, name string) (any, error) {
 	c, err := s.pluginConfig()
 	if err != nil {
-		respond(w, nil, err)
-		return email.Config{}, false
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	disabled := func(label string) error { return &chat.CommandError{Status: 409, Message: label + " is disabled"} }
+	switch name {
+	case "email":
+		if !c.Email.Enabled {
+			return nil, disabled("email plugin")
+		}
+		return map[string]bool{"ok": true}, c.Email.Test(ctx)
+	case "telegram":
+		if !c.Telegram.Enabled {
+			return nil, disabled("Telegram")
+		}
+		return c.Telegram.Test(ctx)
+	case "cloudflare":
+		if !c.Cloudflare.Enabled {
+			return nil, disabled("Cloudflare")
+		}
+		return c.Cloudflare.Test(ctx)
+	case "wechat_ilink", "wechatilink":
+		if !c.WeChatILink.Enabled {
+			return nil, disabled("WeChat iLink")
+		}
+		return c.WeChatILink.Test(ctx)
+	}
+	return nil, &chat.CommandError{Status: 404, Message: "unknown plugin " + name}
+}
+
+// enabledEmail is the email configuration, or a *chat.CommandError when the
+// plugin is disabled.
+func (s *Server) enabledEmail() (email.Config, error) {
+	c, err := s.pluginConfig()
+	if err != nil {
+		return email.Config{}, err
 	}
 	if !c.Email.Enabled {
-		http.Error(w, "email plugin is disabled", 409)
-		return email.Config{}, false
+		return email.Config{}, &chat.CommandError{Status: 409, Message: "email plugin is disabled"}
 	}
-	return c.Email, true
+	return c.Email, nil
+}
+
+func (s *Server) emailConfig(w http.ResponseWriter) (email.Config, bool) {
+	c, err := s.enabledEmail()
+	var command *chat.CommandError
+	if errors.As(err, &command) {
+		http.Error(w, command.Message, command.Status)
+	} else if err != nil {
+		respond(w, nil, err)
+	}
+	return c, err == nil
 }
 
 func (s *Server) sendEmail(w http.ResponseWriter, r *http.Request) {
@@ -292,28 +307,41 @@ func (s *Server) analyzeEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) savePlugin(w http.ResponseWriter, r *http.Request) {
-	s.plugins.mu.Lock()
-	defer s.plugins.mu.Unlock()
-	if s.plugins.closed {
-		http.Error(w, "service is stopping", 503)
-		return
-	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
 	if err != nil {
 		http.Error(w, "invalid configuration", 400)
 		return
 	}
-	c, err := s.Configuration.UpdatePlugin(r.PathValue("plugin"), raw)
+	c, err := s.updatePlugin(r.PathValue("plugin"), raw)
+	var command *chat.CommandError
+	if errors.As(err, &command) {
+		http.Error(w, command.Message, command.Status)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	if r.PathValue("plugin") == "telegram" {
+	writeJSON(w, 200, c.Public())
+}
+
+// updatePlugin saves one plugin's configuration and restarts its channel.
+func (s *Server) updatePlugin(name string, raw []byte) (configuration.Plugins, error) {
+	s.plugins.mu.Lock()
+	defer s.plugins.mu.Unlock()
+	if s.plugins.closed {
+		return configuration.Plugins{}, &chat.CommandError{Status: 503, Message: "service is stopping"}
+	}
+	c, err := s.Configuration.UpdatePlugin(name, raw)
+	if err != nil {
+		return c, err
+	}
+	if name == "telegram" {
 		c.Telegram.Transport = s.HTTPTransport
 		s.restartTelegram(c.Telegram)
 	}
-	if r.PathValue("plugin") == "wechat_ilink" || r.PathValue("plugin") == "wechatilink" {
+	if name == "wechat_ilink" || name == "wechatilink" {
 		s.restartWechat(c.WeChatILink)
 	}
-	writeJSON(w, 200, c.Public())
+	return c, nil
 }

@@ -16,15 +16,24 @@ const (
 	ClientWeChat   = "wechat"
 )
 
-var allClients = []string{ClientWeb, ClientTUI, ClientTelegram, ClientWeChat}
-
-// CommandSpec describes a slash command once for help text and completion in
-// every client.
+// CommandSpec describes a slash command once for help, completion and
+// execution in every client. A transcript command is answered by the chat
+// stream and recorded in the conversation; any other runs through
+// Registry.Run and only shows its result.
 type CommandSpec struct {
-	Name    string   `json:"name"`
-	Usage   string   `json:"usage"`
-	Summary string   `json:"summary"`
-	Clients []string `json:"clients"`
+	Name       string   `json:"name"`
+	Usage      string   `json:"usage"`
+	Summary    string   `json:"summary"`
+	Clients    []string `json:"clients"`
+	Transcript bool     `json:"transcript,omitempty"`
+}
+
+// CommandRequest is text typed into a client: up to the cursor when
+// completing, the whole input when running.
+type CommandRequest struct {
+	Client         string `json:"client"`
+	ConversationID string `json:"conversationId,omitempty"`
+	Text           string `json:"text"`
 }
 
 // Suggestion replaces the last whitespace-separated token of the completed text.
@@ -34,57 +43,92 @@ type Suggestion struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// CompletionRequest asks for suggestions for text typed up to the cursor.
-type CompletionRequest struct {
-	Client         string `json:"client"`
+// Action asks the client to do what only it can: change its view or decide an
+// approval through its own stream.
+type Action struct {
+	Kind           string `json:"kind"`
 	ConversationID string `json:"conversationId,omitempty"`
-	Text           string `json:"text"`
+	ApprovalID     string `json:"approvalId,omitempty"`
+	Approved       bool   `json:"approved,omitempty"`
 }
 
-// argument suggests values for one argument position; prior holds the
+const (
+	OpenConversation = "open-conversation"
+	Decide           = "decide"
+	OpenPlugins      = "open-plugins"
+	ComposeMail      = "compose-mail"
+)
+
+// CommandResult is what a client shows after running a command. Handled is
+// false when the text is not a command to run, and the client sends it as chat.
+type CommandResult struct {
+	Handled  bool    `json:"handled"`
+	Markdown string  `json:"markdown,omitempty"`
+	Action   *Action `json:"action,omitempty"`
+}
+
+// CommandCall is one invocation; Fields are the arguments and Rest is the
+// text after the command name.
+type CommandCall struct {
+	Client, ConversationID, Rest string
+	Fields                       []string
+	Owner                        bool
+}
+
+// Argument suggests values for one argument position; prior holds the
 // arguments before it.
-type argument func(ctx context.Context, s *ConversationService, conversation string, prior []string) []Suggestion
+type Argument func(ctx context.Context, call CommandCall, prior []string) []Suggestion
 
-type command struct {
+type Command struct {
 	CommandSpec
-	args []argument
+	Args []Argument
+	// OwnerOnly commands refuse callers that do not own this Mob.
+	OwnerOnly bool
+	// Run answers a non-transcript command.
+	Run func(ctx context.Context, call CommandCall) (CommandResult, error)
 }
+
+// Registry holds every command. Register all commands before serving.
+type Registry struct{ commands []Command }
 
 const maxSuggestions = 20
 
-var plugins = choices("email", "telegram", "cloudflare")
-
-var commands = []command{
-	{CommandSpec{"model", "/model [NAME | default [NAME]]", "Show or switch this conversation's model", allClients}, []argument{modelOrDefault, defaultModel}},
-	{CommandSpec{"models", "/models [FILTER]", "List available models", allClients}, nil},
-	{CommandSpec{"new", "/new", "Start a new conversation", []string{ClientTUI, ClientTelegram}}, nil},
-	{CommandSpec{"list", "/list", "List conversations", []string{ClientTUI}}, nil},
-	{CommandSpec{"open", "/open ID", "Switch to a conversation", []string{ClientTUI}}, []argument{conversations}},
-	{CommandSpec{"approve", "/approve ID", "Approve a pending tool request", []string{ClientTUI, ClientTelegram}}, []argument{approvals}},
-	{CommandSpec{"deny", "/deny ID", "Deny a pending tool request", []string{ClientTUI, ClientTelegram}}, []argument{approvals}},
-	{CommandSpec{"plugins", "/plugins", "Configure plugins and cloud services", []string{ClientTUI}}, nil},
-	{CommandSpec{"email", "/email [UID VALIDITY | analyze UID VALIDITY]", "List, read or summarize INBOX mail", []string{ClientTUI}}, []argument{choices("analyze")}},
-	{CommandSpec{"mail", "/mail", "Compose an email", []string{ClientTUI}}, nil},
-	{CommandSpec{"cloud", "/cloud OPERATION [ARGUMENT]", "Run a Cloudflare operation", []string{ClientTUI}}, []argument{choices("ai.models", "ai.run", "vectorize.indexes", "vectorize.query", "d1.databases", "d1.query", "kv.namespaces", "kv.get", "r2.buckets", "r2.list", "r2.get")}},
-	{CommandSpec{"test", "/test PLUGIN", "Test a plugin connection", []string{ClientTUI}}, []argument{plugins}},
-	{CommandSpec{"deliveries", "/deliveries", "Show channel delivery status", []string{ClientTUI}}, nil},
-	{CommandSpec{"clear-secret", "/clear-secret PLUGIN FIELD", "Clear a saved credential of a disabled plugin", []string{ClientTUI}}, []argument{plugins}},
-	{CommandSpec{"help", "/help", "Show commands", []string{ClientTelegram}}, nil},
+func (r *Registry) Register(commands ...Command) {
+	for _, c := range commands {
+		if slices.ContainsFunc(r.commands, func(o Command) bool { return o.Name == c.Name }) {
+			panic("command registered twice: " + c.Name)
+		}
+		if c.Transcript == (c.Run != nil) {
+			panic("command needs exactly one of Transcript or Run: " + c.Name)
+		}
+		r.commands = append(r.commands, c)
+	}
 }
 
-func lookup(name, client string) (command, bool) {
-	for _, c := range commands {
+func (r *Registry) lookup(name, client string) (Command, bool) {
+	for _, c := range r.commands {
 		if c.Name == name && slices.Contains(c.Clients, client) {
 			return c, true
 		}
 	}
-	return command{}, false
+	return Command{}, false
 }
 
-// Commands lists the commands a client understands.
-func Commands(client string) []CommandSpec {
+// transcript reports whether text is a transcript command in any client.
+func (r *Registry) transcript(text string) bool {
+	name, _, _ := strings.Cut(text, " ")
+	for _, c := range r.commands {
+		if c.Transcript && "/"+c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Specs lists the commands a client understands.
+func (r *Registry) Specs(client string) []CommandSpec {
 	list := []CommandSpec{}
-	for _, c := range commands {
+	for _, c := range r.commands {
 		if slices.Contains(c.Clients, client) {
 			list = append(list, c.CommandSpec)
 		}
@@ -93,42 +137,68 @@ func Commands(client string) []CommandSpec {
 }
 
 // Help is one line per command a client understands.
-func Help(client string) string {
+func (r *Registry) Help(client string) string {
 	var b strings.Builder
-	for _, c := range Commands(client) {
+	for _, c := range r.Specs(client) {
 		fmt.Fprintf(&b, "%s — %s\n", c.Usage, c.Summary)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
+func parse(input CommandRequest, owner bool) (string, CommandCall) {
+	text := strings.TrimSpace(input.Text)
+	name, rest, _ := strings.Cut(text, " ")
+	rest = strings.TrimSpace(rest)
+	return strings.TrimPrefix(name, "/"), CommandCall{Client: input.Client, ConversationID: input.ConversationID, Rest: rest, Fields: strings.Fields(rest), Owner: owner}
+}
+
+// Run executes a non-transcript command. Other text, transcript commands
+// included, comes back unhandled for the client to send as chat.
+func (r *Registry) Run(ctx context.Context, input CommandRequest, owner bool) (CommandResult, error) {
+	if !strings.HasPrefix(input.Text, "/") || strings.ContainsAny(input.Text, "\r\n") {
+		return CommandResult{}, nil
+	}
+	name, call := parse(input, owner)
+	c, ok := r.lookup(name, input.Client)
+	if !ok || c.Run == nil {
+		return CommandResult{}, nil
+	}
+	if c.OwnerOnly && !owner {
+		return CommandResult{Handled: true, Markdown: "Only the owner of this Mob can use /" + c.Name + "."}, nil
+	}
+	result, err := c.Run(ctx, call)
+	result.Handled = true
+	return result, err
+}
+
 // Complete suggests replacements for the last token of input.Text. Free text
 // and finished arguments get no suggestions.
-func (s *ConversationService) Complete(ctx context.Context, input CompletionRequest) []Suggestion {
+func (r *Registry) Complete(ctx context.Context, input CommandRequest, owner bool) []Suggestion {
 	text := input.Text
 	if !strings.HasPrefix(text, "/") || strings.ContainsAny(text, "\r\n") {
 		return []Suggestion{}
 	}
 	fields := strings.Fields(text)
-	ended := strings.HasSuffix(text, " ") || strings.HasSuffix(text, "\t")
 	prefix := ""
-	if !ended {
+	if !strings.HasSuffix(text, " ") && !strings.HasSuffix(text, "\t") {
 		prefix, fields = fields[len(fields)-1], fields[:len(fields)-1]
 	}
 	if len(fields) == 0 {
 		var list []Suggestion
-		for _, c := range Commands(input.Client) {
+		for _, c := range r.Specs(input.Client) {
 			list = append(list, Suggestion{Value: "/" + c.Name, Label: c.Usage, Detail: c.Summary})
 		}
 		return filter(list, prefix, false)
 	}
-	c, ok := lookup(strings.TrimPrefix(fields[0], "/"), input.Client)
-	if !ok || len(fields)-1 >= len(c.args) {
+	c, ok := r.lookup(strings.TrimPrefix(fields[0], "/"), input.Client)
+	if !ok || len(fields)-1 >= len(c.Args) || c.OwnerOnly && !owner {
 		return []Suggestion{}
 	}
 	// Model listings can refresh from vendors; typing must not wait on them.
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	return filter(c.args[len(fields)-1](ctx, s, input.ConversationID, fields[1:]), prefix, true)
+	_, call := parse(input, owner)
+	return filter(c.Args[len(fields)-1](ctx, call, fields[1:]), prefix, true)
 }
 
 // filter keeps prefix matches of the value before substring matches (of three
@@ -152,8 +222,9 @@ func filter(list []Suggestion, prefix string, labels bool) []Suggestion {
 	return result
 }
 
-func choices(values ...string) argument {
-	return func(context.Context, *ConversationService, string, []string) []Suggestion {
+// Choices is an argument with fixed values.
+func Choices(values ...string) Argument {
+	return func(context.Context, CommandCall, []string) []Suggestion {
 		list := make([]Suggestion, len(values))
 		for i, v := range values {
 			list[i] = Suggestion{Value: v, Label: v}
@@ -162,66 +233,17 @@ func choices(values ...string) argument {
 	}
 }
 
-func modelChoices(ctx context.Context, s *ConversationService) []Suggestion {
-	var list []Suggestion
-	for _, g := range s.Models.List(ctx, "") {
-		for _, m := range g.Models {
-			ref := g.Provider + "/" + m.ID
-			list = append(list, Suggestion{Value: ref, Label: ref, Detail: describe(m)})
-		}
+// Fence shows text verbatim in Markdown, whatever backticks it contains.
+func Fence(language, text string) string {
+	fence := "```"
+	for strings.Contains(text, fence) {
+		fence += "`"
 	}
-	return list
+	return fence + language + "\n" + strings.TrimSuffix(text, "\n") + "\n" + fence
 }
 
-func modelOrDefault(ctx context.Context, s *ConversationService, _ string, _ []string) []Suggestion {
-	return append([]Suggestion{{Value: "default", Label: "default", Detail: "Follow or set the default model"}}, modelChoices(ctx, s)...)
-}
-
-func defaultModel(ctx context.Context, s *ConversationService, _ string, prior []string) []Suggestion {
-	if prior[0] != "default" {
-		return nil
-	}
-	return modelChoices(ctx, s)
-}
-
-func conversations(_ context.Context, s *ConversationService, _ string, _ []string) []Suggestion {
-	list, err := s.Store.List()
-	if err != nil {
-		return nil
-	}
-	suggestions := make([]Suggestion, len(list))
-	for i, c := range list {
-		suggestions[i] = Suggestion{Value: c.ID, Label: c.Title, Detail: c.ID}
-	}
-	return suggestions
-}
-
-// approvals are the conversation's tool requests still awaiting a decision.
-func approvals(_ context.Context, s *ConversationService, id string, _ []string) []Suggestion {
-	if id == "" {
-		return nil
-	}
-	history, err := s.Store.History(id)
-	if err != nil {
-		return nil
-	}
-	var list []Suggestion
-	for _, m := range history {
-		for _, p := range m.Parts {
-			if p["state"] != "approval-requested" {
-				continue
-			}
-			var approval string
-			switch a := p["approval"].(type) {
-			case map[string]any:
-				approval = fmt.Sprint(a["id"])
-			case map[string]string:
-				approval = a["id"]
-			}
-			if approval != "" {
-				list = append(list, Suggestion{Value: approval, Label: approval, Detail: strings.TrimPrefix(fmt.Sprint(p["type"]), "tool-")})
-			}
-		}
-	}
-	return list
+// Cell makes text safe inside a Markdown table cell.
+func Cell(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	return strings.ReplaceAll(text, "|", "\\|")
 }

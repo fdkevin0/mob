@@ -219,7 +219,54 @@ func TestTUICompletesCommands(t *testing.T) {
 	m.input.SetValue("/models")
 	m.suggestions = []chat.Suggestion{{Value: "/models"}}
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m = updated.(model); !m.busy || m.suggestions != nil {
+	if m = updated.(model); !m.running || m.suggestions != nil {
 		t.Fatal("enter on a complete command did not send it")
+	}
+}
+
+func TestTUIRunsCommandsThroughService(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := app.NewServer(store, provider.Offline(), strings.Repeat("t", 32))
+	defer srv.Close()
+	httpSrv := httptest.NewServer(srv.Handler(nil))
+	defer httpSrv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	m := model{configured: true, connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), width: 80}
+	updated, _ := m.Update(m.load("", false)())
+	m = updated.(model)
+	first := m.id
+	enter := func(text string) tea.Cmd {
+		t.Helper()
+		m.input.SetValue(text)
+		updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		m = updated.(model)
+		if !m.running {
+			t.Fatalf("%s did not go to the service", text)
+		}
+		updated, cmd = m.Update(cmd())
+		m = updated.(model)
+		return cmd
+	}
+	if cmd := enter("/list"); cmd != nil || !strings.Contains(m.listText, first) {
+		t.Fatalf("/list: %q", m.listText)
+	}
+	updated, _ = m.Update(enter("/new")())
+	if m = updated.(model); m.id == first || m.id == "" {
+		t.Fatalf("/new kept conversation %s", m.id)
+	}
+	if loaded, ok := enter("/plugins")().(pluginsLoaded); !ok || loaded.Err != nil {
+		t.Fatal("/plugins did not load the plugin configuration")
+	}
+	if enter("/mail"); m.plugin == nil || m.plugin.name != "compose" {
+		t.Fatal("/mail did not open the compose form")
+	}
+	m.plugin = nil
+	if enter("/models"); !m.busy || chat.Text(m.messages[len(m.messages)-1]) != "/models" {
+		t.Fatal("/models was not sent as chat")
 	}
 }

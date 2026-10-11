@@ -54,6 +54,8 @@ try {
   assert(models?.parts.some(p => p.type === 'text' && p.text.includes('**`demo/echo`** (current)')), '/models did not list the current model');
   const suggestions = await (await request('/commands/complete', { client: 'web', conversationId: id, text: '/model d' })).json() as { value: string }[];
   assert.deepEqual(suggestions.map(s => s.value), ['default', 'demo/echo'], '/model did not complete its argument');
+  const listed = await (await request('/commands/run', { client: 'web', conversationId: id, text: '/list' })).json() as { handled: boolean; markdown: string };
+  assert(listed.handled && listed.markdown.includes(id), '/list did not run in the service');
   const current = await (await request(`/conversations/${id}`)).json() as { model: string };
   assert.equal(current.model, 'demo/echo');
   const pending = await turn(id, { text: '/remember 喜欢简洁的回复', requestId: 'memory' });
