@@ -352,7 +352,7 @@ func TestLongPasteIsSentWhole(t *testing.T) {
 	long := strings.Repeat("x\n", 10001) + "TAIL"
 	updated, _ := m.Update(tea.PasteMsg{Content: long})
 	m = updated.(model)
-	if got := m.input.Value(); got != "[Pasted text #1 · 10002 lines]" {
+	if got := m.input.Value(); !pasted.MatchString(got) || !strings.HasPrefix(got, "[Pasted text #1 · 10002 lines · ") {
 		t.Fatalf("long paste shown as %q", got)
 	}
 	updated, _ = m.Update(tea.PasteMsg{Content: " and a note"})
@@ -385,12 +385,16 @@ func TestPastesSurviveTheirOwnLabelsAndAddUp(t *testing.T) {
 		m = updated.(model)
 		return chat.Text(m.messages[len(m.messages)-1])
 	}
-	// A paste that quotes the next paste's label keeps the quote; the label
-	// in the input still brings in the second paste.
+	// Text that looks like a placeholder, inside a paste or before one,
+	// stays as it was; only the placeholders the input made bring in pastes.
 	second := strings.Repeat("y\n", 10001) + "END"
 	first := "[Pasted text #2 · 10002 lines]\n" + strings.Repeat("x\n", 200)
 	if got := submit(fresh(), first, second); got != first+second {
 		t.Fatalf("labels in pasted text were expanded: %d bytes, want %d", len(got), len(first+second))
+	}
+	quote := "Quote [Pasted text #1 · 10002 lines]: "
+	if got := submit(fresh(), quote, second); got != quote+second {
+		t.Fatalf("a quoted label took the paste: %d bytes, want %d", len(got), len(quote+second))
 	}
 	// Short pastes that together pass the input's line limit are all kept.
 	var parts []string
