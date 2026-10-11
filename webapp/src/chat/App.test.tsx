@@ -120,3 +120,21 @@ it('ignores a late 401 for a token that was already replaced', async () => {
   expect(screen.getByRole('button', { name: /disconnect/i })).toBeTruthy();
   expect(localStorage.getItem('mob-token')).toBe('replacement');
 });
+
+it('keeps a replacement token another tab saved when this tab signs out', async () => {
+  localStorage.setItem('mob-token', 'old');
+  let rotated = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (rotated) return new Response('unauthorized', { status: 401 });
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }]);
+    return Response.json({ messages: [], active: false, model: 'demo/echo' });
+  }));
+  render(<App />);
+  await screen.findByRole('button', { name: /disconnect/i });
+  localStorage.setItem('mob-token', 'replacement');
+  rotated = true;
+  screen.getByRole('button', { name: /new/i }).click();
+  await screen.findByLabelText('Local access token');
+  expect(localStorage.getItem('mob-token')).toBe('replacement');
+});
