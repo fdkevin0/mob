@@ -95,3 +95,46 @@ func TestLargeOutputWithoutASandbox(t *testing.T) {
 		t.Fatalf("model read %d bytes: %.200s", len(read), read)
 	}
 }
+
+// Escaping can make text several times longer as JSON; the view the model
+// reads still keeps to its budget.
+func TestLargeOutputViewKeepsToItsBudget(t *testing.T) {
+	for _, text := range []string{strings.Repeat("<", 100000), strings.Repeat("\n\"", 50000), strings.Repeat("\x01", 100000), strings.Repeat("a\x01", 50000)} {
+		for _, c := range []struct {
+			file   string
+			budget int
+		}{{"", inlineOutput}, {"/workspace/.mob/outputs/x.txt", savedPreview}} {
+			got := modelOutput(text, c.file)
+			var view struct{ Head, Tail string }
+			if err := json.Unmarshal([]byte(got), &view); err != nil || len(got) > c.budget || view.Head == "" || view.Tail == "" {
+				t.Fatalf("view of %q... is %d bytes, budget %d: %v", text[:2], len(got), c.budget, err)
+			}
+		}
+	}
+}
+
+// Call IDs repeat across turns; each output keeps its own file.
+func TestEachOutputKeepsItsOwnFile(t *testing.T) {
+	s, id, m := turnFixture(t)
+	dir := t.TempDir()
+	var files []any
+	for _, output := range []string{"first", "second"} {
+		tool := echoTool("big", func(context.Context, ToolCall) (any, error) { return strings.Repeat("z", 50000) + output, nil })
+		model := &scripted{call: llm.ToolCall{ID: "call-1", Name: "big", Arguments: `{}`}}
+		if err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}, Saver: folder{dir}}, id, m, "", func(Event) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		history, _ := s.History(id)
+		files = append(files, history[len(history)-1].Parts[0]["outputFile"])
+		m, _ = s.Begin(id, NewID(), "again", "test/scripted")
+	}
+	if files[0] == files[1] {
+		t.Fatalf("both outputs saved at %v", files[0])
+	}
+	for i, output := range []string{"first", "second"} {
+		raw, err := os.ReadFile(filepath.Join(dir, filepath.Base(files[i].(string))))
+		if err != nil || !strings.HasSuffix(string(raw), output) {
+			t.Fatalf("file %d does not hold its output: %v", i, err)
+		}
+	}
+}

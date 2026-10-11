@@ -159,7 +159,7 @@ func (s *ConversationService) carryOut(ctx context.Context, conversationID strin
 	}
 	file := ""
 	if err == nil {
-		file = save(s.saver(), conversationID, d.ToolCallID, output)
+		file = save(s.saver(), conversationID, output)
 	}
 	if saveErr := s.Store.Complete(d, output, file, err); saveErr != nil {
 		return "", errors.Join(err, saveErr)

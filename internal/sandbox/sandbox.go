@@ -148,7 +148,7 @@ func (b *Sandbox) Workspace(conversationID string) (string, error) {
 	return dir, os.MkdirAll(dir, 0700)
 }
 
-// Save writes text to a file named name in the conversation's workspace,
+// Save writes text to a new file named name in the conversation's workspace,
 // where its commands can read it, and returns the file's path there.
 func (b *Sandbox) Save(conversationID, name, text string) (string, error) {
 	if name == "" || name != filepath.Base(name) || strings.HasPrefix(name, ".") {
@@ -158,14 +158,29 @@ func (b *Sandbox) Save(conversationID, name, text string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(workspace, ".mob", "outputs")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	// Commands control the workspace and can plant symlinks in it, so every
+	// step of the path is resolved within it.
+	root, err := os.OpenRoot(workspace)
+	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0600); err != nil {
+	defer root.Close()
+	dir := path.Join(".mob", "outputs")
+	if err := root.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
-	return path.Join(Workdir, ".mob", "outputs", name), nil
+	f, err := root.OpenFile(path.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(text); err != nil {
+		f.Close()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return path.Join(Workdir, dir, name), nil
 }
 
 // Exec runs command with sh in a new container. The image is pulled on first

@@ -2,8 +2,6 @@ package chat
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"maps"
 	"slices"
@@ -27,16 +25,13 @@ type Saver interface {
 }
 
 // save keeps output in saver when it is too large to read in place, and
-// returns where; "" means it is read in place or could not be saved.
-func save(saver Saver, conversationID, callID string, output any) string {
-	if saver == nil {
+// returns where; "" means it is read in place or could not be saved. Each
+// output gets a new file, as call IDs repeat across turns.
+func save(saver Saver, conversationID string, output any) string {
+	if saver == nil || len(encode(output)) <= inlineOutput {
 		return ""
 	}
-	if raw, _ := json.Marshal(output); len(raw) <= inlineOutput {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(callID))
-	path, err := saver.Save(conversationID, hex.EncodeToString(sum[:8])+".txt", readable(output))
+	path, err := saver.Save(conversationID, NewID()+".txt", readable(output))
 	if err != nil {
 		return ""
 	}
@@ -44,9 +39,10 @@ func save(saver Saver, conversationID, callID string, output any) string {
 }
 
 // modelOutput is a tool output as the model reads it: whole when small,
-// otherwise its head and tail, with where the whole is saved, if it is.
+// otherwise its head and tail, with where the whole is saved, if it is. The
+// view, as encoded, stays within its budget however much escaping adds.
 func modelOutput(output any, file string) string {
-	raw, _ := json.Marshal(output)
+	raw := encode(output)
 	if len(raw) <= inlineOutput {
 		return string(raw)
 	}
@@ -55,9 +51,28 @@ func modelOutput(output any, file string) string {
 	if file != "" {
 		budget, note = savedPreview, "The whole output is saved at "+file+"; read the parts you need with the sandbox tool, such as grep, sed -n or tail."
 	}
-	head, tail := ends(text, budget*2/3, budget/3)
-	view, _ := json.Marshal(map[string]any{"truncated": true, "bytes": len(text), "head": head, "tail": tail, "note": note})
-	return string(view)
+	head, tail := budget*2/3, budget/3
+	for {
+		h, t := ends(text, head, tail)
+		view := encode(map[string]any{"truncated": true, "bytes": len(text), "head": h, "tail": t, "note": note})
+		over := len(view) - budget
+		if over <= 0 || head+tail == 0 {
+			return string(view)
+		}
+		// Shrink by how much the view overshot, at least a byte each time.
+		head, tail = min(head-1, head*budget/len(view)), min(tail-1, tail*budget/len(view))
+		head, tail = max(0, head), max(0, tail)
+	}
+}
+
+// encode is v as JSON, without escaping HTML characters the model reads as
+// they are.
+func encode(v any) []byte {
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	_ = e.Encode(v)
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n"))
 }
 
 // readable is output as text to read or search: a string as it is, an
@@ -68,7 +83,7 @@ func readable(output any) string {
 	if s, ok := output.(string); ok {
 		return s
 	}
-	raw, _ := json.Marshal(output)
+	raw := encode(output)
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || fields == nil {
 		var indented bytes.Buffer

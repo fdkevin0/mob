@@ -22,7 +22,12 @@ and ADR 0065).
   as readable text in the conversation's workspace under
   `/workspace/.mob/outputs/`, the preview shrinks to 4000 bytes, and the note
   tells the model to read the rest with the sandbox tool. Without one, the
-  preview uses the whole 24000 bytes.
+  preview uses the whole 24000 bytes. The budget counts the preview as the
+  model receives it, escaping and note included.
+- Each saved output gets a new file name, as call IDs repeat across turns.
+  Commands control the workspace and can plant symlinks in it, so the save
+  resolves every step of its path inside the workspace and never replaces an
+  existing file.
 - The stored message keeps the whole output and where it was saved, so the
   interface shows it all and later turns read the same preview. Approved
   calls follow the same policy.
