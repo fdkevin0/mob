@@ -31,7 +31,10 @@ func (s *Server) Token() string {
 }
 
 func (s *Server) authorized(header string) bool {
-	token := s.Token()
+	return bearer(header, s.Token())
+}
+
+func bearer(header, token string) bool {
 	return token != "" && subtle.ConstantTimeCompare([]byte(header), []byte("Bearer "+token)) == 1
 }
 
@@ -48,6 +51,13 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	code := chat.NewID() + chat.NewID()
 	now := a.clock()
 	a.mu.Lock()
+	// Check again under the lock: a request authorized just before a rotation
+	// must not mint a code that claims the replacement token.
+	if !bearer(r.Header.Get("Authorization"), a.token) {
+		a.mu.Unlock()
+		http.Error(w, "unauthorized", 401)
+		return
+	}
 	if a.codes == nil {
 		a.codes = map[string]time.Time{}
 	}
@@ -87,15 +97,22 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 // ErrTokenFromEnvironment means the token is supplied through MOB_TOKEN and cannot be rotated here.
 var ErrTokenFromEnvironment = errors.New("the access token is supplied through MOB_TOKEN; change it there and restart Mob")
 
-// RotateToken replaces the token, persisting it first, and invalidates pending pairing codes.
-// Every client signed in with the old token must sign in again.
-func (s *Server) RotateToken() error {
+// errStaleToken means the caller's token was replaced while its request waited.
+var errStaleToken = errors.New("unauthorized")
+
+// rotateToken replaces the token when allowed accepts the current one, persisting
+// it first, and invalidates pending pairing codes. Every client signed in with
+// the old token must sign in again.
+func (s *Server) rotateToken(allowed func(current string) bool) error {
 	if s.PersistToken == nil {
 		return ErrTokenFromEnvironment
 	}
 	next := chat.NewID() + chat.NewID()
 	s.access.mu.Lock()
 	defer s.access.mu.Unlock()
+	if !allowed(s.access.token) {
+		return errStaleToken
+	}
 	if err := s.PersistToken(next); err != nil {
 		return err
 	}
@@ -105,8 +122,11 @@ func (s *Server) RotateToken() error {
 }
 
 func (s *Server) rotate(w http.ResponseWriter, r *http.Request) {
-	if err := s.RotateToken(); errors.Is(err, ErrTokenFromEnvironment) {
+	header := r.Header.Get("Authorization")
+	if err := s.rotateToken(func(current string) bool { return bearer(header, current) }); errors.Is(err, ErrTokenFromEnvironment) {
 		http.Error(w, err.Error(), 409)
+	} else if errors.Is(err, errStaleToken) {
+		http.Error(w, "unauthorized", 401)
 	} else if err != nil {
 		log.Printf("token rotation failed: %v", err)
 		http.Error(w, "token rotation failed", 500)

@@ -62,6 +62,20 @@ func TestRotateTokenAndPairingURL(t *testing.T) {
 		t.Fatal("old token still accepted")
 	}
 
+	// A token file that no longer matches the running service is an error, never
+	// an offline rotation that would leave the two disagreeing.
+	live := running.Server.Token()
+	stale := strings.Repeat("s", 64)
+	if err = os.WriteFile(filepath.Join(c.Dir, "token"), []byte(stale), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = RotateToken(c); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("stale token file: %v", err)
+	}
+	if token() != stale || running.Server.Token() != live {
+		t.Fatal("rotation with a stale token file changed the file or the service")
+	}
+
 	t.Setenv("MOB_TOKEN", strings.Repeat("e", 32))
 	if err = RotateToken(c); !errors.Is(err, app.ErrTokenFromEnvironment) {
 		t.Fatalf("MOB_TOKEN rotation: %v", err)

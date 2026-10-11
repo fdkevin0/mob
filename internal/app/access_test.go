@@ -95,6 +95,21 @@ func TestPairingAndTokenRotation(t *testing.T) {
 		t.Fatalf("code issued before rotation accepted: HTTP %d", status)
 	}
 
+	// A request authorized with a token that is rotated before it takes the lock
+	// neither mints a code for the replacement nor rotates again.
+	stale := httptest.NewRequest("POST", "/api/pairing", nil)
+	stale.Header.Set("Authorization", "Bearer "+old)
+	for _, handle := range []http.HandlerFunc{server.pair, server.rotate} {
+		recorder := httptest.NewRecorder()
+		handle(recorder, stale)
+		if recorder.Code != 401 {
+			t.Fatalf("stale token accepted after rotation: HTTP %d", recorder.Code)
+		}
+	}
+	if len(server.access.codes) != 0 || persisted != server.Token() {
+		t.Fatal("stale request changed pairing codes or the token")
+	}
+
 	current := server.Token()
 	server.PersistToken = func(string) error { return errors.New("disk full") }
 	if resp := post("/api/token/rotate", current, nil); resp.StatusCode != 500 || server.Token() != current {
