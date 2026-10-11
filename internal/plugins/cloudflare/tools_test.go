@@ -72,3 +72,31 @@ func TestTools(t *testing.T) {
 		t.Fatalf("large result: %v", err)
 	}
 }
+
+func TestApprovedCallUsesTheCheckedConfiguration(t *testing.T) {
+	var paths []string
+	transport := transportFunc(func(r *http.Request) (*http.Response, error) {
+		paths = append(paths, r.URL.Path)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"success":true,"result":[]}`)), Header: make(http.Header)}, nil
+	})
+	approvedConfig := Config{Transport: transport, Enabled: true, AccountID: strings.Repeat("a", 32), Token: "secret-token", DatabaseID: "test-db"}
+	// A save lands after the first read: every later read sees another database.
+	reads := 0
+	tool := Tools(func() (Config, error) {
+		reads++
+		if reads == 1 {
+			return approvedConfig, nil
+		}
+		changed := approvedConfig
+		changed.DatabaseID = "production-db"
+		return changed, nil
+	})[0]
+	approved := chat.ApprovedCall{ApprovalID: chat.NewID()}
+	approved.Input, _ = json.Marshal(request{Operation: "d1.query", Argument: "DELETE FROM users", Target: target(approvedConfig, "d1.query")})
+	if _, err := tool.Approved(context.Background(), approved); err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 1 || !strings.HasSuffix(paths[0], "/d1/database/test-db/query") {
+		t.Fatalf("approved query sent to %v", paths)
+	}
+}
