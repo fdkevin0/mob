@@ -34,8 +34,11 @@ type Server struct {
 type Servers map[string]Server
 
 // serverName is what a server may be called: its tools are named
-// mcp__<server>__<tool>, and models accept only these characters.
-var serverName = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+// mcp__<server>__<tool>, and models accept only these characters. A name
+// neither contains __ nor begins or ends with _, so the first __ after the
+// prefix always ends the server's name: fs with _read_file and fs_ with
+// read_file cannot both become mcp__fs___read_file.
+var serverName = regexp.MustCompile(`^[a-z0-9-]+(_[a-z0-9-]+)*$`)
 
 // Validate refuses a server that names neither or both of a command and a
 // URL, or that cannot be told apart in tool names.
@@ -43,8 +46,8 @@ func (s Servers) Validate() error {
 	for _, name := range s.names() {
 		server := s[name]
 		fail := func(message string) error { return fmt.Errorf("mcp_servers.%s: %s", name, message) }
-		if !serverName.MatchString(name) || strings.Contains(name, "__") {
-			return fail("names use a-z, 0-9, - and single _, up to 32 characters")
+		if len(name) > 32 || !serverName.MatchString(name) {
+			return fail("names use a-z, 0-9, - and single _ between them, up to 32 characters")
 		}
 		switch {
 		case (server.Command == "") == (server.URL == ""):
