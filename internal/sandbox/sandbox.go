@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -27,8 +28,9 @@ const (
 	// DefaultTimeout and MaxTimeout bound one command.
 	DefaultTimeout = 2 * time.Minute
 	MaxTimeout     = 5 * time.Minute
-	// outputCap bounds each of stdout and stderr returned to the model.
-	outputCap = 16 << 10
+	// outputCap bounds each of stdout and stderr a command keeps; how much of
+	// them the model reads is the conversation's to decide.
+	outputCap = 1 << 20
 	// minMemoryMiB is the least memory a shell and Python start in reliably.
 	minMemoryMiB = 64
 )
@@ -144,6 +146,26 @@ func (b *Sandbox) Workspace(conversationID string) (string, error) {
 	}
 	dir := filepath.Join(b.Root, conversationID)
 	return dir, os.MkdirAll(dir, 0700)
+}
+
+// Save writes text to a file named name in the conversation's workspace,
+// where its commands can read it, and returns the file's path there.
+func (b *Sandbox) Save(conversationID, name, text string) (string, error) {
+	if name == "" || name != filepath.Base(name) || strings.HasPrefix(name, ".") {
+		return "", errors.New("invalid file name")
+	}
+	workspace, err := b.Workspace(conversationID)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(workspace, ".mob", "outputs")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0600); err != nil {
+		return "", err
+	}
+	return path.Join(Workdir, ".mob", "outputs", name), nil
 }
 
 // Exec runs command with sh in a new container. The image is pulled on first

@@ -88,10 +88,12 @@ func TestTools(t *testing.T) {
 	if _, err := tool.Approved(context.Background(), approved); err != nil || paths[1] != "/client/v4/accounts/"+config.AccountID+"/d1/database/db/query" {
 		t.Fatalf("approved query: %v %v", paths, err)
 	}
-	result = `{"success":true,"result":"` + strings.Repeat("x", toolOutput) + `"}`
+	// A large result comes back whole; the conversation decides what the model reads.
+	big := strings.Repeat("x", 100000)
+	result = `{"success":true,"result":"` + big + `"}`
 	output, err := run(map[string]any{"operation": "kv.get", "argument": "big"})
-	if out, ok := output.(map[string]any); err != nil || !ok || out["truncated"] != true || len(out["result"].(string)) != toolOutput {
-		t.Fatalf("large result: %v", err)
+	if raw, _ := json.Marshal(output); err != nil || !strings.Contains(string(raw), big) {
+		t.Fatalf("large result cut: %d bytes, %v", len(raw), err)
 	}
 }
 
