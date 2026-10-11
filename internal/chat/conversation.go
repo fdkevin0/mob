@@ -25,6 +25,7 @@ type ConversationService struct {
 	// Commands answers slash commands; register more before serving.
 	Commands *Registry
 	mu       sync.Mutex
+	sandbox  Sandbox
 	active   map[string]context.CancelFunc
 	wg       sync.WaitGroup
 	closing  bool
@@ -100,7 +101,10 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 		}
 		return err
 	}
-	err = Run(ctx, s.Store, model, input.ID, message, note, emit)
+	s.mu.Lock()
+	box := s.sandbox
+	s.mu.Unlock()
+	err = Run(ctx, s.Store, model, box, input.ID, message, note, emit)
 	if err != nil {
 		return err
 	}
@@ -112,6 +116,14 @@ func NewConversation(store *Store, models Models) *ConversationService {
 	s.Commands.Register(s.builtins()...)
 	return s
 }
+
+// SetSandbox changes the sandbox later turns use; nil disables it.
+func (s *ConversationService) SetSandbox(box Sandbox) {
+	s.mu.Lock()
+	s.sandbox = box
+	s.mu.Unlock()
+}
+
 func (s *ConversationService) Active(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

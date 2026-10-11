@@ -105,6 +105,10 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	}
 	registry.Demo = c.Demo
 	server := app.NewServer(store, registry, connection.Token)
+	if err := server.ApplySandbox(c.Sandbox, c.Dir); err != nil {
+		cleanup()
+		return nil, err
+	}
 	done := make(chan struct{})
 	var shutdown sync.Once
 	if background {

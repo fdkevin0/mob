@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/adrg/xdg"
+	"github.com/fdkevin0/mob/internal/sandbox"
 	"github.com/spf13/pflag"
 )
 
 func cleanEnvironment(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_CONTAINER_RUNTIME"} {
+	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE"} {
 		t.Setenv(name, "")
 	}
 }
@@ -26,7 +27,7 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("addr: 127.0.0.1:1001\ndemo: true\ncontainer_runtime: apple\n")
+	write("addr: 127.0.0.1:1001\ndemo: true\nsandbox:\n  enabled: true\n  runtime: apple\n")
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	AddFlags(flags)
 	if err := flags.Parse([]string{"--config", path, "--addr", "127.0.0.1:1002", "--demo=false"}); err != nil {
@@ -44,14 +45,16 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Addr != "127.0.0.1:1002" || got.Demo || got.ContainerRuntime != "apple" {
+	if got.Addr != "127.0.0.1:1002" || got.Demo || got.Sandbox != (sandbox.Settings{Enabled: true, Runtime: "apple", Image: sandbox.DefaultImage}) {
 		t.Fatal("flags/environment precedence failed")
 	}
-	t.Setenv("MOB_CONTAINER_RUNTIME", "wslc")
-	if got, err = loader.Read(); err != nil || got.ContainerRuntime != "wslc" {
-		t.Fatal("container runtime not read from the environment")
+	t.Setenv("MOB_SANDBOX_RUNTIME", "wslc")
+	t.Setenv("MOB_SANDBOX_IMAGE", "alpine:3.20")
+	if got, err = loader.Read(); err != nil || got.Sandbox.Runtime != "wslc" || got.Sandbox.Image != "alpine:3.20" {
+		t.Fatal("sandbox settings not read from the environment")
 	}
-	t.Setenv("MOB_CONTAINER_RUNTIME", "")
+	t.Setenv("MOB_SANDBOX_RUNTIME", "")
+	t.Setenv("MOB_SANDBOX_IMAGE", "")
 	// Freeze parsed flags: later changes to a caller's FlagSet cannot alter the loader.
 	flags.Set("addr", "127.0.0.1:1004")
 	got, err = loader.Read()
@@ -66,7 +69,7 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 		os.Chmod(path, 0600)
 	}
 	// Providers and keys live in providers.json; the old fields are refused.
-	for _, body := range []string{"demo: [secret-invalid", "unknown_field: secret-unknown", "data_dir: ''", "api_key: secret-key", "base_url: https://example.org", "model: secret-model", "container_runtime: secret-docker", strings.Repeat("#", (64<<10)+1)} {
+	for _, body := range []string{"demo: [secret-invalid", "unknown_field: secret-unknown", "data_dir: ''", "api_key: secret-key", "base_url: https://example.org", "model: secret-model", "sandbox:\n  runtime: secret-docker", "sandbox:\n  image: --secret", "sandbox:\n  secret_field: 1", strings.Repeat("#", (64<<10)+1)} {
 		write(body)
 		_, err = loader.Read()
 		if err == nil || strings.Contains(err.Error(), "secret-") {

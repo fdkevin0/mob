@@ -14,11 +14,11 @@ import (
 
 func TestContainerCommand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("container_runtime: wslc\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("sandbox:\n  runtime: wslc\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("MOB_CONFIG", path)
-	t.Setenv("MOB_CONTAINER_RUNTIME", "")
+	t.Setenv("MOB_SANDBOX_RUNTIME", "")
 	var calls []string
 	var chosen string
 	newRuntime = func(name string) (*container.Runtime, error) {
@@ -52,14 +52,17 @@ func TestContainerCommand(t *testing.T) {
 	if err != nil || chosen != "wslc" || !strings.Contains(output, "wslc (wslc)") || !strings.Contains(output, "Ready.") {
 		t.Fatalf("status: %q %v", output, err)
 	}
-	output, err = execute("container", "run", "--container-runtime", "apple", "-e", "A=1", "-v", `C:\work:/work`, "-w", "/work", "alpine", "ls", "-la")
+	t.Setenv("MOB_SANDBOX_RUNTIME", "apple")
+	output, err = execute("container", "run", "-e", "A=1", "-v", `C:\work:/work`, "-w", "/work", "alpine", "ls", "-la")
 	if err != nil || output != "out\n" || calls[1] != `container run --rm -w /work -e A=1 -v C:\work:/work alpine ls -la` {
 		t.Fatalf("run: %q %v %q", output, err, calls)
 	}
-	if _, err = execute("container", "run", "--container-runtime", "containerd", "alpine", "fail"); err == nil || !strings.Contains(err.Error(), "status 2") {
+	t.Setenv("MOB_SANDBOX_RUNTIME", "containerd")
+	if _, err = execute("container", "run", "alpine", "fail"); err == nil || !strings.Contains(err.Error(), "status 2") {
 		t.Fatalf("nonzero exit not reported: %v", err)
 	}
-	if _, err = execute("container", "status", "--container-runtime", "docker"); err == nil {
+	t.Setenv("MOB_SANDBOX_RUNTIME", "docker")
+	if _, err = execute("container", "status"); err == nil {
 		t.Fatal("unknown runtime accepted")
 	}
 }

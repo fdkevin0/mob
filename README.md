@@ -127,7 +127,7 @@ images and attachments are not implemented in this first version.
 | `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
 | `MOB_TOKEN` | Optional existing local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
 | `MOB_DEMO` | `1` makes the offline `demo/echo` model the default |
-| `MOB_CONTAINER_RUNTIME` | Empty uses the platform's own: `containerd` (Linux), `apple` (macOS), `wslc` (Windows) |
+| `MOB_SANDBOX_ENABLED`, `MOB_SANDBOX_RUNTIME`, `MOB_SANDBOX_IMAGE` | Override the `sandbox` section; see [Sandbox](#sandbox) |
 
 The CLI uses [Cobra](https://github.com/spf13/cobra), paths use
 [adrg/xdg](https://github.com/adrg/xdg), and configuration merging uses
@@ -150,7 +150,7 @@ are reused instead of silently creating an empty workspace elsewhere.
 ./build/mob start --config /path/to/config.yaml
 ```
 
-Persistent flags: `--config`, `--data-dir`, `--state-dir`, `--addr`, `--demo`, `--container-runtime`.
+Persistent flags: `--config`, `--data-dir`, `--state-dir`, `--addr`, `--demo`.
 `config check` validates config.yaml and providers.json without printing credentials. Start/status/stop must use the
 same startup address/data-directory overrides. Background children preserve the
 original flags and config path, rather than freezing file values into environment
@@ -178,20 +178,35 @@ opening the same SQLite file. Authentication represents one local user, not a
 multi-user permission system. Browser dev origins on localhost port 5173 and the
 Wails WebView origin are supported.
 
-### Container runtime
+### Sandbox
 
-Mob runs containers with the platform's native runtime (ADR 0055): containerd
-through `nerdctl` on Linux, Apple's [container](https://github.com/apple/container)
-on macOS and WSL containers (`wslc`) on Windows.
+With the sandbox enabled, the model can run any shell command in a throwaway
+container, without asking: install packages, run code, fetch from the network.
+Only the conversation's workspace (`data_dir/sandbox/<conversation>`, mounted
+at `/workspace`) persists between commands, and it is the only host path the
+container sees (ADR 0055).
+
+```yaml
+sandbox:
+  enabled: true
+  runtime: ""            # containerd (Linux), apple (macOS), wslc (Windows); empty: the platform's own
+  image: python:3.13-slim
+```
+
+Linux uses containerd through `nerdctl` (with CNI plugins; rootless is
+recommended), macOS uses Apple's [container](https://github.com/apple/container)
+after `container system start`, and Windows uses WSL containers (`wslc`). Check
+the runtime before enabling it:
 
 ```bash
 mob container status                       # which runtime, and is it running
-mob container pull alpine:3.20
-mob container run -v "$PWD:/work" -w /work -e NAME=value alpine:3.20 ls -la
+mob container pull python:3.13-slim
+mob container run -v "$PWD:/work" -w /work alpine:3.20 ls -la
 ```
 
-Containers are removed when they exit; `run` returns the container's exit status
-as an error when it is nonzero.
+A command stops after 2 minutes by default (at most 5) and its container is
+removed; output is cut at 16 KiB per stream. Network access and CPU/memory are
+not limited.
 
 ## Plugins and cloud connections
 
@@ -337,6 +352,8 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
   Go tests reject stale generated types and invalid TUI form paths.
 - `internal/container`: runs OCI images through the platform's container CLI
   (`nerdctl`, `container` or `wslc`) behind one `Spec`; `mob container` drives it.
+  `internal/sandbox` builds the model's `sandbox` tool on it: per-conversation
+  workspaces, pulls, timeouts and output caps.
 - `internal/app`: explicitly wires the conversation/configuration/plugin modules,
   manages poller replacement and exposes authenticated loopback HTTP adapters.
   `internal/local`: process ownership, database lock and background lifecycle.
@@ -371,7 +388,7 @@ GUI send review and the TUI configuration wizard. These tests use local fixtures
 fake providers, not paid models or real email/Telegram recipients.
 
 Not yet implemented: bookmarks, mail OAuth/multiple accounts/background ingestion,
-attachments, MCP, cloud sandbox/shell, automatic semantic memory retrieval/extraction,
+attachments, MCP, a cloud sandbox (the local container sandbox is in place), automatic semantic memory retrieval/extraction,
 compaction, scheduled turns, deep tasks and usage accounting. Local saved facts are included directly in model context; they
 are not a replacement for Vectorize. Recent model context is capped at 40 messages;
 older history remains visible in the UI. Requests in progress are marked interrupted

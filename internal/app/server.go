@@ -12,6 +12,7 @@ import (
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/protocol"
 	"github.com/fdkevin0/mob/internal/provider"
+	"github.com/fdkevin0/mob/internal/sandbox"
 	"github.com/fdkevin0/mob/internal/version"
 	"io"
 	"io/fs"
@@ -30,6 +31,7 @@ type Server struct {
 	Configuration      *configuration.Service
 	Providers          *provider.Registry
 	plugins            pluginRuntime
+	sandbox            sandbox.Settings
 	*chat.ConversationService
 	Token string
 }

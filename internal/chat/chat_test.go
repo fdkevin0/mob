@@ -11,10 +11,12 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/llm/demo"
 	"github.com/fdkevin0/mob/internal/llm/openai"
+	"github.com/fdkevin0/mob/internal/sandbox"
 )
 
 func TestPersistenceApprovalAndRecovery(t *testing.T) {
@@ -41,7 +43,7 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events []Event
-	err = Run(context.Background(), s, demo.Model{}, c.ID, m, "", func(e Event) error { events = append(events, e); return nil })
+	err = Run(context.Background(), s, demo.Model{}, nil, c.ID, m, "", func(e Event) error { events = append(events, e); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +182,7 @@ func TestEngineContinuesAfterTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := openai.New(llm.Ref{Provider: "test", Model: "test"}, llm.Info{ID: "test", Tools: true}, openai.Config{BaseURL: upstream.URL, Key: "test"})
-	err = Run(context.Background(), s, model, c.ID, m, "", func(Event) error { return nil })
+	err = Run(context.Background(), s, model, nil, c.ID, m, "", func(Event) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,5 +193,42 @@ func TestEngineContinuesAfterTool(t *testing.T) {
 	last := history[len(history)-1]
 	if calls.Load() != 2 || last.Parts[0]["state"] != "output-available" || Text(last) != "Time checked." {
 		t.Fatalf("bad tool continuation: %+v", last)
+	}
+}
+
+type fakeSandbox struct{ conversation, command string }
+
+func (f *fakeSandbox) Exec(_ context.Context, conversationID, command string, _ time.Duration) (sandbox.Result, error) {
+	f.conversation, f.command = conversationID, command
+	return sandbox.Result{ExitCode: 0, Stdout: "Linux\n"}, nil
+}
+
+func TestSandboxRunsWithoutApproval(t *testing.T) {
+	s, err := OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c, _ := s.Create()
+	m, _ := s.Begin(c.ID, NewID(), "/sandbox uname", "demo/echo")
+	// Without a sandbox the tool is not offered, so the demo model just echoes.
+	if err = Run(context.Background(), s, demo.Model{}, nil, c.ID, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = s.Begin(c.ID, NewID(), "/sandbox uname", "demo/echo")
+	box := &fakeSandbox{}
+	var kinds []EventKind
+	if err = Run(context.Background(), s, demo.Model{}, box, c.ID, m, "", func(e Event) error { kinds = append(kinds, e.Kind); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	history, _ := s.History(c.ID)
+	last := history[len(history)-1]
+	if box.conversation != c.ID || box.command != "uname" || last.Parts[0]["state"] != "output-available" || !strings.Contains(Text(last), "Linux") {
+		t.Fatalf("sandbox call: %+v %+v", box, last)
+	}
+	for _, k := range kinds {
+		if k == ApprovalRequested {
+			t.Fatal("sandbox asked for approval")
+		}
 	}
 }

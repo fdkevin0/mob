@@ -34,6 +34,8 @@ type Mount struct {
 
 // Spec describes one container run. The container is removed when it exits.
 type Spec struct {
+	// Name lets Remove stop the container if its CLI is interrupted.
+	Name    string
 	Image   string
 	Command []string
 	Env     []string // KEY=VALUE
@@ -56,9 +58,9 @@ type Runtime struct {
 	Name, Binary string
 	// prefix precedes every subcommand, e.g. nerdctl's namespace.
 	prefix []string
-	// probe checks that the CLI can reach its service.
-	probe []string
-	Run   Runner
+	// probe checks that the CLI can reach its service; remove force-deletes a container.
+	probe, remove []string
+	Run           Runner
 }
 
 // Default is the runtime native to goos, or "" when there is none.
@@ -84,11 +86,11 @@ func New(name string) (*Runtime, error) {
 	case Containerd:
 		// nerdctl is containerd's own Docker-compatible CLI; a dedicated
 		// namespace keeps Mob's images and containers apart from others.
-		r.Binary, r.prefix, r.probe = "nerdctl", []string{"--namespace", "mob"}, []string{"info"}
+		r.Binary, r.prefix, r.probe, r.remove = "nerdctl", []string{"--namespace", "mob"}, []string{"info"}, []string{"rm", "-f"}
 	case Apple:
-		r.Binary, r.probe = "container", []string{"system", "status"}
+		r.Binary, r.probe, r.remove = "container", []string{"system", "status"}, []string{"delete", "--force"}
 	case WSLC:
-		r.Binary, r.probe = "wslc", []string{"image", "ls"}
+		r.Binary, r.probe, r.remove = "wslc", []string{"image", "ls"}, []string{"rm", "-f"}
 	case "":
 		return nil, fmt.Errorf("%w: no native container runtime for %s", ErrUnavailable, runtime.GOOS)
 	default:
@@ -105,7 +107,7 @@ func (r *Runtime) Check(ctx context.Context) error {
 		return fmt.Errorf("%w: %s: %v", ErrUnavailable, r.Binary, err)
 	}
 	if code != 0 {
-		return fmt.Errorf("%w: %s %s: %s", ErrUnavailable, r.Binary, strings.Join(r.probe, " "), firstLine(stderr.String()))
+		return fmt.Errorf("%w: %s %s: %s", ErrUnavailable, r.Binary, strings.Join(r.probe, " "), lastLine(stderr.String()))
 	}
 	return nil
 }
@@ -121,7 +123,24 @@ func (r *Runtime) Pull(ctx context.Context, image string) error {
 		return err
 	}
 	if code != 0 {
-		return fmt.Errorf("pull %s: %s", image, firstLine(stderr.String()))
+		return fmt.Errorf("pull %s: %s", image, lastLine(stderr.String()))
+	}
+	return nil
+}
+
+// Remove force-deletes a named container. Interrupting a CLI does not
+// always stop the container it started, so callers remove it themselves.
+func (r *Runtime) Remove(ctx context.Context, name string) error {
+	if name == "" || strings.HasPrefix(name, "-") {
+		return errors.New("container name is required and must not start with -")
+	}
+	var stderr bytes.Buffer
+	code, err := r.Run(ctx, r.Binary, r.args(append(r.remove, name)...), nil, io.Discard, &stderr)
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		return fmt.Errorf("remove %s: %s", name, lastLine(stderr.String()))
 	}
 	return nil
 }
@@ -152,6 +171,9 @@ func (r *Runtime) RunArgs(spec Spec) ([]string, error) {
 		return nil, errors.New("image is required and must not start with -")
 	}
 	args := []string{"run", "--rm"}
+	if spec.Name != "" {
+		args = append(args, "--name", spec.Name)
+	}
 	if spec.Stdin != nil {
 		args = append(args, "-i")
 	}
@@ -192,13 +214,11 @@ func run(ctx context.Context, name string, args []string, stdin io.Reader, stdou
 	return 0, nil
 }
 
-func firstLine(s string) string {
+// lastLine is the last line a CLI printed, usually its error after any logging.
+func lastLine(s string) string {
 	s = strings.TrimSpace(s)
-	if line, _, ok := strings.Cut(s, "\n"); ok {
-		return line
-	}
 	if s == "" {
 		return "no output"
 	}
-	return s
+	return s[strings.LastIndex(s, "\n")+1:]
 }
