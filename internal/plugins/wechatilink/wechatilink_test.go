@@ -266,3 +266,57 @@ func TestDecisionShowsTheNextApproval(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopAnswersEachMessageOnce(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "test.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	conversation := chat.NewConversation(store, provider.Offline())
+	defer conversation.Close()
+	svc := &wechatilink.Service{Store: store, Conversation: conversation}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	polls := 0
+	var sent []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /ilink/bot/getupdates", func(w http.ResponseWriter, r *http.Request) {
+		// The same message arrives twice, as after a restart before the
+		// cursor was saved.
+		if polls++; polls > 2 {
+			cancel()
+			json.NewEncoder(w).Encode(map[string]any{"ret": 0})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ret": 0, "msgs": []map[string]any{{
+			"msg_id": "m1", "from_user_id": "wx_alice", "context_token": "ctx",
+			"item_list": []map[string]any{{"type": 1, "text_item": map[string]string{"text": "/help"}}},
+		}}})
+	})
+	mux.HandleFunc("POST /ilink/bot/sendmessage", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Msg struct {
+				ItemList []struct {
+					TextItem struct{ Text string } `json:"text_item"`
+				} `json:"item_list"`
+			} `json:"msg"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		sent = append(sent, req.Msg.ItemList[0].TextItem.Text)
+		json.NewEncoder(w).Encode(map[string]int{"ret": 0})
+	})
+	mux.HandleFunc("POST /ilink/bot/sendtyping", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]int{"ret": 0})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	cfg := wechatilink.Config{Enabled: true, BaseURL: server.URL, BotToken: "tok", BotID: "bot", AllowedUsers: []string{"wx_alice"}}
+	svc.Loop(ctx, cfg, func(string) {})
+	if len(sent) != 1 || !strings.Contains(sent[0], "Mob 已连接") || !strings.Contains(sent[0], "/approve") {
+		t.Fatalf("sent: %q", sent)
+	}
+	if d, err := store.Delivery("wx:bot:m1"); err != nil || d.State != "sent" {
+		t.Fatalf("delivery: %+v (err: %v)", d, err)
+	}
+}
