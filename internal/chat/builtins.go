@@ -22,8 +22,10 @@ func (s *ConversationService) builtins() []Command {
 		{CommandSpec: CommandSpec{"new", "/new", "Start a new conversation", approving, false}, Run: s.newConversation},
 		{CommandSpec: CommandSpec{"list", "/list", "List conversations", interactive, false}, Run: s.listConversations},
 		{CommandSpec: CommandSpec{"open", "/open ID", "Switch to a conversation", interactive, false}, Args: []Argument{s.conversations}, Run: s.openConversation},
-		{CommandSpec: CommandSpec{"approve", "/approve [ID]", "Approve a pending tool request", approving, false}, Args: []Argument{s.approvals}, Run: s.decide(true)},
+		{CommandSpec: CommandSpec{"approve", "/approve [ID] [conversation|always]", "Approve a pending tool request, optionally remembering it", approving, false}, Args: []Argument{s.approvals, Choices(RememberConversation, RememberAlways)}, Run: s.decide(true)},
 		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", approving, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
+		{CommandSpec: CommandSpec{"grants", "/grants", "List remembered approvals", approving, false}, OwnerOnly: true, Run: s.listGrants},
+		{CommandSpec: CommandSpec{"revoke", "/revoke ID|all", "Forget a remembered approval", approving, false}, OwnerOnly: true, Args: []Argument{s.grantIDs}, Run: s.revokeGrant},
 		{CommandSpec: CommandSpec{"help", "/help", "Show commands", []string{ClientTelegram}, false}, Run: s.help},
 	}
 }
@@ -115,16 +117,23 @@ func (s *ConversationService) openConversation(_ context.Context, call CommandCa
 }
 
 // decide resolves the named approval, or the only pending one when no ID is
-// given. /deny may say why after the ID, or alone when one request is pending.
+// given. /approve may remember the approval for this conversation or always;
+// /deny may say why, after the ID or alone when one request is pending.
 func (s *ConversationService) decide(approved bool) func(context.Context, CommandCall) (CommandResult, error) {
-	form := map[bool]string{true: "/approve ID", false: "/deny ID [reason]"}[approved]
+	form := map[bool]string{true: "/approve [ID] [conversation|always]", false: "/deny [ID] [reason]"}[approved]
 	return func(_ context.Context, call CommandCall) (CommandResult, error) {
-		id, reason := "", strings.TrimSpace(call.Rest)
+		id, rest := "", strings.TrimSpace(call.Rest)
 		if len(call.Fields) > 0 && len(call.Fields[0]) == 32 {
 			id = call.Fields[0]
-			reason = strings.TrimSpace(strings.TrimPrefix(reason, id))
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, id))
 		}
-		if approved && reason != "" {
+		a := &Action{Kind: Decide, Approved: approved}
+		switch {
+		case !approved:
+			a.Reason = rest
+		case rest == "" || rest == RememberConversation || rest == RememberAlways:
+			a.Remember = rest
+		default:
 			return CommandResult{Markdown: "Use `" + form + "`."}, nil
 		}
 		if id == "" {
@@ -134,8 +143,57 @@ func (s *ConversationService) decide(approved bool) func(context.Context, Comman
 			}
 			id = pending[0].Value
 		}
-		return CommandResult{Action: &Action{Kind: Decide, ApprovalID: id, Approved: approved, Reason: reason}}, nil
+		a.ApprovalID = id
+		return CommandResult{Action: a}, nil
 	}
+}
+
+// listGrants shows the remembered approvals and how to revoke them.
+func (s *ConversationService) listGrants(context.Context, CommandCall) (CommandResult, error) {
+	grants, err := s.Store.Grants()
+	if err != nil {
+		return CommandResult{}, err
+	}
+	if len(grants) == 0 {
+		return CommandResult{Markdown: "No approvals are remembered. Approve with `/approve ID always` or `/approve ID conversation` to remember one."}, nil
+	}
+	var b strings.Builder
+	b.WriteString("| Tool | Covers | Where | Revoke |\n| --- | --- | --- | --- |\n")
+	for _, g := range grants {
+		covers, where := g.Scope, "every conversation"
+		if covers == "" {
+			covers = "every call"
+		}
+		if g.ConversationID != "" {
+			where = "conversation `" + g.ConversationID + "`"
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | `/revoke %s` |\n", Cell(g.Tool), Cell(covers), where, g.ID)
+	}
+	b.WriteString("\n`/revoke all` forgets every one.")
+	return CommandResult{Markdown: b.String()}, nil
+}
+
+func (s *ConversationService) revokeGrant(_ context.Context, call CommandCall) (CommandResult, error) {
+	if len(call.Fields) != 1 {
+		return CommandResult{Markdown: "Use `/revoke ID` or `/revoke all`; `/grants` lists them."}, nil
+	}
+	n, err := s.Store.Revoke(call.Fields[0])
+	if err != nil {
+		return CommandResult{}, err
+	}
+	if n == 0 {
+		return CommandResult{Markdown: "No remembered approval has ID `" + Cell(call.Fields[0]) + "`."}, nil
+	}
+	return CommandResult{Markdown: fmt.Sprintf("Forgot %d remembered approval(s); those calls will ask again.", n)}, nil
+}
+
+func (s *ConversationService) grantIDs(context.Context, CommandCall, []string) []Suggestion {
+	grants, _ := s.Store.Grants()
+	list := []Suggestion{{Value: "all", Label: "all", Detail: "every remembered approval"}}
+	for _, g := range grants {
+		list = append(list, Suggestion{Value: g.ID, Label: g.Tool, Detail: g.Scope})
+	}
+	return list
 }
 
 func (s *ConversationService) help(_ context.Context, call CommandCall) (CommandResult, error) {

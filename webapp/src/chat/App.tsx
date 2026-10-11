@@ -154,7 +154,7 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction 
             if (part.type === 'reasoning') return <details className="reasoning" key={index}><summary>Reasoning</summary><p>{part.text}</p></details>;
             if (isToolUIPart(part)) return <section className="tool-card" key={part.toolCallId}><strong>{part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5)}</strong><span className="tool-state">{part.state}</span>
               <pre>{JSON.stringify(part.input, null, 2)}</pre>
-              {part.state === 'approval-requested' && <ApprovalPrompt question={part.type === 'tool-remember' ? 'Save this fact locally?' : 'Allow this request?'} busy={busy} decide={(approved, reason) => void decide(part.approval.id, approved, reason)} />}
+              {part.state === 'approval-requested' && <ApprovalPrompt question={part.type === 'tool-remember' ? 'Save this fact locally?' : 'Allow this request?'} busy={busy} decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)} />}
               {part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
               {part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
             </section>;
@@ -179,10 +179,17 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction 
   </>;
 }
 
-/** ApprovalPrompt asks the user to decide a tool request; a denial may say why, and Mob answers it. */
-function ApprovalPrompt({ question, busy, decide }: { question: string; busy: boolean; decide: (approved: boolean, reason?: string) => void }) {
+/**
+ * ApprovalPrompt asks the user to decide a tool request. An approval may be remembered for this conversation or always,
+ * so calls like it stop asking; a denial may say why, and Mob answers it.
+ */
+function ApprovalPrompt({ question, busy, decide }: { question: string; busy: boolean; decide: (approved: boolean, reason?: string, remember?: string) => void }) {
   const [reason, setReason] = useState('');
-  return <div><p>{question} Approval expires after one hour.</p>
+  const approving = busy || reason.trim() !== '';
+  return <div><p>{question} Approval expires after one hour. Remembered approvals are listed by /grants.</p>
     <input aria-label="Reason for denying (optional)" placeholder="Reason for denying (optional)" value={reason} maxLength={2000} onChange={e => setReason(e.target.value)} />
-    <button disabled={busy || reason.trim() !== ''} onClick={() => decide(true)}>Approve</button><button className="secondary" disabled={busy} onClick={() => decide(false, reason)}>Deny</button></div>;
+    <button disabled={approving} onClick={() => decide(true)}>Approve</button>
+    <button className="secondary" disabled={approving} onClick={() => decide(true, undefined, 'conversation')}>Allow in this conversation</button>
+    <button className="secondary" disabled={approving} onClick={() => decide(true, undefined, 'always')}>Always allow</button>
+    <button className="secondary" disabled={busy} onClick={() => decide(false, reason)}>Deny</button></div>;
 }

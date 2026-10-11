@@ -6,7 +6,9 @@ import (
 	"errors"
 	"math"
 	"net"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -116,6 +118,15 @@ func Tools(config func() (Config, error)) []chat.Tool {
 				}
 				return map[string]bool{"sent": true}, nil
 			},
+			// Remembering an approval covers mail to the same recipients from
+			// the same sender.
+			Scope: func(input json.RawMessage) string {
+				var mail outgoing
+				if json.Unmarshal(input, &mail) != nil {
+					return ""
+				}
+				return "to " + recipients(mail.To) + " from " + mail.Sender
+			},
 		},
 	}
 }
@@ -126,6 +137,19 @@ type outgoing struct {
 	// Sender names the From address and SMTP account when the user was asked;
 	// an approved mail is sent only while they are unchanged.
 	Sender string `json:"sender"`
+}
+
+// recipients is to's addresses, trimmed, lowercased and sorted, so the same
+// people written in another order or case are the same recipients.
+func recipients(to string) string {
+	var list []string
+	for _, address := range strings.Split(to, ",") {
+		if address = strings.ToLower(strings.TrimSpace(address)); address != "" {
+			list = append(list, address)
+		}
+	}
+	slices.Sort(list)
+	return strings.Join(slices.Compact(list), ", ")
 }
 
 func sender(c Config) string {

@@ -57,8 +57,11 @@ func (s *ConversationService) Model(id string) (string, error) {
 
 func (s *ConversationService) Execute(parent context.Context, input ChatRequest, emit func(Event) error) error {
 	input.Text = strings.TrimSpace(input.Text)
-	if len(input.ID) != 32 || len(input.Text) > 16000 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32 || len(input.Approval.Reason) > 2000 || input.Approval.Approved && input.Approval.Reason != "")) {
+	if len(input.ID) != 32 || len(input.Text) > 16000 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32 || len(input.Approval.Reason) > 2000 || input.Approval.Approved && input.Approval.Reason != "" || !rememberable(*input.Approval))) {
 		return &CommandError{400, "invalid conversation, text, request ID, or approval"}
+	}
+	if input.Approval != nil && input.Approval.Remember != "" && !input.Owner {
+		return &CommandError{403, "only the owner of this Mob can remember approvals"}
 	}
 	if _, err := s.Store.History(input.ID); err != nil {
 		return err
@@ -101,6 +104,9 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 		}
 		switch {
 		case input.Approval.Approved:
+			if err = s.remember(input.ID, decision, input.Approval.Remember); err != nil {
+				return err
+			}
 			if note, err = s.carryOut(ctx, input.ID, decision, input.Owner); err != nil {
 				return err
 			}
@@ -156,6 +162,27 @@ func (s *ConversationService) carryOut(ctx context.Context, conversationID strin
 	return "The user approved " + d.Tool + " and it ran. Result: " + string(result) + ". Confirm the result.", nil
 }
 
+// rememberable reports whether a's Remember is one an answer may carry.
+func rememberable(a Answer) bool {
+	return a.Remember == "" || a.Approved && (a.Remember == RememberConversation || a.Remember == RememberAlways)
+}
+
+// remember records the owner's choice to approve calls like d from now on.
+func (s *ConversationService) remember(conversationID string, d Decision, how string) error {
+	if how == "" {
+		return nil
+	}
+	tools := s.Tools.List()
+	i := slices.IndexFunc(tools, func(t Tool) bool { return t.Name == d.Tool })
+	if i < 0 || tools[i].Approved == nil {
+		return nil
+	}
+	if how == RememberAlways {
+		conversationID = ""
+	}
+	return s.Store.AddGrant(conversationID, d.Tool, tools[i].scope(d.Input))
+}
+
 // agent is what the owner's or another caller's next turn uses: the registered
 // tools available to them, the sandbox when one is set, and the hooks.
 func (s *ConversationService) agent(owner bool) Agent {
@@ -168,7 +195,7 @@ func (s *ConversationService) agent(owner bool) Agent {
 	if box != nil {
 		tools = append(tools, sandboxTool(box))
 	}
-	return Agent{Tools: tools, Hooks: s.Hooks}
+	return Agent{Tools: tools, Hooks: s.Hooks, Owner: owner}
 }
 
 // recall gives the model the conversation's saved facts.
@@ -220,6 +247,9 @@ type Answer struct {
 	ID       string `json:"id"`
 	Approved bool   `json:"approved"`
 	Reason   string `json:"reason,omitempty"`
+	// Remember, on an approval, is RememberConversation or RememberAlways:
+	// the owner's later calls of the tool with the same scope run without asking.
+	Remember string `json:"remember,omitempty"`
 }
 
 type ChatRequest struct {

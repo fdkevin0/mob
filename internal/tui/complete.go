@@ -136,7 +136,7 @@ func (m model) apply(a *chat.Action) (tea.Model, tea.Cmd) {
 		return m, m.load(a.ConversationID, false)
 	case chat.Decide:
 		request := chat.ChatRequest{ID: m.id, RequestID: chat.NewID()}
-		request.Approval = &chat.Answer{ID: a.ApprovalID, Approved: a.Approved, Reason: a.Reason}
+		request.Approval = &chat.Answer{ID: a.ApprovalID, Approved: a.Approved, Reason: a.Reason, Remember: a.Remember}
 		cmd := m.stream(request)
 		m.render()
 		return m, cmd
