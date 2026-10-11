@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/provider"
@@ -217,5 +218,46 @@ func TestCommandRoutes(t *testing.T) {
 	}
 	if result, status := run("/model"); status != 200 || result.Handled {
 		t.Fatalf("/model must stay a chat command: %+v", result)
+	}
+}
+
+func TestSnapshotShowsExpiredApprovals(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chat.sqlite")
+	s, err := chat.OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c, _ := s.Create()
+	m, err := s.Begin(c.ID, chat.NewID(), "go", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Parts = append(m.Parts, chat.Part{"type": "tool-remember", "toolCallId": "call", "state": "input-available"})
+	if _, err = s.RequestApproval(c.ID, m, "call", map[string]string{"fact": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	// Another connection moves the approval's expiry into the past.
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec("UPDATE approvals SET expires_at=0"); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	req := httptest.NewRequest("GET", "http://127.0.0.1/api/conversations/"+c.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+server.Token())
+	w := httptest.NewRecorder()
+	server.Handler(nil).ServeHTTP(w, req)
+	var snapshot struct{ Messages []chat.Message }
+	if err = json.Unmarshal(w.Body.Bytes(), &snapshot); err != nil || w.Code != 200 {
+		t.Fatalf("snapshot: %d %s", w.Code, w.Body)
+	}
+	parts := snapshot.Messages[len(snapshot.Messages)-1].Parts
+	if state := parts[len(parts)-1]["state"]; state != "output-error" {
+		t.Fatalf("an expired approval is offered: %v", parts)
 	}
 }
