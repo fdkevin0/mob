@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.go; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.go; localStorage.clear(); sessionStorage.clear(); });
 
 it('opens chat without key setup and shows the conversation model', async () => {
   window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
@@ -44,4 +44,38 @@ it('shows why the desktop could not start instead of asking for a token', async 
   expect((await screen.findByRole('alert')).textContent).toBe(reason);
   expect(screen.getByText('Mob could not start.')).toBeTruthy();
   expect(screen.queryByLabelText('Local access token')).toBeNull();
+});
+
+it('signs in once with the link mob open prints and keeps the token across visits', async () => {
+  window.history.replaceState(null, '', '/#pair=code-1');
+  let claims = 0;
+  const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith('/pairing/claim')) { claims++; expect(JSON.parse(String(options?.body))).toEqual({ code: 'code-1' }); return Response.json({ token: 'paired' }); }
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([]);
+    return Response.json({ messages: [], active: false, model: 'demo/echo' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<App />);
+  await screen.findByRole('button', { name: /disconnect/i });
+  expect(window.location.hash).toBe('');
+  expect(localStorage.getItem('mob-token')).toBe('paired');
+  const authorized = fetchMock.mock.calls.filter(([url]) => !url.endsWith('/pairing/claim'));
+  expect(authorized.every(([, options]) => new Headers(options?.headers).get('Authorization') === 'Bearer paired')).toBe(true);
+  cleanup();
+  render(<App />);
+  await screen.findByRole('button', { name: /disconnect/i });
+  expect(claims).toBe(1);
+  screen.getByRole('button', { name: /disconnect/i }).click();
+  await screen.findByLabelText('Local access token');
+  expect(localStorage.getItem('mob-token')).toBeNull();
+});
+
+it('explains an expired pairing link and offers the token form', async () => {
+  window.history.replaceState(null, '', '/#pair=stale');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('pairing code is invalid or expired; run mob open again', { status: 403 })));
+  render(<App />);
+  expect((await screen.findByRole('alert')).textContent).toContain('run mob open again');
+  expect(screen.getByLabelText('Local access token')).toBeTruthy();
+  expect(localStorage.getItem('mob-token')).toBeNull();
 });

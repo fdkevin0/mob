@@ -59,11 +59,14 @@ MOB_DEMO=1 bun run desktop
 bun run build:desktop
 ```
 
-Open `http://127.0.0.1:8787` for the same conversation UI in a browser. Paste the
-local token from the file printed by `mob serve`; the Wails app obtains it directly.
-For a background service, the token is in `MOB_DATA_DIR/token` and startup errors
-are in `MOB_STATE_DIR/daemon.log` (XDG state home + `mob` by default). The token remains in the browser tab's session
-storage until Disconnect or tab close.
+Run `mob open` while the service is running to sign a browser in to the same
+conversation UI: it opens a one-time link that expires after 5 minutes. You can
+also open `http://127.0.0.1:8787` and paste the local token from the file printed
+by `mob serve`; the Wails app obtains it directly. For a background service, the
+token is in `MOB_DATA_DIR/token` and startup errors are in `MOB_STATE_DIR/daemon.log`
+(XDG state home + `mob` by default). The browser keeps the token in local storage
+until Disconnect. `mob token rotate` replaces the token and signs out every browser,
+terminal and desktop window.
 For frontend-only development, run `bun run dev` alongside `mob serve`.
 
 Start `./build/mob tui` or open the desktop app directly. Both start a local service

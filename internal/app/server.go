@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -34,11 +33,13 @@ type Server struct {
 	extensions         extension.Manager
 	sandbox            sandbox.Settings
 	*chat.ConversationService
-	Token string
+	// PersistToken saves a rotated token; nil when the token comes from MOB_TOKEN.
+	PersistToken func(token string) error
+	access       access
 }
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
-	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), Token: token}
+	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token}}
 	s.Commands.Register(s.pluginCommands()...)
 	s.register()
 	return s
@@ -112,6 +113,9 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	})
 	mux.HandleFunc("POST /api/commands/run", s.runCommand)
 	mux.HandleFunc("POST /api/chat", s.chat)
+	mux.HandleFunc("POST /api/pairing", s.pair)
+	mux.HandleFunc("POST /api/pairing/claim", s.claim)
+	mux.HandleFunc("POST /api/token/rotate", s.rotate)
 	if assets != nil {
 		mux.Handle("/", http.FileServerFS(assets))
 	}
@@ -135,7 +139,7 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")
-			if s.Token == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+s.Token)) != 1 {
+			if r.URL.Path != "/api/pairing/claim" && !s.authorized(r.Header.Get("Authorization")) {
 				http.Error(w, "unauthorized", 401)
 				return
 			}
