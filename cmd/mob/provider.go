@@ -36,7 +36,7 @@ func providerCommand(path func() string) *cobra.Command {
 		Use:   "add ID",
 		Short: "Add a provider, or update one already added",
 		Long: "Add a provider, or update one already added.\n\nPresets: " + strings.Join(presetNames, ", ") +
-			"\nA preset's ID is enough: mob provider add deepseek --key-stdin\nAny other ID needs --chat or --anthropic: mob provider add work --chat https://relay.example/v1 --key-stdin\n" +
+			"\nA preset's ID is enough: mob provider add deepseek --key-stdin\nmagpie finds the magpie gateway on this machine: mob provider add magpie\nAny other ID needs --chat or --anthropic: mob provider add work --chat https://relay.example/v1 --key-stdin\n" +
 			"On a terminal the key is asked for when the provider needs one. Prefer --key-stdin to --key, which shell history keeps.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -62,6 +62,18 @@ func providerCommand(path func() string) *cobra.Command {
 			}{{"name", &p.Name, opts.name}, {"chat", &p.Chat, opts.chat}, {"anthropic", &p.Anthropic, opts.anthropic}, {"models-url", &p.ModelsURL, opts.modelsURL}} {
 				if cmd.Flags().Changed(v.flag) {
 					*v.dst = strings.TrimSpace(v.val)
+				}
+			}
+			// magpie's gateway listens on the port in its settings, which is
+			// looked up unless a URL was given.
+			if p.Preset == "magpie" && !opts.offline && !cmd.Flags().Changed("chat") && !cmd.Flags().Changed("anthropic") {
+				chat, anthropic, err := provider.FindMagpie(cmd.Context(), nil)
+				if err != nil {
+					return fmt.Errorf("%w (or save it as is with --offline)", err)
+				}
+				p.Chat, p.Anthropic = "", ""
+				if chat != p.Endpoint(provider.Chat) {
+					p.Chat, p.Anthropic = chat, anthropic
 				}
 			}
 			if p.Preset == "" && p.Chat == "" && p.Anthropic == "" {

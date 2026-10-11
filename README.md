@@ -83,6 +83,7 @@ Manage them with the CLI; a running service reloads the file on its own:
 mob provider add deepseek --key-stdin        # presets need only a key
 mob provider add work --chat https://relay.example/v1 --key-stdin --models gpt-6,claude-sonnet-5
 mob provider add ollama                      # local servers need no key
+mob provider add magpie                      # the magpie gateway on this machine
 mob provider ls                              # keys shown masked
 mob provider rm work
 ```
@@ -93,8 +94,14 @@ never follow a provider to a new host. The service and CLI lock `providers.json`
 while changing it.
 
 Presets: `opencode`, `openai`, `anthropic`, `deepseek`, `google`, `openrouter`,
-`moonshot`, `zhipu`, `ollama`, `lmstudio`. Any other OpenAI- or Anthropic-compatible
+`moonshot`, `zhipu`, `ollama`, `lmstudio`, `magpie`. Any other OpenAI- or Anthropic-compatible
 endpoint is added with `--chat` or `--anthropic`.
+
+[magpie](https://github.com/yetone/magpie) serves every provider signed in to it,
+its provider plugins and gateway middleware included, from a gateway on this machine.
+`mob provider add magpie` reads the port from magpie's `settings.json` (read only),
+checks that magpie answers there, and lists the models turned on in magpie. Calls
+carry the key `magpie-mob`, so magpie's usage and routing rules see them as Mob's.
 
 In any conversation, in the web UI, TUI, Telegram or WeChat:
 

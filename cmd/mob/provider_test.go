@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -105,5 +106,61 @@ func TestProviderCommands(t *testing.T) {
 	}
 	if _, err = run("", "provider", "rm", "work"); err == nil {
 		t.Fatal("removing a missing provider succeeded")
+	}
+}
+
+func TestProviderAddMagpie(t *testing.T) {
+	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO"} {
+		t.Setenv(name, "")
+	}
+	var keys []string
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/hello" {
+			json.NewEncoder(w).Encode(map[string]string{"name": "magpie"})
+			return
+		}
+		keys = append(keys, r.Header.Get("Authorization"))
+		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "gpt-6"}}})
+	}))
+	defer gateway.Close()
+	magpie := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", magpie)
+	u, _ := url.Parse(gateway.URL)
+	os.MkdirAll(filepath.Join(magpie, "magpie"), 0700)
+	if err := os.WriteFile(filepath.Join(magpie, "magpie", "settings.json"), []byte(`{"port":`+u.Port()+`}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(config, []byte("demo: false\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) (string, error) {
+		command := newRootCommand()
+		var out bytes.Buffer
+		command.SetOut(&out)
+		command.SetErr(&out)
+		command.SetIn(strings.NewReader(""))
+		command.SetArgs(append(args, "--config", config))
+		err := command.Execute()
+		return out.String(), err
+	}
+	out, err := run("provider", "add", "magpie")
+	if err != nil || !strings.Contains(out, "Added magpie (Magpie)") || !strings.Contains(out, "lists 1 models") {
+		t.Fatalf("%s %v", out, err)
+	}
+	f, err := provider.Load(filepath.Join(dir, "providers.json"))
+	if p := f.Find("magpie"); err != nil || p == nil || p.Chat != gateway.URL+"/v1" || p.Anthropic != gateway.URL || p.Key != "" {
+		t.Fatalf("saved %+v %v", p, err)
+	}
+	if strings.Join(keys, ",") != "Bearer magpie-mob" {
+		t.Fatalf("keys: %v", keys)
+	}
+	gateway.Close()
+	if _, err = run("provider", "add", "magpie"); err == nil || !strings.Contains(err.Error(), "not running") {
+		t.Fatalf("added a magpie that is not running: %v", err)
+	}
+	if _, err = run("provider", "add", "magpie", "--offline"); err != nil {
+		t.Fatal(err)
 	}
 }
