@@ -197,11 +197,21 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 		}
 		return err
 	}
-	err = Run(ctx, s.Store, model, s.agent(input.Owner), input.ID, message, note, emit)
+	agent := s.agent(input.Owner)
+	if input.Channel != "" {
+		agent.Prompt = channelPrompt(input.Channel)
+	}
+	err = Run(ctx, s.Store, model, agent, input.ID, message, note, emit)
 	if err != nil {
 		return err
 	}
 	return emit(Event{Kind: TurnFinished, Reason: "stop"})
+}
+
+// channelPrompt tells the model that the reader of a channel turn sees only
+// its last step's text, so that text has to stand on its own.
+func channelPrompt(app string) string {
+	return "The user is reading in " + app + ", where they see only the text you write after your last tool call, not your tool calls or earlier text. End with a complete, concise answer that says what you found or did."
 }
 
 func NewConversation(store *Store, models Models) *ConversationService {
@@ -356,4 +366,8 @@ type ChatRequest struct {
 	// UI, and a channel's owner. Only the owner may switch models, which
 	// spends their provider credit. Never decoded from a request body.
 	Owner bool `json:"-"`
+	// Channel names the messaging app a channel's turn answers in, whose
+	// reader sees only the text of the turn's last step. Never decoded from
+	// a request body.
+	Channel string `json:"-"`
 }

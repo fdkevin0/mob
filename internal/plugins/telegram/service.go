@@ -143,6 +143,13 @@ var texts = channel.Texts{
 	},
 	Unsupported: "That command needs the desktop or terminal app.",
 	Empty:       "Done. Open the local conversation for details.",
+	Used: func(used []channel.Use) string {
+		names := make([]string, len(used))
+		for i, u := range used {
+			names[i] = u.String()
+		}
+		return "\n\n(Used " + strings.Join(names, ", ") + ". Details are in the local conversation.)"
+	},
 }
 
 // message is the owner's message in update u, as the bridge reads it.
