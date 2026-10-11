@@ -14,3 +14,7 @@ demo: false
 # Optional startup-only directory overrides:
 # data_dir: /absolute/path/to/mob-data
 # state_dir: /absolute/path/to/mob-state
+
+# Container runtime for `mob container`; empty uses the platform's own:
+# containerd (via nerdctl) on Linux, apple on macOS, wslc on Windows.
+# container_runtime: containerd

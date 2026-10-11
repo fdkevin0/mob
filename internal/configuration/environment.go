@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/adrg/xdg"
+	"github.com/fdkevin0/mob/internal/container"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -19,8 +21,10 @@ import (
 type Environment struct {
 	Dir, StateDir, Addr string
 	// Demo makes the offline model the default.
-	Demo   bool
-	Loader *Loader
+	Demo bool
+	// ContainerRuntime names the container runtime; empty uses the platform's own.
+	ContainerRuntime string
+	Loader           *Loader
 }
 
 type settings struct {
@@ -28,6 +32,8 @@ type settings struct {
 	StateDir string `mapstructure:"state_dir"`
 	Addr     string `mapstructure:"addr"`
 	Demo     bool   `mapstructure:"demo"`
+	// Container is the container runtime; see package container.
+	Container string `mapstructure:"container_runtime"`
 }
 
 // Loader holds immutable startup flags. Each read uses a fresh Viper instance;
@@ -45,6 +51,7 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.String("state-dir", "", "Background log directory")
 	flags.String("addr", "", "Loopback listen address")
 	flags.Bool("demo", false, "Use offline model simulation")
+	flags.String("container-runtime", "", "Container runtime: containerd, apple or wslc (default: the platform's own)")
 }
 
 func NewLoader(flags *pflag.FlagSet) (*Loader, error) {
@@ -95,6 +102,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	v.SetDefault("state_dir", filepath.Join(xdg.StateHome, "mob"))
 	v.SetDefault("addr", "127.0.0.1:8787")
 	v.SetDefault("demo", false)
+	v.SetDefault("container_runtime", "")
 	raw, mode, err := readConfigFile(l.path)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) || required {
@@ -116,7 +124,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 			return fail("configuration must not be writable by group or others")
 		}
 	}
-	for _, key := range []string{"data_dir", "state_dir", "addr", "demo"} {
+	for _, key := range []string{"data_dir", "state_dir", "addr", "demo", "container_runtime"} {
 		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(key)); err != nil {
 			return Environment{}, err
 		}
@@ -140,6 +148,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if data.DataDir == "" || data.StateDir == "" {
 		return fail("data_dir and state_dir must not be empty")
 	}
+	if data.Container != "" && !slices.Contains(container.Names, data.Container) {
+		return fail("container_runtime must be " + strings.Join(container.Names, ", ") + " or empty")
+	}
 	data.DataDir, err = filepath.Abs(data.DataDir)
 	if err != nil {
 		return fail("invalid data_dir")
@@ -148,7 +159,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Loader: l}, nil
+	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, ContainerRuntime: data.Container, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

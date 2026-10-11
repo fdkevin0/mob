@@ -127,6 +127,7 @@ images and attachments are not implemented in this first version.
 | `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
 | `MOB_TOKEN` | Optional existing local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
 | `MOB_DEMO` | `1` makes the offline `demo/echo` model the default |
+| `MOB_CONTAINER_RUNTIME` | Empty uses the platform's own: `containerd` (Linux), `apple` (macOS), `wslc` (Windows) |
 
 The CLI uses [Cobra](https://github.com/spf13/cobra), paths use
 [adrg/xdg](https://github.com/adrg/xdg), and configuration merging uses
@@ -149,7 +150,7 @@ are reused instead of silently creating an empty workspace elsewhere.
 ./build/mob start --config /path/to/config.yaml
 ```
 
-Persistent flags: `--config`, `--data-dir`, `--state-dir`, `--addr`, `--demo`.
+Persistent flags: `--config`, `--data-dir`, `--state-dir`, `--addr`, `--demo`, `--container-runtime`.
 `config check` validates config.yaml and providers.json without printing credentials. Start/status/stop must use the
 same startup address/data-directory overrides. Background children preserve the
 original flags and config path, rather than freezing file values into environment
@@ -176,6 +177,21 @@ The database owner holds a process lock; clients use HTTP rather than independen
 opening the same SQLite file. Authentication represents one local user, not a
 multi-user permission system. Browser dev origins on localhost port 5173 and the
 Wails WebView origin are supported.
+
+### Container runtime
+
+Mob runs containers with the platform's native runtime (ADR 0055): containerd
+through `nerdctl` on Linux, Apple's [container](https://github.com/apple/container)
+on macOS and WSL containers (`wslc`) on Windows.
+
+```bash
+mob container status                       # which runtime, and is it running
+mob container pull alpine:3.20
+mob container run -v "$PWD:/work" -w /work -e NAME=value alpine:3.20 ls -la
+```
+
+Containers are removed when they exit; `run` returns the container's exit status
+as an error when it is nonzero.
 
 ## Plugins and cloud connections
 
@@ -319,6 +335,8 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
   saved configuration and effective provider selection. `cmd/contracts` generates
   React types from Go JSON structs; `bun run generate:contracts` refreshes them.
   Go tests reject stale generated types and invalid TUI form paths.
+- `internal/container`: runs OCI images through the platform's container CLI
+  (`nerdctl`, `container` or `wslc`) behind one `Spec`; `mob container` drives it.
 - `internal/app`: explicitly wires the conversation/configuration/plugin modules,
   manages poller replacement and exposes authenticated loopback HTTP adapters.
   `internal/local`: process ownership, database lock and background lifecycle.
