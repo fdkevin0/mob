@@ -14,6 +14,24 @@ import (
 	"github.com/fdkevin0/mob/internal/llm"
 )
 
+func TestReadOnly(t *testing.T) {
+	for sql, want := range map[string]bool{
+		"SELECT 1":                           true,
+		" select *\nfrom t; ":                true,
+		"SELECT\t1":                          true,
+		"SELECT 1; DELETE FROM t":            false,
+		"SELECT ';'":                         false,
+		"WITH x AS (SELECT 1) DELETE FROM t": false,
+		"/* */ SELECT 1":                     false,
+		"PRAGMA table_info(t)":               false,
+		"":                                   false,
+	} {
+		if readOnly(sql) != want {
+			t.Errorf("readOnly(%q) = %v", sql, !want)
+		}
+	}
+}
+
 func TestTools(t *testing.T) {
 	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
 	if err != nil {
@@ -56,6 +74,10 @@ func TestTools(t *testing.T) {
 			t.Fatalf("%s ran without approval: %v", operation, err)
 		}
 	}
+	if _, err := run(map[string]any{"operation": "d1.query", "argument": " select * from t; "}); err != nil || len(paths) != 2 {
+		t.Fatalf("a SELECT waited for approval: %v %v", paths, err)
+	}
+	paths = paths[:1]
 	approved := chat.ApprovedCall{ConversationID: conversation.ID, ApprovalID: chat.NewID(), Store: store}
 	approved.Input, _ = json.Marshal(request{Operation: "d1.query", Argument: "SELECT ?", Params: []any{1}, Target: target(config, "d1.query")})
 	config.DatabaseID = "production"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -33,6 +34,15 @@ type request struct {
 	// Target names the account and resource the call would use when the user
 	// was asked; an approved call runs only while they are unchanged.
 	Target string `json:"target,omitempty"`
+}
+
+// readOnly reports whether sql is one SELECT statement, which D1 runs without
+// writing. Anything else, including SQL it cannot be sure about, such as a ';'
+// even inside a string or comment, is not.
+func readOnly(sql string) bool {
+	sql = strings.TrimSuffix(strings.TrimSpace(sql), ";")
+	words := strings.Fields(sql)
+	return len(words) > 0 && strings.EqualFold(words[0], "select") && !strings.Contains(sql, ";")
 }
 
 // target is what an approved operation acts on under c.
@@ -67,7 +77,7 @@ func Tools(config func() (Config, error)) []chat.Tool {
 		Tool: llm.Tool{
 			Name: "cloudflare",
 			Description: "Use the user's Cloudflare account. argument is the prompt for ai.run, the search text for vectorize.query, the SQL for d1.query (params bind its ? placeholders), the key for kv.get and r2.get, and the cursor for r2.list. " +
-				"ai.run, vectorize.query and d1.query stop the turn until the user approves: Workers AI may incur charges and D1 runs writes too.",
+				"ai.run, vectorize.query and d1.query stop the turn until the user approves, because Workers AI may incur charges and D1 runs writes too; a single SELECT statement runs at once.",
 			Parameters: map[string]any{"type": "object", "properties": map[string]any{
 				"operation": map[string]any{"type": "string", "enum": operations},
 				"argument":  map[string]any{"type": "string"},
@@ -92,7 +102,7 @@ func Tools(config func() (Config, error)) []chat.Tool {
 			if err != nil {
 				return nil, err
 			}
-			if slices.Contains(readOperations, r.Operation) {
+			if slices.Contains(readOperations, r.Operation) || r.Operation == "d1.query" && readOnly(r.Argument) {
 				return run(ctx, c, r)
 			}
 			r.Target = target(c, r.Operation)
