@@ -108,8 +108,12 @@ func (a abort) Unwrap() error { return a.err }
 // Abort makes a tool's error end the turn instead of going to the model.
 func Abort(err error) error { return abort{err} }
 
-// ToolRegistry holds the tools every turn offers. Register all tools before serving.
-type ToolRegistry struct{ tools []Tool }
+// ToolRegistry holds the tools every turn offers. Register all tools and
+// sources before serving.
+type ToolRegistry struct {
+	tools   []Tool
+	sources []func() []Tool
+}
 
 // sandboxName is reserved for the sandbox tool, which ConversationService adds
 // per turn while a sandbox is set.
@@ -130,8 +134,25 @@ func (r *ToolRegistry) Register(tools ...Tool) {
 	}
 }
 
-// List is the registered tools in registration order.
-func (r *ToolRegistry) List() []Tool { return slices.Clone(r.tools) }
+// RegisterSource adds tools that change while Mob runs, such as those of
+// the MCP servers it is connected to. List asks source each time; a tool it
+// lists under a name already taken, or without a name or Run, is left out.
+func (r *ToolRegistry) RegisterSource(source func() []Tool) {
+	r.sources = append(r.sources, source)
+}
+
+// List is the registered tools in registration order, then each source's.
+func (r *ToolRegistry) List() []Tool {
+	list := slices.Clone(r.tools)
+	for _, source := range r.sources {
+		for _, t := range source() {
+			if t.Name != "" && t.Name != sandboxName && t.Run != nil && !slices.ContainsFunc(list, func(o Tool) bool { return o.Name == t.Name }) {
+				list = append(list, t)
+			}
+		}
+	}
+	return list
+}
 
 // DefaultTools are the tools every conversation offers.
 func DefaultTools() []Tool {

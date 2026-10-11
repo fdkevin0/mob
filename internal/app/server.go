@@ -10,6 +10,7 @@ import (
 	"github.com/fdkevin0/mob/internal/configuration"
 	"github.com/fdkevin0/mob/internal/extension"
 	"github.com/fdkevin0/mob/internal/llm"
+	"github.com/fdkevin0/mob/internal/plugins/mcp"
 	"github.com/fdkevin0/mob/internal/protocol"
 	"github.com/fdkevin0/mob/internal/provider"
 	"github.com/fdkevin0/mob/internal/sandbox"
@@ -36,11 +37,14 @@ type Server struct {
 	*chat.ConversationService
 	// PersistToken saves a rotated token; nil when the token comes from MOB_TOKEN.
 	PersistToken func(token string) error
-	access       access
+	// MCP connects to the configured MCP servers.
+	MCP    *mcp.Hub
+	access access
 }
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
+	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }}
 	s.Commands.Register(s.pluginCommands()...)
 	s.register()
 	return s

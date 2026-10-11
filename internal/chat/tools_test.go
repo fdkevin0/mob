@@ -60,6 +60,25 @@ func TestToolRegistryRejectsDuplicates(t *testing.T) {
 	r.Register(DefaultTools()[0])
 }
 
+func TestToolRegistrySources(t *testing.T) {
+	var r ToolRegistry
+	r.Register(DefaultTools()...)
+	var listed []Tool
+	r.RegisterSource(func() []Tool { return listed })
+	if len(r.List()) != 2 {
+		t.Fatal("an empty source added tools")
+	}
+	noop := func(context.Context, ToolCall) (any, error) { return nil, nil }
+	listed = []Tool{echoTool("mcp__a__b", noop), echoTool("datetime", noop), echoTool("sandbox", noop), {Tool: llm.Tool{Name: "norun"}}}
+	var names []string
+	for _, tool := range r.List() {
+		names = append(names, tool.Name)
+	}
+	if strings.Join(names, " ") != "datetime remember mcp__a__b" {
+		t.Fatalf("tools: %v", names)
+	}
+}
+
 func TestToolRegistryReservesSandbox(t *testing.T) {
 	defer func() {
 		if recover() == nil {
