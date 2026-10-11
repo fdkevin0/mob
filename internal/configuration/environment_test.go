@@ -3,11 +3,13 @@ package configuration
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/adrg/xdg"
+	"github.com/fdkevin0/mob/internal/plugins/mcp"
 	"github.com/fdkevin0/mob/internal/sandbox"
 	"github.com/spf13/pflag"
 )
@@ -140,5 +142,39 @@ func TestXDGDefaultsAndOptionalFile(t *testing.T) {
 		if _, err = loader.Read(); err == nil {
 			t.Fatal("symlink accepted")
 		}
+	}
+}
+
+func TestMCPServers(t *testing.T) {
+	cleanEnvironment(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	write := func(body string) *Loader {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("MOB_CONFIG", path)
+		loader, err := NewLoader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return loader
+	}
+	got, err := write("mcp_servers:\n  github:\n    command: npx\n    args: [-y, server]\n    env: [GITHUB_TOKEN=x]\n  docs:\n    url: https://example.com/mcp\n    headers:\n      Authorization: Bearer y\n").Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := mcp.Servers{
+		"github": {Command: "npx", Args: []string{"-y", "server"}, Env: []string{"GITHUB_TOKEN=x"}},
+		"docs":   {URL: "https://example.com/mcp", Headers: map[string]string{"authorization": "Bearer y"}},
+	}
+	if !reflect.DeepEqual(got.MCPServers, want) {
+		t.Fatalf("got %+v", got.MCPServers)
+	}
+	if _, err := write("mcp_servers:\n  both:\n    command: x\n    url: https://example.com\n").Read(); err == nil || !strings.Contains(err.Error(), "mcp_servers.both") {
+		t.Fatalf("invalid server: %v", err)
+	}
+	if _, err := write("mcp_servers:\n  x:\n    command: x\n    unknown: 1\n").Read(); err == nil {
+		t.Fatal("unknown server field accepted")
 	}
 }

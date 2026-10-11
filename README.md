@@ -362,6 +362,31 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
 [Vectorize](https://developers.cloudflare.com/api/resources/vectorize/),
 [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/).
 
+### MCP servers
+
+Mob can use the tools of [Model Context Protocol](https://modelcontextprotocol.io)
+servers. List them under `mcp_servers` in `config.yaml`; changes reload live:
+
+```yaml
+mcp_servers:
+  github:                       # a-z, 0-9, - and _; tools appear as mcp__github__<tool>
+    command: npx                # started by Mob and spoken to over stdin/stdout
+    args: [-y, "@modelcontextprotocol/server-github"]
+    env: [GITHUB_PERSONAL_ACCESS_TOKEN=...]
+  docs:
+    url: https://example.com/mcp   # Streamable HTTP
+    headers:
+      Authorization: Bearer ...
+```
+
+Only the owner's turns are offered MCP tools, and only while their server is
+connected. Every call waits for approval; **Always allow** (or
+`/approve ID always`) stops asking for that tool on that server, and `/grants`
+lists what is allowed. `/mcp` shows each server's status and tools. A command
+inherits Mob's environment without the `MOB_*` variables, plus its `env`.
+It runs as you, outside the sandbox, so configure only servers you trust. Keep
+`config.yaml` owner-only (`chmod 600`) when it holds keys.
+
 ## Current module boundaries
 
 - `internal/chat`: `ConversationService.Execute` owns admission, validation,

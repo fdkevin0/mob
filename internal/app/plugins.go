@@ -13,6 +13,7 @@ import (
 	"github.com/fdkevin0/mob/internal/extension"
 	"github.com/fdkevin0/mob/internal/plugins/cloudflare"
 	"github.com/fdkevin0/mob/internal/plugins/email"
+	"github.com/fdkevin0/mob/internal/plugins/mcp"
 	"github.com/fdkevin0/mob/internal/plugins/telegram"
 	"github.com/fdkevin0/mob/internal/plugins/wechatilink"
 )
@@ -32,6 +33,8 @@ type plugin struct {
 	commands []chat.Command
 	tools    []chat.Tool
 	routes   []extension.Route
+	// source lists tools that change while Mob runs.
+	source func() []chat.Tool
 	// background is set for a plugin that runs while it is enabled.
 	background *extension.Extension
 }
@@ -45,11 +48,13 @@ func (s *Server) plugins() []plugin {
 	wechat := wechatilink.Host{Config: func() (wechatilink.Config, error) { c, err := s.pluginConfig(); return c.WeChatILink, err }, Store: s.Store, Conversation: s.ConversationService, Transport: func() http.RoundTripper { return s.HTTPTransport }}
 	telegramRun := telegram.Extension(bot, s.Store, s.ConversationService)
 	wechatRun := wechatilink.Extension(wechat)
+	mcpRun := mcp.Extension(s.MCP)
 	return []plugin{
 		{name: "email", commands: email.Commands(mail), tools: email.Tools(mail.Config), routes: email.Routes(mail)},
 		{name: "telegram", background: &telegramRun},
 		{name: "cloudflare", commands: cloudflare.Commands(cloud), tools: cloudflare.Tools(cloud), routes: cloudflare.Routes(cloud)},
 		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
+		{name: "mcp", commands: mcp.Commands(s.MCP), source: s.MCP.Tools, background: &mcpRun},
 	}
 }
 
@@ -58,6 +63,9 @@ func (s *Server) register() {
 	for _, p := range s.plugins() {
 		s.Commands.Register(p.commands...)
 		s.Tools.Register(p.tools...)
+		if p.source != nil {
+			s.Tools.RegisterSource(p.source)
+		}
 		if p.background != nil {
 			s.extensions.Register(*p.background)
 		}

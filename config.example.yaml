@@ -29,3 +29,18 @@ demo: false
 #   cpus: 0                # whole CPUs per command; 0: the runtime's default
 #   memory: ""             # e.g. 512m or 2g, at least 64m; empty: the runtime's default
 #   isolation: ""          # gvisor: run under gVisor's runsc (Linux, containerd only); empty: the runtime's own
+
+# MCP servers whose tools the model may use, each call after your approval.
+# A command is started by Mob (outside the sandbox, as you) and inherits its
+# environment without MOB_* variables; a url is a Streamable HTTP endpoint.
+# Server names use a-z, 0-9, - and _. Keep this file chmod 600 if it holds
+# keys. Reloads live; /mcp shows status and tools.
+# mcp_servers:
+#   github:
+#     command: npx
+#     args: [-y, "@modelcontextprotocol/server-github"]
+#     env: [GITHUB_PERSONAL_ACCESS_TOKEN=...]
+#   docs:
+#     url: https://example.com/mcp
+#     headers:
+#       Authorization: Bearer ...

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
+	"github.com/fdkevin0/mob/internal/plugins/mcp"
 	"github.com/fdkevin0/mob/internal/sandbox"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -25,7 +26,9 @@ type Environment struct {
 	Sandbox sandbox.Settings
 	// MaxToolSteps bounds the model calls one turn makes while it uses tools.
 	MaxToolSteps int
-	Loader       *Loader
+	// MCPServers are the MCP servers whose tools the model may use.
+	MCPServers mcp.Servers
+	Loader     *Loader
 }
 
 type settings struct {
@@ -35,7 +38,8 @@ type settings struct {
 	Demo     bool             `mapstructure:"demo"`
 	Sandbox  sandbox.Settings `mapstructure:"sandbox"`
 	// MaxToolSteps is max_tool_steps, 1 to MaxToolSteps.
-	MaxToolSteps int `mapstructure:"max_tool_steps"`
+	MaxToolSteps int         `mapstructure:"max_tool_steps"`
+	MCPServers   mcp.Servers `mapstructure:"mcp_servers"`
 }
 
 // MaxToolSteps is the most max_tool_steps may allow; DefaultToolSteps is used
@@ -177,6 +181,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err := data.Sandbox.Validate(); err != nil {
 		return Environment{}, err
 	}
+	if err := data.MCPServers.Validate(); err != nil {
+		return Environment{}, err
+	}
 	data.DataDir, err = filepath.Abs(data.DataDir)
 	if err != nil {
 		return fail("invalid data_dir")
@@ -185,7 +192,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, Loader: l}, nil
+	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {
