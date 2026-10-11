@@ -1,7 +1,7 @@
 # 54. Release versions and database migration windows
 
 Date: 2026-10-11
-Status: Accepted
+Status: Accepted; release naming and publishing amended by ADR 0057
 
 Every schema change so far has been a migration kept forever, and the code could
 only say that a database was "newer than this application". Keeping every

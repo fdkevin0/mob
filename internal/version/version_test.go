@@ -27,7 +27,12 @@ func TestFormat(t *testing.T) {
 			t.Errorf("%v: got %q, want %q", tc.settings, got, tc.want)
 		}
 	}
-	if !Valid("20261011.c0502b6") || Valid("20261011.c0502b6-dirty") || Valid(Dev) {
-		t.Fatal("Valid accepts only release versions")
+	for v, want := range map[string]bool{"20261011.c0502b6": true, "v0.1.0": true, "v1.12.3": true, "20261011.c0502b6-dirty": false, Dev: false, "0.1.0": false, "v0.1": false, "v01.2.3": false, "v0.1.0-rc.1": false} {
+		if Valid(v) != want {
+			t.Errorf("Valid(%q) = %v, want %v", v, !want, want)
+		}
+	}
+	if !Stable("v0.1.0") || Stable("20261011.c0502b6") {
+		t.Error("Stable accepts only vX.Y.Z")
 	}
 }
