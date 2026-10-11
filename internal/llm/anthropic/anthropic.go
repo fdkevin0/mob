@@ -131,7 +131,7 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return result, openai.StatusError(resp)
+		return result, openai.StatusError(resp, openai.Secrets(m.config.Key, m.config.Headers)...)
 	}
 	var u llm.Usage
 	blocks := map[int]int{} // content block index → tool call index, for tool_use blocks

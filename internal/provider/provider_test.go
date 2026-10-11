@@ -228,3 +228,56 @@ func TestUpdateAndDefault(t *testing.T) {
 		t.Fatal("demo default")
 	}
 }
+
+func TestAuditRegressions(t *testing.T) {
+	// Vendors echoing the key never pass it on.
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(401)
+		fmt.Fprintf(w, `{"error":{"message":"Invalid key: %s, header %s"}}`, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), r.Header.Get("X-Team"))
+	}))
+	defer echo.Close()
+	r := Memory(File{Providers: []Provider{{ID: "leaky", Chat: echo.URL, Key: "sk-very-secret", Headers: map[string]string{"X-Team": "team-secret"}}}})
+	g := r.List(context.Background(), "")
+	m, _ := r.Resolve("leaky/x")
+	_, err := m.Stream(context.Background(), llm.Request{}, func(string, string) error { return nil })
+	for _, text := range []string{g[0].Error, err.Error()} {
+		if !strings.Contains(text, "Invalid key") || strings.Contains(text, "sk-very-secret") || strings.Contains(text, "team-secret") {
+			t.Fatalf("secret in error: %q", text)
+		}
+	}
+
+	// A provider file removed while running keeps the providers in effect.
+	path := filepath.Join(t.TempDir(), "providers.json")
+	if err = Save(path, File{Default: "work/m", Providers: []Provider{{ID: "work", Chat: echo.URL}}}); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = Open(path, nil, File{})
+	os.Remove(path)
+	if err = r.Reload(); err == nil || r.Default() != "work/m" {
+		t.Fatalf("removal accepted: %v %q", err, r.Default())
+	}
+
+	// A short name for the demo model, or for a provider removed meanwhile, never panics.
+	r = Offline()
+	if m, err := r.Resolve("echo"); err != nil || m.Ref().String() != "demo/echo" {
+		t.Fatalf("demo short name: %v", err)
+	}
+	r = Memory(File{Providers: []Provider{{ID: "gone", Chat: echo.URL, Models: []string{"only-here"}}}})
+	r.Update(func(f *File) error { f.Providers = nil; return nil })
+	if _, err = r.model(llm.Ref{Provider: "gone", Model: "only-here"}); err == nil {
+		t.Fatal("removed provider built")
+	}
+
+	// A changed endpoint under the same ID is listed again.
+	a, _, _ := vendor(t, "old-model")
+	b, _, _ := vendor(t, "new-model")
+	r = Memory(File{Providers: []Provider{{ID: "p", Chat: a.URL}}})
+	r.List(context.Background(), "")
+	r.Update(func(f *File) error { f.Providers[0].Chat = b.URL; return nil })
+	if r.Default() == "p/old-model" {
+		t.Fatal("old server's list served after the endpoint changed")
+	}
+	if g := r.List(context.Background(), ""); len(g[0].Models) != 1 || g[0].Models[0].ID != "new-model" {
+		t.Fatalf("stale list after endpoint change: %+v", g)
+	}
+}

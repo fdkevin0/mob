@@ -110,7 +110,7 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return result, StatusError(resp)
+		return result, StatusError(resp, Secrets(m.config.Key, m.config.Headers)...)
 	}
 	finished, done, size := false, false, 0
 	err = llm.ReadSSE(resp.Body, func(_ string, data []byte) error {
@@ -223,8 +223,10 @@ func (u usage) normal() llm.Usage {
 }
 
 // StatusError reads a vendor's short error message, so "model not found"
-// or "invalid key" reaches the user instead of a bare status code.
-func StatusError(resp *http.Response) error {
+// or "invalid key" reaches the user instead of a bare status code. Vendors
+// may echo the credential ("Invalid key: sk-…"), so every secret sent with
+// the request is masked before the message reaches transcripts or channels.
+func StatusError(resp *http.Response, secrets ...string) error {
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	var body struct {
 		Error any `json:"error"`
@@ -236,6 +238,11 @@ func StatusError(resp *http.Response) error {
 			message = e
 		case map[string]any:
 			message, _ = e["message"].(string)
+		}
+	}
+	for _, secret := range secrets {
+		if len(secret) >= 4 {
+			message = strings.ReplaceAll(message, secret, "••••")
 		}
 	}
 	message = strings.Map(func(r rune) rune {
@@ -251,4 +258,13 @@ func StatusError(resp *http.Response) error {
 		return fmt.Errorf("model returned HTTP %d", resp.StatusCode)
 	}
 	return fmt.Errorf("model returned HTTP %d: %s", resp.StatusCode, message)
+}
+
+// Secrets are the credentials a request carries: its key and header values.
+func Secrets(key string, headers map[string]string) []string {
+	out := []string{key}
+	for _, v := range headers {
+		out = append(out, v)
+	}
+	return out
 }
