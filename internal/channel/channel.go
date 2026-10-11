@@ -154,15 +154,35 @@ func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest) (Reply, error
 		case chat.TurnFailed:
 			text.WriteString("\nError: " + event.Error)
 		}
-		if b.Limit > 0 && text.Len() > b.Limit {
-			return errors.New("reply exceeds the " + b.Name + " bridge limit")
+		if b.over(text.Len(), approvals) {
+			return b.overLimit()
 		}
 		return nil
 	})
 	if len(approvals) > 0 {
 		text.WriteString(b.Texts.Approvals(approvals, len(b.Conversation.Pending(input.ID))))
 	}
+	if err == nil && b.Limit > 0 && text.Len() > b.Limit {
+		err = b.overLimit()
+	}
 	return Reply{Text: text.String(), Approvals: approvals}, err
+}
+
+// over reports whether a reply of n bytes followed by the prompt for
+// approvals passes the limit. The prompt is measured as if one or several
+// requests were pending, since the count is known only after the turn.
+func (b *Bridge) over(n int, approvals []chat.PendingApproval) bool {
+	if b.Limit <= 0 {
+		return false
+	}
+	if len(approvals) > 0 {
+		n += max(len(b.Texts.Approvals(approvals, 1)), len(b.Texts.Approvals(approvals, 2)))
+	}
+	return n > b.Limit
+}
+
+func (b *Bridge) overLimit() error {
+	return errors.New("reply exceeds the " + b.Name + " bridge limit")
 }
 
 // Deliver answers the message with id and sends the answer once. Each step is
