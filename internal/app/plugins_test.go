@@ -269,3 +269,51 @@ func TestPluginToolsFollowTheirPlugins(t *testing.T) {
 		t.Fatalf("with plugins on: %s", got)
 	}
 }
+
+func TestPluginRoutes(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := NewServer(store, provider.Offline(), strings.Repeat("t", 32))
+	defer srv.Close()
+	// The transport is set after the server is built, as the CLI and tests do.
+	var hosts []string
+	srv.HTTPTransport = pluginTransport(func(r *http.Request) (*http.Response, error) {
+		hosts = append(hosts, r.URL.Host)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"success":true,"result":[]}`)), Header: make(http.Header)}, nil
+	})
+	handler := srv.Handler(nil)
+	request := func(method, path, body string) int {
+		t.Helper()
+		req := httptest.NewRequest(method, "http://127.0.0.1"+path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+srv.Token)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w.Code
+	}
+	var c configuration.Plugins
+	c.Email.Enabled = true
+	c.Cloudflare = cloudflare.Config{Enabled: true, AccountID: strings.Repeat("a", 32), Token: "secret-token"}
+	store.SaveSetting("plugins", c)
+	if code := request("POST", "/api/plugins/email/analyze", `{"uid":1,"validity":1,"extra":true}`); code != 400 {
+		t.Fatalf("unknown field: %d", code)
+	}
+	if code := request("GET", "/api/plugins/email/messages/0?validity=1", ""); code != 400 {
+		t.Fatalf("invalid message identity: %d", code)
+	}
+	if code := request("POST", "/api/plugins/cloudflare/action", `{"operation":"d1.databases"}`); code != 200 || len(hosts) != 1 || hosts[0] != "api.cloudflare.com" {
+		t.Fatalf("cloudflare action: %d %v", code, hosts)
+	}
+	request("POST", "/api/plugins/wechat_ilink/qrcode", "")
+	if len(hosts) != 2 {
+		t.Fatalf("the QR code request did not use the server's transport: %v", hosts)
+	}
+	if code := request("POST", "/api/plugins/wechat_ilink/message", `{"senderId":"a","text":"hi"}`); code != 409 {
+		t.Fatalf("message to a disabled WeChat plugin: %d", code)
+	}
+	if code := request("GET", "/api/plugins/telegram/inbox", ""); code != 404 && code != 405 {
+		t.Fatalf("a route no plugin serves: %d", code)
+	}
+}
