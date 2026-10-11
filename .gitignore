@@ -15,3 +15,4 @@ package.json.md5
 !webapp/dist/
 webapp/dist/*
 !webapp/dist/.gitkeep
+*.test

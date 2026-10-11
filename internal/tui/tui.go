@@ -3,13 +3,13 @@ package tui
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -75,7 +75,7 @@ type model struct {
 	cancel              context.CancelFunc
 	streamCancel        context.CancelFunc
 	// pastes hold long pasted texts the input shows as placeholders.
-	pastes []string
+	pastes []paste
 }
 
 func Run(connection local.Connection) error {
@@ -421,31 +421,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // is unreadable in a three-line box anyway.
 const pasteLines = 100
 
-// pasted matches a placeholder; its number picks the paste.
-var pasted = regexp.MustCompile(`\[Pasted text #(\d+) · \d+ lines\]`)
+// A placeholder ends in a random tag, so text that only looks like one,
+// typed, pasted or inside a paste, never brings in a held paste.
+var pasted = regexp.MustCompile(`\[Pasted text #\d+ · \d+ lines · [0-9a-f]{8}\]`)
+
+// paste is a text held aside and the placeholder that stands for it.
+type paste struct{ label, text string }
 
 // collapse holds a long text aside and returns the placeholder that stands for it.
 func (m *model) collapse(text string) string {
-	m.pastes = append(m.pastes, text)
-	return placeholder(len(m.pastes)-1, text)
-}
-
-func placeholder(i int, text string) string {
-	return fmt.Sprintf("[Pasted text #%d · %d lines]", i+1, strings.Count(text, "\n")+1)
+	tag := make([]byte, 4)
+	_, _ = rand.Read(tag)
+	label := fmt.Sprintf("[Pasted text #%d · %d lines · %x]", len(m.pastes)+1, strings.Count(text, "\n")+1, tag)
+	m.pastes = append(m.pastes, paste{label, text})
+	return label
 }
 
 // expand replaces each placeholder still in s with its pasted text, once,
 // in one pass: text a paste brings in is never scanned for placeholders.
 func (m *model) expand(s string) string {
-	used := map[int]bool{}
+	used := map[string]bool{}
 	return pasted.ReplaceAllStringFunc(s, func(label string) string {
-		i, _ := strconv.Atoi(pasted.FindStringSubmatch(label)[1])
-		i--
-		if i < 0 || i >= len(m.pastes) || used[i] || label != placeholder(i, m.pastes[i]) {
-			return label
+		for _, p := range m.pastes {
+			if p.label == label && !used[label] {
+				used[label] = true
+				return p.text
+			}
 		}
-		used[i] = true
-		return m.pastes[i]
+		return label
 	})
 }
 
