@@ -46,18 +46,38 @@ storage until Disconnect or tab close.
 For frontend-only development, run `bun run dev` alongside `mob serve`.
 
 Start `./build/mob tui` or open the desktop app directly. Both start a local service
-when needed and check configuration before opening chat. With no provider overrides,
-Mob uses OpenCode Zen Free (`mimo-v2.6-flash-free`) with an anonymous public token.
-No API key setup is needed. For a custom provider, set its base URL and model; if
-a key is missing, enter it in the masked setup form and save. It takes effect
-immediately. Saving validates format only; the first request verifies access.
+when needed. With no `providers.json`, Mob uses OpenCode Zen Free
+(`opencode/mimo-v2.6-flash-free`) with an anonymous public token, so no setup is needed.
 
-The key is saved in the local SQLite database (unencrypted, file permissions 0600).
-It is never returned by the configuration API or added to chat history.
-Environment variables override the file and saved key: `MOB_API_KEY`, then
-`DEEPSEEK_API_KEY`. A file-provided key also overrides the saved database key.
-Demo mode skips key setup. An already running service determines configuration.
-Conversations and saved facts are sent to the configured model provider.
+### Model providers
+
+Providers live in `providers.json` beside `config.yaml` (XDG config home + `mob`),
+owner-only (0600), keys included. Keys are never read from environment variables.
+Manage them with the CLI; a running service reloads the file on its own:
+
+```bash
+mob provider add deepseek --key-stdin        # presets need only a key
+mob provider add work --chat https://relay.example/v1 --key-stdin --models gpt-6,claude-sonnet-5
+mob provider add ollama                      # local servers need no key
+mob provider ls                              # keys shown masked
+mob provider rm work
+```
+
+Presets: `opencode`, `openai`, `anthropic`, `deepseek`, `google`, `openrouter`,
+`moonshot`, `zhipu`, `ollama`, `lmstudio`. Any other OpenAI- or Anthropic-compatible
+endpoint is added with `--chat` or `--anthropic`.
+
+In any conversation, in the web UI, TUI, Telegram or WeChat:
+
+- `/models [FILTER]` lists the models of every provider, with what each can do.
+- `/model NAME` switches this conversation. NAME may be `provider/model`, a model ID,
+  or a unique fragment (`/model sonnet`); `:low`/`:high`… picks a reasoning level.
+- `/model default NAME` sets the default for conversations without their own choice.
+
+Only the owner switches models from channels: Telegram's configured user and the
+first allowed WeChat user. Model capabilities and prices come from
+[models.dev](https://models.dev), cached in XDG cache home + `mob/models.json`.
+Conversations and saved facts are sent to the chosen model's provider.
 The default free model may use collected data to improve the model; see
 [OpenCode Zen privacy](https://docs.opencode.ai/docs/zen/#privacy).
 
@@ -72,7 +92,7 @@ current foreground/UI owner and then run `mob start` with the same environment.
 ## Current behavior
 
 - Multiple conversations; structured text, reasoning and tool parts saved in SQLite.
-- Real Chat Completions streaming, stop/cancel, partial-response preservation,
+- Real Chat Completions and Anthropic Messages streaming, stop/cancel, partial-response preservation,
   duplicate-send protection and recovery of interrupted messages after restart.
 - `datetime` tool and local `remember` tool. **Remember requires approval in this
   first local version**, unlike the original ungated cloud memory tool. Approval
@@ -101,23 +121,14 @@ images and attachments are not implemented in this first version.
 | `MOB_STATE_DIR` | XDG state home + `mob`; background logs |
 | `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
 | `MOB_TOKEN` | Optional existing local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
-| `MOB_API_KEY` | Model API key; falls back to `DEEPSEEK_API_KEY`, then an origin-scoped saved key; Zen free models use `public` when no key is available |
-| `MOB_BASE_URL` | `https://opencode.ai/zen/v1`; HTTPS required except localhost models |
-| `MOB_MODEL` | `mimo-v2.6-flash-free` |
-| `MOB_DEMO` | `1` explicitly selects offline simulation |
+| `MOB_DEMO` | `1` makes the offline `demo/echo` model the default |
 
 The CLI uses [Cobra](https://github.com/spf13/cobra), paths use
 [adrg/xdg](https://github.com/adrg/xdg), and configuration merging uses
 [Viper](https://github.com/spf13/viper). Precedence is **explicit CLI flags →
-environment → configuration file → defaults**. Plugins and UI-saved model keys
-remain in SQLite. There is no `.env` auto-loader.
-
-For compatibility, a private key supplied by `MOB_API_KEY`, `DEEPSEEK_API_KEY`
-or the config file without an explicit base URL retains the original DeepSeek
-endpoint and `deepseek-flash` default. Explicit model overrides are preserved.
-Set `--base-url`, `MOB_BASE_URL` or `base_url` when selecting another provider.
-For an existing SQLite-saved DeepSeek key, explicitly select the DeepSeek endpoint
-and model so the key stays with its recorded origin.
+environment → configuration file → defaults**. Plugin settings remain in SQLite;
+model providers and keys live in `providers.json` (see [Model providers](#model-providers)).
+There is no `.env` auto-loader.
 
 Start from [config.example.yaml](config.example.yaml). Supported file formats are
 YAML, JSON and TOML. On macOS the default file is
@@ -133,37 +144,28 @@ are reused instead of silently creating an empty workspace elsewhere.
 ./build/mob start --config /path/to/config.yaml
 ```
 
-Persistent flags: `--config`, `--data-dir`, `--state-dir`, `--addr`, `--base-url`,
-`--model`, `--demo`. Secrets have no CLI flag, so they do not enter process arguments.
-`config check` validates without printing credentials. Start/status/stop must use the
+Persistent flags: `--config`, `--data-dir`, `--state-dir`, `--addr`, `--demo`.
+`config check` validates config.yaml and providers.json without printing credentials. Start/status/stop must use the
 same startup address/data-directory overrides. Background children preserve the
 original flags and config path, rather than freezing file values into environment
 variables. Environment changes require restarting the process.
 
 The runtime watches the config file's directory with fsnotify so atomic file
 replacement works. Every reload uses a fresh Viper instance, rejects unknown fields,
-validates a complete candidate, and only then replaces the provider for future turns.
-Active turns keep their original provider. Syntax/type errors, unsafe permissions,
+and validates a complete candidate before applying it. providers.json is watched the
+same way; a rejected providers.json keeps the providers in effect. Active turns keep
+the model they started with. Syntax/type errors, unsafe permissions,
 file deletion and invalid values retain the last valid configuration; diagnostics
 omit file contents and appear in stderr/background logs and `/api/runtime`.
 `mob status` reports reload errors when the startup configuration remains readable.
 Removing the watched directory requires restarting the service to resume watching.
 
-`model`, `base_url`, `demo` and `api_key` can reload. Changing `addr`, `data_dir` or
-`state_dir` rejects the whole candidate and requires restart. Files must be regular
-(non-symlink), at most 64 KiB, and not group/world-writable on Unix. Files containing
-an API key must have owner-only permissions (`chmod 600`); on Windows protect the
-file with the user directory's ACLs. Malformed or missing explicitly selected files
-fail startup. An absent default file is optional and can be created later.
-
-A key supplied by file/environment cannot be changed by the UI. `api_key: ""`
-explicitly suppresses a saved key; omitting the field restores the saved key for its
-recorded API origin. When no matching saved key exists, Zen free models use the
-public token. This fallback remains editable through the configuration API and
-is not stored as a private key. UI-saved keys and their origins commit together. Legacy
-unscoped keys are restricted to the original DeepSeek endpoint; re-enter a key for a
-custom endpoint. Live changes to another API origin require a replacement key or
-explicit empty key, preventing accidental forwarding of an existing credential.
+Changing `addr`, `data_dir`, `state_dir` or `demo` rejects the whole candidate and
+requires restart. Files must be regular (non-symlink), at most 64 KiB, and not
+group/world-writable on Unix. providers.json holds keys and must be owner-only
+(`chmod 600`); on Windows protect it with the user directory's ACLs. Malformed or
+missing explicitly selected files fail startup. An absent default file is optional
+and can be created later.
 
 The database owner holds a process lock; clients use HTTP rather than independently
 opening the same SQLite file. Authentication represents one local user, not a

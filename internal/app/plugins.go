@@ -45,9 +45,6 @@ func (s *Server) StartPlugins() error {
 	if err != nil {
 		return err
 	}
-	if err = s.applyConfiguration(); err != nil {
-		return err
-	}
 	s.restartTelegram(c.Telegram)
 	s.restartWechat(c.WeChatILink)
 	return nil
@@ -71,14 +68,6 @@ func (s *Server) closePlugins() {
 	if wechatDone != nil {
 		<-wechatDone
 	}
-}
-
-func (s *Server) applyConfiguration() error {
-	provider, _, err := s.Configuration.Effective()
-	if err == nil {
-		s.SetProvider(provider)
-	}
-	return err
 }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, dest any) bool {
@@ -271,7 +260,7 @@ func (s *Server) sendEmail(w http.ResponseWriter, r *http.Request) {
 	if !decodeRequest(w, r, &input) {
 		return
 	}
-	err := (&email.Service{Config: c, Store: s.Store, Provider: s.Provider}).Send(r.Context(), input.RequestID, input.Draft)
+	err := (&email.Service{Config: c, Store: s.Store, Model: s.defaultModel}).Send(r.Context(), input.RequestID, input.Draft)
 	var command *chat.CommandError
 	if errors.As(err, &command) {
 		http.Error(w, command.Message, command.Status)
@@ -298,7 +287,7 @@ func (s *Server) analyzeEmail(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	verdict, err := (&email.Service{Config: c, Store: s.Store, Provider: s.Provider}).Analyze(ctx, input.UID, input.Validity)
+	verdict, err := (&email.Service{Config: c, Store: s.Store, Model: s.defaultModel}).Analyze(ctx, input.UID, input.Validity)
 	pluginResult(w, verdict, err)
 }
 
@@ -325,12 +314,6 @@ func (s *Server) savePlugin(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.PathValue("plugin") == "wechat_ilink" || r.PathValue("plugin") == "wechatilink" {
 		s.restartWechat(c.WeChatILink)
-	}
-	if r.PathValue("plugin") == "cloudflare" {
-		if err = s.applyConfiguration(); err != nil {
-			respond(w, nil, err)
-			return
-		}
 	}
 	writeJSON(w, 200, c.Public())
 }

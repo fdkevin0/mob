@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,7 @@ func TestHTTPAuthCancellationAndBusy(t *testing.T) {
 	}
 	defer s.Close()
 	c, _ := s.Create()
-	server := NewServer(s, chat.Provider{Demo: true}, strings.Repeat("t", 32))
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
 	defer server.Close()
 	httpServer := httptest.NewServer(server.Handler(nil))
 	defer httpServer.Close()

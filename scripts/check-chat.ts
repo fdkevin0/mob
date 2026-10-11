@@ -13,7 +13,7 @@ let processHandle: ChildProcess | undefined;
 let url = '';
 let token = '';
 async function start() {
-  const child = spawn(binary, ['serve'], { env: { ...process.env, MOB_CONFIG: join(dir, 'config.yaml'), MOB_STATE_DIR: dir, MOB_API_KEY: '', DEEPSEEK_API_KEY: '', MOB_DEMO: '1', MOB_DATA_DIR: dir, MOB_ADDR: '127.0.0.1:0', MOB_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(binary, ['serve'], { env: { ...process.env, MOB_CONFIG: join(dir, 'config.yaml'), MOB_STATE_DIR: dir, MOB_DEMO: '1', MOB_DATA_DIR: dir, MOB_ADDR: '127.0.0.1:0', MOB_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   processHandle = child;
   url = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Go server did not start')), 15_000);
@@ -50,6 +50,10 @@ try {
   const reply = await turn(id, { text: '你好，Mob', requestId: 'hello' });
   assert(reply?.parts.some(p => p.type === 'text' && p.text.includes('你好，Mob')));
   assert.equal((await request('/chat', { id, text: 'repeat', requestId: 'hello' })).status, 409);
+  const models = await turn(id, { text: '/models', requestId: 'models' });
+  assert(models?.parts.some(p => p.type === 'text' && p.text.includes('▸ demo/echo')), '/models did not list the current model');
+  const current = await (await request(`/conversations/${id}`)).json() as { model: string };
+  assert.equal(current.model, 'demo/echo');
   const pending = await turn(id, { text: '/remember 喜欢简洁的回复', requestId: 'memory' });
   const tool = pending?.parts.find(isToolUIPart);
   assert(tool?.state === 'approval-requested', 'AI SDK did not recognize the approval event');
@@ -66,7 +70,7 @@ try {
   await stop(); await start();
   const restored = await (await request(`/conversations/${id}`)).json();
   assert.deepEqual(restored.messages, snapshot.messages, 'history changed across restart');
-  console.log('Go ↔ AI SDK UI: text, approvals, denial, deduplication, validation and restart passed.');
+  console.log('Go ↔ AI SDK UI: text, /models, approvals, denial, deduplication, validation and restart passed.');
 } finally {
   await stop(); await rm(dir, { recursive: true, force: true });
 }

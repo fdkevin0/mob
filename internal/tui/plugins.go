@@ -46,7 +46,7 @@ func fieldsFor(name string) []pluginField {
 	case "telegram":
 		return []pluginField{{"enabled", "Enable Telegram (true/false)", "bool"}, {"token", "Bot Token (blank keeps saved token)", "secret"}, {"userId", "Allowed Telegram user ID (private messages only)", "int"}}
 	case "cloudflare":
-		return []pluginField{{"enabled", "Enable Cloudflare (true/false)", "bool"}, {"accountId", "Cloudflare account ID", "text"}, {"token", "API Token (blank keeps existing for same account)", "secret"}, {"useForChat", "Use Workers AI for chat (true/false)", "bool"}, {"model", "Workers AI chat model", "text"}, {"embeddingModel", "Workers AI embedding model", "text"}, {"index", "Vectorize index", "text"}, {"databaseId", "D1 database ID", "text"}, {"namespaceId", "KV namespace ID", "text"}, {"bucket", "R2 bucket", "text"}, {"accessKey", "R2 S3 Access Key ID", "text"}, {"secretKey", "R2 S3 Secret Access Key (blank keeps saved value)", "secret"}}
+		return []pluginField{{"enabled", "Enable Cloudflare (true/false)", "bool"}, {"accountId", "Cloudflare account ID", "text"}, {"token", "API Token (blank keeps existing for same account)", "secret"}, {"model", "Workers AI model for /cloud ai.run", "text"}, {"embeddingModel", "Workers AI embedding model", "text"}, {"index", "Vectorize index", "text"}, {"databaseId", "D1 database ID", "text"}, {"namespaceId", "KV namespace ID", "text"}, {"bucket", "R2 bucket", "text"}, {"accessKey", "R2 S3 Access Key ID", "text"}, {"secretKey", "R2 S3 Secret Access Key (blank keeps saved value)", "secret"}}
 	case "compose":
 		return []pluginField{{"to", "Recipient(s)", "text"}, {"subject", "Subject", "text"}, {"text", "Message body (single paragraph; GUI supports multiple lines)", "text"}}
 	}
@@ -124,7 +124,7 @@ func (m model) pluginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "esc" {
 		m.plugin = nil
 		m.failure = ""
-		return m, m.checkConfig("")
+		return m, m.checkConfig()
 	}
 	if f.index < 0 {
 		switch msg.String() {

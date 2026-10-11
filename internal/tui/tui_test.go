@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"github.com/fdkevin0/mob/internal/app"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/local"
+	"github.com/fdkevin0/mob/internal/provider"
 )
 
 func TestTUIUsesSharedService(t *testing.T) {
@@ -23,7 +23,7 @@ func TestTUIUsesSharedService(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv := app.NewServer(store, chat.Provider{Demo: true}, strings.Repeat("t", 32))
+	srv := app.NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	httpSrv := httptest.NewServer(srv.Handler(nil))
 	defer httpSrv.Close()
@@ -72,44 +72,32 @@ func TestTUIUsesSharedService(t *testing.T) {
 	}
 }
 
-func TestTUISetup(t *testing.T) {
+func TestTUIConnectsAndShowsModel(t *testing.T) {
 	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv := app.NewServer(store, chat.Provider{}, strings.Repeat("t", 32))
+	srv := app.NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	httpSrv := httptest.NewServer(srv.Handler(nil))
 	defer httpSrv.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	key := textinput.New()
-	key.EchoMode = textinput.EchoPassword
-	key.Focus()
-	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, key: key}
-	msg := m.checkConfig("")().(modelConfiguration)
-	if msg.Err != nil || msg.Configured {
-		t.Fatal("expected missing key")
+	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel}
+	msg := m.checkConfig()().(modelConfiguration)
+	if msg.Err != nil || msg.DefaultModel != "demo/echo" {
+		t.Fatalf("config %+v", msg)
 	}
-	updated, _ := m.Update(msg)
+	updated, cmd := m.Update(msg)
 	m = updated.(model)
-	m.key.SetValue("secret-key")
-	if strings.Contains(m.key.View(), "secret-key") {
-		t.Fatal("key is visible")
+	if !m.configured || cmd == nil {
+		t.Fatal("did not enter chat")
 	}
-	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	updated, _ = m.Update(cmd())
 	m = updated.(model)
-	if !m.saving || cmd == nil {
-		t.Fatal("setup did not save")
-	}
-	updated, cmd = m.Update(cmd())
-	m = updated.(model)
-	if !m.configured || m.key.Value() != "" || cmd == nil {
-		t.Fatal("setup did not enter chat and clear key")
-	}
-	if got := cmd().(snapshot); got.Err != nil || got.ID == "" {
-		t.Fatalf("chat failed: %+v", got)
+	if m.id == "" || !strings.Contains(m.status, "demo/echo") {
+		t.Fatalf("status %q", m.status)
 	}
 }
 
@@ -119,18 +107,18 @@ func TestTUIPluginWizardMasksAndSaves(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv := app.NewServer(store, chat.Provider{}, strings.Repeat("t", 32))
+	srv := app.NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	httpSrv := httptest.NewServer(srv.Handler(nil))
 	defer httpSrv.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New(), key: textinput.New()}
+	m := model{connection: local.Connection{URL: httpSrv.URL, Token: srv.Token}, ctx: ctx, cancel: cancel, input: textarea.New(), viewport: viewport.New()}
 	updated, _ := m.Update(m.loadPlugins()())
 	m = updated.(model)
 	updated, _ = m.Update(tea.KeyPressMsg{Code: '3'})
 	m = updated.(model)
-	values := []string{"true", strings.Repeat("a", 32), "secret-token", "true", "@cf/chat", "@cf/embed", "index", "db", "ns", "bucket", "access-key", "secret-r2"}
+	values := []string{"true", strings.Repeat("a", 32), "secret-token", "@cf/chat", "@cf/embed", "index", "db", "ns", "bucket", "access-key", "secret-r2"}
 	for i, value := range values {
 		m.plugin.input.SetValue(value)
 		if m.plugin.fields[i].kind == "secret" && strings.Contains(m.plugin.input.View(), value) {
@@ -151,13 +139,9 @@ func TestTUIPluginWizardMasksAndSaves(t *testing.T) {
 	if result.Err != nil {
 		t.Fatal(result.Err)
 	}
-	updated, cmd = m.Update(result)
+	updated, _ = m.Update(result)
 	m = updated.(model)
-	if m.plugin != nil {
+	if m.plugin != nil || m.status != "Saved" {
 		t.Fatal("wizard did not close")
-	}
-	status := cmd().(modelConfiguration)
-	if status.Err != nil || !status.Configured {
-		t.Fatal("Workers AI did not satisfy startup configuration")
 	}
 }

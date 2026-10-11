@@ -15,6 +15,7 @@ import (
 	"github.com/fdkevin0/mob/internal/gateway"
 	"github.com/fdkevin0/mob/internal/local"
 	"github.com/fdkevin0/mob/internal/node"
+	"github.com/fdkevin0/mob/internal/provider"
 	"github.com/fdkevin0/mob/internal/tui"
 	"github.com/fdkevin0/mob/webapp"
 	"github.com/spf13/cobra"
@@ -57,7 +58,7 @@ func newRootCommand() *cobra.Command {
 			return err
 		}
 		defer app.Close()
-		fmt.Fprintf(cmd.OutOrStdout(), "Mob: %s\nDemo mode: %t\nConfiguration: %s\n", app.Connection.URL, config.Provider.Demo, config.Loader.Path())
+		fmt.Fprintf(cmd.OutOrStdout(), "Mob: %s\nDemo mode: %t\nConfiguration: %s\n", app.Connection.URL, config.Demo, config.Loader.Path())
 		if os.Getenv("MOB_TOKEN") == "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "Token file: %s\n", filepath.Join(config.Dir, "token"))
 		} else {
@@ -182,9 +183,12 @@ func newRootCommand() *cobra.Command {
 	)
 	check := &cobra.Command{Use: "config", Short: "Inspect configuration without exposing secrets"}
 	check.AddCommand(&cobra.Command{Use: "check", Short: "Validate configuration and show its location", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(cmd.OutOrStdout(), "Configuration valid: %s\nData directory: %s\nState directory: %s\n", config.Loader.Path(), config.Dir, config.StateDir)
+		if _, err := provider.Load(config.Loader.ProvidersPath()); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Configuration valid: %s\nProviders: %s\nData directory: %s\nState directory: %s\n", config.Loader.Path(), config.Loader.ProvidersPath(), config.Dir, config.StateDir)
 		return nil
 	}})
-	root.AddCommand(check)
+	root.AddCommand(check, providerCommand(func() string { return config.Loader.ProvidersPath() }))
 	return root
 }

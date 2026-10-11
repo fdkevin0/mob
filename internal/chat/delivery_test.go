@@ -29,9 +29,9 @@ INSERT INTO deliveries(id,state) VALUES('tg:old','processing')`); err != nil {
 		if err != nil {
 			t.Fatal(err)
 		}
-		key, err := s.APIKey()
-		if err != nil || key != "keep-secret" {
-			t.Fatalf("key lost: %v", err)
+		var key string
+		if err := s.Setting("api_key", &key); err != nil || key != "" {
+			t.Fatalf("legacy key kept in SQLite: %v", err)
 		}
 		list, err := s.List()
 		if err != nil || len(list) != 1 || list[0].Title != "keep-title" {

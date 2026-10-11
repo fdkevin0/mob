@@ -2,8 +2,9 @@ import type { UIMessage } from 'ai';
 
 export type Connection = { url: string; token: string };
 export type Conversation = { id: string; title: string; updatedAt: number };
-export type ChatMessage = UIMessage<{ status?: string; error?: string }>;
-export type Snapshot = { messages: ChatMessage[]; active: boolean };
+export type ChatMessage = UIMessage<{ status?: string; error?: string; model?: string; command?: boolean }>;
+// model is the reference the conversation's next turn uses; /model changes it.
+export type Snapshot = { messages: ChatMessage[]; active: boolean; model: string };
 export type { Config } from './contracts';
 
 declare global {

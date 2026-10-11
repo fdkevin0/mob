@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/gofrs/flock"
 	_ "modernc.org/sqlite"
 )
@@ -22,6 +23,10 @@ type Message struct {
 	Role     string         `json:"role"`
 	Parts    []Part         `json:"parts"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+	// Model answered an assistant message; Usage is what its steps cost.
+	Model   string     `json:"-"`
+	Usage   *llm.Usage `json:"-"`
+	Command bool       `json:"-"`
 }
 
 type Conversation struct {
@@ -93,7 +98,7 @@ func (s *Store) Close() error { return errors.Join(s.db.Close(), s.lock.Unlock()
 
 func (s *Store) Create() (Conversation, error) {
 	c := Conversation{NewID(), "New conversation", time.Now().UnixMilli()}
-	_, err := s.db.Exec("INSERT INTO conversations VALUES(?,?,?)", c.ID, c.Title, c.UpdatedAt)
+	_, err := s.db.Exec("INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)", c.ID, c.Title, c.UpdatedAt)
 	return c, err
 }
 
@@ -119,7 +124,7 @@ func (s *Store) History(id string) ([]Message, error) {
 	if err := s.db.QueryRow("SELECT id FROM conversations WHERE id=?", id).Scan(&found); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("SELECT id,role,parts,status,error FROM messages WHERE conversation_id=? ORDER BY seq", id)
+	rows, err := s.db.Query("SELECT id,role,parts,status,error,model,usage,kind FROM messages WHERE conversation_id=? ORDER BY seq", id)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +132,8 @@ func (s *Store) History(id string) ([]Message, error) {
 	result := []Message{}
 	for rows.Next() {
 		var m Message
-		var raw, status, failure string
-		if err := rows.Scan(&m.ID, &m.Role, &raw, &status, &failure); err != nil {
+		var raw, status, failure, usage, kind string
+		if err := rows.Scan(&m.ID, &m.Role, &raw, &status, &failure, &m.Model, &usage, &kind); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(raw), &m.Parts); err != nil {
@@ -138,12 +143,22 @@ func (s *Store) History(id string) ([]Message, error) {
 		if failure != "" {
 			m.Metadata["error"] = failure
 		}
+		if m.Model != "" {
+			m.Metadata["model"] = m.Model
+		}
+		if usage != "" && json.Unmarshal([]byte(usage), &m.Usage) == nil {
+			m.Metadata["usage"] = m.Usage
+		}
+		if m.Command = kind == "command"; m.Command {
+			m.Metadata["command"] = true
+		}
 		result = append(result, m)
 	}
 	return result, rows.Err()
 }
 
-func (s *Store) Begin(id, requestID, text string) (Message, error) {
+// Begin records the user's text and an empty assistant reply by model.
+func (s *Store) Begin(id, requestID, text, model string) (Message, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Message{}, err
@@ -162,9 +177,29 @@ func (s *Store) Begin(id, requestID, text string) (Message, error) {
 			return Message{}, err
 		}
 	}
-	m := Message{ID: NewID(), Role: "assistant", Parts: []Part{}}
-	_, err = tx.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'assistant','[]','streaming')", m.ID, id)
+	m := Message{ID: NewID(), Role: "assistant", Parts: []Part{}, Model: model}
+	_, err = tx.Exec("INSERT INTO messages(id,conversation_id,role,parts,status,model) VALUES(?,?,'assistant','[]','streaming',?)", m.ID, id, model)
 	if err != nil {
+		return Message{}, err
+	}
+	return m, tx.Commit()
+}
+
+// Command records a slash command and its reply. Commands stay in the
+// transcript but are never sent to a model.
+func (s *Store) Command(id, requestID, text, reply string) (Message, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Message{}, err
+	}
+	defer tx.Rollback()
+	question, _ := json.Marshal([]Part{{"type": "text", "text": text}})
+	m := Message{ID: NewID(), Role: "assistant", Parts: []Part{{"type": "text", "text": reply}}, Command: true}
+	answer, _ := json.Marshal(m.Parts)
+	if _, err = tx.Exec("INSERT INTO messages(id,conversation_id,role,parts,status,kind) VALUES(?,?,'user',?,'complete','command'),(?,?,'assistant',?,'complete','command')", requestID, id, string(question), m.ID, id, string(answer)); err != nil {
+		return Message{}, err
+	}
+	if _, err = tx.Exec("UPDATE conversations SET updated_at=? WHERE id=?", time.Now().UnixMilli(), id); err != nil {
 		return Message{}, err
 	}
 	return m, tx.Commit()
@@ -175,7 +210,29 @@ func (s *Store) Save(m Message, status, failure string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec("UPDATE messages SET parts=?,status=?,error=? WHERE id=?", string(raw), status, failure, m.ID)
+	usage := ""
+	if m.Usage != nil {
+		encoded, _ := json.Marshal(m.Usage)
+		usage = string(encoded)
+	}
+	_, err = s.db.Exec("UPDATE messages SET parts=?,status=?,error=?,usage=? WHERE id=?", string(raw), status, failure, usage, m.ID)
+	return err
+}
+
+// ConversationModel is the model reference /model chose, or "" for the default.
+func (s *Store) ConversationModel(id string) (string, error) {
+	var model string
+	err := s.db.QueryRow("SELECT model FROM conversations WHERE id=?", id).Scan(&model)
+	return model, err
+}
+
+func (s *Store) SetConversationModel(id, model string) error {
+	result, err := s.db.Exec("UPDATE conversations SET model=? WHERE id=?", model, id)
+	if err == nil {
+		if n, _ := result.RowsAffected(); n == 0 {
+			err = sql.ErrNoRows
+		}
+	}
 	return err
 }
 
@@ -307,45 +364,6 @@ func Text(m Message) string {
 		}
 	}
 	return result
-}
-
-func (s *Store) APIKey() (string, error) {
-	var key string
-	err := s.db.QueryRow("SELECT value FROM settings WHERE key='api_key'").Scan(&key)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return key, err
-}
-func (s *Store) SaveAPIKey(key string) error { return s.SaveAPIKeyFor(key, "https://api.deepseek.com") }
-func (s *Store) SaveAPIKeyFor(key, baseURL string) error {
-	origin, _ := json.Marshal(ProviderOrigin(baseURL))
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec("INSERT INTO settings VALUES('api_key',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key); err != nil {
-		return err
-	}
-	if _, err = tx.Exec("INSERT INTO settings VALUES('api_key_origin',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", string(origin)); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-func (s *Store) APIKeyFor(baseURL string) (string, error) {
-	var origin string
-	if err := s.Setting("api_key_origin", &origin); err != nil {
-		return "", err
-	}
-	// Unscoped legacy keys were entered for the original default provider.
-	if origin == "" {
-		origin = "https://api.deepseek.com"
-	}
-	if origin != ProviderOrigin(baseURL) {
-		return "", nil
-	}
-	return s.APIKey()
 }
 
 func (s *Store) HasRequest(id string) bool {

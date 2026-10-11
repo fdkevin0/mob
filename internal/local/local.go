@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/fdkevin0/mob/internal/app"
+	"github.com/fdkevin0/mob/internal/catalog"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
+	"github.com/fdkevin0/mob/internal/provider"
 )
 
 type Connection struct {
@@ -31,12 +33,16 @@ type App struct {
 	Server      *app.Server
 	http        *http.Server
 	store       *chat.Store
-	stopWatch   func()
+	stopWatch   []func()
 	configMu    sync.RWMutex
 	configError string
+	providers   string
 }
 
 func LoadConfig() (Config, error) { return configuration.Load() }
+
+// newCatalog is replaced by tests, which must not fetch models.dev.
+var newCatalog = catalog.Default
 
 func Credentials(c Config) (Connection, error) {
 	token := os.Getenv("MOB_TOKEN")
@@ -87,12 +93,18 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 		return nil, err
 	}
 	connection.URL = "http://" + listener.Addr().String()
-	keySource := c.KeySource
-	if keySource == "" && c.Provider.APIKey != "" {
-		keySource = "environment"
+	providersPath := ""
+	if c.Loader != nil {
+		providersPath = c.Loader.ProvidersPath()
 	}
-	server := app.NewServer(store, c.Provider, connection.Token)
-	server.Configuration.KeySource = keySource
+	models := newCatalog()
+	registry, err := provider.Open(providersPath, models, provider.Initial())
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	registry.Demo = c.Demo
+	server := app.NewServer(store, registry, connection.Token)
 	done := make(chan struct{})
 	var shutdown sync.Once
 	if background {
@@ -106,7 +118,10 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	}
 	server.ConfigurationError = a.ConfigError
 	if c.Loader != nil {
-		a.stopWatch, err = c.Loader.Watch(context.Background(), func(next configuration.Environment) error {
+		fresh, stopFresh := context.WithCancel(context.Background())
+		a.stopWatch = append(a.stopWatch, stopFresh)
+		go models.KeepFresh(fresh, func(err error) { log.Printf("Model catalog refresh failed: %s", err) })
+		stop, err := c.Loader.Watch(context.Background(), func(next configuration.Environment) error {
 			if next.Dir != c.Dir || next.StateDir != c.StateDir || next.Addr != c.Addr {
 				return errors.New("data_dir, state_dir and addr changes require a restart; current configuration retained")
 			}
@@ -122,11 +137,27 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 				log.Printf("Configuration reload rejected: %s", err)
 			}
 		})
+		if err == nil {
+			a.stopWatch = append(a.stopWatch, stop)
+			stop, err = configuration.WatchFile(context.Background(), providersPath, false, registry.Reload, func(err error) {
+				a.configMu.Lock()
+				a.providers = ""
+				if err != nil {
+					a.providers = err.Error() + "; current providers retained"
+				}
+				a.configMu.Unlock()
+				if err != nil {
+					log.Printf("providers.json reload rejected: %s", err)
+				}
+			})
+		}
 		if err != nil {
+			a.stopAll()
 			server.Close()
 			cleanup()
 			return nil, err
 		}
+		a.stopWatch = append(a.stopWatch, stop)
 	}
 	go func() {
 		if e := httpServer.Serve(listener); e != nil && !errors.Is(e, http.ErrServerClosed) {
@@ -136,10 +167,15 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	return a, nil
 }
 
-func (a *App) Close() error {
-	if a.stopWatch != nil {
-		a.stopWatch()
+func (a *App) stopAll() {
+	for _, stop := range a.stopWatch {
+		stop()
 	}
+	a.stopWatch = nil
+}
+
+func (a *App) Close() error {
+	a.stopAll()
 	a.Server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -182,5 +218,5 @@ func ConnectOrStart(c Config, assets fs.FS) (Connection, func(), error) {
 func (a *App) ConfigError() string {
 	a.configMu.RLock()
 	defer a.configMu.RUnlock()
-	return a.configError
+	return strings.Trim(a.configError+"\n"+a.providers, "\n")
 }

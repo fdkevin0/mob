@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,8 @@ func TestPluginConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv := NewServer(store, chat.Provider{APIKey: "original-key", Model: "original"}, strings.Repeat("t", 32))
+	models := provider.Memory(provider.File{Default: "work/original", Providers: []provider.Provider{{ID: "work", Chat: "https://relay.example/v1", Key: "secret-token"}}})
+	srv := NewServer(store, models, strings.Repeat("t", 32))
 	defer srv.Close()
 	handler := srv.Handler(nil)
 	request := func(method, path, body string, status int) string {
@@ -52,26 +54,17 @@ func TestPluginConfiguration(t *testing.T) {
 		t.Fatal("blank edit cleared saved password")
 	}
 	request("POST", "/api/plugins/email", strings.ReplaceAll(strings.ReplaceAll(mail, "imap.example.org", "attacker.example.org"), `"password":"secret-password"`, `"password":""`), 400)
-	cf := cloudflare.Config{Enabled: true, UseForChat: true, Token: "secret-token", AccountID: strings.Repeat("a", 32), Model: "@cf/chat"}
+	cf := cloudflare.Config{Enabled: true, Token: "secret-token", AccountID: strings.Repeat("a", 32), Model: "@cf/chat"}
 	raw, _ := json.Marshal(cf)
 	request("POST", "/api/plugins/cloudflare", string(raw), 200)
-	p := srv.Provider()
-	if p.APIKey != "secret-token" || !strings.HasSuffix(p.BaseURL, "/ai/v1") {
-		t.Fatal("Workers AI not selected")
+	if !strings.Contains(request("GET", "/api/config", "", 200), `"defaultModel":"work/original"`) {
+		t.Fatal("default model missing")
 	}
-	request("POST", "/api/config", `{"apiKey":"replacement"}`, 200)
-	p = srv.Provider()
-	if p.APIKey != "secret-token" {
-		t.Fatal("model setup overwrote Cloudflare token")
+	// Providers are listed with their keys masked; keys are set through providers.json only.
+	if !strings.Contains(request("GET", "/api/providers", "", 200), `"key":"sec…oken"`) {
+		t.Fatal("provider key not masked")
 	}
-	cf.Enabled = false
-	cf.Token = ""
-	raw, _ = json.Marshal(cf)
-	request("POST", "/api/plugins/cloudflare", string(raw), 200)
-	p = srv.Provider()
-	if p.APIKey != "replacement" {
-		t.Fatal("default provider not restored")
-	}
+	request("POST", "/api/config", `{"apiKey":"replacement"}`, 405)
 	request("GET", "/api/plugins", "", 200)
 	req := httptest.NewRequest("GET", "http://127.0.0.1/api/plugins", nil)
 	w := httptest.NewRecorder()
@@ -90,7 +83,7 @@ func TestTelegramBridgeIsolationAndDeduplication(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv := NewServer(store, chat.Provider{Demo: true}, strings.Repeat("t", 32))
+	srv := NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	sent := make(chan string, 4)
 	var polls atomic.Int32
@@ -171,7 +164,7 @@ func TestEmailDuplicateSendDoesNotReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv := NewServer(store, chat.Provider{Demo: true}, strings.Repeat("t", 32))
+	srv := NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	var c configuration.Plugins
 	c.Email.Enabled = true

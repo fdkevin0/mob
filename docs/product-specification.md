@@ -41,7 +41,7 @@ graph TD
         ChatEngine["Chat Engine (Session & Turns)"]
         ToolRegistry["Tool Registry & Sandbox"]
         ApprovalManager["Human-in-the-Loop State Machine"]
-        Provider["Model Client (OpenCode Zen / DeepSeek / OpenAI)"]
+        Provider["Model Registry (providers.json · models.dev catalog · Chat + Anthropic drivers)"]
     end
 
     subgraph Storage["Persistence"]
@@ -160,21 +160,20 @@ stateDiagram-v2
 
 ---
 
-## 7. Model Providers & Zero-Config Free Tier
+## 7. Model Providers & Per-Conversation Models
 
-Mob provides a zero-configuration out-of-the-box chat experience, while maintaining full flexibility for custom model providers:
+See [ADR 0052](./adr/0052-providers-json-and-per-conversation-models.md).
 
-1. **Default Free Tier (OpenCode Zen Free)**:
-   - **Endpoint**: `https://opencode.ai/zen/v1`
-   - **Default Model**: `mimo-v2.6-flash-free`
-   - **Default API Key**: `public`, applied only after checking for a saved key for the Zen origin; explicit empty file keys disable setup.
-   - **Verification Emulation**: Mob injects official client signatures (`User-Agent: opencode/1.18.34`, `x-opencode-*` headers, session/request IDs, and required tool declarations) to satisfy upstream anti-abuse requirements and prevent `FreeTierError`.
-2. **Custom Providers**:
-   - Users select provider endpoints and models via CLI flags, environment variables, or configuration file (`config.yaml`). Web/GUI setup can save a key for that provider unless the key is managed by runtime configuration.
-   - **DeepSeek**: `https://api.deepseek.com` (`deepseek-chat`, `deepseek-reasoner`)
-   - **OpenAI / Compatible**: `https://api.openai.com/v1` (`gpt-4o`, `gpt-4o-mini`)
-   - **Local Ollama / vLLM**: `http://localhost:11434/v1`
-   - **Cloudflare Workers AI**: Built-in plugin supports Workers AI models.
+1. **Zero configuration**: without `providers.json`, the only provider is OpenCode Zen
+   (`https://opencode.ai/zen/v1`) and the default is `opencode/mimo-v2.6-flash-free`,
+   sent with the anonymous `public` key and OpenCode's client headers (a preset quirk).
+2. **Providers**: any number, in `providers.json` (0600, atomic, `.bak` kept, reloaded live),
+   managed with `mob provider add|ls|rm`. Presets cover OpenCode Zen, OpenAI, Anthropic,
+   DeepSeek, Gemini, OpenRouter, Kimi, GLM, Ollama and LM Studio; other endpoints are added by URL.
+   A provider may serve Chat Completions and Anthropic Messages; each model uses one.
+3. **Catalog**: model capabilities, limits and prices from models.dev, cached and refreshed daily.
+4. **Switching**: `/models` lists, `/model NAME` switches the conversation, `/model default NAME`
+   sets the default. Commands work in every client and channel and are never sent to a model.
 
 ---
 
@@ -196,5 +195,6 @@ Mob provides a zero-configuration out-of-the-box chat experience, while maintain
 | **M1: Core Decoupling & Protocol** | Abstract Engine interfaces, unified mesh frame protocol | Go Mesh Frame Protocol, `contracts.ts` update | **Completed** |
 | **M2: Cloud Gateway & Relay Mesh** | Implement `mob gateway`, node reverse-relay & Web hosting | WebSocket bidirectional relay, remote Web access | **Completed** |
 | **M3: WeChat iLink & Telegram Ingress** | Native Go WeChat iLink client, QR-code login, in-band approvals | Pure Go `wechatilink` module, UI QR scan component | **Completed** |
-| **M4: Default Free Model & Zero-Config** | Integrate OpenCode Zen Free tier with public key and client verification | `internal/chat/opencode.go`, default configurations | **Completed** |
+| **M4: Default Free Model & Zero-Config** | Integrate OpenCode Zen Free tier with public key and client verification | `internal/provider/opencode.go`, default configurations | **Completed** |
+| **M4.1: Multiple Providers & /model** | providers.json, models.dev catalog, Chat + Anthropic drivers, per-conversation models | `internal/provider`, `internal/catalog`, `internal/llm` | **Completed** |
 | **M5: WebRTC P2P Direct Tunnel** | WebRTC DataChannel hole-punching for browser-to-node direct access | Pion WebRTC channel, ICE signaling exchange | **In Progress** |
