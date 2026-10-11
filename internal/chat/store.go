@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
@@ -268,75 +269,114 @@ func (s *Store) RequestApproval(conversationID string, m Message, callID string,
 
 var ErrStaleApproval = errors.New("approval is unknown, expired, or already decided")
 
-// Decision, side effect and displayed result commit together, so retries cannot write twice.
-func (s *Store) Decide(conversationID, approvalID string, approved bool) (string, error) {
+// Decision is an approval the user has just decided.
+type Decision struct {
+	ApprovalID, MessageID, ToolCallID string
+	// Tool is the name of the tool that asked.
+	Tool  string
+	Input json.RawMessage
+}
+
+// Decide records the user's decision, at most once. A denial completes the
+// call and tells the model; an approved call is left for Complete, so a retry
+// never carries it out twice.
+func (s *Store) Decide(conversationID, approvalID string, approved bool) (Decision, error) {
+	d := Decision{ApprovalID: approvalID}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return "", err
+		return d, err
 	}
 	defer tx.Rollback()
-	var messageID, callID, input, status, raw string
+	var input, status string
 	var expires int64
-	err = tx.QueryRow("SELECT message_id,tool_call_id,input,status,expires_at FROM approvals WHERE id=? AND conversation_id=?", approvalID, conversationID).Scan(&messageID, &callID, &input, &status, &expires)
+	err = tx.QueryRow("SELECT message_id,tool_call_id,input,status,expires_at FROM approvals WHERE id=? AND conversation_id=?", approvalID, conversationID).Scan(&d.MessageID, &d.ToolCallID, &input, &status, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrStaleApproval
+		return d, ErrStaleApproval
 	}
 	if err != nil {
-		return "", err
+		return d, err
 	}
 	if status != "pending" || expires < time.Now().UnixMilli() {
-		return "", ErrStaleApproval
+		return d, ErrStaleApproval
 	}
-	var args struct {
-		Fact string `json:"fact"`
-	}
-	if err = json.Unmarshal([]byte(input), &args); err != nil {
-		return "", err
-	}
-	if err = tx.QueryRow("SELECT parts FROM messages WHERE id=?", messageID).Scan(&raw); err != nil {
-		return "", err
-	}
-	var parts []Part
-	if err = json.Unmarshal([]byte(raw), &parts); err != nil {
-		return "", err
-	}
+	d.Input = json.RawMessage(input)
 	status = "denied"
-	note := "The user denied saving this memory: " + args.Fact + ". Do not retry unless asked."
 	if approved {
 		status = "approved"
-		if _, err = tx.Exec("INSERT INTO memories VALUES(?,?,?)", approvalID, conversationID, args.Fact); err != nil {
-			return "", err
+	}
+	err = updatePart(tx, d, func(p Part) {
+		d.Tool = strings.TrimPrefix(fmt.Sprint(p["type"]), "tool-")
+		p["approval"] = map[string]any{"id": approvalID, "approved": approved}
+		p["state"] = "approval-responded"
+		if !approved {
+			p["state"] = "output-denied"
 		}
-		note = "The user approved remember. The following fact was saved locally: " + args.Fact + ". Confirm the result."
+	})
+	if err != nil {
+		return d, err
+	}
+	if _, err = tx.Exec("UPDATE approvals SET status=? WHERE id=?", status, approvalID); err != nil {
+		return d, err
+	}
+	if !approved {
+		note := "The user denied the " + d.Tool + " request. Do not retry unless asked."
+		body, _ := json.Marshal([]Part{{"type": "text", "text": note}})
+		if _, err = tx.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", NewID(), conversationID, string(body)); err != nil {
+			return d, err
+		}
+	}
+	return d, tx.Commit()
+}
+
+// Complete records what an approved call returned.
+func (s *Store) Complete(d Decision, output any, failure error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	err = updatePart(tx, d, func(p Part) {
+		if failure != nil {
+			p["state"] = "output-error"
+			p["errorText"] = failure.Error()
+		} else {
+			p["state"] = "output-available"
+			p["output"] = output
+		}
+	})
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// updatePart changes the decided call's part in its stored message.
+func updatePart(tx *sql.Tx, d Decision, change func(Part)) error {
+	var raw string
+	if err := tx.QueryRow("SELECT parts FROM messages WHERE id=?", d.MessageID).Scan(&raw); err != nil {
+		return err
+	}
+	var parts []Part
+	if err := json.Unmarshal([]byte(raw), &parts); err != nil {
+		return err
 	}
 	for _, p := range parts {
-		if p["toolCallId"] == callID {
-			p["approval"] = map[string]any{"id": approvalID, "approved": approved}
-			if approved {
-				p["state"] = "output-available"
-				p["output"] = map[string]any{"saved": true}
-			} else {
-				p["state"] = "output-denied"
-			}
+		if p["toolCallId"] == d.ToolCallID {
+			change(p)
 		}
 	}
 	encoded, err := json.Marshal(parts)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if _, err = tx.Exec("UPDATE messages SET parts=? WHERE id=?", string(encoded), messageID); err != nil {
-		return "", err
-	}
-	if _, err = tx.Exec("UPDATE approvals SET status=? WHERE id=?", status, approvalID); err != nil {
-		return "", err
-	}
-	if !approved {
-		body, _ := json.Marshal([]Part{{"type": "text", "text": note}})
-		if _, err = tx.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", NewID(), conversationID, string(body)); err != nil {
-			return "", err
-		}
-	}
-	return note, tx.Commit()
+	_, err = tx.Exec("UPDATE messages SET parts=? WHERE id=?", string(encoded), d.MessageID)
+	return err
+}
+
+// SaveFact keeps a fact for the conversation; id makes saving it again a no-op.
+func (s *Store) SaveFact(id, conversationID, fact string) error {
+	_, err := s.db.Exec("INSERT OR IGNORE INTO memories VALUES(?,?,?)", id, conversationID, fact)
+	return err
 }
 
 func (s *Store) Memories(id string) ([]string, error) {

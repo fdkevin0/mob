@@ -46,7 +46,7 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 	if got := reply("/remember 简洁"); !strings.Contains(got, "/approve") {
 		t.Fatalf("approval request: %s", got)
 	}
-	if got := reply("/approve"); !strings.Contains(got, "saved locally") {
+	if got := reply("/approve"); !strings.Contains(got, "approved remember and it ran") {
 		t.Fatalf("/approve: %s", got)
 	}
 	if got := reply("/approve"); !strings.Contains(got, "0 requests are pending") {

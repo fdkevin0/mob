@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -26,26 +25,55 @@ func (s *Server) pluginConfig() (configuration.Plugins, error) {
 	return c, err
 }
 
-// channels are the plugins that run in the background: each polls its
-// service while its configuration has it on.
-func (s *Server) channels() []extension.Extension {
-	return []extension.Extension{
-		{Name: "telegram", Start: func() (extension.Serve, error) {
-			c, err := s.pluginConfig()
-			if err != nil || !c.Telegram.Enabled {
-				return nil, err
-			}
-			service := &telegram.Service{Store: s.Store, Conversation: s.ConversationService}
-			return func(ctx context.Context, status func(string)) { service.Loop(ctx, c.Telegram, status) }, nil
-		}},
-		{Name: "wechat_ilink", Start: func() (extension.Serve, error) {
-			c, err := s.pluginConfig()
-			if err != nil || !c.WeChatILink.Enabled || c.WeChatILink.BotToken == "" {
-				return nil, err
-			}
-			service := &wechatilink.Service{Store: s.Store, Conversation: s.ConversationService}
-			return func(ctx context.Context, status func(string)) { service.Loop(ctx, c.WeChatILink, status) }, nil
-		}},
+// plugin is what one plugin adds to Mob besides its configuration section,
+// which package configuration describes.
+type plugin struct {
+	name     string
+	commands []chat.Command
+	tools    []chat.Tool
+	routes   []extension.Route
+	// background is set for a plugin that runs while it is enabled.
+	background *extension.Extension
+}
+
+// plugins lists every plugin and what it adds. Each plugin reads the saved
+// configuration whenever it needs it.
+func (s *Server) plugins() []plugin {
+	mail := email.Host{Config: func() (email.Config, error) { c, err := s.pluginConfig(); return c.Email, err }, Store: s.Store, Model: s.defaultModel}
+	cloud := func() (cloudflare.Config, error) { c, err := s.pluginConfig(); return c.Cloudflare, err }
+	bot := func() (telegram.Config, error) { c, err := s.pluginConfig(); return c.Telegram, err }
+	wechat := wechatilink.Host{Config: func() (wechatilink.Config, error) { c, err := s.pluginConfig(); return c.WeChatILink, err }, Store: s.Store, Conversation: s.ConversationService, Transport: func() http.RoundTripper { return s.HTTPTransport }}
+	telegramRun := telegram.Extension(bot, s.Store, s.ConversationService)
+	wechatRun := wechatilink.Extension(wechat)
+	return []plugin{
+		{name: "email", commands: email.Commands(mail), tools: email.Tools(mail.Config), routes: email.Routes(mail)},
+		{name: "telegram", background: &telegramRun},
+		{name: "cloudflare", commands: cloudflare.Commands(cloud), tools: cloudflare.Tools(cloud), routes: cloudflare.Routes(cloud)},
+		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
+	}
+}
+
+// register adds every plugin's commands, tools and background run.
+func (s *Server) register() {
+	for _, p := range s.plugins() {
+		s.Commands.Register(p.commands...)
+		s.Tools.Register(p.tools...)
+		if p.background != nil {
+			s.extensions.Register(*p.background)
+		}
+	}
+}
+
+// pluginRoute serves a plugin's route, mapping its errors to statuses.
+func pluginRoute(route extension.Route) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result, err := route.Handle(r)
+		var command *chat.CommandError
+		if errors.As(err, &command) {
+			http.Error(w, command.Message, command.Status)
+			return
+		}
+		pluginResult(w, result, err)
 	}
 }
 
@@ -92,95 +120,11 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 		}
 		pluginResult(w, result, err)
 	})
-	mux.HandleFunc("POST /api/plugins/wechat_ilink/qrcode", func(w http.ResponseWriter, r *http.Request) {
-		c, err := s.pluginConfig()
-		if err != nil {
-			respond(w, nil, err)
-			return
+	for _, p := range s.plugins() {
+		for _, route := range p.routes {
+			mux.HandleFunc(route.Method+" /api/plugins/"+p.name+"/"+route.Path, pluginRoute(route))
 		}
-		client := wechatilink.NewClient(c.WeChatILink, s.HTTPTransport)
-		qr, err := client.GetQRCode(r.Context())
-		pluginResult(w, qr, err)
-	})
-	mux.HandleFunc("GET /api/plugins/wechat_ilink/qrcode/status", func(w http.ResponseWriter, r *http.Request) {
-		c, err := s.pluginConfig()
-		if err != nil {
-			respond(w, nil, err)
-			return
-		}
-		qrcode := r.URL.Query().Get("qrcode")
-		if qrcode == "" {
-			http.Error(w, "missing qrcode parameter", 400)
-			return
-		}
-		client := wechatilink.NewClient(c.WeChatILink, s.HTTPTransport)
-		status, err := client.GetQRCodeStatus(r.Context(), qrcode)
-		pluginResult(w, status, err)
-	})
-	mux.HandleFunc("POST /api/plugins/wechat_ilink/message", func(w http.ResponseWriter, r *http.Request) {
-		c, err := s.pluginConfig()
-		if err != nil || !c.WeChatILink.Enabled {
-			http.Error(w, "wechat_ilink plugin disabled", 409)
-			return
-		}
-		var payload struct {
-			SenderID     string `json:"senderId"`
-			ContextToken string `json:"contextToken"`
-			Text         string `json:"text"`
-		}
-		if !decodeRequest(w, r, &payload) {
-			return
-		}
-		wechatSvc := &wechatilink.Service{
-			Store:        s.Store,
-			Conversation: s.ConversationService,
-		}
-		reply, err := wechatSvc.ProcessMessage(r.Context(), c.WeChatILink, payload.SenderID, payload.ContextToken, payload.Text)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		writeJSON(w, 200, map[string]string{"reply": reply})
-	})
-	mux.HandleFunc("GET /api/plugins/email/inbox", func(w http.ResponseWriter, r *http.Request) {
-		c, ok := s.emailConfig(w)
-		if !ok {
-			return
-		}
-		result, err := c.Inbox(r.Context())
-		pluginResult(w, result, err)
-	})
-	mux.HandleFunc("GET /api/plugins/email/messages/{uid}", func(w http.ResponseWriter, r *http.Request) {
-		c, ok := s.emailConfig(w)
-		if !ok {
-			return
-		}
-		uid, e1 := strconv.ParseUint(r.PathValue("uid"), 10, 32)
-		validity, e2 := strconv.ParseUint(r.URL.Query().Get("validity"), 10, 32)
-		if e1 != nil || e2 != nil || uid == 0 || validity == 0 {
-			http.Error(w, "invalid message identity", 400)
-			return
-		}
-		result, err := c.Read(r.Context(), uint32(uid), uint32(validity))
-		pluginResult(w, result, err)
-	})
-	mux.HandleFunc("POST /api/plugins/email/send", s.sendEmail)
-	mux.HandleFunc("POST /api/plugins/email/analyze", s.analyzeEmail)
-	mux.HandleFunc("POST /api/plugins/cloudflare/action", func(w http.ResponseWriter, r *http.Request) {
-		var a cloudflare.Action
-		if !decodeRequest(w, r, &a) {
-			return
-		}
-		c, err := s.pluginConfig()
-		if err != nil {
-			respond(w, nil, err)
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-		defer cancel()
-		result, err := c.Cloudflare.Do(ctx, a)
-		pluginResult(w, result, err)
-	})
+	}
 }
 
 // testPlugin checks an enabled plugin's connection. A disabled or unknown
@@ -200,73 +144,6 @@ func (s *Server) testPlugin(ctx context.Context, name string) (any, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return section.Test(ctx, c)
-}
-
-// enabledEmail is the email configuration, or a *chat.CommandError when the
-// plugin is disabled.
-func (s *Server) enabledEmail() (email.Config, error) {
-	c, err := s.pluginConfig()
-	if err != nil {
-		return email.Config{}, err
-	}
-	if !c.Email.Enabled {
-		return email.Config{}, &chat.CommandError{Status: 409, Message: "email plugin is disabled"}
-	}
-	return c.Email, nil
-}
-
-func (s *Server) emailConfig(w http.ResponseWriter) (email.Config, bool) {
-	c, err := s.enabledEmail()
-	var command *chat.CommandError
-	if errors.As(err, &command) {
-		http.Error(w, command.Message, command.Status)
-	} else if err != nil {
-		respond(w, nil, err)
-	}
-	return c, err == nil
-}
-
-func (s *Server) sendEmail(w http.ResponseWriter, r *http.Request) {
-	c, ok := s.emailConfig(w)
-	if !ok {
-		return
-	}
-	var input struct {
-		email.Draft
-		RequestID string `json:"requestId"`
-	}
-	if !decodeRequest(w, r, &input) {
-		return
-	}
-	err := (&email.Service{Config: c, Store: s.Store, Model: s.defaultModel}).Send(r.Context(), input.RequestID, input.Draft)
-	var command *chat.CommandError
-	if errors.As(err, &command) {
-		http.Error(w, command.Message, command.Status)
-		return
-	}
-	pluginResult(w, map[string]bool{"sent": true}, err)
-}
-
-func (s *Server) analyzeEmail(w http.ResponseWriter, r *http.Request) {
-	c, ok := s.emailConfig(w)
-	if !ok {
-		return
-	}
-	var input struct {
-		UID      uint32 `json:"uid"`
-		Validity uint32 `json:"validity"`
-	}
-	if !decodeRequest(w, r, &input) {
-		return
-	}
-	if input.UID == 0 || input.Validity == 0 {
-		http.Error(w, "invalid message identity", 400)
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
-	verdict, err := (&email.Service{Config: c, Store: s.Store, Model: s.defaultModel}).Analyze(ctx, input.UID, input.Validity)
-	pluginResult(w, verdict, err)
 }
 
 func (s *Server) savePlugin(w http.ResponseWriter, r *http.Request) {

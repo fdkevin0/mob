@@ -4,8 +4,8 @@
   "license": "MIT",
   "description": "Local Go assistant with Wails, AI SDK UI and Bubble Tea.",
   "dependencies": {
-    "@ai-sdk/react": "4.0.130",
-    "ai": "7.0.127",
+    "@ai-sdk/react": "4.0.137",
+    "ai": "7.0.134",
     "qrcode.react": "4.2.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -14,7 +14,7 @@
     "use-stick-to-bottom": "1.1.6"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "4.0.14",
+    "@ai-sdk/provider": "4.0.25",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.5.1",
@@ -23,7 +23,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "happy-dom": "^20.14.5",
     "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.0"
   },

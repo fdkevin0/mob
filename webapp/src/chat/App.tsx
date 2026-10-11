@@ -154,7 +154,7 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction 
             if (part.type === 'reasoning') return <details className="reasoning" key={index}><summary>Reasoning</summary><p>{part.text}</p></details>;
             if (isToolUIPart(part)) return <section className="tool-card" key={part.toolCallId}><strong>{part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5)}</strong><span className="tool-state">{part.state}</span>
               <pre>{JSON.stringify(part.input, null, 2)}</pre>
-              {part.state === 'approval-requested' && <div><p>Save this fact locally? Approval expires after one hour.</p><button disabled={busy} onClick={() => void decide(part.approval.id, true)}>Approve</button><button className="secondary" disabled={busy} onClick={() => void decide(part.approval.id, false)}>Deny</button></div>}
+              {part.state === 'approval-requested' && <div><p>{part.type === 'tool-remember' ? 'Save this fact locally?' : 'Allow this request?'} Approval expires after one hour.</p><button disabled={busy} onClick={() => void decide(part.approval.id, true)}>Approve</button><button className="secondary" disabled={busy} onClick={() => void decide(part.approval.id, false)}>Deny</button></div>}
               {part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
               {part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
             </section>;

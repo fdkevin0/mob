@@ -3,6 +3,9 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -91,12 +94,15 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 	note := ""
 	if input.Approval != nil {
 		var err error
-		note, err = s.Store.Decide(input.ID, input.Approval.ID, input.Approval.Approved)
+		decision, err := s.Store.Decide(input.ID, input.Approval.ID, input.Approval.Approved)
 		if err != nil {
 			return err
 		}
 		if !input.Approval.Approved {
 			return emit(Event{Kind: TurnFinished, Reason: "stop"})
+		}
+		if note, err = s.carryOut(ctx, input.ID, decision, input.Owner); err != nil {
+			return err
 		}
 	}
 	message, err := s.Store.Begin(input.ID, input.RequestID, input.Text, model.Ref().String())
@@ -106,7 +112,7 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 		}
 		return err
 	}
-	err = Run(ctx, s.Store, model, s.agent(), input.ID, message, note, emit)
+	err = Run(ctx, s.Store, model, s.agent(input.Owner), input.ID, message, note, emit)
 	if err != nil {
 		return err
 	}
@@ -121,13 +127,40 @@ func NewConversation(store *Store, models Models) *ConversationService {
 	return s
 }
 
-// agent is what the next turn uses: the registered tools, the sandbox when
-// one is set, and the hooks.
-func (s *ConversationService) agent() Agent {
+// carryOut runs an approved call and records its result, returning the note
+// that tells the model.
+func (s *ConversationService) carryOut(ctx context.Context, conversationID string, d Decision, owner bool) (string, error) {
+	var output any
+	var err error
+	tools := s.Tools.List()
+	i := slices.IndexFunc(tools, func(t Tool) bool { return t.Name == d.Tool })
+	switch {
+	case i < 0 || tools[i].Approved == nil:
+		err = fmt.Errorf("%s cannot carry out approved calls", d.Tool)
+	case tools[i].OwnerOnly && !owner:
+		err = errors.New("only the owner of this Mob can approve " + d.Tool)
+	default:
+		output, err = tools[i].Approved(ctx, ApprovedCall{ConversationID: conversationID, ApprovalID: d.ApprovalID, Input: d.Input, Store: s.Store})
+	}
+	if saveErr := s.Store.Complete(d, output, err); saveErr != nil {
+		return "", errors.Join(err, saveErr)
+	}
+	if err != nil {
+		return "The user approved " + d.Tool + ", but it failed: " + err.Error() + ". Tell the user.", nil
+	}
+	result, _ := json.Marshal(output)
+	return "The user approved " + d.Tool + " and it ran. Result: " + string(result) + ". Confirm the result.", nil
+}
+
+// agent is what the owner's or another caller's next turn uses: the registered
+// tools available to them, the sandbox when one is set, and the hooks.
+func (s *ConversationService) agent(owner bool) Agent {
 	s.mu.Lock()
 	box := s.sandbox
 	s.mu.Unlock()
-	tools := s.Tools.List()
+	tools := slices.DeleteFunc(s.Tools.List(), func(t Tool) bool {
+		return t.OwnerOnly && !owner || t.Available != nil && !t.Available()
+	})
 	if box != nil {
 		tools = append(tools, sandboxTool(box))
 	}
