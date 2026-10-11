@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -61,6 +62,7 @@ type model struct {
 	generation          uint64
 	busy, remoteBusy    bool
 	running             bool
+	markdown            *markdown
 	width, height       int
 	suggestions         []chat.Suggestion
 	selected            int
@@ -80,7 +82,11 @@ func Run(connection local.Connection) error {
 	input.KeyMap.InsertNewline.SetKeys("alt+enter", "shift+enter", "ctrl+j")
 	input.CharLimit = 16000
 	input.Focus()
-	m := model{connection: connection, input: input, viewport: viewport.New(), ctx: ctx, cancel: cancel, width: 80, status: "Connecting…"}
+	style := "light"
+	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
+		style = "dark"
+	}
+	m := model{connection: connection, input: input, viewport: viewport.New(), ctx: ctx, cancel: cancel, width: 80, status: "Connecting…", markdown: &markdown{style: style}}
 	_, err := tea.NewProgram(m).Run()
 	return err
 }
@@ -400,38 +406,54 @@ func safe(s string) string {
 		return -1
 	}, s)
 }
+
+// render draws the transcript, or the last command result in its place.
+// Content is sanitized before Markdown rendering, which adds its own styling.
 func (m *model) render() {
-	var b strings.Builder
+	if m.markdown == nil {
+		m.markdown = &markdown{}
+	}
+	width := max(20, m.width-4)
 	if m.listText != "" {
-		m.viewport.SetContent(safe(m.listText))
+		m.viewport.SetContent(m.markdown.render(safe(m.listText), width))
 		return
 	}
+	plain := lipgloss.NewStyle().Width(width)
+	role := lipgloss.NewStyle().Bold(true)
+	var b strings.Builder
 	for _, message := range m.messages {
-		b.WriteString(strings.ToUpper(message.Role) + "\n")
+		b.WriteString(role.Render(strings.ToUpper(safe(message.Role))) + "\n")
 		for _, p := range message.Parts {
 			if p["type"] == "text" {
-				b.WriteString(fmt.Sprint(p["text"]) + "\n")
+				text := safe(fmt.Sprint(p["text"]))
+				if message.Role == "assistant" {
+					b.WriteString(m.markdown.render(text, width) + "\n")
+				} else {
+					b.WriteString(plain.Render(text) + "\n")
+				}
 			}
 			if strings.HasPrefix(fmt.Sprint(p["type"]), "tool-") {
 				raw, _ := json.Marshal(p["input"])
-				b.WriteString(fmt.Sprintf("[%s · %s] %s\n", p["type"], p["state"], raw))
+				line := fmt.Sprintf("[%s · %s] %s", p["type"], p["state"], raw)
 				if p["state"] == "approval-requested" {
 					if approval, ok := p["approval"].(map[string]any); ok {
-						b.WriteString("/approve " + fmt.Sprint(approval["id"]) + "  or  /deny " + fmt.Sprint(approval["id"]) + "\n")
+						line += "\n/approve " + fmt.Sprint(approval["id"]) + "  or  /deny " + fmt.Sprint(approval["id"])
 					}
 				}
+				b.WriteString(plain.Render(safe(line)) + "\n")
 			}
 		}
 		if message.Metadata["error"] != nil {
-			b.WriteString("[" + fmt.Sprint(message.Metadata["error"]) + "]\n")
+			b.WriteString(plain.Render(safe("["+fmt.Sprint(message.Metadata["error"])+"]")) + "\n")
 		}
 		b.WriteString("\n")
 	}
 	if m.busy {
-		b.WriteString("ASSISTANT\n" + m.draft)
+		// A reply in progress stays plain until it is complete.
+		b.WriteString(role.Render("ASSISTANT") + "\n" + plain.Render(safe(m.draft)))
 	}
 	atBottom := m.viewport.AtBottom()
-	m.viewport.SetContent(lipgloss.NewStyle().Width(max(20, m.width-4)).Render(safe(b.String())))
+	m.viewport.SetContent(b.String())
 	if atBottom {
 		m.viewport.GotoBottom()
 	}

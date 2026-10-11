@@ -270,3 +270,35 @@ func TestTUIRunsCommandsThroughService(t *testing.T) {
 		t.Fatal("/models was not sent as chat")
 	}
 }
+
+func TestTUIRendersMarkdown(t *testing.T) {
+	m := model{input: textarea.New(), viewport: viewport.New(), width: 80}
+	m.viewport.SetWidth(76)
+	m.viewport.SetHeight(30)
+	m.messages = []chat.Message{
+		{ID: "u", Role: "user", Parts: []chat.Part{{"type": "text", "text": "**not bold** for users"}}},
+		{ID: "a", Role: "assistant", Parts: []chat.Part{{"type": "text", "text": "**Current model:** `demo/echo`\n\n| Model | Traits |\n| --- | --- |\n| demo/echo | tools \x1b]52;c;ZXZpbA==\x07|"}}},
+	}
+	m.render()
+	content := m.viewport.GetContent()
+	if !strings.Contains(content, "**not bold**") {
+		t.Fatal("user text was rendered as Markdown")
+	}
+	if strings.Contains(content, "**Current model:**") || strings.Contains(content, "| --- |") || !strings.Contains(content, "demo/echo") {
+		t.Fatalf("assistant Markdown was not rendered:\n%s", content)
+	}
+	if strings.Contains(content, "\x1b]52") || strings.Contains(content, "\x07") {
+		t.Fatal("a terminal escape from model output reached the screen")
+	}
+	m.listText = "**Deliveries:** none yet."
+	m.render()
+	if content := m.viewport.GetContent(); strings.Contains(content, "**") || !strings.Contains(content, "Deliveries:") {
+		t.Fatalf("command result was not rendered:\n%s", content)
+	}
+	m.markdown.cache["sentinel"] = "kept"
+	m.width = 60
+	m.render()
+	if _, ok := m.markdown.cache["sentinel"]; ok {
+		t.Fatal("a width change kept output wrapped for the old width")
+	}
+}
