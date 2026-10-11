@@ -7,6 +7,7 @@ const errorText = (error: unknown) => error instanceof Error ? error.message : S
 export function useConversation({ connection, id, initial, onBusy, onChanged }: { connection: Connection; id: string; initial: Snapshot; onBusy: (busy: boolean) => void; onChanged: () => void }) {
   const [input, setInput] = useState('');
   const [remoteBusy, setRemoteBusy] = useState(initial.active);
+  const [model, setModel] = useState(initial.model);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const submittedText = useRef('');
@@ -33,7 +34,7 @@ export function useConversation({ connection, id, initial, onBusy, onChanged }: 
     const generation = refreshGeneration.current;
     const snapshot = await api<Snapshot>(connection, `/conversations/${id}`);
     if (generation !== refreshGeneration.current || busyRef.current) return;
-    setMessages(snapshot.messages); setRemoteBusy(snapshot.active);
+    setMessages(snapshot.messages); setRemoteBusy(snapshot.active); setModel(snapshot.model);
   }
   useEffect(() => {
     if (streaming || approvalBusy) return;
@@ -63,5 +64,5 @@ export function useConversation({ connection, id, initial, onBusy, onChanged }: 
     try { await api(connection, `/conversations/${id}/stop`, {}); approvalController.current?.abort(); await stop(); }
     catch (e) { setFailure(errorText(e)); }
   }
- return { input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel };
+ return { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel };
 }

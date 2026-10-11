@@ -7,7 +7,7 @@ const connection = { url: 'http://localhost', token: 'local-token' };
 const initial = (): Configs => ({
   email: { enabled: true, from: 'a@example.org', imap: { host: 'imap.example.org', port: 993, security: 'tls', username: 'a', hasPassword: true }, smtp: { host: 'smtp.example.org', port: 587, security: 'starttls', username: 'a', hasPassword: true } },
   telegram: { enabled: false, userId: 0 },
-  cloudflare: { enabled: false, useForChat: false, accountId: '', model: '', embeddingModel: '', index: '', databaseId: '', namespaceId: '', bucket: '' },
+  cloudflare: { enabled: false, accountId: '', model: '', embeddingModel: '', index: '', databaseId: '', namespaceId: '', bucket: '' },
   wechat_ilink: { enabled: false, baseUrl: '', allowedUsers: [] },
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/plugins/telegram"
+	"github.com/fdkevin0/mob/internal/provider"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestTelegramPersistenceFailureDoesNotAcknowledge(t *testing.T) {
 	if _, err = db.Exec(`CREATE TRIGGER reject_receipt BEFORE INSERT ON deliveries BEGIN SELECT RAISE(FAIL,'disk failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	server := NewServer(s, chat.Provider{Demo: true}, "token")
+	server := NewServer(s, provider.Offline(), "token")
 	defer server.Close()
 	polls := 0
 	c := telegram.Config{Enabled: true, Token: "123:secret", UserID: 42}
@@ -57,7 +58,7 @@ func TestTelegramTerminalDeliveryNeverResends(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	server := NewServer(s, chat.Provider{Demo: true}, "token")
+	server := NewServer(s, provider.Offline(), "token")
 	defer server.Close()
 	c := telegram.Config{Token: "123:secret", UserID: 42, Transport: pluginTransport(func(*http.Request) (*http.Response, error) { t.Fatal("unexpected resend"); return nil, nil })}
 	var update telegram.Update
@@ -83,7 +84,7 @@ func TestTelegramCancellationAndProcessingErrorAreDurable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	server := NewServer(store, chat.Provider{}, "token")
+	server := NewServer(store, provider.Memory(provider.File{}), "token")
 	defer server.Close()
 	var update telegram.Update
 	json.Unmarshal([]byte(`{"update_id":7,"message":{"text":"hello","from":{"id":42},"chat":{"id":42,"type":"private"}}}`), &update)

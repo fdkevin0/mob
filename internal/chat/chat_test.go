@@ -11,6 +11,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/fdkevin0/mob/internal/llm"
+	"github.com/fdkevin0/mob/internal/llm/demo"
+	"github.com/fdkevin0/mob/internal/llm/openai"
 )
 
 func TestPersistenceApprovalAndRecovery(t *testing.T) {
@@ -32,12 +36,12 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := s.Begin(c.ID, "request-1", "/remember 喜欢中文")
+	m, err := s.Begin(c.ID, "request-1", "/remember 喜欢中文", "demo/echo")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var events []Event
-	err = Run(context.Background(), s, Provider{Demo: true}, c.ID, m, "", func(e Event) error { events = append(events, e); return nil })
+	err = Run(context.Background(), s, demo.Model{}, c.ID, m, "", func(e Event) error { events = append(events, e); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +70,7 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if err != nil || len(facts) != 1 || facts[0] != "喜欢中文" {
 		t.Fatalf("facts %v, %v", facts, err)
 	}
-	if _, err = s.Begin(c.ID, "request-1", "duplicate"); err == nil {
+	if _, err = s.Begin(c.ID, "request-1", "duplicate", ""); err == nil {
 		t.Fatal("duplicate request accepted")
 	}
 	history, err := s.History(c.ID)
@@ -76,7 +80,7 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if history[1].Parts[0]["state"] != "output-available" {
 		t.Fatal("approval UI state not persisted")
 	}
-	m, err = s.Begin(c.ID, "interrupted", "hello")
+	m, err = s.Begin(c.ID, "interrupted", "hello", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +114,7 @@ func TestDenialAndExpiry(t *testing.T) {
 	defer s.Close()
 	c, _ := s.Create()
 	for _, action := range []string{"deny", "expire"} {
-		m, err := s.Begin(c.ID, NewID(), "remember")
+		m, err := s.Begin(c.ID, NewID(), "remember", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,53 +142,15 @@ func TestDenialAndExpiry(t *testing.T) {
 	}
 }
 
-func TestProviderStreamingAndTruncation(t *testing.T) {
-	for _, truncated := range []bool{false, true} {
-		t.Run(fmt.Sprint(truncated), func(t *testing.T) {
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/chat/completions" || r.Header.Get("Authorization") != "Bearer test" {
-					t.Error("bad provider request")
-				}
-				w.Header().Set("Content-Type", "text/event-stream")
-				fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"思考\"}}]}\r\n\r\n")
-				fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"你好\",\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"datetime\",\"arguments\":\"{\"}}]}}]}\n\n")
-				if !truncated {
-					fmt.Fprint(w, `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]},"finish_reason":"tool_calls"}]}`+"\n\n")
-					fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":3}}\n\ndata: [DONE]\n\n")
-				}
-			}))
-			defer upstream.Close()
-			var got string
-			result, err := (Provider{BaseURL: upstream.URL, APIKey: "test", Model: "test"}).Stream(context.Background(), []ModelMessage{{Role: "user", Content: "hi"}}, func(kind, delta string) error { got += kind + ":" + delta + ";"; return nil })
-			if truncated {
-				if err == nil {
-					t.Fatal("truncated stream marked successful")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != "reasoning:思考;text:你好;" || len(result.Calls) != 1 || result.Calls[0].ID != "c1" || result.Calls[0].Function.Arguments != "{}" || result.Usage["prompt_tokens"] != float64(3) {
-				t.Fatalf("bad result: %+v %s", result, got)
-			}
-		})
-	}
-}
-
-func TestSSEMultiline(t *testing.T) {
-	var got []string
-	err := ReadSSE(strings.NewReader(": heartbeat\r\ndata: one\r\ndata: two\r\n\r\ndata: tail"), func(raw []byte) error { got = append(got, string(raw)); return nil })
-	if err != nil || strings.Join(got, "|") != "one\ntwo|tail" {
-		t.Fatalf("%v %v", got, err)
-	}
-}
-
 func TestEngineContinuesAfterTool(t *testing.T) {
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Messages []ModelMessage `json:"messages"`
+			Messages []struct {
+				Role       string `json:"role"`
+				Content    string `json:"content"`
+				ToolCallID string `json:"tool_call_id"`
+			} `json:"messages"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
@@ -209,11 +175,12 @@ func TestEngineContinuesAfterTool(t *testing.T) {
 	}
 	defer s.Close()
 	c, _ := s.Create()
-	m, err := s.Begin(c.ID, NewID(), "What time is it?")
+	m, err := s.Begin(c.ID, NewID(), "What time is it?", "test/test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = Run(context.Background(), s, Provider{BaseURL: upstream.URL, APIKey: "test", Model: "test"}, c.ID, m, "", func(Event) error { return nil })
+	model := openai.New(llm.Ref{Provider: "test", Model: "test"}, llm.Info{ID: "test", Tools: true}, openai.Config{BaseURL: upstream.URL, Key: "test"})
+	err = Run(context.Background(), s, model, c.ID, m, "", func(Event) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

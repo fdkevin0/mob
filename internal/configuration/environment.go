@@ -12,25 +12,21 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
-	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 type Environment struct {
 	Dir, StateDir, Addr string
-	Provider            chat.Provider
-	KeySource           string
-	Loader              *Loader
+	// Demo makes the offline model the default.
+	Demo   bool
+	Loader *Loader
 }
 
 type settings struct {
 	DataDir  string `mapstructure:"data_dir"`
 	StateDir string `mapstructure:"state_dir"`
 	Addr     string `mapstructure:"addr"`
-	BaseURL  string `mapstructure:"base_url"`
-	Model    string `mapstructure:"model"`
-	APIKey   string `mapstructure:"api_key"`
 	Demo     bool   `mapstructure:"demo"`
 }
 
@@ -48,8 +44,6 @@ func AddFlags(flags *pflag.FlagSet) {
 	flags.String("data-dir", "", "SQLite and local token directory")
 	flags.String("state-dir", "", "Background log directory")
 	flags.String("addr", "", "Loopback listen address")
-	flags.String("base-url", "", "OpenAI-compatible API base URL")
-	flags.String("model", "", "Model name")
 	flags.Bool("demo", false, "Use offline model simulation")
 }
 
@@ -75,8 +69,11 @@ func NewLoader(flags *pflag.FlagSet) (*Loader, error) {
 	l.path, err = filepath.Abs(l.path)
 	return l, err
 }
-func (l *Loader) Path() string        { return l.path }
-func (l *Loader) Arguments() []string { return append([]string(nil), l.args...) }
+func (l *Loader) Path() string { return l.path }
+
+// ProvidersPath is providers.json, beside the configuration file.
+func (l *Loader) ProvidersPath() string { return filepath.Join(filepath.Dir(l.path), "providers.json") }
+func (l *Loader) Arguments() []string   { return append([]string(nil), l.args...) }
 
 func defaultDataDir() string {
 	dir := filepath.Join(xdg.DataHome, "mob")
@@ -97,9 +94,6 @@ func (l *Loader) read(required bool) (Environment, error) {
 	v.SetDefault("data_dir", defaultDataDir())
 	v.SetDefault("state_dir", filepath.Join(xdg.StateHome, "mob"))
 	v.SetDefault("addr", "127.0.0.1:8787")
-	v.SetDefault("base_url", chat.DefaultOpenCodeZenBaseURL)
-	v.SetDefault("model", chat.DefaultOpenCodeZenModel)
-	v.SetDefault("api_key", "")
 	v.SetDefault("demo", false)
 	raw, mode, err := readConfigFile(l.path)
 	if err != nil {
@@ -121,11 +115,8 @@ func (l *Loader) read(required bool) (Environment, error) {
 		if runtime.GOOS != "windows" && mode.Perm()&0022 != 0 {
 			return fail("configuration must not be writable by group or others")
 		}
-		if runtime.GOOS != "windows" && v.InConfig("api_key") && v.GetString("api_key") != "" && mode.Perm()&0077 != 0 {
-			return fail("configuration containing api_key must have owner-only permissions (chmod 600)")
-		}
 	}
-	for _, key := range []string{"data_dir", "state_dir", "addr", "base_url", "model", "demo"} {
+	for _, key := range []string{"data_dir", "state_dir", "addr", "demo"} {
 		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(key)); err != nil {
 			return Environment{}, err
 		}
@@ -133,19 +124,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 			return Environment{}, err
 		}
 	}
-	if err := v.BindEnv("api_key", "MOB_API_KEY", "DEEPSEEK_API_KEY"); err != nil {
-		return Environment{}, err
-	}
 	var data settings
 	if v.UnmarshalExact(&data) != nil {
-		return fail("invalid configuration fields or types (contents omitted)")
-	}
-	// Legacy key-only configurations belong to DeepSeek; changing providers requires an explicit URL.
-	if strings.TrimSpace(data.APIKey) != "" && !strings.EqualFold(strings.TrimSpace(data.APIKey), chat.DefaultOpenCodeZenKey) && os.Getenv("MOB_BASE_URL") == "" && !l.flags.Lookup("base-url").Changed && !v.InConfig("base_url") {
-		data.BaseURL = "https://api.deepseek.com"
-		if os.Getenv("MOB_MODEL") == "" && !l.flags.Lookup("model").Changed && !v.InConfig("model") {
-			data.Model = "deepseek-flash"
-		}
+		return fail("invalid configuration fields or types (contents omitted); model providers live in providers.json")
 	}
 	host, port, err := net.SplitHostPort(data.Addr)
 	if err != nil {
@@ -155,16 +136,6 @@ func (l *Loader) read(required bool) (Environment, error) {
 	number, err := strconv.Atoi(port)
 	if ip == nil || !ip.IsLoopback() || err != nil || number < 0 || number > 65535 {
 		return fail("addr must be a loopback IP and valid port")
-	}
-	if chat.ValidateProviderURL(data.BaseURL) != nil {
-		return fail("base_url requires HTTPS (HTTP only for loopback), without credentials, query or fragment")
-	}
-	if strings.TrimSpace(data.Model) == "" || len(data.Model) > 256 || strings.ContainsAny(data.Model, "\r\n\x00") {
-		return fail("model must be a nonempty name without control characters")
-	}
-	data.APIKey = strings.TrimSpace(data.APIKey)
-	if !validAPIKey(data.APIKey) {
-		return fail("api_key must contain at most 4096 printable non-space ASCII characters")
 	}
 	if data.DataDir == "" || data.StateDir == "" {
 		return fail("data_dir and state_dir must not be empty")
@@ -177,17 +148,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	source := ""
-	if os.Getenv("MOB_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" {
-		source = "environment"
-	} else if v.InConfig("api_key") {
-		source = "file"
-	}
-	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Provider: chat.Provider{BaseURL: data.BaseURL, APIKey: data.APIKey, Model: data.Model, Demo: data.Demo}, KeySource: source, Loader: l}, nil
-}
-
-func validAPIKey(key string) bool {
-	return len(key) <= 4096 && !strings.ContainsFunc(key, func(r rune) bool { return r < 33 || r > 126 })
+	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

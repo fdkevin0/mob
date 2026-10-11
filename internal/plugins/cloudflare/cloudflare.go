@@ -22,7 +22,6 @@ import (
 type Config struct {
 	Transport      http.RoundTripper `json:"-"`
 	Enabled        bool              `json:"enabled"`
-	UseForChat     bool              `json:"useForChat"`
 	AccountID      string            `json:"accountId"`
 	Token          string            `json:"token,omitempty"`
 	HasToken       bool              `json:"hasToken,omitempty"`
@@ -46,9 +45,6 @@ func (c Config) Validate() error {
 	}
 	if !accountID.MatchString(c.AccountID) || c.Token == "" || strings.ContainsAny(c.Token, " \r\n\t") {
 		return errors.New("Cloudflare: valid account ID and API token required")
-	}
-	if c.UseForChat && !validModel(c.Model) {
-		return errors.New("Cloudflare: choose a Workers AI chat model")
 	}
 	for _, id := range []string{c.Index, c.DatabaseID, c.NamespaceID, c.Bucket} {
 		if id != "" && (!resource.MatchString(id) || id == "." || id == "..") {

@@ -18,6 +18,12 @@ CREATE TABLE IF NOT EXISTS memories(id TEXT PRIMARY KEY, conversation_id TEXT NO
 `,
 	`ALTER TABLE deliveries ADD COLUMN error TEXT NOT NULL DEFAULT '';
 ALTER TABLE deliveries ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;`,
+	// Models are chosen per conversation; keys live in providers.json.
+	`ALTER TABLE conversations ADD COLUMN model TEXT NOT NULL DEFAULT '';
+ALTER TABLE messages ADD COLUMN model TEXT NOT NULL DEFAULT '';
+ALTER TABLE messages ADD COLUMN usage TEXT NOT NULL DEFAULT '';
+ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT '';
+DELETE FROM settings WHERE key IN ('api_key','api_key_origin');`,
 }
 
 func (s *Store) migrate() error {

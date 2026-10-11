@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
+	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/protocol"
+	"github.com/fdkevin0/mob/internal/provider"
 	"io"
 	"io/fs"
 	"log"
@@ -24,14 +26,17 @@ type Server struct {
 	Shutdown           func()
 	ConfigurationError func() string
 	Configuration      *configuration.Service
+	Providers          *provider.Registry
 	plugins            pluginRuntime
 	*chat.ConversationService
 	Token string
 }
 
-func NewServer(store *chat.Store, provider chat.Provider, token string) *Server {
-	return &Server{Configuration: &configuration.Service{Store: store, Base: provider}, ConversationService: chat.NewConversation(store, provider), Token: token}
+func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
+	return &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), Token: token}
 }
+
+func (s *Server) defaultModel() (llm.Model, error) { return s.Providers.Resolve(s.Providers.Default()) }
 
 func (s *Server) Close() {
 	s.closePlugins()
@@ -57,10 +62,19 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	})
 	s.pluginRoutes(mux)
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
-		_, snapshot, err := s.Configuration.Effective()
-		respond(w, snapshot, err)
+		writeJSON(w, 200, configuration.Snapshot{DefaultModel: s.Providers.Default(), Demo: s.Providers.Demo})
 	})
-	mux.HandleFunc("POST /api/config", s.configure)
+	mux.HandleFunc("GET /api/models", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, s.Providers.List(r.Context(), r.URL.Query().Get("q")))
+	})
+	mux.HandleFunc("GET /api/providers", func(w http.ResponseWriter, r *http.Request) {
+		f := s.Providers.File()
+		public := make([]provider.Provider, len(f.Providers))
+		for i, p := range f.Providers {
+			public[i] = p.Public()
+		}
+		writeJSON(w, 200, map[string]any{"default": f.Default, "providers": public})
+	})
 	mux.HandleFunc("GET /api/conversations", func(w http.ResponseWriter, r *http.Request) { data, err := s.Store.List(); respond(w, data, err) })
 	mux.HandleFunc("POST /api/conversations", func(w http.ResponseWriter, r *http.Request) { data, err := s.Store.Create(); respond(w, data, err) })
 	mux.HandleFunc("GET /api/conversations/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -69,8 +83,12 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 			respond(w, nil, err)
 			return
 		}
-		active := s.Active(r.PathValue("id"))
-		writeJSON(w, 200, map[string]any{"messages": messages, "active": active})
+		model, err := s.Model(r.PathValue("id"))
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"messages": messages, "active": s.Active(r.PathValue("id")), "model": model})
 	})
 	mux.HandleFunc("POST /api/conversations/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"stopped": s.Stop(r.PathValue("id"))})
@@ -141,6 +159,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expected one JSON object", 400)
 		return
 	}
+	// Holders of the local token run this Mob.
+	input.Owner = true
 	started := false
 	emit := func(e chat.Event) error {
 		if !started {
@@ -203,32 +223,4 @@ func respond(w http.ResponseWriter, data any, err error) {
 	} else {
 		writeJSON(w, 200, data)
 	}
-}
-
-func (s *Server) configure(w http.ResponseWriter, r *http.Request) {
-	s.plugins.mu.Lock()
-	defer s.plugins.mu.Unlock()
-	var input struct {
-		APIKey string `json:"apiKey"`
-		Action string `json:"action"`
-	}
-	if !decodeRequest(w, r, &input) {
-		return
-	}
-	if err := s.Configuration.UpdateAPIKey(input.APIKey, input.Action); err != nil {
-		var command *chat.CommandError
-		if errors.As(err, &command) {
-			http.Error(w, err.Error(), command.Status)
-		} else {
-			http.Error(w, err.Error(), 400)
-		}
-		return
-	}
-	provider, snapshot, err := s.Configuration.Effective()
-	if err != nil {
-		respond(w, nil, err)
-		return
-	}
-	s.SetProvider(provider)
-	writeJSON(w, 200, snapshot)
 }

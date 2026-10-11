@@ -14,7 +14,7 @@ it('ignores a stale history response after a local send and restores input on fa
     if (++reads === 1) return new Promise<Response>(resolve => { resolveHistory = resolve; });
     return Promise.resolve(Response.json({ messages: [], active: false }));
   }));
-  const { result } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false }, onBusy: () => {}, onChanged: () => {} }));
+  const { result } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
   act(() => result.current.setInput('keep my text'));
   act(() => result.current.submit({ preventDefault() {} } as FormEvent));
   await waitFor(() => expect(result.current.busy).toBe(true));
@@ -32,7 +32,7 @@ it('cancels an approval stream when the conversation is unmounted', async () => 
     }
     return Promise.resolve(Response.json({ messages: [], active: false }));
   }));
-  const { result, unmount } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false }, onBusy: () => {}, onChanged: () => {} }));
+  const { result, unmount } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
   act(() => { void result.current.decide('approval', true); });
   await waitFor(() => expect(signal).toBeDefined());
   unmount();

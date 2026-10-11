@@ -5,17 +5,19 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/fdkevin0/mob/internal/llm"
 )
 
-var tools = []any{
-	map[string]any{"type": "function", "function": map[string]any{"name": "datetime", "description": "Get current date and time in an optional IANA timezone.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"timezone": map[string]any{"type": "string"}}, "additionalProperties": false}}},
-	map[string]any{"type": "function", "function": map[string]any{"name": "remember", "description": "Request permission to save one durable fact locally for this conversation. Stops the turn until the user approves.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}}},
+var tools = []llm.Tool{
+	{Name: "datetime", Description: "Get current date and time in an optional IANA timezone.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"timezone": map[string]any{"type": "string"}}, "additionalProperties": false}},
+	{Name: "remember", Description: "Request permission to save one durable fact locally for this conversation. Stops the turn until the user approves.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}},
 }
 
-func executeTool(store *Store, conversationID string, message *Message, call ToolCall, part Part, input map[string]any, send func(Event) error) (any, bool, error, error) {
+func executeTool(store *Store, conversationID string, message *Message, call llm.ToolCall, part Part, input map[string]any, send func(Event) error) (any, bool, error, error) {
 	var output any
 	var toolErr error
-	switch call.Function.Name {
+	switch call.Name {
 	case "datetime":
 		zone, _ := input["timezone"].(string)
 		if zone == "" {
@@ -44,7 +46,7 @@ func executeTool(store *Store, conversationID string, message *Message, call Too
 		}
 		return nil, true, nil, nil
 	default:
-		toolErr = fmt.Errorf("unsupported tool: %s", call.Function.Name)
+		toolErr = fmt.Errorf("unsupported tool: %s", call.Name)
 	}
 	return output, false, toolErr, nil
 }

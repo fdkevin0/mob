@@ -12,11 +12,11 @@ import (
 	"unicode"
 
 	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/local"
 	"github.com/fdkevin0/mob/internal/protocol"
 )
@@ -26,6 +26,7 @@ type snapshot struct {
 	ID         string
 	Messages   []chat.Message
 	Active     bool
+	Model      string
 	Err        error
 }
 type streamEvent struct {
@@ -34,32 +35,33 @@ type streamEvent struct {
 	Done  bool
 }
 type tick struct{}
+
+// modelConfiguration is the service's answer to GET /api/config.
 type modelConfiguration struct {
-	Configured bool
-	Err        error
+	DefaultModel string
+	Err          error
 }
 type listing struct {
 	Text string
 	Err  error
 }
 type model struct {
-	plugin                      *pluginForm
-	connection                  local.Connection
-	key                         textinput.Model
-	configured, checked, saving bool
-	id                          string
-	messages                    []chat.Message
-	input                       textarea.Model
-	viewport                    viewport.Model
-	status, draft               string
-	failure, listText           string
-	generation                  uint64
-	busy, remoteBusy            bool
-	width                       int
-	events                      chan streamEvent
-	ctx                         context.Context
-	cancel                      context.CancelFunc
-	streamCancel                context.CancelFunc
+	plugin              *pluginForm
+	connection          local.Connection
+	configured, checked bool
+	id, modelRef        string
+	messages            []chat.Message
+	input               textarea.Model
+	viewport            viewport.Model
+	status, draft       string
+	failure, listText   string
+	generation          uint64
+	busy, remoteBusy    bool
+	width               int
+	events              chan streamEvent
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	streamCancel        context.CancelFunc
 }
 
 func Run(connection local.Connection) error {
@@ -71,27 +73,16 @@ func Run(connection local.Connection) error {
 	input.KeyMap.InsertNewline.SetKeys("alt+enter", "shift+enter", "ctrl+j")
 	input.CharLimit = 16000
 	input.Focus()
-	key := textinput.New()
-	key.EchoMode = textinput.EchoPassword
-	key.CharLimit = 4096
-	key.Placeholder = "API key"
-	key.Focus()
-	m := model{key: key, connection: connection, input: input, viewport: viewport.New(), ctx: ctx, cancel: cancel, width: 80, status: "Connecting…"}
+	m := model{connection: connection, input: input, viewport: viewport.New(), ctx: ctx, cancel: cancel, width: 80, status: "Connecting…"}
 	_, err := tea.NewProgram(m).Run()
 	return err
 }
 
-func (m model) Init() tea.Cmd { return tea.Batch(m.checkConfig(""), nextTick()) }
-func (m model) checkConfig(key string) tea.Cmd {
+func (m model) Init() tea.Cmd { return tea.Batch(m.checkConfig(), nextTick()) }
+func (m model) checkConfig() tea.Cmd {
 	return func() tea.Msg {
 		var result modelConfiguration
-		method := "GET"
-		var body any
-		if key != "" {
-			method = "POST"
-			body = map[string]string{"apiKey": key}
-		}
-		result.Err = m.json(method, "/api/config", body, &result)
+		result.Err = m.json("GET", "/api/config", nil, &result)
 		return result
 	}
 }
@@ -182,7 +173,7 @@ func (m *model) stream(input chat.ChatRequest) tea.Cmd {
 		resp, err := copy.request(ctx, "POST", "/api/chat", input)
 		if err == nil {
 			defer resp.Body.Close()
-			err = chat.ReadSSE(resp.Body, func(raw []byte) error {
+			err = llm.ReadSSE(resp.Body, func(_ string, raw []byte) error {
 				if string(raw) == "[DONE]" {
 					return nil
 				}
@@ -224,22 +215,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.plugin = nil
 		m.failure = ""
 		m.status = "Saved"
-		return m, m.checkConfig("")
+		return m, nil
 	case modelConfiguration:
-		m.saving = false
+		m.checked = true
 		if msg.Err != nil {
 			m.failure = msg.Err.Error()
 			return m, nil
 		}
-		m.checked = true
-		if !msg.Configured {
-			m.configured = false
-			m.key.Focus()
-		}
-		if !m.configured && msg.Configured {
+		if !m.configured {
 			m.configured = true
-			m.key.Reset()
-			m.key.Blur()
 			m.failure = ""
 			return m, m.load("", false)
 		}
@@ -264,7 +248,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.id = msg.ID
 		m.messages = msg.Messages
 		m.remoteBusy = msg.Active
-		m.status = "Ready · " + m.id
+		m.modelRef = msg.Model
+		m.status = "Ready · " + m.modelRef + " · " + m.id
 		if m.remoteBusy {
 			m.status = "Another client is generating · Ctrl+S to stop"
 		}
@@ -320,25 +305,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel()
 				return m, tea.Quit
 			}
-			if msg.String() == "ctrl+r" && !m.saving {
-				return m, m.checkConfig("")
+			if msg.String() == "ctrl+r" {
+				return m, m.checkConfig()
 			}
-			if m.saving || !m.checked {
-				return m, nil
-			}
-			if msg.String() == "enter" {
-				key := strings.TrimSpace(m.key.Value())
-				if key == "" {
-					m.failure = "Enter your API key."
-					return m, nil
-				}
-				m.saving = true
-				m.failure = ""
-				return m, m.checkConfig(key)
-			}
-			var cmd tea.Cmd
-			m.key, cmd = m.key.Update(msg)
-			return m, cmd
+			return m, nil
 		}
 		switch msg.String() {
 		case "ctrl+c":
@@ -432,8 +402,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	if !m.configured {
-		m.key, cmd = m.key.Update(msg)
-		return m, cmd
+		return m, nil
 	}
 	m.input, cmd = m.input.Update(msg)
 	return m, cmd
@@ -486,16 +455,9 @@ func (m *model) render() {
 }
 func (m model) View() tea.View {
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Render("Mob / terminal")
-	body := title + "\n" + safe(m.status) + "\n" + safe(m.failure) + "\n" + m.viewport.View() + "\n" + m.input.View() + "\n/new /list /open ID · /plugins /email /mail /cloud /deliveries · Ctrl+P connections · Ctrl+S stop · Ctrl+C quit · PgUp/PgDn scroll"
+	body := title + "\n" + safe(m.status) + "\n" + safe(m.failure) + "\n" + m.viewport.View() + "\n" + m.input.View() + "\n/new /list /open ID · /model /models · /plugins /email /mail /cloud /deliveries · Ctrl+P connections · Ctrl+S stop · Ctrl+C quit · PgUp/PgDn scroll"
 	if !m.configured {
-		body = title + "\nChecking configuration… (Ctrl+R retry · Ctrl+C quit)\n" + safe(m.failure)
-		if m.checked {
-			action := "Enter to save and continue · Ctrl+P connections · Ctrl+C quit"
-			if m.saving {
-				action = "Saving…"
-			}
-			body = title + "\nSet up your model\nMissing DEEPSEEK_API_KEY (or MOB_API_KEY).\nCreate a key at https://platform.deepseek.com/api_keys\nSaved locally on this computer; no restart needed.\n\n" + m.key.View() + "\n" + safe(m.failure) + "\n" + action
-		}
+		body = title + "\nConnecting… (Ctrl+R retry · Ctrl+C quit)\n" + safe(m.failure)
 	}
 	if m.plugin != nil {
 		body = title + "\n" + m.plugin.view() + "\n" + safe(m.failure)

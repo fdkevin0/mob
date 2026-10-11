@@ -21,7 +21,6 @@ export type TelegramConfig = {
 };
 export type CloudflareConfig = {
   enabled: boolean;
-  useForChat: boolean;
   accountId: string;
   token?: string;
   hasToken?: boolean;
@@ -50,12 +49,8 @@ export type Configs = {
   wechat_ilink: WeChatILinkConfig;
 };
 export type Config = {
-  model: string;
-  baseURL: string;
+  defaultModel: string;
   demo: boolean;
-  configured: boolean;
-  source: string;
-  keySource: string;
 };
 export type SecretUpdate = {
   mode: string;

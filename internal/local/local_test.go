@@ -1,11 +1,8 @@
 package local
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,151 +10,70 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/catalog"
+	"github.com/fdkevin0/mob/internal/provider"
 )
 
-func TestSetupPersistsAndEnvironmentWins(t *testing.T) {
-	t.Setenv("MOB_TOKEN", "")
-	c := Config{Dir: t.TempDir(), Addr: "127.0.0.1:0", Provider: chat.Provider{Model: "test", BaseURL: "https://api.deepseek.com"}}
+func TestProvidersReloadWhileRunning(t *testing.T) {
+	for _, name := range []string{"MOB_CONFIG", "MOB_TOKEN", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO"} {
+		t.Setenv(name, "")
+	}
+	dir := t.TempDir()
+	offlineCatalog(t, dir)
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(fmt.Sprintf("data_dir: %q\naddr: 127.0.0.1:0\n", dir)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MOB_CONFIG", path)
+	c, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
 	app, err := Start(c, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		if app != nil {
-			app.Close()
-		}
-	}()
-	request := func(method, body string, want int) string {
-		t.Helper()
-		req, _ := http.NewRequest(method, app.Connection.URL+"/api/config", bytes.NewBufferString(body))
+	defer app.Close()
+	config := func() string {
+		req, _ := http.NewRequest("GET", app.Connection.URL+"/api/config", nil)
 		req.Header.Set("Authorization", "Bearer "+app.Connection.Token)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		raw, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != want {
-			t.Fatalf("status %d: %s", resp.StatusCode, raw)
+		var snapshot struct{ DefaultModel string }
+		json.NewDecoder(resp.Body).Decode(&snapshot)
+		return snapshot.DefaultModel
+	}
+	if got := config(); got != "opencode/mimo-v2.6-flash-free" {
+		t.Fatalf("zero-configuration default %q", got)
+	}
+	providers := c.Loader.ProvidersPath()
+	if err = provider.Save(providers, provider.File{Default: "work/m1", Providers: []provider.Provider{{ID: "work", Chat: "https://relay.example/v1", Key: "secret"}}}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor := func(ok func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); !ok(); time.Sleep(50 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("timed out")
+			}
 		}
-		if strings.Contains(string(raw), "secret-key") {
-			t.Fatal("key leaked")
-		}
-		return string(raw)
 	}
-	if !strings.Contains(request("GET", "", 200), `"configured":false`) {
-		t.Fatal("missing setup")
-	}
-	request("POST", `{"apiKey":" "}`, 400)
-	request("POST", `{"apiKey":"bad key"}`, 400)
-	request("POST", `{"apiKey":"secret-key"}{}`, 400)
-	if !strings.Contains(request("POST", `{"apiKey":"secret-key"}`, 200), `"configured":true`) {
-		t.Fatal("not configured immediately")
-	}
-	app.Close()
-	app = nil
-	store, err := chat.OpenStore(filepath.Join(c.Dir, "mob.sqlite"))
-	if err != nil {
+	waitFor(func() bool { return config() == "work/m1" })
+	if err = os.WriteFile(providers, []byte("{broken"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	key, err := store.APIKey()
-	store.Close()
-	if err != nil || key != "secret-key" {
-		t.Fatal("key not persisted")
-	}
-	app, err = Start(c, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var config struct{ Configured bool }
-	json.Unmarshal([]byte(request("GET", "", 200)), &config)
-	if !config.Configured {
-		t.Fatal("restart lost config")
-	}
-	app.Close()
-	app = nil
-	c.Provider.APIKey = "environment-key"
-	app, err = Start(c, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request("POST", `{"apiKey":"replacement"}`, 409)
-}
-
-func TestLoadedProviderResolvesSavedKeyBeforeFreeFallback(t *testing.T) {
-	for _, tc := range []struct {
-		name, baseURL, model, savedURL, savedKey, fileKey, wantKey, wantSource string
-		configured                                                             bool
-	}{
-		{name: "anonymous Zen", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, wantKey: "public", wantSource: "default", configured: true},
-		{name: "saved Zen", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, savedURL: chat.DefaultOpenCodeZenBaseURL, savedKey: "saved-key", wantKey: "saved-key", wantSource: "saved", configured: true},
-		{name: "saved DeepSeek", baseURL: "https://api.deepseek.com", model: "deepseek-flash", savedURL: "https://api.deepseek.com", savedKey: "saved-key", wantKey: "saved-key", wantSource: "saved", configured: true},
-		{name: "foreign saved key", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, savedURL: "https://api.deepseek.com", savedKey: "saved-key", wantKey: "public", wantSource: "default", configured: true},
-		{name: "paid Zen without key", baseURL: chat.DefaultOpenCodeZenBaseURL, model: "paid-model", wantSource: "none"},
-		{name: "explicit empty key", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, savedURL: chat.DefaultOpenCodeZenBaseURL, savedKey: "saved-key", fileKey: "api_key: ''\n", wantSource: "file"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, name := range []string{"MOB_CONFIG", "MOB_TOKEN", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_BASE_URL", "MOB_MODEL", "MOB_API_KEY", "DEEPSEEK_API_KEY", "MOB_DEMO"} {
-				t.Setenv(name, "")
-			}
-			dir := t.TempDir()
-			path := filepath.Join(dir, "config.yaml")
-			if err := os.WriteFile(path, []byte(fmt.Sprintf("data_dir: %q\naddr: 127.0.0.1:0\nbase_url: %q\nmodel: %q\n%s", dir, tc.baseURL, tc.model, tc.fileKey)), 0600); err != nil {
-				t.Fatal(err)
-			}
-			t.Setenv("MOB_CONFIG", path)
-			c, err := LoadConfig()
-			if err != nil {
-				t.Fatal(err)
-			}
-			store, err := chat.OpenStore(filepath.Join(dir, "mob.sqlite"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tc.savedKey != "" {
-				if err := store.SaveAPIKeyFor(tc.savedKey, tc.savedURL); err != nil {
-					store.Close()
-					t.Fatal(err)
-				}
-			}
-			if err := store.Close(); err != nil {
-				t.Fatal(err)
-			}
-			app, err := Start(c, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer app.Close()
-			p, snapshot, err := app.Server.Configuration.Effective()
-			if err != nil || p.APIKey != tc.wantKey || app.Server.Provider().APIKey != tc.wantKey || snapshot.KeySource != tc.wantSource || snapshot.Configured != tc.configured {
-				t.Fatalf("incorrect effective provider: %+v, %v", snapshot, err)
-			}
-			if key, err := app.Server.Store.APIKey(); err != nil || key != tc.savedKey {
-				t.Fatal("fallback changed the saved credential")
-			}
-			if tc.fileKey == "" {
-				req, err := http.NewRequest("POST", app.Connection.URL+"/api/config", strings.NewReader(`{"apiKey":"replacement"}`))
-				if err != nil {
-					t.Fatal(err)
-				}
-				req.Header.Set("Authorization", "Bearer "+app.Connection.Token)
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					t.Fatal(err)
-				}
-				resp.Body.Close()
-				if resp.StatusCode != 200 || app.Server.Provider().APIKey != "replacement" {
-					t.Fatalf("UI key update failed: HTTP %d", resp.StatusCode)
-				}
-			}
-		})
+	waitFor(func() bool { return strings.Contains(app.ConfigError(), "providers.json") })
+	if got := config(); got != "work/m1" {
+		t.Fatalf("broken file replaced providers: %q", got)
 	}
 }
 
 func TestBackgroundShutdownAndUIAttachment(t *testing.T) {
 	t.Setenv("MOB_TOKEN", "")
-	c := Config{Dir: t.TempDir(), Addr: "127.0.0.1:0", Provider: chat.Provider{Demo: true}}
+	c := Config{Dir: t.TempDir(), Addr: "127.0.0.1:0", Demo: true}
 	app, err := StartDaemon(c, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -186,13 +102,14 @@ func TestBackgroundShutdownAndUIAttachment(t *testing.T) {
 }
 
 func TestDynamicConfigurationKeepsLastGoodAndStopsWatcher(t *testing.T) {
-	for _, name := range []string{"MOB_CONFIG", "MOB_TOKEN", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_BASE_URL", "MOB_MODEL", "MOB_API_KEY", "DEEPSEEK_API_KEY", "MOB_DEMO"} {
+	for _, name := range []string{"MOB_CONFIG", "MOB_TOKEN", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO"} {
 		t.Setenv(name, "")
 	}
 	dir := t.TempDir()
+	offlineCatalog(t, dir)
 	path := filepath.Join(dir, "config.yaml")
-	body := func(model, addr string) string {
-		return fmt.Sprintf("data_dir: %q\nstate_dir: %q\naddr: %q\nmodel: %q\ndemo: true\napi_key: fixture-private\n", filepath.Join(dir, "data"), filepath.Join(dir, "state"), addr, model)
+	body := func(addr string, demo bool) string {
+		return fmt.Sprintf("data_dir: %q\nstate_dir: %q\naddr: %q\ndemo: %t\n", filepath.Join(dir, "data"), filepath.Join(dir, "state"), addr, demo)
 	}
 	write := func(raw string) {
 		t.Helper()
@@ -204,7 +121,7 @@ func TestDynamicConfigurationKeepsLastGoodAndStopsWatcher(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(body("first", "127.0.0.1:0"))
+	write(body("127.0.0.1:0", true))
 	t.Setenv("MOB_CONFIG", path)
 	c, err := LoadConfig()
 	if err != nil {
@@ -214,64 +131,44 @@ func TestDynamicConfigurationKeepsLastGoodAndStopsWatcher(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	closed := false
-	defer func() {
-		if !closed {
-			app.Close()
-		}
-	}()
+	defer app.Close()
 	wait := func(check func() bool) {
 		t.Helper()
-		deadline := time.Now().Add(4 * time.Second)
-		for time.Now().Before(deadline) {
-			if check() {
-				return
+		for deadline := time.Now().Add(4 * time.Second); !check(); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("configuration reload timed out")
 			}
-			time.Sleep(10 * time.Millisecond)
 		}
-		t.Fatal("configuration reload timed out")
 	}
-	// Concurrent readers only ever observe complete validated snapshots.
-	ctx, cancel := context.WithCancel(context.Background())
-	joined := make(chan struct{})
-	go func() {
-		defer close(joined)
-		for ctx.Err() == nil {
-			_, _, _ = app.Server.Configuration.Effective()
-			time.Sleep(time.Millisecond)
-		}
-	}()
-	defer func() { cancel(); <-joined }()
-	write(body("second", "127.0.0.1:0"))
-	wait(func() bool { return app.Server.Provider().Model == "second" })
-	write("api_key: [fixture-private\n")
+	write("demo: [fixture-private\n")
 	wait(func() bool { return app.ConfigError() != "" })
-	if app.Server.Provider().Model != "second" || strings.Contains(app.ConfigError(), "fixture-private") {
-		t.Fatal("invalid file changed state or leaked credentials")
+	if strings.Contains(app.ConfigError(), "fixture-private") || app.Server.Providers.Default() != "demo/echo" {
+		t.Fatal("invalid file changed state or leaked contents")
 	}
-	write(body("must-not-apply", "127.0.0.1:9999"))
+	write(body("127.0.0.1:9999", true))
 	wait(func() bool { return strings.Contains(app.ConfigError(), "restart") })
-	if app.Server.Provider().Model != "second" {
-		t.Fatal("immutable setting rejection partially applied")
-	}
-	write(body("third", "127.0.0.1:0"))
-	wait(func() bool { return app.Server.Provider().Model == "third" && app.ConfigError() == "" })
+	write(body("127.0.0.1:0", false))
+	wait(func() bool { return strings.Contains(app.ConfigError(), "demo changes require a restart") })
+	write(body("127.0.0.1:0", true))
+	wait(func() bool { return app.ConfigError() == "" })
 	os.Remove(path)
 	wait(func() bool { return app.ConfigError() != "" })
-	if app.Server.Provider().Model != "third" {
-		t.Fatal("removed file reset config")
-	}
-	write(body("fourth", "127.0.0.1:0"))
-	wait(func() bool { return app.Server.Provider().Model == "fourth" && app.ConfigError() == "" })
-	cancel()
-	<-joined
-	// Avoid joining the same channel in the defer only blocks on an already closed channel.
+	write(body("127.0.0.1:0", true))
+	wait(func() bool { return app.ConfigError() == "" })
 	if err = app.Close(); err != nil {
 		t.Fatal(err)
 	}
-	closed = true
-	write(body("after-close", "127.0.0.1:0"))
-	if app.Server.Provider().Model != "fourth" {
+	write("demo: [after-close\n")
+	time.Sleep(300 * time.Millisecond)
+	if app.ConfigError() != "" {
 		t.Fatal("watcher outlived runtime")
 	}
+}
+
+// offlineCatalog keeps the running service from fetching models.dev.
+func offlineCatalog(t *testing.T, dir string) {
+	newCatalog = func() *catalog.Catalog { return &catalog.Catalog{Path: filepath.Join(dir, "models.json")} }
+	url := catalog.URL
+	catalog.URL = "http://127.0.0.1:1/unreachable"
+	t.Cleanup(func() { newCatalog, catalog.URL = catalog.Default, url })
 }

@@ -50,6 +50,7 @@ func (s *Service) ProcessMessage(ctx context.Context, c Config, senderID, contex
 		ID:        convID,
 		RequestID: chat.NewID(),
 		Text:      trimmed,
+		Owner:     c.IsOwner(senderID),
 	}
 
 	turnErr := s.Conversation.Execute(ctx, input, func(e chat.Event) error {

@@ -32,6 +32,7 @@ Understand the architectural concepts, network mesh models, and design decisions
   Explores AI Elements and AI SDK UI integration and streaming state management.
 * **[Architecture Decision Records (ADRs)](./adr/)**  
   Captures key architectural decisions, including:
+  - [ADR 0052: Providers in providers.json, Models Chosen per Conversation](./adr/0052-providers-json-and-per-conversation-models.md)
   - [ADR 0051: Multi-runtime Mesh, P2P/Relay Connectivity, and WeChat iLink Channel Gateway](./adr/0051-multi-runtime-mesh-and-channel-gateway.md)
   - [ADR 0050: DeepSeek Official API Integration](./adr/0050-use-deepseek-official-api.md)
   - [ADR 0039: Tool Approval as Turn Boundary](./adr/0039-tool-approval-as-turn-boundary.md)

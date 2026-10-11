@@ -10,10 +10,23 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Watch uses the directory so an editor's atomic rename does not lose the watch.
-// fsnotify is owned explicitly so Close can join the watcher before closing SQLite.
+// Watch reapplies the configuration file whenever it changes.
 func (l *Loader) Watch(ctx context.Context, apply func(Environment) error, report func(error)) (func(), error) {
-	dir := filepath.Dir(l.path)
+	return WatchFile(ctx, l.path, l.required, func() error {
+		next, err := l.read(true)
+		if err == nil {
+			err = apply(next)
+		}
+		return err
+	}, report)
+}
+
+// WatchFile calls reload after path changes and reports its outcome. It uses
+// the directory so an editor's atomic rename does not lose the watch.
+// fsnotify is owned explicitly so Close can join the watcher before closing SQLite.
+// An absent file is ignored until it first exists, unless required.
+func WatchFile(ctx context.Context, path string, required bool, reload func() error, report func(error)) (func(), error) {
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, errors.New("cannot create configuration directory")
 	}
@@ -26,8 +39,8 @@ func (l *Loader) Watch(ctx context.Context, apply func(Environment) error, repor
 		return nil, errors.New("cannot watch configuration directory")
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	seen := l.required
-	if _, err := os.Lstat(l.path); err == nil {
+	seen := required
+	if _, err := os.Lstat(path); err == nil {
 		seen = true
 	}
 	done := make(chan struct{})
@@ -38,13 +51,6 @@ func (l *Loader) Watch(ctx context.Context, apply func(Environment) error, repor
 		defer timer.Stop()
 		// Reconcile after registering the watch, covering writes during startup.
 		pending := timer.C
-		reload := func() {
-			next, err := l.read(true)
-			if err == nil {
-				err = apply(next)
-			}
-			report(err)
-		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -64,7 +70,7 @@ func (l *Loader) Watch(ctx context.Context, apply func(Environment) error, repor
 					report(errors.New("configuration directory removed; restart required to resume watching"))
 					return
 				}
-				if filepath.Clean(event.Name) != l.path {
+				if filepath.Clean(event.Name) != path {
 					continue
 				}
 				if event.Has(fsnotify.Write | fsnotify.Create | fsnotify.Rename | fsnotify.Remove | fsnotify.Chmod) {
@@ -74,11 +80,11 @@ func (l *Loader) Watch(ctx context.Context, apply func(Environment) error, repor
 			case <-pending:
 				pending = nil
 				// An absent optional file is fine only before it has ever been loaded.
-				if _, err := os.Lstat(l.path); errors.Is(err, os.ErrNotExist) && !seen {
+				if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) && !seen {
 					continue
 				}
 				seen = true
-				reload()
+				report(reload())
 			}
 		}
 	}()

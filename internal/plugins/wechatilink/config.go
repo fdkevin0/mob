@@ -65,6 +65,12 @@ func (c Config) Test(ctx context.Context) (any, error) {
 	}, nil
 }
 
+// IsOwner reports whether the sender is the first allowed user, who owns
+// this Mob; with no allow list nobody is.
+func (c Config) IsOwner(userID string) bool {
+	return len(c.AllowedUsers) > 0 && c.AllowedUsers[0] == userID
+}
+
 // IsUserAllowed verifies whether the WeChat sender is authorized.
 func (c Config) IsUserAllowed(userID string) bool {
 	if len(c.AllowedUsers) == 0 {

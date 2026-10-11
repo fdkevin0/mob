@@ -31,7 +31,7 @@ func TestCobraHelpAndConfigValidation(t *testing.T) {
 		t.Fatal("explicit missing config accepted")
 	}
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("model: test\napi_key: private-test-secret\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("demo: true\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	command = newRootCommand()
@@ -41,8 +41,8 @@ func TestCobraHelpAndConfigValidation(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "Configuration valid") || strings.Contains(output.String(), "private-test-secret") {
-		t.Fatal("config check leaked credentials")
+	if !strings.Contains(output.String(), "Configuration valid") || !strings.Contains(output.String(), "providers.json") {
+		t.Fatal("config check incomplete")
 	}
 	command = newRootCommand()
 	command.SetArgs([]string{"status", "unexpected"})
@@ -67,7 +67,7 @@ func TestGatewayCommandHelp(t *testing.T) {
 
 func TestInheritedFlagsSurviveBackgroundLaunch(t *testing.T) {
 	command := newRootCommand()
-	command.SetArgs([]string{"config", "check", "--config", "/tmp/mob-test.yaml", "--model", "pinned"})
+	command.SetArgs([]string{"config", "check", "--config", "/tmp/mob-test.yaml", "--demo"})
 	command.PersistentPreRunE = nil
 	check, _, err := command.Find([]string{"config", "check"})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestInheritedFlagsSurviveBackgroundLaunch(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := strings.Join(loader.Arguments(), " "); got != "--config=/tmp/mob-test.yaml --model=pinned" {
+		if got := strings.Join(loader.Arguments(), " "); got != "--config=/tmp/mob-test.yaml --demo=true" {
 			t.Fatalf("background arguments lost inherited flags: %q", got)
 		}
 	}

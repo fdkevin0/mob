@@ -11,6 +11,7 @@ import (
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/plugins/wechatilink"
+	"github.com/fdkevin0/mob/internal/provider"
 )
 
 func TestWeChatILinkConfig(t *testing.T) {
@@ -158,8 +159,7 @@ func TestWeChatILinkServiceProcessing(t *testing.T) {
 	}
 	defer store.Close()
 
-	provider := chat.Provider{Demo: true}
-	convSvc := chat.NewConversation(store, provider)
+	convSvc := chat.NewConversation(store, provider.Offline())
 	defer convSvc.Close()
 
 	svc := &wechatilink.Service{
