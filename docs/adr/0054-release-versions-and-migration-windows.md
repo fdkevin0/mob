@@ -15,8 +15,12 @@ the tree indefinitely, and the refusal never told the user what to install.
   reads both from the VCS stamp Go adds to builds made in a Git checkout, so
   `go build`, `bun run build:cli` and Wails need no linker flags. A build with
   uncommitted changes gets `-dirty`; `go run` and tests report `dev`.
-  `mob --version` and `GET /api/runtime` show it. A published release is tagged
-  with its version, and `version.DownloadURL` points to that tag.
+  `mob --version` and `GET /api/runtime` show it.
+- **Releases.** `main` changes only through pull requests. When CI passes on a
+  commit pushed to `main`, `.github/workflows/release.yml` builds the CLI with
+  the web UI embedded for Linux, macOS and Windows and publishes a GitHub release
+  tagged with the version the binary reports. `version.DownloadURL` points to
+  that release.
 - **Recorded in the database.** `PRAGMA user_version` holds the schema. The `meta`
   table's `service_version` holds the release that last opened the database, so
   a refusal can name it.
@@ -51,5 +55,5 @@ the tree indefinitely, and the refusal never told the user what to install.
 The code carries at most one window of migrations plus a baseline. A user who
 skips more than a window upgrades in steps, each refusal naming the next
 release, and nothing is lost on the way. Closing a window requires that the
-named release stays downloadable, so releases have to be published with their
-version tags; no workflow publishes them yet.
+named release stays published. Releases carry the CLI only; the Wails desktop
+app is not built in CI.

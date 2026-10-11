@@ -33,7 +33,7 @@ Use Go's `testing` package with `*_test.go` and `TestName` functions. UI tests u
 
 ## Commit & Pull Request Guidelines
 
-Follow history's `type(scope): description` convention, such as `fix(models): close reload race`. Keep commits focused. Describe the behavior change, link relevant issues, record validation commands and results, and include screenshots for UI changes.
+`main` changes only through pull requests; each merge that passes CI is released automatically as `{date}.{sha}` (`.github/workflows/release.yml`). Follow history's `type(scope): description` convention, such as `fix(models): close reload race`. Keep commits focused. Describe the behavior change, link relevant issues, record validation commands and results, and include screenshots for UI changes.
 
 ## Security & Configuration
 

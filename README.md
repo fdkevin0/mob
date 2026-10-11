@@ -308,7 +308,9 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
   with the release to install instead (ADR 0054). SQLite remains the concrete
   persistence dependency, with no generic repository or external queue.
 - `internal/version`: the `{date}.{sha}` release version, read from Go's VCS build
-  stamp; `mob --version` and `GET /api/runtime` report it.
+  stamp; `mob --version` and `GET /api/runtime` report it. Every merge to `main`
+  that passes CI is published as a GitHub release of that version with CLI
+  archives for Linux, macOS and Windows.
 - `internal/plugins/email`: mail reading, analysis, send deduplication, SMTP/IMAP
   and MIME. `internal/plugins/telegram`: polling, private-user filtering, offset
   acknowledgement, conversation mapping and reply delivery. Neither imports the
