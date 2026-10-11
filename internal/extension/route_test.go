@@ -19,6 +19,10 @@ func TestDecode(t *testing.T) {
 		`{"name":"mob"} {}`:        false,
 		`not json`:                 false,
 		`{"name":"` + strings.Repeat("x", 256<<10) + `"}`: false,
+		// A valid value that ends exactly at the limit, then more bytes.
+		padded(maxBody) + " ":  false,
+		padded(maxBody) + "{}": false,
+		padded(maxBody):        true,
 	} {
 		var v input
 		err := Decode(httptest.NewRequest("POST", "/", strings.NewReader(body)), &v)
@@ -27,4 +31,10 @@ func TestDecode(t *testing.T) {
 			t.Fatalf("%.40s: %v", body, err)
 		}
 	}
+}
+
+// padded is a valid body of exactly n bytes.
+func padded(n int) string {
+	body := `{"name":""}`
+	return body[:9] + strings.Repeat("x", n-len(body)) + body[9:]
 }

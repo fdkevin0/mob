@@ -303,6 +303,14 @@ func TestPluginRoutes(t *testing.T) {
 	if code := request("GET", "/api/plugins/email/messages/0?validity=1", ""); code != 400 {
 		t.Fatalf("invalid message identity: %d", code)
 	}
+	// A valid action that fills the 256 KiB limit, then trailing content.
+	action := `{"operation":"d1.databases","text":""}`
+	action = action[:len(action)-2] + strings.Repeat("x", 256<<10-len(action)) + `"}`
+	for _, trailing := range []string{" ", "{}"} {
+		if code := request("POST", "/api/plugins/cloudflare/action", action+trailing); code != 400 || len(hosts) != 0 {
+			t.Fatalf("an action past the size limit ran: %d %v", code, hosts)
+		}
+	}
 	if code := request("POST", "/api/plugins/cloudflare/action", `{"operation":"d1.databases"}`); code != 200 || len(hosts) != 1 || hosts[0] != "api.cloudflare.com" {
 		t.Fatalf("cloudflare action: %d %v", code, hosts)
 	}

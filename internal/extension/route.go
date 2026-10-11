@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -20,10 +21,19 @@ type Route struct {
 // Decode reads a request body of at most 256 KiB holding exactly one JSON
 // value with only the fields dest has.
 func Decode(r *http.Request, dest any) error {
-	d := json.NewDecoder(io.LimitReader(r.Body, 256<<10))
+	invalid := &chat.CommandError{Status: 400, Message: "invalid request"}
+	// One byte past the limit tells a body that ends at it from a longer one.
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
+	if err != nil || len(raw) > maxBody {
+		return invalid
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if d.Decode(dest) != nil || d.Decode(new(any)) != io.EOF {
-		return &chat.CommandError{Status: 400, Message: "invalid request"}
+		return invalid
 	}
 	return nil
 }
+
+// maxBody bounds a request body, in bytes.
+const maxBody = 256 << 10
