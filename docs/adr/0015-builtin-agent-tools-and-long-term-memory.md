@@ -1,6 +1,6 @@
 # 15. Built-in tools and chat-scoped semantic memory
 
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Assemble built-in tools in one factory with injected dependencies, then pass the
 tool set to the AI SDK turn loop. Capability and configuration gates decide which

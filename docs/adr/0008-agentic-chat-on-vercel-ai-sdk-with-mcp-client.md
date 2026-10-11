@@ -1,7 +1,7 @@
 # 8. AI SDK tool loop and outbound MCP client
 
 Date: 2026-06-20
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Use the AI SDK's streaming tool loop and the Agents SDK's MCP client instead of
 maintaining tool-call execution and transport by hand. `ConversationAgent` extends

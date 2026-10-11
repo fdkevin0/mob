@@ -1,7 +1,7 @@
 # 26. Tool labels and elapsed time
 
 Date: 2026-06-28
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 A result summary says what came back, but not what was requested. Add a short
 input label at tool start and elapsed execution time on completion, for example

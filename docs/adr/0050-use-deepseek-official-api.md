@@ -1,7 +1,7 @@
 # 50. One model through DeepSeek's official API
 
 Date: 2026-09-08
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 All LLM calls use `deepseek-flash` through the official Chat Completions endpoint
 at `https://api.deepseek.com`. Direct access removes an unrelated gateway, while

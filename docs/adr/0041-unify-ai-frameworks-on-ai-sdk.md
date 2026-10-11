@@ -1,7 +1,7 @@
 # 41. One AI SDK for all language-model calls
 
 Date: 2026-07-11
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Chat, email, extraction, and compaction use the AI SDK. A second handwritten model
 client duplicated transport, types, and usage accounting. Consumers accept the

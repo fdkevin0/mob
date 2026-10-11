@@ -1,7 +1,7 @@
 # 12. Separate turn orchestration from Telegram delivery
 
 Date: 2026-06-20
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Put Telegram delivery behind a Reply surface so model turns can be exercised
 with a recorder instead of a live bot. The agent retains platform lifecycle

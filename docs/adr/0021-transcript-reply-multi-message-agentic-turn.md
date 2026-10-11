@@ -1,7 +1,7 @@
 # 21. A multi-message transcript for the agentic turn
 
 Date: 2026-06-24
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Render a tool-using turn as interleaved text segments and tool-status messages.
 A single draft hides tool activity after completion and makes intermediate prose

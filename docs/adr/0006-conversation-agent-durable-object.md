@@ -1,7 +1,7 @@
 # 6. One Conversation Agent per chat
 
 Date: 2026-06-20
-Status: Accepted
+Status: Superseded — records the retired Cloudflare Worker, kept at the `legacy-worker` tag; the Go runtime does not follow it.
 
 Conversation state belongs to one `ConversationAgent` Durable Object per Telegram
 chat. Keeping history and execution together avoids the lost updates of a KV

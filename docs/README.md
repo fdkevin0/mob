@@ -26,16 +26,13 @@ Understand the architectural concepts, network mesh models, and design decisions
 
 * **[Product & Architecture Specification](./product-specification.md)**  
   Covers multi-runtime architecture (Desktop, Cloud Gateway, Edge Node), P2P and Gateway relay mesh topology, Telegram & WeChat iLink channel integration, and human-in-the-loop tool approvals.
-* **[Go + Bun Migration Technical Research](./go-bun-migration-research.md)**  
-  Records the architectural transition from legacy Node/Worker modules to Go + SQLite + Bun + Wails.
-* **[Chat UI Research](./chat-ui-research.md)**  
-  Explores AI Elements and AI SDK UI integration and streaming state management.
 * **[Architecture Decision Records (ADRs)](./adr/)**  
   Captures key architectural decisions, including:
+  - [ADR 0053: One Command Registry Drives Help and Completion in Every Client](./adr/0053-command-registry-and-completion.md)
   - [ADR 0052: Providers in providers.json, Models Chosen per Conversation](./adr/0052-providers-json-and-per-conversation-models.md)
   - [ADR 0051: Multi-runtime Mesh, P2P/Relay Connectivity, and WeChat iLink Channel Gateway](./adr/0051-multi-runtime-mesh-and-channel-gateway.md)
-  - [ADR 0050: DeepSeek Official API Integration](./adr/0050-use-deepseek-official-api.md)
-  - [ADR 0039: Tool Approval as Turn Boundary](./adr/0039-tool-approval-as-turn-boundary.md)
+
+  ADRs 0006–0050 record the retired Cloudflare Worker and are superseded.
 
 ---
 
