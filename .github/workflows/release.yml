@@ -1,8 +1,12 @@
 name: Release
 
-# Every change to main arrives by pull request; once CI passes on the merged
-# commit, it is published as a release tagged with its version ({date}.{sha},
-# docs/adr/0054). Older releases stay downloadable for database upgrades.
+# Every change to main arrives by pull request. Once CI passes on a commit pushed
+# to main (docs/adr/0057):
+# - nightly: the commit is published as a prerelease tagged {date}.{sha};
+# - stable: release-please keeps a release PR with the next vX.Y.Z and its
+#   changelog up to date. When that PR is merged it tags the release, and
+#   GoReleaser adds the archives and updates the Homebrew cask.
+# Older releases stay downloadable for database upgrades (docs/adr/0054).
 on:
   workflow_run:
     workflows: [CI]
@@ -10,23 +14,27 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-
-concurrency:
-  group: release-${{ github.event.workflow_run.head_sha }}
+  contents: read
 
 jobs:
-  release:
-    name: Publish release
+  nightly:
+    name: Publish nightly
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: nightly-${{ github.event.workflow_run.head_sha }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -36,43 +44,107 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Build the web UI
         run: bun run build
-      # The version comes from the binary itself, so the tag always matches
-      # what mob --version reports. Output stays outside the checkout, which
-      # must remain clean for the build not to be marked -dirty.
-      - name: Build the CLI
+      # internal/version names the build from the same commit date and hash; the
+      # check below confirms the binary agrees.
+      - name: Name the build
         run: |
-          out="$RUNNER_TEMP/release"
-          mkdir -p "$out"
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$out/mob" ./cmd/mob
-          version=$("$out/mob" --version | awk '{print $NF}')
-          if ! [[ "$version" =~ ^[0-9]{8}\.[0-9a-f]{7}$ ]]; then
-            echo "::error::Unexpected version $version"
+          version="$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d HEAD).$(git rev-parse HEAD | cut -c1-7)"
+          echo "NIGHTLY_VERSION=$version" >> "$GITHUB_ENV"
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean
+      - name: Check the version
+        run: |
+          version=$(dist/mob_linux_amd64_v1/mob --version | awk '{print $NF}')
+          if [ "$version" != "$NIGHTLY_VERSION" ]; then
+            echo "::error::The binary reports $version, expected $NIGHTLY_VERSION"
             exit 1
           fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
-            os=${target%/*} arch=${target#*/}
-            name="mob_${version}_${os}_${arch}"
-            mkdir -p "$out/$name"
-            binary=mob
-            [ "$os" = windows ] && binary=mob.exe
-            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$out/$name/$binary" ./cmd/mob
-            cp LICENSE README.md config.example.yaml "$out/$name/"
-            if [ "$os" = windows ]; then
-              (cd "$out" && zip -qr "$name.zip" "$name")
-            else
-              tar -C "$out" -czf "$out/$name.tar.gz" "$name"
-            fi
-          done
-          (cd "$out" && sha256sum mob_*.tar.gz mob_*.zip > SHA256SUMS)
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
       - name: Publish
         run: |
-          if gh release view "$VERSION" >/dev/null 2>&1; then
-            echo "Release $VERSION already exists"
+          if gh release view "$NIGHTLY_VERSION" >/dev/null 2>&1; then
+            echo "Release $NIGHTLY_VERSION already exists"
             exit 0
           fi
-          out="$RUNNER_TEMP/release"
-          gh release create "$VERSION" "$out"/mob_*.tar.gz "$out"/mob_*.zip "$out/SHA256SUMS" \
+          gh release create "$NIGHTLY_VERSION" dist/*.tar.gz dist/*.zip dist/SHA256SUMS \
             --target "${{ github.event.workflow_run.head_sha }}" \
-            --title "Mob $VERSION" \
+            --title "Mob $NIGHTLY_VERSION (nightly)" \
+            --prerelease --latest=false \
             --generate-notes
+
+  release-please:
+    name: Update the release PR
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-please
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # A release PR opened with the default token does not start CI; set
+      # RELEASE_PLEASE_TOKEN to a token that can open pull requests so it does.
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          target-branch: main
+
+  stable:
+    name: Publish stable
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Build the web UI
+        run: bun run build
+      # Without HOMEBREW_TAP_TOKEN the cask is built but not pushed to
+      # fdkevin0/homebrew-tap.
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Check the version
+        run: |
+          version=$(dist/mob_linux_amd64_v1/mob --version | awk '{print $NF}')
+          if [ "$version" != "${{ needs.release-please.outputs.tag }}" ]; then
+            echo "::error::The binary reports $version, expected ${{ needs.release-please.outputs.tag }}"
+            exit 1
+          fi
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip

@@ -28,6 +28,7 @@ Understand the architectural concepts, network mesh models, and design decisions
   Covers multi-runtime architecture (Desktop, Cloud Gateway, Edge Node), P2P and Gateway relay mesh topology, Telegram & WeChat iLink channel integration, and human-in-the-loop tool approvals.
 * **[Architecture Decision Records (ADRs)](./adr/)**  
   Captures key architectural decisions, including:
+  - [ADR 0057: Nightly and Stable Release Channels](./adr/0057-nightly-and-stable-release-channels.md)
   - [ADR 0054: Release Versions and Database Migration Windows](./adr/0054-release-versions-and-migration-windows.md)
   - [ADR 0053: One Command Registry Drives Help and Completion in Every Client](./adr/0053-command-registry-and-completion.md)
   - [ADR 0052: Providers in providers.json, Models Chosen per Conversation](./adr/0052-providers-json-and-per-conversation-models.md)

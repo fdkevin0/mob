@@ -1,0 +1,70 @@
+# Builds every Mob release (docs/adr/0057). The web UI must be built first
+# (bun run build) so that it is embedded in the binary.
+#
+#   stable:  goreleaser release --clean           on a vX.Y.Z tag
+#   nightly: goreleaser release --snapshot --clean with NIGHTLY_VERSION set
+version: 2
+
+project_name: mob
+
+builds:
+  - main: ./cmd/mob
+    binary: mob
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    # A stable build reports its tag; a nightly build names itself from the VCS
+    # stamp, like any other build from a checkout.
+    ldflags:
+      - -s -w{{ if not .IsSnapshot }} -X github.com/fdkevin0/mob/internal/version.release={{ .Tag }}{{ end }}
+
+snapshot:
+  version_template: '{{ envOrDefault "NIGHTLY_VERSION" "snapshot" }}'
+
+archives:
+  - name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    wrap_in_directory: true
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - config.example.yaml
+
+checksum:
+  name_template: SHA256SUMS
+
+# release-please writes the notes and creates the release; GoReleaser only adds
+# the archives to it.
+changelog:
+  disable: true
+
+release:
+  mode: keep-existing
+
+homebrew_casks:
+  - name: mob
+    repository:
+      owner: fdkevin0
+      name: homebrew-tap
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    homepage: https://github.com/fdkevin0/mob
+    description: Local assistant with desktop, terminal and background service
+    license: MIT
+    # Without a token the cask is generated but not published.
+    skip_upload: '{{ if envOrDefault "HOMEBREW_TAP_TOKEN" "" }}false{{ else }}true{{ end }}'
+    # The binary is not notarized, so macOS would refuse to start it.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mob"]
+          end

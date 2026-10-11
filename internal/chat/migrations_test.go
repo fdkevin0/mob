@@ -62,8 +62,8 @@ func TestSchemaHistoryRules(t *testing.T) {
 	}
 	below := 0
 	for _, w := range history.retired {
-		if w.Below <= below || w.Below > history.first || !version.Valid(w.Release) {
-			t.Errorf("retired windows must rise, end at schema %d and name releases: %+v", history.first, w)
+		if w.Below <= below || w.Below > history.first || !version.Stable(w.Release) {
+			t.Errorf("retired windows must rise, end at schema %d and name stable releases: %+v", history.first, w)
 		}
 		below = w.Below
 	}

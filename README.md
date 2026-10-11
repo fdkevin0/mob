@@ -371,10 +371,11 @@ API references: [Telegram Bot API](https://core.telegram.org/bots/api),
   migration window. A database too old or too new for this release is refused
   with the release to install instead (ADR 0054). SQLite remains the concrete
   persistence dependency, with no generic repository or external queue.
-- `internal/version`: the `{date}.{sha}` release version, read from Go's VCS build
-  stamp; `mob --version` and `GET /api/runtime` report it. Every merge to `main`
-  that passes CI is published as a GitHub release of that version with CLI
-  archives for Linux, macOS and Windows.
+- `internal/version`: the release version; `mob --version` and `GET /api/runtime`
+  report it. Every merge to `main` that passes CI is published as a nightly
+  prerelease named `{date}.{sha}` from Go's VCS build stamp. Stable `vX.Y.Z`
+  releases come from merging the release-please PR and are also installable with
+  `brew install fdkevin0/tap/mob` (ADR 0057).
 - `internal/plugins/email`: mail reading, analysis, send deduplication, SMTP/IMAP
   and MIME. `internal/plugins/telegram`: polling, private-user filtering, offset
   acknowledgement, conversation mapping and reply delivery. Neither imports the
