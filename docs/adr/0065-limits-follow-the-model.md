@@ -17,8 +17,10 @@ to the model (see `research/limits-and-context-management.md`).
 - A chat message has no length limit of its own. The chat request body is
   capped at 8 MiB only to stop runaway bodies, and neither the web composer nor
   the terminal input limits what is typed or pasted. The terminal's input
-  component keeps at most 10000 lines, so a bracketed paste of 100 lines or
-  more is held aside, shown as `[Pasted text #1 · N lines]`, and sent whole.
+  component keeps at most 10000 lines, so a bracketed paste that would bring
+  the input to 100 lines is held aside, shown as `[Pasted text #1 · N lines]`,
+  and sent whole; placeholders are expanded in one pass, so pasted text that
+  quotes a placeholder stays as it was.
   A message that alone exceeds what the model's context leaves room for ends
   the turn with an error naming its size and the model, before any model
   request.
