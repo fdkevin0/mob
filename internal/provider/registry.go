@@ -93,12 +93,9 @@ func Open(path string, c *catalog.Catalog, file File) (*Registry, error) {
 // Reload rereads providers.json; a file that cannot be used leaves the
 // providers in effect unchanged. A file removed while running is refused
 // too: falling back to the initial configuration would quietly send
-// conversations to another provider.
+// conversations to another provider. Only Open accepts a missing file.
 func (r *Registry) Reload() error {
-	if _, err := os.Lstat(r.Path); errors.Is(err, os.ErrNotExist) {
-		return errors.New("providers.json was removed")
-	}
-	f, err := Load(r.Path)
+	f, err := read(r.Path)
 	if err != nil {
 		return err
 	}
@@ -122,8 +119,11 @@ func (r *Registry) Update(change func(*File) error) error {
 	defer r.mu.Unlock()
 	f := r.file
 	if r.Path != "" {
-		var err error
-		if f, err = Load(r.Path); err != nil {
+		// A file removed meanwhile is rewritten from the providers in
+		// effect, never from the initial configuration.
+		if disk, err := read(r.Path); err == nil {
+			f = disk
+		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
