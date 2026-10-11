@@ -237,7 +237,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			} else {
 				part["state"] = "output-available"
 				part["output"] = output
-				if file := save(agent.Saver, conversationID, call.ID, output); file != "" {
+				if file := save(agent.Saver, conversationID, output); file != "" {
 					part["outputFile"] = file
 				}
 				if err := send(Event{Kind: ToolOutput, ToolCallID: call.ID, Output: output}); err != nil {

@@ -169,3 +169,42 @@ func TestSaveWritesIntoTheWorkspace(t *testing.T) {
 		}
 	}
 }
+
+// Commands can replace the outputs directory, or a file in it, with a symlink;
+// a save must never follow one out of the workspace.
+func TestSaveStaysInTheWorkspace(t *testing.T) {
+	box := &Sandbox{Root: t.TempDir()}
+	outside := t.TempDir()
+	host := filepath.Join(outside, "host.txt")
+	if err := os.WriteFile(host, []byte("host file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	workspace, _ := box.Workspace(conversation)
+	outputs := filepath.Join(workspace, ".mob", "outputs")
+	_ = os.MkdirAll(outputs, 0700)
+	if err := os.Symlink(host, filepath.Join(outputs, "out.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := box.Save(conversation, "out.txt", "overwritten"); err == nil {
+		t.Fatal("saved through a symlinked file")
+	}
+	_ = os.RemoveAll(outputs)
+	if err := os.Symlink(outside, outputs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := box.Save(conversation, "host.txt", "overwritten"); err == nil {
+		t.Fatal("saved through a symlinked directory")
+	}
+	if raw, _ := os.ReadFile(host); string(raw) != "host file" {
+		t.Fatalf("host file changed: %q", raw)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new.txt")); err == nil {
+		t.Fatal("created a file outside the workspace")
+	}
+	if _, err := box.Save(conversation, "new.txt", "x"); err == nil {
+		t.Fatal("saved a new file through a symlinked directory")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new.txt")); err == nil {
+		t.Fatal("created a file outside the workspace")
+	}
+}
