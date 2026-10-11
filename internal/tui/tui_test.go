@@ -366,3 +366,39 @@ func TestLongPasteIsSentWhole(t *testing.T) {
 		t.Fatal("paste kept after sending")
 	}
 }
+
+func TestPastesSurviveTheirOwnLabelsAndAddUp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fresh := func() model {
+		input := textarea.New()
+		input.CharLimit, input.MaxHeight = 0, 0
+		input.Focus()
+		return model{configured: true, id: chat.NewID(), ctx: ctx, cancel: cancel, input: input, viewport: viewport.New(), width: 80}
+	}
+	submit := func(m model, pastes ...string) string {
+		for _, p := range pastes {
+			updated, _ := m.Update(tea.PasteMsg{Content: p})
+			m = updated.(model)
+		}
+		updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		m = updated.(model)
+		return chat.Text(m.messages[len(m.messages)-1])
+	}
+	// A paste that quotes the next paste's label keeps the quote; the label
+	// in the input still brings in the second paste.
+	second := strings.Repeat("y\n", 10001) + "END"
+	first := "[Pasted text #2 · 10002 lines]\n" + strings.Repeat("x\n", 200)
+	if got := submit(fresh(), first, second); got != first+second {
+		t.Fatalf("labels in pasted text were expanded: %d bytes, want %d", len(got), len(first+second))
+	}
+	// Short pastes that together pass the input's line limit are all kept.
+	var parts []string
+	for range 102 {
+		parts = append(parts, strings.Repeat("z\n", 99))
+	}
+	parts = append(parts, "TAIL")
+	if got, want := submit(fresh(), parts...), strings.Join(parts, ""); got != want {
+		t.Fatalf("pastes past the input's limit were cut: %d bytes, want %d", len(got), len(want))
+	}
+}

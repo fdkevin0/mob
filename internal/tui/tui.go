@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -252,7 +254,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.PasteMsg:
-		if m.plugin == nil && m.configured && strings.Count(msg.Content, "\n") >= pasteLines {
+		if lines := strings.Count(msg.Content, "\n"); m.plugin == nil && m.configured && m.input.LineCount()+lines >= pasteLines {
 			m.input.InsertString(m.collapse(msg.Content))
 			return m, nil
 		}
@@ -413,10 +415,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// pasteLines is where a paste is held aside and shown as a placeholder: the
-// input component keeps at most 10000 lines, and a long paste is unreadable
-// in a three-line box anyway.
+// A paste that would take the input to pasteLines lines is held aside and
+// shown as a placeholder, so pastes never add up to the 10000 lines the input
+// component keeps; it also redraws every line on each key, and a long text
+// is unreadable in a three-line box anyway.
 const pasteLines = 100
+
+// pasted matches a placeholder; its number picks the paste.
+var pasted = regexp.MustCompile(`\[Pasted text #(\d+) · \d+ lines\]`)
 
 // collapse holds a long text aside and returns the placeholder that stands for it.
 func (m *model) collapse(text string) string {
@@ -428,12 +434,19 @@ func placeholder(i int, text string) string {
 	return fmt.Sprintf("[Pasted text #%d · %d lines]", i+1, strings.Count(text, "\n")+1)
 }
 
-// expand replaces each placeholder still in s with its pasted text.
+// expand replaces each placeholder still in s with its pasted text, once,
+// in one pass: text a paste brings in is never scanned for placeholders.
 func (m *model) expand(s string) string {
-	for i, text := range m.pastes {
-		s = strings.Replace(s, placeholder(i, text), text, 1)
-	}
-	return s
+	used := map[int]bool{}
+	return pasted.ReplaceAllStringFunc(s, func(label string) string {
+		i, _ := strconv.Atoi(pasted.FindStringSubmatch(label)[1])
+		i--
+		if i < 0 || i >= len(m.pastes) || used[i] || label != placeholder(i, m.pastes[i]) {
+			return label
+		}
+		used[i] = true
+		return m.pastes[i]
+	})
 }
 
 // restore puts unsent text back in the input, holding it aside if long.
