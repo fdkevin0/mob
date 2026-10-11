@@ -151,8 +151,8 @@ func (c Config) Send(ctx context.Context, chatID int64, text string, approvals .
 	return nil
 }
 
-// buttons is one Approve/Deny row per approval; a tap arrives as a callback
-// query whose data is the matching command.
+// buttons is one Approve/Always allow/Deny row per approval; a tap arrives as
+// a callback query whose data is the matching command.
 func buttons(approvals []chat.PendingApproval) [][]map[string]string {
 	rows := make([][]map[string]string, len(approvals))
 	for i, a := range approvals {
@@ -162,6 +162,7 @@ func buttons(approvals []chat.PendingApproval) [][]map[string]string {
 		}
 		rows[i] = []map[string]string{
 			{"text": "Approve" + label, "callback_data": "/approve " + a.ID},
+			{"text": "Always allow" + label, "callback_data": "/approve " + a.ID + " " + chat.RememberAlways},
 			{"text": "Deny" + label, "callback_data": "/deny " + a.ID},
 		}
 	}

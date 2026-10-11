@@ -40,6 +40,9 @@ ALTER TABLE messages ADD COLUMN model TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN usage TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT '';
 DELETE FROM settings WHERE key IN ('api_key','api_key_origin');`},
+		// Remembered approvals; an empty conversation_id covers every conversation.
+		{"20261011", `CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, tool TEXT NOT NULL,
+ scope TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(conversation_id, tool, scope));`},
 	},
 }
 

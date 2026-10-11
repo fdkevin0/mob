@@ -200,6 +200,19 @@ func TestWeChatILinkServiceProcessing(t *testing.T) {
 	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "拒绝 我不喝咖啡"); err != nil || !strings.Contains(reply, "已拒绝") || !strings.Contains(reply, "said: 我不喝咖啡") {
 		t.Fatalf("denial with a reason: %s (err: %v)", reply, err)
 	}
+	svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "/remember 散步")
+	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "批准 总是"); err != nil || !strings.Contains(reply, "已记住这个决定") {
+		t.Fatalf("remembered approval: %s (err: %v)", reply, err)
+	}
+	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "/remember 跑步"); err != nil || strings.Contains(reply, "【操作审批】") {
+		t.Fatalf("a remembered approval still asked: %s (err: %v)", reply, err)
+	}
+	// Only the owner, the first allowed user, can remember approvals.
+	guest := wechatilink.Config{Enabled: true, AllowedUsers: []string{"wx_alice", "wx_carol"}}
+	svc.ProcessMessage(context.Background(), guest, "wx_carol", "ctx_2", "/remember 我是访客")
+	if reply, err = svc.ProcessMessage(context.Background(), guest, "wx_carol", "ctx_2", "批准 总是"); err != nil || !strings.Contains(reply, "only the owner") {
+		t.Fatalf("a guest remembered an approval: %s (err: %v)", reply, err)
+	}
 
 	// 4. Approval command handling
 	approvalReply, err := svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "批准 12345678901234567890123456789012")

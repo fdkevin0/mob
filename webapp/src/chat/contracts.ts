@@ -86,6 +86,7 @@ export type Action = {
   approvalId?: string;
   approved?: boolean;
   reason?: string;
+  remember?: string;
 };
 export type CommandResult = {
   handled: boolean;

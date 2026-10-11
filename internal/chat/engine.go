@@ -27,6 +27,9 @@ const systemPrompt = "You are Mob, a concise personal assistant. Reply in the us
 type Agent struct {
 	Tools []Tool
 	Hooks Hooks
+	// Owner is set for the owner's turns, which run calls their remembered
+	// approvals cover without asking.
+	Owner bool
 }
 
 // Turn is one run of the model loop as hooks see it.
@@ -187,7 +190,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			if parseErr != nil {
 				toolErr = errors.New("tool arguments must be a JSON object")
 			} else {
-				output, toolErr = runTool(ctx, agent.Hooks, offered, ToolCall{ToolCall: call, ConversationID: conversationID, Input: input, Part: part, Message: &message, Store: store, Send: send})
+				output, toolErr = runTool(ctx, agent, offered, ToolCall{ToolCall: call, ConversationID: conversationID, Input: input, Part: part, Message: &message, Store: store, Send: send})
 				var stop abort
 				switch {
 				case errors.Is(toolErr, ErrAwaitingApproval):
@@ -226,18 +229,27 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	return errors.New("tool step limit reached (5); send another message to continue")
 }
 
-// runTool runs an offered tool after the BeforeTool hooks allow it.
-func runTool(ctx context.Context, hooks Hooks, offered map[string]Tool, call ToolCall) (any, error) {
+// runTool runs an offered tool after the BeforeTool hooks allow it, and
+// carries out a call a remembered approval covers.
+func runTool(ctx context.Context, agent Agent, offered map[string]Tool, call ToolCall) (any, error) {
 	tool, ok := offered[call.Name]
 	if !ok {
 		return nil, fmt.Errorf("unsupported tool: %s", call.Name)
 	}
-	for _, before := range hooks.BeforeTool {
+	for _, before := range agent.Hooks.BeforeTool {
 		if err := before(ctx, call); err != nil {
 			return nil, err
 		}
 	}
-	return tool.Run(ctx, call)
+	if agent.Owner {
+		call.tool = &tool
+	}
+	output, err := tool.Run(ctx, call)
+	var g granted
+	if errors.As(err, &g) {
+		return tool.Approved(ctx, ApprovedCall{ConversationID: call.ConversationID, ApprovalID: NewID(), Input: g.input, Store: call.Store})
+	}
+	return output, err
 }
 
 func add(total *llm.Usage, u llm.Usage) *llm.Usage {

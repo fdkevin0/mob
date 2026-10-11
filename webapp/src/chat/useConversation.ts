@@ -64,16 +64,16 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
       const result = await api<CommandResult>(connection, '/commands/run', request);
       if (!result.handled) { send(text); return; }
       if (result.markdown) setCommandResult(result.markdown);
-      if (result.action?.kind === 'decide') void decide(result.action.approvalId ?? '', result.action.approved ?? false, result.action.reason);
+      if (result.action?.kind === 'decide') void decide(result.action.approvalId ?? '', result.action.approved ?? false, result.action.reason, result.action.remember);
       else if (result.action) onAction?.(result.action);
     } catch (e) { setFailure(errorText(e)); setInput(current => current || text); }
     finally { setRunning(false); }
   }
-  async function decide(approvalId: string, approved: boolean, reason?: string) {
+  async function decide(approvalId: string, approved: boolean, reason?: string, remember?: string) {
     if (busy) return; refreshGeneration.current++; busyRef.current = true; setApprovalBusy(true); setFailure(''); clearError();
     const controller = new AbortController(); approvalController.current = controller;
     try {
-      const stream = await transport.sendMessages({ chatId: id, messages: [], trigger: 'submit-message', messageId: undefined, abortSignal: controller.signal, body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined } } });
+      const stream = await transport.sendMessages({ chatId: id, messages: [], trigger: 'submit-message', messageId: undefined, abortSignal: controller.signal, body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined, remember: remember || undefined } } });
       const baseline = (await api<Snapshot>(connection, `/conversations/${id}`)).messages.filter(m => m.metadata?.status !== 'streaming');
       for await (const message of readUIMessageStream<ChatMessage>({ stream, terminateOnError: true })) {
         // A denial with a reason gets an answer from the model.

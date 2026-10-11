@@ -122,5 +122,13 @@ func Tools(config func() (Config, error)) []chat.Tool {
 			}
 			return run(ctx, c, r)
 		},
+		// Remembering an approval covers the operation on the same target.
+		Scope: func(input json.RawMessage) string {
+			var r request
+			if json.Unmarshal(input, &r) != nil {
+				return ""
+			}
+			return r.Operation + " on " + r.Target
+		},
 	}}
 }

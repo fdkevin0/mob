@@ -86,3 +86,22 @@ func TestTools(t *testing.T) {
 		t.Fatalf("an approval sent twice: %v", err)
 	}
 }
+
+func TestSendScope(t *testing.T) {
+	var send chat.Tool
+	for _, tool := range Tools(func() (Config, error) { return Config{}, nil }) {
+		if tool.Name == "email_send" {
+			send = tool
+		}
+	}
+	scope := func(to string) string {
+		raw, _ := json.Marshal(outgoing{Draft{To: to, Subject: "s", Text: "t"}, "me@x via me@smtp:587"})
+		return send.Scope(raw)
+	}
+	if got := scope(" Bob@X.com, alice@x.com,bob@x.com "); got != "to alice@x.com, bob@x.com from me@x via me@smtp:587" {
+		t.Fatalf("scope: %q", got)
+	}
+	if scope("alice@x.com") == scope("alice@x.com, eve@y.com") {
+		t.Fatal("another recipient shares the scope")
+	}
+}

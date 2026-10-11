@@ -55,15 +55,31 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 		t.Fatalf("second /approve: %s", got)
 	}
 	reply("/remember 冗长")
-	if got := reply("/approve " + chat.NewID() + " please"); got != "Use `/approve ID`." {
+	if got := reply("/approve " + chat.NewID() + " please"); got != "Use `/approve [ID] [conversation|always]`." {
 		t.Fatalf("/approve with a reason: %s", got)
 	}
 	// The demo model echoes what it last received: the denial and its reason.
 	if got := reply("/deny 太长了"); !strings.Contains(got, "The user denied the remember request and said: 太长了") {
 		t.Fatalf("/deny with a reason: %s", got)
 	}
-	if got := reply("/deny"); !strings.Contains(got, "0 requests are pending; use `/deny ID [reason]`") {
+	if got := reply("/deny"); !strings.Contains(got, "0 requests are pending; use `/deny [ID] [reason]`") {
 		t.Fatalf("/deny with nothing pending: %s", got)
+	}
+	reply("/remember 喝茶")
+	if got := reply("/approve always"); !strings.Contains(got, "approved remember and it ran") {
+		t.Fatalf("/approve always: %s", got)
+	}
+	if got := reply("/remember 喝咖啡"); strings.Contains(got, "Approval needed") {
+		t.Fatalf("a remembered approval still asked: %s", got)
+	}
+	if got := reply("/grants"); !strings.Contains(got, "| remember | every call | every conversation |") {
+		t.Fatalf("/grants: %s", got)
+	}
+	if got := reply("/revoke all"); !strings.Contains(got, "Forgot 1") {
+		t.Fatalf("/revoke all: %s", got)
+	}
+	if got := reply("/remember 喝水"); !strings.Contains(got, "Approval needed") {
+		t.Fatalf("a revoked approval did not ask: %s", got)
 	}
 }
 
@@ -89,7 +105,7 @@ func TestApprovalButtonsAndTaps(t *testing.T) {
 		t.Fatalf("buttons belong under the last chunk only: %v", sent)
 	}
 	rows, _ := json.Marshal(sent[1]["reply_markup"])
-	if want := `{"inline_keyboard":[[{"callback_data":"/approve ` + a + `","text":"Approve email_send"},{"callback_data":"/deny ` + a + `","text":"Deny email_send"}],[{"callback_data":"/approve ` + b + `","text":"Approve remember"},{"callback_data":"/deny ` + b + `","text":"Deny remember"}]]}`; string(rows) != want {
+	if want := `{"inline_keyboard":[[{"callback_data":"/approve ` + a + `","text":"Approve email_send"},{"callback_data":"/approve ` + a + ` always","text":"Always allow email_send"},{"callback_data":"/deny ` + a + `","text":"Deny email_send"}],[{"callback_data":"/approve ` + b + `","text":"Approve remember"},{"callback_data":"/approve ` + b + ` always","text":"Always allow remember"},{"callback_data":"/deny ` + b + `","text":"Deny remember"}]]}`; string(rows) != want {
 		t.Fatalf("buttons: %s", rows)
 	}
 
@@ -148,7 +164,7 @@ func TestPublishCommandsFromRegistry(t *testing.T) {
 			t.Fatalf("%s has no description", c.Command)
 		}
 	}
-	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models new approve deny help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
+	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models new approve deny grants revoke help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
 		t.Fatalf("published %s %v %+v", path, names, sent.Scope)
 	}
 }

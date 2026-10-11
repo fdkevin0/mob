@@ -53,6 +53,8 @@ type Action struct {
 	Approved       bool   `json:"approved,omitempty"`
 	// Reason is why the user denied the request, if they said.
 	Reason string `json:"reason,omitempty"`
+	// Remember is how long to remember an approval, as Answer.Remember.
+	Remember string `json:"remember,omitempty"`
 }
 
 const (

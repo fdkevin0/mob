@@ -37,6 +37,10 @@ type Tool struct {
 	// Approved carries out a call the user approved after Run asked with
 	// ToolCall.RequestApproval; its output or error goes to the model.
 	Approved func(ctx context.Context, call ApprovedCall) (any, error)
+	// Scope names what remembering an approval of input covers: the owner's
+	// later calls with the same scope run without asking. Nil covers every
+	// call of the tool.
+	Scope func(input json.RawMessage) string
 }
 
 // ApprovedCall is a call the user approved.
@@ -60,12 +64,28 @@ type ToolCall struct {
 	Message *Message
 	Store   *Store
 	Send    func(Event) error
+	// tool is the tool called, set for turns that may use remembered
+	// approvals: the owner's.
+	tool *Tool
 }
 
 // RequestApproval asks the user to approve input, which the call records as
 // its input; Run returns the error, and Approved carries the call out.
 func (c ToolCall) RequestApproval(input any) error {
 	c.Part["input"] = input
+	if c.tool != nil && c.tool.Approved != nil {
+		raw, err := json.Marshal(input)
+		if err != nil {
+			return Abort(err)
+		}
+		ok, err := c.Store.Granted(c.ConversationID, c.Name, c.tool.scope(raw))
+		if err != nil {
+			return Abort(err)
+		}
+		if ok {
+			return granted{raw}
+		}
+	}
 	id, err := c.Store.RequestApproval(c.ConversationID, *c.Message, c.ID, input)
 	if err != nil {
 		return Abort(err)
