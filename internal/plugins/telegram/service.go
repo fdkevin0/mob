@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fdkevin0/mob/internal/chat"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,38 @@ import (
 type Service struct {
 	Store        *chat.Store
 	Conversation *chat.ConversationService
+}
+
+// botCommand is one entry of Telegram's command menu.
+type botCommand struct {
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
+// commandName is what setMyCommands accepts as a command.
+var commandName = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
+
+// menu is the commands in the form setMyCommands accepts; names Telegram
+// rejects are left out.
+func menu(specs []chat.CommandSpec) []botCommand {
+	list := []botCommand{}
+	for _, spec := range specs {
+		description := []rune(strings.TrimSpace(spec.Summary))
+		if !commandName.MatchString(spec.Name) || len(description) == 0 {
+			continue
+		}
+		list = append(list, botCommand{Command: spec.Name, Description: string(description[:min(len(description), 256)])})
+	}
+	return list
+}
+
+// PublishCommands shows the registry's Telegram commands in the owner's chat
+// menu, the only chat the bot answers.
+func (s *Service) PublishCommands(ctx context.Context, c Config) error {
+	return c.Call(ctx, "setMyCommands", map[string]any{
+		"commands": menu(s.Conversation.Commands.Specs(chat.ClientTelegram)),
+		"scope":    map[string]any{"type": "chat", "chat_id": c.UserID},
+	}, nil)
 }
 
 func waitTelegram(ctx context.Context) bool {
@@ -28,6 +61,7 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 	botID := strings.SplitN(c.Token, ":", 2)[0]
 	offsetKey := "telegram-offset:" + botID
 	var offset int64
+	published := false
 	if err := s.Store.Setting(offsetKey, &offset); err != nil {
 		status("Cannot load Telegram update offset")
 		return
@@ -41,6 +75,15 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 			continue
 		}
 		status("Connected · polling private messages")
+		if !published {
+			// The menu is a convenience; polling goes on without it and the
+			// next connection retries.
+			if err := s.PublishCommands(ctx, c); err != nil {
+				status("Connected · polling private messages · command menu not updated: " + err.Error())
+			} else {
+				published = true
+			}
+		}
 		for ctx.Err() == nil {
 			updates, err := c.Updates(ctx, offset)
 			if err != nil {
