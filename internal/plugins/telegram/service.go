@@ -222,10 +222,7 @@ func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text st
 			return reply, nil, nil
 		case a.Kind == chat.Decide:
 			input.Text = ""
-			input.Approval = &struct {
-				ID       string `json:"id"`
-				Approved bool   `json:"approved"`
-			}{a.ApprovalID, a.Approved}
+			input.Approval = &chat.Answer{ID: a.ApprovalID, Approved: a.Approved, Reason: a.Reason}
 		default:
 			return "That command needs the desktop or terminal app.", nil, nil
 		}
@@ -265,7 +262,7 @@ func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text st
 // decideHint tells the owner how to answer, given how many requests are pending.
 func decideHint(pending int) string {
 	if pending > 1 {
-		return "Tap Approve or Deny, or reply /approve ID or /deny ID."
+		return "Tap Approve or Deny, or reply /approve ID, or /deny ID with an optional reason."
 	}
-	return "Tap Approve or Deny, or reply /approve or /deny."
+	return "Tap Approve or Deny, or reply /approve, or /deny with an optional reason."
 }

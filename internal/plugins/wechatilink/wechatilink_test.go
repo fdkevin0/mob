@@ -195,6 +195,11 @@ func TestWeChatILinkServiceProcessing(t *testing.T) {
 	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "拒绝"); err != nil || !strings.Contains(reply, "当前没有待审批的请求") {
 		t.Fatalf("nothing pending: %s (err: %v)", reply, err)
 	}
+	svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "/remember 喜欢咖啡")
+	// The demo model echoes the denial and its reason.
+	if reply, err = svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "拒绝 我不喝咖啡"); err != nil || !strings.Contains(reply, "已拒绝") || !strings.Contains(reply, "said: 我不喝咖啡") {
+		t.Fatalf("denial with a reason: %s (err: %v)", reply, err)
+	}
 
 	// 4. Approval command handling
 	approvalReply, err := svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "批准 12345678901234567890123456789012")

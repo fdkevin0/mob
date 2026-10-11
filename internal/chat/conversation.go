@@ -57,7 +57,7 @@ func (s *ConversationService) Model(id string) (string, error) {
 
 func (s *ConversationService) Execute(parent context.Context, input ChatRequest, emit func(Event) error) error {
 	input.Text = strings.TrimSpace(input.Text)
-	if len(input.ID) != 32 || len(input.Text) > 16000 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32)) {
+	if len(input.ID) != 32 || len(input.Text) > 16000 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32 || len(input.Approval.Reason) > 2000 || input.Approval.Approved && input.Approval.Reason != "")) {
 		return &CommandError{400, "invalid conversation, text, request ID, or approval"}
 	}
 	if _, err := s.Store.History(input.ID); err != nil {
@@ -94,16 +94,20 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 	note := ""
 	if input.Approval != nil {
 		var err error
-		decision, err := s.Store.Decide(input.ID, input.Approval.ID, input.Approval.Approved)
+		input.Approval.Reason = strings.TrimSpace(input.Approval.Reason)
+		decision, err := s.Store.Decide(input.ID, input.Approval.ID, input.Approval.Approved, input.Approval.Reason)
 		if err != nil {
 			return err
 		}
-		if !input.Approval.Approved {
+		switch {
+		case input.Approval.Approved:
+			if note, err = s.carryOut(ctx, input.ID, decision, input.Owner); err != nil {
+				return err
+			}
+		case input.Approval.Reason == "":
 			return emit(Event{Kind: TurnFinished, Reason: "stop"})
 		}
-		if note, err = s.carryOut(ctx, input.ID, decision, input.Owner); err != nil {
-			return err
-		}
+		// A denial with a reason lets the model answer it; the history has the reason.
 	}
 	message, err := s.Store.Begin(input.ID, input.RequestID, input.Text, model.Ref().String())
 	if err != nil {
@@ -210,14 +214,19 @@ func (s *ConversationService) Close() {
 	s.wg.Wait()
 }
 
+// Answer is the user's decision on a pending approval. A denial may say why,
+// and the model then answers it.
+type Answer struct {
+	ID       string `json:"id"`
+	Approved bool   `json:"approved"`
+	Reason   string `json:"reason,omitempty"`
+}
+
 type ChatRequest struct {
-	ID        string `json:"id"`
-	Text      string `json:"text"`
-	RequestID string `json:"requestId"`
-	Approval  *struct {
-		ID       string `json:"id"`
-		Approved bool   `json:"approved"`
-	} `json:"approval,omitempty"`
+	ID        string  `json:"id"`
+	Text      string  `json:"text"`
+	RequestID string  `json:"requestId"`
+	Approval  *Answer `json:"approval,omitempty"`
 	// Owner is set by transports for the person who runs Mob: the local
 	// UI, and a channel's owner. Only the owner may switch models, which
 	// spends their provider credit. Never decoded from a request body.

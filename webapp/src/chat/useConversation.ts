@@ -64,19 +64,20 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
       const result = await api<CommandResult>(connection, '/commands/run', request);
       if (!result.handled) { send(text); return; }
       if (result.markdown) setCommandResult(result.markdown);
-      if (result.action?.kind === 'decide') void decide(result.action.approvalId ?? '', result.action.approved ?? false);
+      if (result.action?.kind === 'decide') void decide(result.action.approvalId ?? '', result.action.approved ?? false, result.action.reason);
       else if (result.action) onAction?.(result.action);
     } catch (e) { setFailure(errorText(e)); setInput(current => current || text); }
     finally { setRunning(false); }
   }
-  async function decide(approvalId: string, approved: boolean) {
+  async function decide(approvalId: string, approved: boolean, reason?: string) {
     if (busy) return; refreshGeneration.current++; busyRef.current = true; setApprovalBusy(true); setFailure(''); clearError();
     const controller = new AbortController(); approvalController.current = controller;
     try {
-      const stream = await transport.sendMessages({ chatId: id, messages: [], trigger: 'submit-message', messageId: undefined, abortSignal: controller.signal, body: { approval: { id: approvalId, approved } } });
+      const stream = await transport.sendMessages({ chatId: id, messages: [], trigger: 'submit-message', messageId: undefined, abortSignal: controller.signal, body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined } } });
       const baseline = (await api<Snapshot>(connection, `/conversations/${id}`)).messages.filter(m => m.metadata?.status !== 'streaming');
       for await (const message of readUIMessageStream<ChatMessage>({ stream, terminateOnError: true })) {
-        if (approved) setMessages([...baseline, message]);
+        // A denial with a reason gets an answer from the model.
+        if (approved || reason?.trim()) setMessages([...baseline, message]);
       }
     } catch (e) { if (!controller.signal.aborted) setFailure(errorText(e)); }
     finally { setApprovalBusy(false); busyRef.current = false; approvalController.current = null; }

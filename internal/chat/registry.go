@@ -51,6 +51,8 @@ type Action struct {
 	ConversationID string `json:"conversationId,omitempty"`
 	ApprovalID     string `json:"approvalId,omitempty"`
 	Approved       bool   `json:"approved,omitempty"`
+	// Reason is why the user denied the request, if they said.
+	Reason string `json:"reason,omitempty"`
 }
 
 const (

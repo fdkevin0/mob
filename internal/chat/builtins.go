@@ -23,7 +23,7 @@ func (s *ConversationService) builtins() []Command {
 		{CommandSpec: CommandSpec{"list", "/list", "List conversations", interactive, false}, Run: s.listConversations},
 		{CommandSpec: CommandSpec{"open", "/open ID", "Switch to a conversation", interactive, false}, Args: []Argument{s.conversations}, Run: s.openConversation},
 		{CommandSpec: CommandSpec{"approve", "/approve [ID]", "Approve a pending tool request", approving, false}, Args: []Argument{s.approvals}, Run: s.decide(true)},
-		{CommandSpec: CommandSpec{"deny", "/deny [ID]", "Deny a pending tool request", approving, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
+		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", approving, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
 		{CommandSpec: CommandSpec{"help", "/help", "Show commands", []string{ClientTelegram}, false}, Run: s.help},
 	}
 }
@@ -114,24 +114,27 @@ func (s *ConversationService) openConversation(_ context.Context, call CommandCa
 	return CommandResult{Action: &Action{Kind: OpenConversation, ConversationID: id}}, nil
 }
 
-// decide resolves the named approval, or the only pending one when no ID is given.
+// decide resolves the named approval, or the only pending one when no ID is
+// given. /deny may say why after the ID, or alone when one request is pending.
 func (s *ConversationService) decide(approved bool) func(context.Context, CommandCall) (CommandResult, error) {
-	verb := map[bool]string{true: "/approve", false: "/deny"}[approved]
+	form := map[bool]string{true: "/approve ID", false: "/deny ID [reason]"}[approved]
 	return func(_ context.Context, call CommandCall) (CommandResult, error) {
-		var id string
-		switch len(call.Fields) {
-		case 0:
+		id, reason := "", strings.TrimSpace(call.Rest)
+		if len(call.Fields) > 0 && len(call.Fields[0]) == 32 {
+			id = call.Fields[0]
+			reason = strings.TrimSpace(strings.TrimPrefix(reason, id))
+		}
+		if approved && reason != "" {
+			return CommandResult{Markdown: "Use `" + form + "`."}, nil
+		}
+		if id == "" {
 			pending := s.pending(call.ConversationID)
 			if len(pending) != 1 {
-				return CommandResult{Markdown: fmt.Sprintf("%d requests are pending; use `%s ID`.", len(pending), verb)}, nil
+				return CommandResult{Markdown: fmt.Sprintf("%d requests are pending; use `%s`.", len(pending), form)}, nil
 			}
 			id = pending[0].Value
-		case 1:
-			id = call.Fields[0]
-		default:
-			return CommandResult{Markdown: "Use `" + verb + " ID`."}, nil
 		}
-		return CommandResult{Action: &Action{Kind: Decide, ApprovalID: id, Approved: approved}}, nil
+		return CommandResult{Action: &Action{Kind: Decide, ApprovalID: id, Approved: approved, Reason: reason}}, nil
 	}
 }
 

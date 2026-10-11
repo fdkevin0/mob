@@ -85,6 +85,7 @@ export type Action = {
   conversationId?: string;
   approvalId?: string;
   approved?: boolean;
+  reason?: string;
 };
 export type CommandResult = {
   handled: boolean;

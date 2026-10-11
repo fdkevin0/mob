@@ -192,7 +192,7 @@ func TestServiceRecallsSavedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decision, err := s.Decide(id, approval, true)
+	decision, err := s.Decide(id, approval, true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestApprovedToolCalls(t *testing.T) {
 			if p := service.Pending(id); len(p) != 1 || p[0].ID != approval || p[0].Tool != c.name {
 				t.Fatalf("pending: %+v", p)
 			}
-			decision, err := s.Decide(id, approval, c.decide)
+			decision, err := s.Decide(id, approval, c.decide, "")
 			if err != nil || decision.Tool != c.name {
 				t.Fatalf("decide: %+v %v", decision, err)
 			}
