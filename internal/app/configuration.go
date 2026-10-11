@@ -16,6 +16,7 @@ func (s *Server) ReloadConfiguration(next configuration.Environment) error {
 	if next.Demo != s.Providers.Demo {
 		return errors.New("demo changes require a restart; current configuration retained")
 	}
+	s.SetToolSteps(next.MaxToolSteps)
 	return s.ApplySandbox(next.Sandbox, next.Dir)
 }
 

@@ -17,7 +17,7 @@ type PendingApproval struct {
 
 // Pending lists the conversation's tool calls awaiting a decision, oldest first.
 func (s *ConversationService) Pending(id string) []PendingApproval {
-	if id == "" {
+	if id == "" || s.Store.ExpireApprovals(id) != nil {
 		return nil
 	}
 	history, err := s.Store.History(id)

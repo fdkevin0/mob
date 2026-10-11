@@ -29,6 +29,10 @@ hearing why. Issue #29 tracks the wider plan.
   grants and `/revoke ID|all` forgets them.
 - A single D1 `SELECT` statement runs without approval; SQL the check cannot be
   sure of still asks.
+- An approval left undecided past its hour is marked expired and its call
+  failed, so the model and channels stop waiting on it.
+- A turn makes at most `max_tool_steps` model calls (default 20, at most 100,
+  reloaded live) instead of a fixed 5.
 
 ## Consequences
 

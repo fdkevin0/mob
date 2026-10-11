@@ -125,6 +125,7 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	if os.Getenv("MOB_TOKEN") == "" {
 		server.PersistToken = func(token string) error { return writeToken(c.Dir, token) }
 	}
+	server.SetToolSteps(c.MaxToolSteps)
 	if err := server.ApplySandbox(c.Sandbox, c.Dir); err != nil {
 		cleanup()
 		return nil, err

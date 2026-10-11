@@ -376,6 +376,49 @@ func updatePart(tx *sql.Tx, d Decision, change func(Part)) error {
 	return err
 }
 
+// expiredApproval is what the model and the user see for a call whose
+// approval expired undecided.
+const expiredApproval = "The approval expired before the user decided; ask again if it is still needed."
+
+// ExpireApprovals marks the conversation's undecided approvals that are past
+// their expiry as expired and their calls as failed, so nothing waits on them.
+func (s *Store) ExpireApprovals(conversationID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query("SELECT id,message_id,tool_call_id FROM approvals WHERE conversation_id=? AND status='pending' AND expires_at<?", conversationID, time.Now().UnixMilli())
+	if err != nil {
+		return err
+	}
+	var expired []Decision
+	for rows.Next() {
+		var d Decision
+		if err = rows.Scan(&d.ApprovalID, &d.MessageID, &d.ToolCallID); err != nil {
+			rows.Close()
+			return err
+		}
+		expired = append(expired, d)
+	}
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, d := range expired {
+		err = updatePart(tx, d, func(p Part) {
+			p["state"] = "output-error"
+			p["errorText"] = expiredApproval
+		})
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("UPDATE approvals SET status='expired' WHERE id=?", d.ApprovalID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // SaveFact keeps a fact for the conversation; id makes saving it again a no-op.
 func (s *Store) SaveFact(id, conversationID, fact string) error {
 	_, err := s.db.Exec("INSERT OR IGNORE INTO memories VALUES(?,?,?)", id, conversationID, fact)

@@ -5,6 +5,10 @@ addr: 127.0.0.1:8787
 # Offline model simulation; changing it requires a restart.
 demo: false
 
+# Model calls one turn may make while it uses tools (1-100). A turn that
+# reaches it stops and asks you to send another message. Reloads live.
+# max_tool_steps: 20
+
 # Model providers and their keys are not configured here. They live in
 # providers.json in this directory (owner-only, 0600), managed with:
 #   mob provider add deepseek --key-stdin

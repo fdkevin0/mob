@@ -1,8 +1,12 @@
 package chat
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/fdkevin0/mob/internal/llm"
 )
 
 func TestDescribeApproval(t *testing.T) {
@@ -23,5 +27,37 @@ func TestDescribeApproval(t *testing.T) {
 	}
 	if got := DescribeApproval("t", []int{1}); got != "t\n[1]" {
 		t.Fatalf("array input: %q", got)
+	}
+}
+
+func TestExpiredApprovalsStopWaiting(t *testing.T) {
+	s, id, m := turnFixture(t)
+	service := NewConversation(s, nil)
+	service.Tools.Register(echoTool("deploy", func(_ context.Context, call ToolCall) (any, error) {
+		return nil, call.RequestApproval(map[string]string{"target": "prod"})
+	}))
+	var approval string
+	err := Run(context.Background(), s, &scripted{call: llm.ToolCall{ID: "c1", Name: "deploy", Arguments: `{}`}}, service.agent(true), id, m, "", func(e Event) error {
+		if e.Kind == ApprovalRequested {
+			approval = e.ApprovalID
+		}
+		return nil
+	})
+	if err != nil || len(service.Pending(id)) != 1 {
+		t.Fatalf("request: %v %+v", err, service.Pending(id))
+	}
+	if _, err = s.db.Exec("UPDATE approvals SET expires_at=0 WHERE id=?", approval); err != nil {
+		t.Fatal(err)
+	}
+	if p := service.Pending(id); len(p) != 0 {
+		t.Fatalf("an expired approval is still pending: %+v", p)
+	}
+	history, _ := s.History(id)
+	part := history[len(history)-1].Parts[0]
+	if part["state"] != "output-error" || part["errorText"] != expiredApproval || outcome(part) != `{"error":"`+expiredApproval+`"}` {
+		t.Fatalf("expired call: %v", part)
+	}
+	if _, err = s.Decide(id, approval, true, ""); !errors.Is(err, ErrStaleApproval) {
+		t.Fatalf("decided an expired approval: %v", err)
 	}
 }
