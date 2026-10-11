@@ -13,7 +13,9 @@ phone's connection drops far more often than a local tab's.
 
 - `ConversationService.Start` admits a turn and runs it on the service's own
   context. Only `POST /api/conversations/{id}/stop`, `Close`, the five-minute
-  turn limit, or replacing the access token that started it end it early.
+  turn limit, or replacing the access token that started it end it early;
+  the token is watched from admission, so its replacement also stops an
+  approved call that runs before the turn's first event.
   Errors before the turn emits anything (busy, repeated request, stale
   approval, no model) are still returned as HTTP errors.
 - Every admitted turn, including those Telegram and WeChat iLink start with
@@ -24,8 +26,11 @@ phone's connection drops far more often than a local tab's.
   204 when no turn is running. Any number of clients can follow one turn, and
   a client that leaves ends only its own stream.
 - The web UI follows a running turn whenever a conversation snapshot says one
-  is active, using the AI SDK's `resumeStream`, whose replay replaces the saved
-  draft. The terminal does the same.
+  is active. It reads the replay itself (`reconnectToStream` and
+  `readUIMessageStream`) rather than through `resumeStream`, so every attempt
+  builds the reply from fresh state and replaces the saved draft; one reconnect
+  is in flight at a time and polling pauses until it ends. The terminal follows
+  the same way.
 
 ## Consequences
 
