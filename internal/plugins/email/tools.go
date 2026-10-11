@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -25,7 +27,11 @@ func Tools(config func() (Config, error)) []chat.Tool {
 		return err == nil && c.Enabled
 	}
 	object := func(properties map[string]any, required ...string) map[string]any {
-		return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+		schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+		if len(required) > 0 {
+			schema["required"] = required
+		}
+		return schema
 	}
 	return []chat.Tool{
 		{
@@ -83,17 +89,25 @@ func Tools(config func() (Config, error)) []chat.Tool {
 				if err := draft.Validate(); err != nil {
 					return nil, err
 				}
-				return nil, call.RequestApproval(draft)
+				c, err := config()
+				if err != nil {
+					return nil, err
+				}
+				return nil, call.RequestApproval(outgoing{draft, sender(c)})
 			},
 			Approved: func(ctx context.Context, call chat.ApprovedCall) (any, error) {
-				var draft Draft
-				if err := json.Unmarshal(call.Input, &draft); err != nil {
+				var mail outgoing
+				if err := json.Unmarshal(call.Input, &mail); err != nil {
 					return nil, err
 				}
 				c, err := config()
 				if err != nil {
 					return nil, err
 				}
+				if sender(c) != mail.Sender {
+					return nil, errors.New("the email configuration changed after the request; ask again so the user can approve the new sender")
+				}
+				draft := mail.Draft
 				ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 				defer cancel()
 				// The approval ID keys the delivery, so the mail is sent at most once.
@@ -104,6 +118,18 @@ func Tools(config func() (Config, error)) []chat.Tool {
 			},
 		},
 	}
+}
+
+// outgoing is a mail the user approves, with the sender it would leave from.
+type outgoing struct {
+	Draft
+	// Sender names the From address and SMTP account when the user was asked;
+	// an approved mail is sent only while they are unchanged.
+	Sender string `json:"sender"`
+}
+
+func sender(c Config) string {
+	return c.From + " via " + c.SMTP.Username + "@" + net.JoinHostPort(c.SMTP.Host, strconv.Itoa(c.SMTP.Port))
 }
 
 // identity reads a message's uid or validity from JSON input.

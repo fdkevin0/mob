@@ -57,7 +57,12 @@ func TestTools(t *testing.T) {
 		}
 	}
 	approved := chat.ApprovedCall{ConversationID: conversation.ID, ApprovalID: chat.NewID(), Store: store}
-	approved.Input, _ = json.Marshal(request{Operation: "d1.query", Argument: "SELECT ?", Params: []any{1}})
+	approved.Input, _ = json.Marshal(request{Operation: "d1.query", Argument: "SELECT ?", Params: []any{1}, Target: target(config, "d1.query")})
+	config.DatabaseID = "production"
+	if _, err := tool.Approved(context.Background(), approved); err == nil || len(paths) != 1 {
+		t.Fatalf("ran against another database than the user approved: %v %v", paths, err)
+	}
+	config.DatabaseID = "db"
 	if _, err := tool.Approved(context.Background(), approved); err != nil || paths[1] != "/client/v4/accounts/"+config.AccountID+"/d1/database/db/query" {
 		t.Fatalf("approved query: %v %v", paths, err)
 	}

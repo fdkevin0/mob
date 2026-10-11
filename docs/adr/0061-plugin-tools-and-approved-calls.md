@@ -31,7 +31,10 @@ architecture after ADR 0058, 0059 and 0060.
   and owner-only.
   Reading runs at once; sending mail, Workers AI (`ai.run`, and
   `vectorize.query`, which embeds with Workers AI) and D1 queries, which may
-  write, wait for approval. Mail text and Cloudflare results sent to the model
+  write, wait for approval. The approval names what the call acts on (the
+  sender and SMTP account, or the Cloudflare account and model, index or
+  database), and an approved call runs only while the configuration still
+  names the same target, so changing the configuration cannot redirect it. Mail text and Cloudflare results sent to the model
   are bounded, and the model is told they are untrusted data.
 - `remember` is an ordinary approved tool: saving the fact is its `Approved`.
 

@@ -30,6 +30,19 @@ type request struct {
 	Operation string `json:"operation"`
 	Argument  string `json:"argument,omitempty"`
 	Params    []any  `json:"params,omitempty"`
+	// Target names the account and resource the call would use when the user
+	// was asked; an approved call runs only while they are unchanged.
+	Target string `json:"target,omitempty"`
+}
+
+// target is what an approved operation acts on under c.
+func target(c Config, operation string) string {
+	resource := map[string]string{
+		"ai.run":          "Workers AI model " + c.Model,
+		"vectorize.query": "Vectorize index " + c.Index + " with " + c.EmbeddingModel,
+		"d1.query":        "D1 database " + c.DatabaseID,
+	}[operation]
+	return resource + " in account " + c.AccountID
 }
 
 // Tools let the model use the configured Cloudflare services while the plugin
@@ -80,12 +93,24 @@ func Tools(config func() (Config, error)) []chat.Tool {
 			if slices.Contains(readOperations, r.Operation) {
 				return run(ctx, r)
 			}
+			c, err := config()
+			if err != nil {
+				return nil, err
+			}
+			r.Target = target(c, r.Operation)
 			return nil, call.RequestApproval(r)
 		},
 		Approved: func(ctx context.Context, call chat.ApprovedCall) (any, error) {
 			var r request
 			if err := json.Unmarshal(call.Input, &r); err != nil {
 				return nil, err
+			}
+			c, err := config()
+			if err != nil {
+				return nil, err
+			}
+			if target(c, r.Operation) != r.Target {
+				return nil, errors.New("the Cloudflare configuration changed after the request; ask again so the user can approve the new target")
 			}
 			return run(ctx, r)
 		},
