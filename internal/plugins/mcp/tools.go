@@ -36,15 +36,15 @@ var unsafe = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
 // toolName is mcp__<server>__<tool> when that uses only the characters
 // models accept and is at most 64 long. Otherwise it is cut to fit, with
-// those characters replaced, and ends in a hash of the real name, so that
-// read.file and read_file stay apart.
+// those characters replaced, and ends in a hash of the server and tool, so
+// that read.file and read_file stay apart.
 func toolName(server, tool string) string {
 	name := "mcp__" + server + "__" + tool
 	safe := unsafe.ReplaceAllString(name, "_")
 	if safe == name && len(name) <= 64 {
 		return name
 	}
-	sum := sha256.Sum256([]byte(name))
+	sum := sha256.Sum256([]byte(server + "\x00" + tool))
 	return safe[:min(len(safe), 47)] + "_" + hex.EncodeToString(sum[:8])
 }
 

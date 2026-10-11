@@ -162,6 +162,10 @@ func TestValidate(t *testing.T) {
 		{Servers{"both": {Command: "x", URL: "https://example.com"}}, false},
 		{Servers{"none": {}}, false},
 		{Servers{"a__b": {Command: "x"}}, false},
+		{Servers{"fs_": {Command: "x"}}, false},
+		{Servers{"_fs": {Command: "x"}}, false},
+		{Servers{"my_fs-2": {Command: "x"}}, true},
+		{Servers{strings.Repeat("a", 33): {Command: "x"}}, false},
 		{Servers{"Bad Name": {Command: "x"}}, false},
 		{Servers{"ftp": {URL: "ftp://example.com"}}, false},
 		{Servers{"env": {Command: "x", Env: []string{"NOVALUE"}}}, false},
@@ -184,6 +188,44 @@ func TestToolName(t *testing.T) {
 	long := toolName("server", strings.Repeat("x", 80))
 	if len(long) != 64 || long == toolName("server", strings.Repeat("x", 81)) {
 		t.Fatalf("long names: %s", long)
+	}
+}
+
+// TestToolNamesStayApartInTheRegistry offers the tools of servers whose
+// names could run into their tools' names, and checks the model is offered
+// every one of them.
+func TestToolNamesStayApartInTheRegistry(t *testing.T) {
+	servers := Servers{}
+	h := &Hub{states: map[string]*state{}}
+	tools := map[string][]string{
+		"fs":     {"_read_file", "read_file", "read.file", "a__b", strings.Repeat("x", 80)},
+		"fs_a":   {"b", "read_file"},
+		"fs-a":   {"_b", strings.Repeat("x", 80)},
+		"fs_a_b": {"c"},
+	}
+	want := 0
+	for name, names := range tools {
+		server := Server{Command: "x"}
+		servers[name] = server
+		s := &state{server: server}
+		for _, tool := range names {
+			s.tools = append(s.tools, &sdk.Tool{Name: tool})
+			want++
+		}
+		h.states[name] = s
+	}
+	if err := servers.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	h.Configure(servers)
+	var registry chat.ToolRegistry
+	registry.RegisterSource(h.Tools)
+	offered := map[string]bool{}
+	for _, tool := range registry.List() {
+		offered[tool.Name] = true
+	}
+	if len(offered) != want {
+		t.Fatalf("offered %d of %d tools: %v", len(offered), want, offered)
 	}
 }
 
