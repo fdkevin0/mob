@@ -41,7 +41,7 @@ Understand the architectural concepts, network mesh models, and design decisions
 
 Quickly bootstrap and explore Mob across different runtimes:
 
-* **[Project Root README](../README.md)**: Environment prerequisites (Go 1.26+, Bun 1.3.10+, Wails v2), installation, and one-command local startup.
+* **[Project Root README](../README.md)**: Environment prerequisites (Go 1.26+, Bun 1.4.3+, Wails v2), installation, and one-command local startup.
 * **Launch Desktop App**: `bun run desktop`
 * **Launch Terminal TUI**: `./build/mob tui`
 * **Launch Cloud Gateway**: `./build/mob gateway --addr :8788 --token <secret-token>`

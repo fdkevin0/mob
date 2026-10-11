@@ -7,7 +7,7 @@ remain as reference; the local integrations described below are implemented in G
 
 ## Run locally
 
-Requirements: Go 1.26+, Bun 1.3.10, and the platform prerequisites for
+Requirements: Go 1.26+, Bun 1.4.3, and the platform prerequisites for
 [Wails v2](https://wails.io/docs/gettingstarted/installation). Desktop packaging has
 been checked on macOS arm64 only. The current toolchain targets macOS 13+; the
 app is locally signed for development, not notarized for distribution.
