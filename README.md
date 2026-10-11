@@ -208,6 +208,10 @@ A command stops after 2 minutes by default (at most 5) and its container is
 removed; output is cut at 16 KiB per stream. Network access and CPU/memory are
 not limited.
 
+`scripts/verify-sandbox.sh` (macOS, Linux) and `scripts/verify-sandbox.ps1`
+(Windows) check a machine end to end; see
+[docs/sandbox-verification.md](docs/sandbox-verification.md).
+
 ## Plugins and cloud connections
 
 Open **Plugins & cloud services** in the GUI (also available before model setup),
