@@ -1,8 +1,13 @@
 # Verifying the sandbox on macOS and Windows
 
-The sandbox (ADR 0055) is tested against real containerd on Linux. On macOS and
-Windows only the CLI arguments are unit-tested, so check each platform on a
-real machine with the scripts below. Each script builds `mob` from the
+The sandbox (ADR 0055) is unit-tested on every platform, and these scripts check
+a real machine end to end. Results so far:
+
+| Platform | Runtime | Result |
+| --- | --- | --- |
+| Linux | containerd 2.3.6, nerdctl 2.1.6 | all checks pass |
+| macOS 27.0.1, Apple silicon | Apple container 1.5.0 | all checks pass |
+| Windows | wslc | not yet run on a real machine | Each script builds `mob` from the
 checkout, then checks the following and prints `PASS`/`FAIL` per check:
 
 | Check | What it proves |
