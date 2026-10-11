@@ -41,9 +41,12 @@ type modelConfiguration struct {
 	DefaultModel string
 	Err          error
 }
-type listing struct {
-	Text string
-	Err  error
+
+// commandRan is the service's answer to a typed slash command.
+type commandRan struct {
+	Text   string
+	Result chat.CommandResult
+	Err    error
 }
 type model struct {
 	plugin              *pluginForm
@@ -57,6 +60,7 @@ type model struct {
 	failure, listText   string
 	generation          uint64
 	busy, remoteBusy    bool
+	running             bool
 	width, height       int
 	suggestions         []chat.Suggestion
 	selected            int
@@ -261,13 +265,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Another client is generating · Ctrl+S to stop"
 		}
 		m.render()
-	case listing:
+	case commandRan:
+		m.running = false
 		if msg.Err != nil {
 			m.failure = msg.Err.Error()
-		} else {
-			m.listText = msg.Text
+			if m.input.Value() == "" {
+				m.input.SetValue(msg.Text)
+			}
+			return m, nil
+		}
+		if !msg.Result.Handled {
+			return m, m.send(msg.Text)
+		}
+		if msg.Result.Markdown != "" {
+			m.listText = msg.Result.Markdown
 			m.render()
 		}
+		return m.apply(msg.Result.Action)
 	case tick:
 		if m.plugin != nil {
 			return m, nextTick()
@@ -341,7 +355,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
 		case "enter":
-			if m.busy || m.remoteBusy || m.id == "" {
+			if m.busy || m.remoteBusy || m.running || m.id == "" {
 				return m, nil
 			}
 			text := strings.TrimSpace(m.input.Value())
@@ -354,58 +368,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.failure = ""
 			m.listText = ""
 			m.generation++
-			if text == "/mail" {
-				m.plugin = newPluginForm()
-				m.plugin.name = "compose"
-				m.plugin.config = map[string]map[string]any{"compose": {}}
-				m.plugin.fields = fieldsFor("compose")
-				m.plugin.index = 0
-				m.plugin.requestID = chat.NewID()
-				m.plugin.focus()
-				return m, nil
+			if strings.HasPrefix(text, "/") {
+				m.running = true
+				return m, m.runCommand(text)
 			}
-			if cmd, ok := m.pluginCommand(text); ok {
-				return m, cmd
-			}
-			if text == "/new" {
-				return m, m.load("", true)
-			}
-			if text == "/list" {
-				return m, func() tea.Msg {
-					var list []chat.Conversation
-					err := m.json("GET", "/api/conversations", nil, &list)
-					if err != nil {
-						return listing{Err: err}
-					}
-					var lines []string
-					for _, c := range list {
-						lines = append(lines, c.ID+"  "+c.Title)
-					}
-					return listing{Text: "/open ID to switch\n" + strings.Join(lines, "\n")}
-				}
-			}
-			if strings.HasPrefix(text, "/open ") {
-				return m, m.load(strings.TrimSpace(strings.TrimPrefix(text, "/open ")), false)
-			}
-			request := chat.ChatRequest{ID: m.id, Text: text, RequestID: chat.NewID()}
-			if strings.HasPrefix(text, "/approve ") || strings.HasPrefix(text, "/deny ") {
-				fields := strings.Fields(text)
-				if len(fields) != 2 {
-					m.status = "Use /approve ID or /deny ID"
-					return m, nil
-				}
-				request.Text = ""
-				request.Approval = &struct {
-					ID       string `json:"id"`
-					Approved bool   `json:"approved"`
-				}{fields[1], fields[0] == "/approve"}
-			} else {
-				m.messages = append(m.messages, chat.Message{ID: request.RequestID, Role: "user", Parts: []chat.Part{{"type": "text", "text": text}}})
-			}
-			cmd := m.stream(request)
-			m.viewport.GotoBottom()
-			m.render()
-			return m, cmd
+			return m, m.send(text)
 		}
 	}
 	var cmd tea.Cmd

@@ -16,32 +16,46 @@ func values(list []Suggestion) []string {
 	return out
 }
 
-func TestComplete(t *testing.T) {
+func testService(t *testing.T) (*ConversationService, Conversation) {
+	t.Helper()
 	s, err := OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
-	service := NewConversation(s, &models{def: "alpha/one"})
+	t.Cleanup(func() { s.Close() })
 	c, _ := s.Create()
+	return NewConversation(s, &models{def: "alpha/one"}), c
+}
+
+// pendingApproval stores a tool request awaiting a decision and returns its ID.
+func pendingApproval(t *testing.T, s *Store, conversation string) string {
+	t.Helper()
+	approval := NewID()
+	raw := `[{"type":"tool-remember","state":"approval-requested","approval":{"id":"` + approval + `"}}]`
+	if _, err := s.db.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'assistant',?,'complete')", NewID(), conversation, raw); err != nil {
+		t.Fatal(err)
+	}
+	return approval
+}
+
+func TestComplete(t *testing.T) {
+	service, c := testService(t)
 	complete := func(client, text string) []string {
-		return values(service.Complete(context.Background(), CompletionRequest{Client: client, ConversationID: c.ID, Text: text}))
+		return values(service.Commands.Complete(context.Background(), CommandRequest{Client: client, ConversationID: c.ID, Text: text}, true))
 	}
 	for _, tc := range []struct {
 		client, text string
 		want         []string
 	}{
-		{ClientWeb, "/", []string{"/model", "/models"}},
+		{ClientTelegram, "/", []string{"/model", "/models", "/new", "/approve", "/deny", "/help"}},
 		{ClientWeb, "/mo", []string{"/model", "/models"}},
 		{ClientWeb, "/models", []string{"/models"}},
-		{ClientTUI, "/de", []string{"/deny", "/deliveries"}},
-		{ClientTUI, "/secret", []string{"/clear-secret"}},
-		{ClientWeb, "/open ", []string{}},
+		{ClientWeb, "/de", []string{"/deny"}},
+		{ClientWeChat, "/open ", []string{}},
 		{ClientWeb, "/model ", []string{"default", "alpha/one", "beta/two"}},
 		{ClientWeb, "/model TWO", []string{"beta/two"}},
 		{ClientWeb, "/model default b", []string{"beta/two"}},
 		{ClientWeb, "/model alpha/one ", []string{}},
-		{ClientTUI, "/test t", []string{"telegram"}},
 		{ClientTUI, "/approve ", []string{}},
 		{ClientWeb, "hello /mo", []string{}},
 		{ClientWeb, "/model\nx", []string{}},
@@ -53,29 +67,89 @@ func TestComplete(t *testing.T) {
 	if got := complete(ClientTUI, "/open "); !slices.Equal(got, []string{c.ID}) {
 		t.Fatalf("conversations: %v", got)
 	}
-	approval := NewID()
-	raw := `[{"type":"tool-remember","state":"approval-requested","approval":{"id":"` + approval + `"}}]`
-	if _, err := s.db.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'assistant',?,'complete')", NewID(), c.ID, raw); err != nil {
-		t.Fatal(err)
-	}
-	if got := service.Complete(context.Background(), CompletionRequest{Client: ClientTUI, ConversationID: c.ID, Text: "/deny "}); len(got) != 1 || got[0].Value != approval || got[0].Detail != "remember" {
+	approval := pendingApproval(t, service.Store, c.ID)
+	if got := service.Commands.Complete(context.Background(), CommandRequest{Client: ClientTUI, ConversationID: c.ID, Text: "/deny "}, true); len(got) != 1 || got[0].Value != approval || got[0].Detail != "remember" {
 		t.Fatalf("approvals: %+v", got)
 	}
 }
 
-func TestHelpFollowsClient(t *testing.T) {
-	help := Help(ClientTelegram)
-	for _, want := range []string{"/new", "/approve ID", "/model [NAME", "/help"} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("telegram help lacks %s:\n%s", want, help)
+func TestRun(t *testing.T) {
+	service, c := testService(t)
+	run := func(client, text string) CommandResult {
+		t.Helper()
+		result, err := service.Commands.Run(context.Background(), CommandRequest{Client: client, ConversationID: c.ID, Text: text}, true)
+		if err != nil {
+			t.Fatalf("%s: %v", text, err)
+		}
+		return result
+	}
+	for _, text := range []string{"hello", "/model", "/models x", "/unknown", "/new\nsecond line"} {
+		if run(ClientWeb, text).Handled {
+			t.Fatalf("%q must be sent as chat", text)
 		}
 	}
-	if strings.Contains(help, "/cloud") {
-		t.Fatal("telegram help lists a terminal-only command")
+	if run(ClientWeChat, "/new").Handled {
+		t.Fatal("/new ran in a client that does not support it")
 	}
-	for _, c := range Commands(ClientWeb) {
-		if !isCommand("/" + c.Name) {
-			t.Fatalf("web lists /%s, which the service does not answer", c.Name)
+	created := run(ClientWeb, "/new")
+	if !created.Handled || created.Action == nil || created.Action.Kind != OpenConversation {
+		t.Fatalf("/new: %+v", created)
+	}
+	if list, _ := service.Store.List(); len(list) != 2 {
+		t.Fatal("/new did not create a conversation")
+	}
+	if list := run(ClientTUI, "/list").Markdown; !strings.Contains(list, "(current)") || !strings.Contains(list, created.Action.ConversationID) {
+		t.Fatalf("/list: %s", list)
+	}
+	if opened := run(ClientWeb, "/open "+created.Action.ConversationID); opened.Action == nil || opened.Action.ConversationID != created.Action.ConversationID {
+		t.Fatalf("/open: %+v", opened)
+	}
+	if missing := run(ClientWeb, "/open nope"); missing.Action != nil || !strings.Contains(missing.Markdown, "No conversation") {
+		t.Fatalf("/open missing: %+v", missing)
+	}
+	if none := run(ClientWeb, "/approve"); none.Action != nil || !strings.Contains(none.Markdown, "0 requests") {
+		t.Fatalf("/approve without requests: %+v", none)
+	}
+	approval := pendingApproval(t, service.Store, c.ID)
+	for text, approved := range map[string]bool{"/approve": true, "/deny " + approval: false} {
+		got := run(ClientTelegram, text)
+		if got.Action == nil || got.Action.Kind != Decide || got.Action.ApprovalID != approval || got.Action.Approved != approved {
+			t.Fatalf("%s: %+v", text, got)
 		}
+	}
+	if help := run(ClientTelegram, "/help").Markdown; !strings.Contains(help, "/approve [ID]") || strings.Contains(help, "/list") {
+		t.Fatalf("telegram help: %s", help)
+	}
+	service.Commands.Register(Command{CommandSpec: CommandSpec{Name: "secret", Clients: []string{ClientWeb}}, OwnerOnly: true,
+		Run: func(context.Context, CommandCall) (CommandResult, error) { return CommandResult{Markdown: "ran"}, nil }})
+	if got, _ := service.Commands.Run(context.Background(), CommandRequest{Client: ClientWeb, Text: "/secret"}, false); !got.Handled || got.Markdown == "ran" {
+		t.Fatalf("owner-only command ran for a guest: %+v", got)
+	}
+}
+
+func TestRegisterRejectsAmbiguousCommands(t *testing.T) {
+	for _, c := range []Command{
+		{CommandSpec: CommandSpec{Name: "model", Transcript: true}},
+		{CommandSpec: CommandSpec{Name: "both", Transcript: true}, Run: func(context.Context, CommandCall) (CommandResult, error) { return CommandResult{}, nil }},
+		{CommandSpec: CommandSpec{Name: "neither"}},
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("registered %s", c.Name)
+				}
+			}()
+			service, _ := testService(t)
+			service.Commands.Register(c)
+		}()
+	}
+}
+
+func TestFenceAndCell(t *testing.T) {
+	if got := Fence("", "a ``` b"); got != "````\na ``` b\n````" {
+		t.Fatalf("fence: %q", got)
+	}
+	if got := Cell("a|b\nc"); got != `a\|b c` {
+		t.Fatalf("cell: %q", got)
 	}
 }

@@ -34,7 +34,9 @@ type Server struct {
 }
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
-	return &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), Token: token}
+	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), Token: token}
+	s.Commands.Register(s.pluginCommands()...)
+	return s
 }
 
 func (s *Server) defaultModel() (llm.Model, error) { return s.Providers.Resolve(s.Providers.Default()) }
@@ -95,16 +97,15 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		writeJSON(w, 200, map[string]bool{"stopped": s.Stop(r.PathValue("id"))})
 	})
 	mux.HandleFunc("GET /api/commands", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, chat.Commands(r.URL.Query().Get("client")))
+		writeJSON(w, 200, s.Commands.Specs(r.URL.Query().Get("client")))
 	})
 	mux.HandleFunc("POST /api/commands/complete", func(w http.ResponseWriter, r *http.Request) {
-		var input chat.CompletionRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&input); err != nil {
-			http.Error(w, "invalid completion request", 400)
-			return
+		var input chat.CommandRequest
+		if decodeRequest(w, r, &input) {
+			writeJSON(w, 200, s.Commands.Complete(r.Context(), input, true))
 		}
-		writeJSON(w, 200, s.Complete(r.Context(), input))
 	})
+	mux.HandleFunc("POST /api/commands/run", s.runCommand)
 	mux.HandleFunc("POST /api/chat", s.chat)
 	if assets != nil {
 		mux.Handle("/", http.FileServerFS(assets))

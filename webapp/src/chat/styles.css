@@ -38,6 +38,8 @@ header strong { font-size: 14px; font-weight: 500; }.eyebrow { margin: 0 0 5px; 
 .tool-card p { font-size: 12px; margin-bottom: 10px; }.reasoning { color: #777f6e; font-size: 12px; }.reasoning p { white-space: pre-wrap; }
 .composer-area { width: 100%; max-width: 850px; margin: 0 auto; padding: 12px 32px 18px; }.composer { display: flex; align-items: end; border: 1px solid #d7dece; border-radius: 15px; padding: 12px; background: white; box-shadow: 0 3px 15px #333d2406; gap: 10px; }
 .composer textarea { width: 100%; background: transparent; border: 0; resize: vertical; max-height: 180px; padding: 4px; font-size: 14px; }.composer button { flex-shrink: 0; }
+.command-result { margin: 0 0 8px; padding: 10px 14px; border: 1px solid #d7dece; border-radius: 12px; background: white; max-height: 40vh; overflow: auto; font-size: 13px; }
+.command-result table { border-collapse: collapse; font-size: 12px; }.command-result th,.command-result td { border-bottom: 1px solid #e9ede5; padding: 4px 8px; text-align: left; }
 .suggestions { list-style: none; margin: 0 0 6px; padding: 4px; border: 1px solid #d7dece; border-radius: 12px; background: white; box-shadow: 0 3px 15px #333d2410; max-height: 228px; overflow-y: auto; }
 .suggestions li { display: flex; gap: 12px; align-items: baseline; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; overflow-wrap: anywhere; }
 .suggestions li small { color: #858b7c; font-size: 11px; }.suggestions [aria-selected='true'] { background: #e9ede5; }

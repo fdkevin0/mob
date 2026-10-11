@@ -31,7 +31,9 @@ var definitions = []definition{
 	{"Delivery", chat.Delivery{}},
 	{"CommandSpec", chat.CommandSpec{}},
 	{"Suggestion", chat.Suggestion{}},
-	{"CompletionRequest", chat.CompletionRequest{}},
+	{"CommandRequest", chat.CommandRequest{}},
+	{"Action", chat.Action{}},
+	{"CommandResult", chat.CommandResult{}},
 }
 
 func contract() string {
@@ -55,6 +57,8 @@ func contract() string {
 			return "number"
 		case reflect.Slice:
 			return kind(t.Elem()) + "[]"
+		case reflect.Pointer:
+			return kind(t.Elem())
 		default:
 			panic("unsupported contract type: " + t.String())
 		}

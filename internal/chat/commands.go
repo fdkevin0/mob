@@ -15,11 +15,6 @@ const modelHelp = "/model shows this conversation's model · /model NAME switche
 // perProvider bounds /models output; a filter narrows a long list.
 const perProvider = 25
 
-func isCommand(text string) bool {
-	name, _, _ := strings.Cut(text, " ")
-	return name == "/model" || name == "/models"
-}
-
 func (s *ConversationService) command(ctx context.Context, input ChatRequest, emit func(Event) error) error {
 	// A retried request must not switch models again after later choices.
 	if s.Store.HasRequest(input.RequestID) {

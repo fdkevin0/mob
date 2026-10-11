@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
 import { api, defaultURL, type Connection, type Conversation, type Snapshot } from './api';
+import type { Action } from './contracts';
 
 import { Plugins } from './Plugins';
 
@@ -53,6 +54,10 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
     try { const snapshot = await api<Snapshot>(connection, `/conversations/${id}`); setSelected({ id, snapshot }); }
     catch (e) { setError(errorText(e)); } finally { setSwitching(false); }
   }
+  function act(action: Action) {
+    if (action.kind === 'open-conversation' && action.conversationId) void refreshList().then(() => open(action.conversationId!)).catch(e => setError(errorText(e)));
+    else if (action.kind === 'open-plugins' || action.kind === 'compose-mail') setPlugins(true);
+  }
   async function create() {
     setSwitching(true);
     try { const next = await api<Conversation>(connection, '/conversations', {}); await refreshList(); await open(next.id); }
@@ -78,13 +83,13 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
     </aside>
     <main className="chat-main"><header><div><p className="eyebrow">YOUR WORKSPACE</p><strong title="This conversation's model; /model NAME switches it">{model?.startsWith('demo/') ? 'Demo mode · no model calls' : model ?? 'Connecting…'}</strong></div><span className="badge" title={background ? "Continues after this window closes" : "Lifetime is controlled by the process that started the service"}>{background ? "Background service" : "Session service"}</span></header>
       {error && <div className="error" role="alert">{error}<button className="plain" onClick={() => void refreshList().catch(e => setError(errorText(e)))}>Refresh</button></div>}
-      {selected ? <Thread key={selected.id} connection={connection} id={selected.id} initial={selected.snapshot} onModel={setModel} onBusy={setBusy} onChanged={() => { void refreshList().catch(e => setError(errorText(e))); }} /> : <div className="loading" role="status">Opening workspace…</div>}
+      {selected ? <Thread key={selected.id} connection={connection} id={selected.id} initial={selected.snapshot} onModel={setModel} onBusy={setBusy} onChanged={() => { void refreshList().catch(e => setError(errorText(e))); }} onAction={act} /> : <div className="loading" role="status">Opening workspace…</div>}
     </main>
   </div>;
 }
 
-function Thread({ connection, id, initial, onModel, onBusy, onChanged }: { connection: Connection; id: string; initial: Snapshot; onModel: (model: string) => void; onBusy: (busy: boolean) => void; onChanged: () => void }) {
-  const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel } = useConversation({ connection, id, initial, onBusy, onChanged });
+function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction }: { connection: Connection; id: string; initial: Snapshot; onModel: (model: string) => void; onBusy: (busy: boolean) => void; onChanged: () => void; onAction: (action: Action) => void }) {
+  const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel, commandResult, dismissCommand } = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
   const completion = useCompletion({ connection, id, input, setInput });
   useEffect(() => { onModel(model); }, [model, onModel]);
   return <>
@@ -108,6 +113,7 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged }: { conne
       {busy && <p className="muted" role="status">{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}</p>}
     </ConversationContent><ConversationScrollButton /></ChatConversation>
     <div className="composer-area">{(failure || error) && <p className="error" role="alert">{failure || error?.message}</p>}
+      {commandResult && <section className="command-result" aria-label="Command result"><MessageResponse>{commandResult}</MessageResponse><button className="plain" onClick={dismissCommand}>Dismiss</button></section>}
       {completion.suggestions.length > 0 && <ul className="suggestions" id="command-suggestions" role="listbox" aria-label="Command suggestions">
         {completion.suggestions.map((s, i) => <li key={`${i}-${s.value}`} id={`suggestion-${i}`} role="option" aria-selected={i === completion.selected} onMouseDown={e => { e.preventDefault(); completion.accept(i); }}>
           <span>{s.label}</span>{s.detail && <small>{s.detail}</small>}</li>)}

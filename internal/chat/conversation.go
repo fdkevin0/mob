@@ -20,12 +20,14 @@ type Models interface {
 
 // Conversation owns execution, cancellation and admission for every transport.
 type ConversationService struct {
-	Store   *Store
-	Models  Models
-	mu      sync.Mutex
-	active  map[string]context.CancelFunc
-	wg      sync.WaitGroup
-	closing bool
+	Store  *Store
+	Models Models
+	// Commands answers slash commands; register more before serving.
+	Commands *Registry
+	mu       sync.Mutex
+	active   map[string]context.CancelFunc
+	wg       sync.WaitGroup
+	closing  bool
 }
 
 type CommandError struct {
@@ -52,7 +54,7 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 	if _, err := s.Store.History(input.ID); err != nil {
 		return err
 	}
-	command := input.Approval == nil && isCommand(input.Text)
+	command := input.Approval == nil && s.Commands.transcript(input.Text)
 	var model llm.Model
 	if !command {
 		ref, err := s.Model(input.ID)
@@ -106,7 +108,9 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 }
 
 func NewConversation(store *Store, models Models) *ConversationService {
-	return &ConversationService{Store: store, Models: models, active: map[string]context.CancelFunc{}}
+	s := &ConversationService{Store: store, Models: models, Commands: &Registry{}, active: map[string]context.CancelFunc{}}
+	s.Commands.Register(s.builtins()...)
+	return s
 }
 func (s *ConversationService) Active(id string) bool {
 	s.mu.Lock()

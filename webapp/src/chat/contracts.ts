@@ -68,14 +68,26 @@ export type CommandSpec = {
   usage: string;
   summary: string;
   clients: string[];
+  transcript?: boolean;
 };
 export type Suggestion = {
   value: string;
   label: string;
   detail?: string;
 };
-export type CompletionRequest = {
+export type CommandRequest = {
   client: string;
   conversationId?: string;
   text: string;
+};
+export type Action = {
+  kind: string;
+  conversationId?: string;
+  approvalId?: string;
+  approved?: boolean;
+};
+export type CommandResult = {
+  handled: boolean;
+  markdown?: string;
+  action?: Action;
 };
