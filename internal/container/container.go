@@ -36,6 +36,17 @@ type Mount struct {
 // NoNetwork is the Network that gives a container only its loopback interface.
 const NoNetwork = "none"
 
+// GVisor is the Isolation that runs a container under gVisor's runsc, a
+// user-space kernel between the container and the host's. Only containerd
+// offers it: Apple's runtime and wslc already give each container a VM.
+const GVisor = "gvisor"
+
+// gvisorRuntime is what nerdctl's --runtime takes for gVisor. A bare binary
+// name runs it under containerd's runc shim, as Docker does, so only runsc
+// must be installed; runsc's own shim also sets a negative OOM score, which
+// some hosts refuse.
+const gvisorRuntime = "runsc"
+
 // Limits bound what a container may use; zero values keep the runtime's
 // defaults. All three CLIs accept --network none, --cpus N and --memory
 // SIZE with the same meaning, so one setting serves every platform.
@@ -59,6 +70,8 @@ type Spec struct {
 	Workdir string
 	Stdin   io.Reader
 	Limits  Limits
+	// Isolation is "" for the runtime's default or GVisor.
+	Isolation string
 }
 
 // Result is what a finished container produced. A nonzero ExitCode is not an error.
@@ -75,9 +88,10 @@ type Runtime struct {
 	Name, Binary string
 	// prefix precedes every subcommand, e.g. nerdctl's namespace.
 	prefix []string
-	// probe checks that the CLI can reach its service; remove force-deletes a container.
-	probe, remove []string
-	Run           Runner
+	// probe checks that the CLI can reach its service; remove force-deletes a
+	// container, after stop when set.
+	probe, stop, remove []string
+	Run                 Runner
 }
 
 // Default is the runtime native to goos, or "" when there is none.
@@ -104,6 +118,9 @@ func New(name string) (*Runtime, error) {
 		// nerdctl is containerd's own Docker-compatible CLI; a dedicated
 		// namespace keeps Mob's images and containers apart from others.
 		r.Binary, r.prefix, r.probe, r.remove = "nerdctl", []string{"--namespace", "mob"}, []string{"info"}, []string{"rm", "-f"}
+		// Under gVisor, rm -f alone kills the sandbox and then fails to
+		// delete the container, leaving it behind once its client is gone.
+		r.stop = []string{"stop", "-t", "0"}
 	case Apple:
 		r.Binary, r.probe, r.remove = "container", []string{"system", "status"}, []string{"delete", "--force"}
 	case WSLC:
@@ -150,6 +167,10 @@ func (r *Runtime) Pull(ctx context.Context, image string) error {
 func (r *Runtime) Remove(ctx context.Context, name string) error {
 	if name == "" || strings.HasPrefix(name, "-") {
 		return errors.New("container name is required and must not start with -")
+	}
+	if r.stop != nil {
+		// rm reports a container that stop could not reach.
+		_, _ = r.Run(ctx, r.Binary, r.args(append(r.stop, name)...), nil, io.Discard, io.Discard)
 	}
 	var stderr bytes.Buffer
 	code, err := r.Run(ctx, r.Binary, r.args(append(r.remove, name)...), nil, io.Discard, &stderr)
@@ -202,6 +223,16 @@ func (r *Runtime) RunArgs(spec Spec) ([]string, error) {
 		return nil, err
 	}
 	args = append(args, limits...)
+	switch spec.Isolation {
+	case "":
+	case GVisor:
+		if r.Name != Containerd {
+			return nil, fmt.Errorf("isolation %q needs the %s runtime", GVisor, Containerd)
+		}
+		args = append(args, "--runtime", gvisorRuntime)
+	default:
+		return nil, fmt.Errorf("isolation %q must be empty or %q", spec.Isolation, GVisor)
+	}
 	for _, e := range spec.Env {
 		if key, _, ok := strings.Cut(e, "="); !ok || key == "" {
 			return nil, fmt.Errorf("environment entry %q must be KEY=VALUE", e)

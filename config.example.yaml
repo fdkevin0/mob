@@ -24,3 +24,4 @@ demo: false
 #   network: ""            # none: no network at all; empty: the runtime's default (internet)
 #   cpus: 0                # whole CPUs per command; 0: the runtime's default
 #   memory: ""             # e.g. 512m or 2g, at least 64m; empty: the runtime's default
+#   isolation: ""          # gvisor: run under gVisor's runsc (Linux, containerd only); empty: the runtime's own

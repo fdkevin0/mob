@@ -7,6 +7,7 @@
 #   scripts/verify-sandbox.sh                # builds mob from this checkout
 #   MOB=/path/to/mob IMAGE=alpine:3.20 PORT=8799 scripts/verify-sandbox.sh
 #   MOB_SANDBOX_RUNTIME=containerd scripts/verify-sandbox.sh
+#   MOB_SANDBOX_ISOLATION=gvisor scripts/verify-sandbox.sh   # Linux, with runsc
 set -u
 
 IMAGE=${IMAGE:-alpine:3.20}
@@ -48,6 +49,19 @@ containerd) CLI=nerdctl; LIST="nerdctl --namespace mob ps -a" ;;
 esac
 command -v "$CLI" >/dev/null || { echo "$CLI is not on PATH"; exit 2; }
 "$CLI" --version 2>&1 | head -1
+# Every container below runs under the isolation chosen; the serve run reads
+# it from the environment.
+ISOLATION=${MOB_SANDBOX_ISOLATION:-}
+ISO=
+case $ISOLATION in
+"") ;;
+gvisor)
+	[ "$RUNTIME" = containerd ] || { echo "gvisor needs the containerd runtime"; exit 2; }
+	command -v runsc >/dev/null || { echo "runsc is not on PATH"; exit 2; }
+	runsc --version 2>&1 | head -1
+	ISO="--isolation gvisor" ;;
+*) echo "Unsupported isolation: $ISOLATION"; exit 2 ;;
+esac
 
 if [ -z "${MOB:-}" ]; then
 	echo "== Build"
@@ -64,20 +78,25 @@ out=$("$MOB" container status 2>&1) && check "container status" "$out" "Ready." 
 out=$("$MOB" container pull "$IMAGE" 2>&1) && pass "container pull $IMAGE" || fail "container pull $IMAGE" "$out"
 mkdir -p "$WORK/host"
 echo hello >"$WORK/host/in.txt"
-out=$("$MOB" container run -v "$WORK/host:/work" -w /work -e GREETING=hi "$IMAGE" sh -c 'echo $GREETING; cat in.txt; echo out > out.txt' 2>&1)
+out=$("$MOB" container run $ISO -v "$WORK/host:/work" -w /work -e GREETING=hi "$IMAGE" sh -c 'echo $GREETING; cat in.txt; echo out > out.txt' 2>&1)
 check "run: env, bind mount, workdir" "$out" hi hello
 [ "$(cat "$WORK/host/out.txt" 2>/dev/null)" = out ] && pass "run: container writes reach the host" || fail "run: container writes reach the host" "$(ls -la "$WORK/host")"
-out=$("$MOB" container run "$IMAGE" sh -c 'exit 3' 2>&1)
+out=$("$MOB" container run $ISO "$IMAGE" sh -c 'exit 3' 2>&1)
 check "run: exit status" "$out" "status 3"
 # read rather than cat: nerdctl 2.1 does not pass stdin's EOF on to the container.
-out=$(echo piped | "$MOB" container run -i "$IMAGE" sh -c 'read l; echo got-$l' 2>&1)
+out=$(echo piped | "$MOB" container run $ISO -i "$IMAGE" sh -c 'read l; echo got-$l' 2>&1)
 check "run: stdin with -i" "$out" got-piped
 # Prints a token per limit that took effect: cgroup v2 or v1 inside a shared
-# kernel, the VM's own size on Apple's runtime. No quotes, so the same text
-# survives JSON and PowerShell.
-LIMITS='n=$(ls /sys/class/net); c=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); m=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes); set -- $(grep MemTotal /proc/meminfo); echo net=$n nproc=$(nproc) cpu=$c mem=$m total=$2; [ $n = lo ] && echo no-network; { [ $(nproc) = 1 ] || [ ${c%% *} = 100000 ]; } && echo one-cpu; { [ $m = 268435456 ] || [ $2 -le 262144 ]; } && echo memory-capped; true'
-out=$("$MOB" container run --network none --cpus 1 --memory 256m "$IMAGE" sh -c "$LIMITS" 2>&1)
+# kernel, the VM's own size on Apple's runtime. Interfaces come from
+# /proc/net/dev, since gVisor has no /sys/class/net and, without a network,
+# not even lo. No quotes, so the same text survives JSON and PowerShell.
+LIMITS='n=$(sed 1,2d /proc/net/dev | grep -v lo: | grep -c :); c=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); m=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes); set -- $(grep MemTotal /proc/meminfo); echo net=$n nproc=$(nproc) cpu=$c mem=$m total=$2; [ $n = 0 ] && echo no-network; { [ $(nproc) = 1 ] || [ ${c%% *} = 100000 ]; } && echo one-cpu; { [ $m = 268435456 ] || [ $2 -le 262144 ]; } && echo memory-capped; true'
+out=$("$MOB" container run $ISO --network none --cpus 1 --memory 256m "$IMAGE" sh -c "$LIMITS" 2>&1)
 check "run: --network none, --cpus 1, --memory 256m" "$out" no-network one-cpu memory-capped
+if [ -n "$ISO" ]; then
+	out=$("$MOB" container run $ISO "$IMAGE" dmesg 2>&1)
+	check "run: --isolation gvisor runs under gVisor" "$out" "Starting gVisor"
+fi
 
 echo "== Sandbox tool through mob serve --demo"
 cat >"$MOB_CONFIG" <<EOF
@@ -114,6 +133,10 @@ out=$(chat 'yes x | head -c 40000')
 check "tool: output capped" "$out" '"truncated":true'
 out=$(chat "$LIMITS")
 check "tool: network, CPU and memory limits apply" "$out" no-network one-cpu memory-capped
+if [ -n "$ISO" ]; then
+	out=$(chat 'dmesg | head -1')
+	check "tool: sandbox.isolation runs commands under gVisor" "$out" "Starting gVisor"
+fi
 
 # Stopping the turn must remove the running container.
 chat 'sleep 600' >/dev/null &

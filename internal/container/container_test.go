@@ -45,7 +45,18 @@ func TestRunArgs(t *testing.T) {
 	if args, err := r.RunArgs(limited); err != nil || strings.Join(args, " ") != "run --rm -w /w --network none --cpus 2 --memory 1536m alpine ls" {
 		t.Errorf("limits: %q %v", args, err)
 	}
-	for _, bad := range []Spec{{}, {Image: "--privileged"}, {Image: "alpine", Env: []string{"=x"}}, {Image: "alpine", Mounts: []Mount{{"/a", "relative"}}},
+	containerd, _ := New(Containerd)
+	gvisor := Spec{Image: "alpine", Command: []string{"ls"}, Limits: Limits{Network: NoNetwork}, Isolation: GVisor}
+	if args, err := containerd.RunArgs(gvisor); err != nil || strings.Join(args, " ") != "--namespace mob run --rm --network none --runtime runsc alpine ls" {
+		t.Errorf("gvisor: %q %v", args, err)
+	}
+	for _, name := range []string{Apple, WSLC} {
+		other, _ := New(name)
+		if _, err := other.RunArgs(gvisor); err == nil || !strings.Contains(err.Error(), "containerd") {
+			t.Errorf("%s accepted gvisor: %v", name, err)
+		}
+	}
+	for _, bad := range []Spec{{}, {Image: "--privileged"}, {Image: "alpine", Isolation: "kata"}, {Image: "alpine", Env: []string{"=x"}}, {Image: "alpine", Mounts: []Mount{{"/a", "relative"}}},
 		{Image: "alpine", Limits: Limits{Network: "host"}}, {Image: "alpine", Limits: Limits{CPUs: -1}}, {Image: "alpine", Limits: Limits{MemoryMiB: -1}}} {
 		if _, err := r.RunArgs(bad); err == nil {
 			t.Errorf("accepted %+v", bad)
