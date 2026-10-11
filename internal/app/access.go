@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -19,8 +21,10 @@ const pairingLifetime = 5 * time.Minute
 type access struct {
 	mu    sync.RWMutex
 	token string
-	codes map[string]time.Time
-	now   func() time.Time
+	// revoked closes when token is replaced, ending every request it authorized.
+	revoked chan struct{}
+	codes   map[string]time.Time
+	now     func() time.Time
 }
 
 // Token is the current local access token.
@@ -30,8 +34,48 @@ func (s *Server) Token() string {
 	return s.access.token
 }
 
-func (s *Server) authorized(header string) bool {
-	return bearer(header, s.Token())
+// authorize checks the request's token and returns the channel that closes when it is revoked.
+func (s *Server) authorize(header string) (<-chan struct{}, bool) {
+	s.access.mu.RLock()
+	defer s.access.mu.RUnlock()
+	return s.access.revoked, bearer(header, s.access.token)
+}
+
+// errRevoked ends requests whose token was rotated while they ran.
+var errRevoked = errors.New("access token was replaced")
+
+// revocable ties a request to its token: rotation cancels its context, so
+// streams and turns stop, and fails body reads, so a request still waiting
+// for its body never starts work.
+func revocable(r *http.Request, revoked <-chan struct{}) *http.Request {
+	ctx, cancel := context.WithCancelCause(r.Context())
+	go func() {
+		select {
+		case <-revoked:
+			cancel(errRevoked)
+		case <-ctx.Done():
+		}
+	}()
+	r = r.WithContext(ctx)
+	if r.Body != nil {
+		r.Body = revocableBody{r.Body, revoked}
+	}
+	return r
+}
+
+type revocableBody struct {
+	io.ReadCloser
+	revoked <-chan struct{}
+}
+
+func (b revocableBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	select {
+	case <-b.revoked:
+		return 0, errRevoked
+	default:
+		return n, err
+	}
 }
 
 func bearer(header, token string) bool {
@@ -118,6 +162,8 @@ func (s *Server) rotateToken(allowed func(current string) bool) error {
 	}
 	s.access.token = next
 	s.access.codes = nil
+	close(s.access.revoked)
+	s.access.revoked = make(chan struct{})
 	return nil
 }
 

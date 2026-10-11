@@ -4,7 +4,7 @@ import { useCompletion } from './useCompletion';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
-import { api, defaultURL, type Connection, type Conversation, type Snapshot } from './api';
+import { api, defaultURL, unauthorizedEvent, type Connection, type Conversation, type Snapshot } from './api';
 import type { Action } from './contracts';
 
 import { Plugins } from './Plugins';
@@ -24,9 +24,19 @@ export function App() {
     }
     const code = pairingCode();
     const saved = savedToken();
-    const restore = code ? claimPairing(code) : saved ? Promise.resolve({ url: defaultURL(), token: saved }) : Promise.resolve(undefined);
+    const restore = code ? claimPairing(code) : saved ? verify({ url: defaultURL(), token: saved }) : Promise.resolve(undefined);
     restore.then(next => { if (next) { saveToken(next.token); setConnection(next); } })
-      .catch(e => { if (code) setError(errorText(e)); }).finally(() => setLoading(false));
+      .catch(e => setError(current => current || errorText(e))).finally(() => setLoading(false));
+  }, []);
+  // A replaced token signs this window out; the desktop reads the new token instead.
+  useEffect(() => {
+    const signOut = () => {
+      const desktop = window.go?.main?.Desktop;
+      if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
+      clearToken(); setConnection(undefined); setError('The access token was replaced. Run mob open to sign in again.');
+    };
+    window.addEventListener(unauthorizedEvent, signOut);
+    return () => window.removeEventListener(unauthorizedEvent, signOut);
   }, []);
   async function connect(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
@@ -60,6 +70,11 @@ function pairingCode() {
   const code = new URLSearchParams(window.location.hash.slice(1)).get('pair');
   if (code) window.history.replaceState(null, '', window.location.pathname + window.location.search);
   return code;
+}
+// verify checks a saved token before opening the workspace; a 401 signs out through unauthorizedEvent.
+async function verify(connection: Connection) {
+  await api(connection, '/config');
+  return connection;
 }
 async function claimPairing(code: string): Promise<Connection> {
   const url = defaultURL();

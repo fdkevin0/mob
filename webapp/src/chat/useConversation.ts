@@ -1,7 +1,7 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, readUIMessageStream } from 'ai';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { api, type ChatMessage, type Connection, type Snapshot } from './api';
+import { api, authorizedFetch, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action, CommandRequest, CommandResult } from './contracts';
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -17,7 +17,7 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
   const approvalController = useRef<AbortController | null>(null);
   const refreshGeneration = useRef(0);
   const transport = useMemo(() => new DefaultChatTransport<ChatMessage>({
-    api: `${connection.url}/api/chat`, headers: { Authorization: `Bearer ${connection.token}` },
+    api: `${connection.url}/api/chat`, headers: { Authorization: `Bearer ${connection.token}` }, fetch: authorizedFetch,
     prepareSendMessagesRequest: ({ messages, body }) => {
       if (body?.approval) return { body: { id, approval: body.approval } };
       const last = messages.at(-1);

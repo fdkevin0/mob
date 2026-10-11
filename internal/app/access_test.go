@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -118,5 +119,90 @@ func TestPairingAndTokenRotation(t *testing.T) {
 	server.PersistToken = nil
 	if resp := post("/api/token/rotate", current, nil); resp.StatusCode != 409 {
 		t.Fatalf("MOB_TOKEN rotation HTTP %d", resp.StatusCode)
+	}
+}
+
+// gatedBody signals its first read, then waits for release before returning data.
+type gatedBody struct {
+	reading, release chan struct{}
+	data             *bytes.Reader
+}
+
+func (b *gatedBody) Read(p []byte) (int, error) {
+	if b.reading != nil {
+		close(b.reading)
+		b.reading = nil
+		<-b.release
+	}
+	return b.data.Read(p)
+}
+
+func (b *gatedBody) Close() error { return nil }
+
+func TestRotationEndsRequestsOfTheOldToken(t *testing.T) {
+	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	server.PersistToken = func(string) error { return nil }
+	handler := server.Handler(nil)
+	rotate := func() {
+		t.Helper()
+		if err := server.rotateToken(func(string) bool { return true }); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A request authorized before rotation but still waiting for its body never starts a turn.
+	waiting, _ := s.Create()
+	raw, _ := json.Marshal(chat.ChatRequest{ID: waiting.ID, Text: "late", RequestID: "late"})
+	body := &gatedBody{reading: make(chan struct{}), release: make(chan struct{}), data: bytes.NewReader(raw)}
+	reading := body.reading
+	req := httptest.NewRequest("POST", "http://127.0.0.1/api/chat", body)
+	req.Header.Set("Authorization", "Bearer "+server.Token())
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { handler.ServeHTTP(recorder, req); close(done) }()
+	<-reading
+	rotate()
+	close(body.release)
+	<-done
+	if recorder.Code == 200 {
+		t.Fatal("request with a revoked token started a turn")
+	}
+	if h, _ := s.History(waiting.ID); len(h) != 0 {
+		t.Fatalf("revoked request saved messages: %+v", h)
+	}
+
+	// A turn streaming under the old token stops when the token is replaced.
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+	streaming, _ := s.Create()
+	raw, _ = json.Marshal(chat.ChatRequest{ID: streaming.ID, Text: strings.Repeat("hello ", 2000), RequestID: "stream"})
+	req, _ = http.NewRequest("POST", httpServer.URL+"/api/chat", bytes.NewReader(raw))
+	req.Header.Set("Authorization", "Bearer "+server.Token())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("stream HTTP %d", resp.StatusCode)
+	}
+	rotate()
+	io.Copy(io.Discard, resp.Body)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		h, _ := s.History(streaming.ID)
+		if len(h) > 0 && h[len(h)-1].Metadata["status"] == "cancelled" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("turn kept running after rotation: %+v", h)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
