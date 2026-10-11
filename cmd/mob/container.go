@@ -41,6 +41,9 @@ func containerCommand(name func() string) *cobra.Command {
 		env, volumes []string
 		workdir      string
 		interactive  bool
+		network      string
+		cpus         int
+		memory       string
 	}
 	run := &cobra.Command{
 		Use:   "run [flags] IMAGE [COMMAND...]",
@@ -51,7 +54,12 @@ func containerCommand(name func() string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			spec := container.Spec{Image: args[0], Command: args[1:], Env: opts.env, Workdir: opts.workdir}
+			spec := container.Spec{Image: args[0], Command: args[1:], Env: opts.env, Workdir: opts.workdir, Limits: container.Limits{Network: opts.network, CPUs: opts.cpus}}
+			if opts.memory != "" {
+				if spec.Limits.MemoryMiB, err = container.ParseMemory(opts.memory); err != nil {
+					return err
+				}
+			}
 			for _, v := range opts.volumes {
 				// Split at the last colon: Windows sources carry a drive letter.
 				i := strings.LastIndex(v, ":")
@@ -79,6 +87,9 @@ func containerCommand(name func() string) *cobra.Command {
 	run.Flags().StringArrayVarP(&opts.volumes, "volume", "v", nil, "Bind a host path (SOURCE:TARGET, repeatable)")
 	run.Flags().StringVarP(&opts.workdir, "workdir", "w", "", "Working directory inside the container")
 	run.Flags().BoolVarP(&opts.interactive, "interactive", "i", false, "Pass standard input to the container")
+	run.Flags().StringVar(&opts.network, "network", "", `"none" to give the container no network`)
+	run.Flags().IntVar(&opts.cpus, "cpus", 0, "Limit the container to this many whole CPUs")
+	run.Flags().StringVarP(&opts.memory, "memory", "m", "", "Limit the container's memory, such as 512m or 2g")
 
 	root.AddCommand(status, pull, run)
 	return root

@@ -73,6 +73,11 @@ try {
 	# read rather than cat, so a runtime that keeps stdin open after EOF cannot hang this.
 	$out = ('piped' | & $Mob container run -i $Image sh -c 'read l; echo got-$l' 2>&1 | ForEach-Object { "$_" }) -join "`n"
 	Check 'run: stdin with -i' $out @('got-piped')
+	# Prints a token per limit that took effect: cgroup v2 or v1 inside the
+	# session's kernel. No double quotes, which Windows PowerShell 5.1 mangles.
+	$Limits = 'n=$(ls /sys/class/net); c=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); m=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes); set -- $(grep MemTotal /proc/meminfo); echo net=$n nproc=$(nproc) cpu=$c mem=$m total=$2; [ $n = lo ] && echo no-network; { [ $(nproc) = 1 ] || [ ${c%% *} = 100000 ]; } && echo one-cpu; { [ $m = 268435456 ] || [ $2 -le 262144 ]; } && echo memory-capped; true'
+	$out = Mob container run --network none --cpus 1 --memory 256m $Image sh -c $Limits
+	Check 'run: --network none, --cpus 1, --memory 256m' $out @('no-network', 'one-cpu', 'memory-capped')
 
 	Write-Host '== Sandbox tool through mob serve --demo'
 	@"
@@ -83,6 +88,9 @@ state_dir: '$(Join-Path $Work 'state')'
 sandbox:
   enabled: true
   image: $Image
+  network: none
+  cpus: 1
+  memory: 256m
 "@ | Set-Content -Path $env:MOB_CONFIG -Encoding ASCII
 	$env:MOB_TOKEN = $Token
 	$start = @{ FilePath = $Mob; ArgumentList = 'serve'; PassThru = $true
@@ -118,6 +126,8 @@ sandbox:
 	Check 'tool: nonzero exit is a result' $out @('"exitCode":3')
 	$out = Chat 'yes x | head -c 40000'
 	Check 'tool: output capped' $out @('"truncated":true')
+	$out = Chat $Limits
+	Check 'tool: network, CPU and memory limits apply' $out @('no-network', 'one-cpu', 'memory-capped')
 
 	# Stopping the turn must remove the running container.
 	$job = Start-Job -ScriptBlock $Chat -ArgumentList $Api, $Token, $Id, 'sleep 600'

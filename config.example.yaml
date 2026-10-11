@@ -21,3 +21,6 @@ demo: false
 #   enabled: true
 #   runtime: ""            # containerd (Linux, via nerdctl), apple (macOS), wslc (Windows)
 #   image: python:3.13-slim
+#   network: ""            # none: no network at all; empty: the runtime's default (internet)
+#   cpus: 0                # whole CPUs per command; 0: the runtime's default
+#   memory: ""             # e.g. 512m or 2g, at least 64m; empty: the runtime's default

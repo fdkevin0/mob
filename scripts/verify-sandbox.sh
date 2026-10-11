@@ -72,6 +72,12 @@ check "run: exit status" "$out" "status 3"
 # read rather than cat: nerdctl 2.1 does not pass stdin's EOF on to the container.
 out=$(echo piped | "$MOB" container run -i "$IMAGE" sh -c 'read l; echo got-$l' 2>&1)
 check "run: stdin with -i" "$out" got-piped
+# Prints a token per limit that took effect: cgroup v2 or v1 inside a shared
+# kernel, the VM's own size on Apple's runtime. No quotes, so the same text
+# survives JSON and PowerShell.
+LIMITS='n=$(ls /sys/class/net); c=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); m=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes); set -- $(grep MemTotal /proc/meminfo); echo net=$n nproc=$(nproc) cpu=$c mem=$m total=$2; [ $n = lo ] && echo no-network; { [ $(nproc) = 1 ] || [ ${c%% *} = 100000 ]; } && echo one-cpu; { [ $m = 268435456 ] || [ $2 -le 262144 ]; } && echo memory-capped; true'
+out=$("$MOB" container run --network none --cpus 1 --memory 256m "$IMAGE" sh -c "$LIMITS" 2>&1)
+check "run: --network none, --cpus 1, --memory 256m" "$out" no-network one-cpu memory-capped
 
 echo "== Sandbox tool through mob serve --demo"
 cat >"$MOB_CONFIG" <<EOF
@@ -82,6 +88,9 @@ state_dir: '$WORK/state'
 sandbox:
   enabled: true
   image: $IMAGE
+  network: none
+  cpus: 1
+  memory: 256m
 EOF
 MOB_TOKEN=$TOKEN "$MOB" serve >"$WORK/serve.log" 2>&1 &
 SERVE_PID=$!
@@ -103,6 +112,8 @@ out=$(chat 'exit 3')
 check "tool: nonzero exit is a result" "$out" '"exitCode":3'
 out=$(chat 'yes x | head -c 40000')
 check "tool: output capped" "$out" '"truncated":true'
+out=$(chat "$LIMITS")
+check "tool: network, CPU and memory limits apply" "$out" no-network one-cpu memory-capped
 
 # Stopping the turn must remove the running container.
 chat 'sleep 600' >/dev/null &

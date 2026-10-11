@@ -57,6 +57,13 @@ func TestContainerCommand(t *testing.T) {
 	if err != nil || output != "out\n" || calls[1] != `container run --rm -w /work -e A=1 -v C:\work:/work alpine ls -la` {
 		t.Fatalf("run: %q %v %q", output, err, calls)
 	}
+	output, err = execute("container", "run", "--network", "none", "--cpus", "1", "-m", "2g", "alpine", "ls", "--cpus", "9")
+	if err != nil || calls[len(calls)-1] != "container run --rm --network none --cpus 1 --memory 2048m alpine ls --cpus 9" {
+		t.Fatalf("run with limits: %q %v %q", output, err, calls)
+	}
+	if _, err = execute("container", "run", "-m", "2", "alpine"); err == nil {
+		t.Fatal("memory without a unit accepted")
+	}
 	t.Setenv("MOB_SANDBOX_RUNTIME", "containerd")
 	if _, err = execute("container", "run", "alpine", "fail"); err == nil || !strings.Contains(err.Error(), "status 2") {
 		t.Fatalf("nonzero exit not reported: %v", err)

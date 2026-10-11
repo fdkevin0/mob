@@ -28,10 +28,34 @@ func TestDisabledAndInvalidSettings(t *testing.T) {
 	if box, err := New(Settings{Image: DefaultImage}, t.TempDir()); box != nil || err != nil {
 		t.Fatalf("disabled sandbox built: %v %v", box, err)
 	}
-	for _, s := range []Settings{{Enabled: true, Runtime: "docker", Image: DefaultImage}, {Enabled: true, Image: ""}, {Enabled: true, Image: "--privileged"}, {Enabled: true, Image: "a b"}} {
+	for _, s := range []Settings{{Enabled: true, Runtime: "docker", Image: DefaultImage}, {Enabled: true, Image: ""}, {Enabled: true, Image: "--privileged"}, {Enabled: true, Image: "a b"},
+		{Enabled: true, Image: DefaultImage, Network: "host"}, {Enabled: true, Image: DefaultImage, CPUs: -1}, {Enabled: true, Image: DefaultImage, Memory: "512"}, {Enabled: true, Image: DefaultImage, Memory: "32m"}} {
 		if _, err := New(s, t.TempDir()); err == nil {
 			t.Errorf("accepted %+v", s)
 		}
+	}
+}
+
+func TestLimitsReachTheRun(t *testing.T) {
+	var run string
+	box, err := New(Settings{Enabled: true, Runtime: container.Apple, Image: "alpine:3.20", Network: "none", CPUs: 1, Memory: "1g"}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	box.Runtime.Run = func(_ context.Context, _ string, args []string, _ io.Reader, _, _ io.Writer) (int, error) {
+		if args[0] == "run" {
+			run = strings.Join(args, " ")
+		}
+		return 0, nil
+	}
+	if !box.Offline() {
+		t.Fatal("network none not reported offline")
+	}
+	if _, err := box.Exec(context.Background(), conversation, "ls", 0); err != nil || !strings.Contains(run, "-w /workspace --network none --cpus 1 --memory 1024m -v ") {
+		t.Fatalf("limits not passed: %q %v", run, err)
+	}
+	if fake(t, nil).Offline() {
+		t.Fatal("default network reported offline")
 	}
 }
 

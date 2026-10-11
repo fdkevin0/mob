@@ -41,9 +41,27 @@ func TestRunArgs(t *testing.T) {
 		}
 	}
 	r, _ := New(WSLC)
-	for _, bad := range []Spec{{}, {Image: "--privileged"}, {Image: "alpine", Env: []string{"=x"}}, {Image: "alpine", Mounts: []Mount{{"/a", "relative"}}}} {
+	limited := Spec{Image: "alpine", Command: []string{"ls"}, Workdir: "/w", Limits: Limits{Network: NoNetwork, CPUs: 2, MemoryMiB: 1536}}
+	if args, err := r.RunArgs(limited); err != nil || strings.Join(args, " ") != "run --rm -w /w --network none --cpus 2 --memory 1536m alpine ls" {
+		t.Errorf("limits: %q %v", args, err)
+	}
+	for _, bad := range []Spec{{}, {Image: "--privileged"}, {Image: "alpine", Env: []string{"=x"}}, {Image: "alpine", Mounts: []Mount{{"/a", "relative"}}},
+		{Image: "alpine", Limits: Limits{Network: "host"}}, {Image: "alpine", Limits: Limits{CPUs: -1}}, {Image: "alpine", Limits: Limits{MemoryMiB: -1}}} {
 		if _, err := r.RunArgs(bad); err == nil {
 			t.Errorf("accepted %+v", bad)
+		}
+	}
+}
+
+func TestParseMemory(t *testing.T) {
+	for in, want := range map[string]int{"512m": 512, "512M": 512, "2g": 2048, "1.5GiB": 1536, " 3gb ": 3072, "1t": 1 << 20} {
+		if got, err := ParseMemory(in); err != nil || got != want {
+			t.Errorf("ParseMemory(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "512", "512k", "2x", "g", "-1g", "0m", "0.5m", "nanm", "infg", "2048t"} {
+		if got, err := ParseMemory(bad); err == nil {
+			t.Errorf("ParseMemory(%q) = %d, want an error", bad, got)
 		}
 	}
 }

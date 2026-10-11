@@ -70,7 +70,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, box Sandbox, conver
 	if info.Tools {
 		req.Tools = tools
 		if box != nil {
-			req.Tools = append(append([]llm.Tool(nil), tools...), sandboxTool)
+			req.Tools = append(append([]llm.Tool(nil), tools...), sandboxTool(box))
 			req.System += " Use the sandbox tool for any command, code or file work; it is isolated, so it needs no permission."
 		}
 	}

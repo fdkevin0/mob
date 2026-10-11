@@ -23,14 +23,25 @@ var tools = []llm.Tool{
 	{Name: "remember", Description: "Request permission to save one durable fact locally for this conversation. Stops the turn until the user approves.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}},
 }
 
-var sandboxTool = llm.Tool{
-	Name: "sandbox",
-	Description: "Run a shell command (sh -c) in an isolated Linux container. Anything is allowed there: install packages, run code, use the network. " +
-		"Only /workspace, the working directory, persists between calls in this conversation; the user's own files and machine are not reachable.",
-	Parameters: map[string]any{"type": "object", "properties": map[string]any{
-		"command": map[string]any{"type": "string"},
-		"timeout": map[string]any{"type": "integer", "minimum": 1, "maximum": int(sandbox.MaxTimeout / time.Second), "description": "Seconds; default " + fmt.Sprint(int(sandbox.DefaultTimeout/time.Second))},
-	}, "required": []string{"command"}, "additionalProperties": false},
+// offline is implemented by a sandbox whose commands have no network.
+type offline interface{ Offline() bool }
+
+// sandboxTool describes box to the model, so it does not try the network
+// where there is none.
+func sandboxTool(box Sandbox) llm.Tool {
+	allowed := "Anything is allowed there: install packages, run code, use the network. "
+	if o, ok := box.(offline); ok && o.Offline() {
+		allowed = "Anything is allowed there, but it has no network: packages cannot be downloaded, so use what the image provides. "
+	}
+	return llm.Tool{
+		Name: "sandbox",
+		Description: "Run a shell command (sh -c) in an isolated Linux container. " + allowed +
+			"Only /workspace, the working directory, persists between calls in this conversation; the user's own files and machine are not reachable.",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{
+			"command": map[string]any{"type": "string"},
+			"timeout": map[string]any{"type": "integer", "minimum": 1, "maximum": int(sandbox.MaxTimeout / time.Second), "description": "Seconds; default " + fmt.Sprint(int(sandbox.DefaultTimeout/time.Second))},
+		}, "required": []string{"command"}, "additionalProperties": false},
+	}
 }
 
 func executeTool(ctx context.Context, store *Store, box Sandbox, conversationID string, message *Message, call llm.ToolCall, part Part, input map[string]any, send func(Event) error) (any, bool, error, error) {

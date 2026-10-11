@@ -12,6 +12,7 @@ import (
 	"io"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -32,6 +33,21 @@ type Mount struct {
 	Source, Target string
 }
 
+// NoNetwork is the Network that gives a container only its loopback interface.
+const NoNetwork = "none"
+
+// Limits bound what a container may use; zero values keep the runtime's
+// defaults. All three CLIs accept --network none, --cpus N and --memory
+// SIZE with the same meaning, so one setting serves every platform.
+type Limits struct {
+	// Network is "" for the runtime's default network or NoNetwork.
+	Network string
+	// CPUs is whole CPUs, since Apple's CLI takes no fractions.
+	CPUs int
+	// MemoryMiB is the memory ceiling in MiB.
+	MemoryMiB int
+}
+
 // Spec describes one container run. The container is removed when it exits.
 type Spec struct {
 	// Name lets Remove stop the container if its CLI is interrupted.
@@ -42,6 +58,7 @@ type Spec struct {
 	Mounts  []Mount
 	Workdir string
 	Stdin   io.Reader
+	Limits  Limits
 }
 
 // Result is what a finished container produced. A nonzero ExitCode is not an error.
@@ -180,6 +197,11 @@ func (r *Runtime) RunArgs(spec Spec) ([]string, error) {
 	if spec.Workdir != "" {
 		args = append(args, "-w", spec.Workdir)
 	}
+	limits, err := spec.Limits.args()
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, limits...)
 	for _, e := range spec.Env {
 		if key, _, ok := strings.Cut(e, "="); !ok || key == "" {
 			return nil, fmt.Errorf("environment entry %q must be KEY=VALUE", e)
@@ -194,6 +216,44 @@ func (r *Runtime) RunArgs(spec Spec) ([]string, error) {
 	}
 	args = append(args, spec.Image)
 	return r.args(append(args, spec.Command...)...), nil
+}
+
+func (l Limits) args() ([]string, error) {
+	var args []string
+	switch l.Network {
+	case "":
+	case NoNetwork:
+		args = append(args, "--network", NoNetwork)
+	default:
+		return nil, fmt.Errorf("network %q must be empty or %q", l.Network, NoNetwork)
+	}
+	if l.CPUs < 0 || l.MemoryMiB < 0 {
+		return nil, errors.New("CPU and memory limits must not be negative")
+	}
+	if l.CPUs > 0 {
+		args = append(args, "--cpus", strconv.Itoa(l.CPUs))
+	}
+	if l.MemoryMiB > 0 {
+		// A lowercase m means MiB to all three CLIs.
+		args = append(args, "--memory", strconv.Itoa(l.MemoryMiB)+"m")
+	}
+	return args, nil
+}
+
+// ParseMemory reads a size such as 512m, 2g or 1.5GiB as whole MiB. A unit is
+// required: the CLIs disagree on what a bare number means.
+func ParseMemory(s string) (int, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	number := strings.TrimRight(s, "kmgtib")
+	unit := strings.TrimSuffix(strings.TrimSuffix(s[len(number):], "b"), "i")
+	shift := map[string]uint{"m": 0, "g": 10, "t": 20}
+	n, err := strconv.ParseFloat(number, 64)
+	bits, ok := shift[unit]
+	mib := n * float64(uint64(1)<<bits)
+	if err != nil || !ok || !(mib >= 1 && mib <= 1<<30) {
+		return 0, errors.New("memory must be a size with a unit, such as 512m or 2g")
+	}
+	return int(mib), nil
 }
 
 func (r *Runtime) args(rest ...string) []string {
