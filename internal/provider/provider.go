@@ -96,6 +96,12 @@ func (p Provider) Endpoint(proto Protocol) string {
 	return cmp.Or(own, preset)
 }
 
+// Destination is where requests and their credentials go. A key or secret
+// header saved for one destination must not follow a provider to another.
+func (p Provider) Destination() string {
+	return strings.Join([]string{p.Preset, p.Endpoint(Chat), p.Endpoint(Anthropic), p.ModelsURL}, "\x00")
+}
+
 // DisplayName is the provider's name, its preset's, or its ID.
 func (p Provider) DisplayName() string {
 	if p.Name != "" {

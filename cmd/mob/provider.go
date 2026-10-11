@@ -29,7 +29,7 @@ func providerCommand(path func() string) *cobra.Command {
 	}
 	var opts struct {
 		preset, key, name, chat, anthropic, modelsURL, defaultModel string
-		keyStdin, offline                                           bool
+		keyStdin, offline, clearKey, clearHeaders                   bool
 		models                                                      []string
 	}
 	add := &cobra.Command{
@@ -66,6 +66,22 @@ func providerCommand(path func() string) *cobra.Command {
 			}
 			if p.Preset == "" && p.Chat == "" && p.Anthropic == "" {
 				return fmt.Errorf("%q is not a preset (%s); give its base URL with --chat or --anthropic", id, strings.Join(presetNames, ", "))
+			}
+			// Credentials saved for one destination never follow the provider
+			// to another: the next request, a model list fetch, would send them.
+			if opts.clearKey {
+				p.Key = ""
+			}
+			if opts.clearHeaders {
+				p.Headers = nil
+			}
+			if existing != nil && existing.Destination() != p.Destination() {
+				if p.Key != "" && !opts.keyStdin && !cmd.Flags().Changed("key") {
+					return fmt.Errorf("%s now points elsewhere; give its key again with --key-stdin, or drop it with --clear-key", id)
+				}
+				if len(p.Headers) > 0 {
+					return fmt.Errorf("%s now points elsewhere and has saved headers; drop them with --clear-headers", id)
+				}
 			}
 			switch {
 			case opts.keyStdin:
@@ -137,6 +153,8 @@ func providerCommand(path func() string) *cobra.Command {
 	add.Flags().StringVar(&opts.preset, "preset", "", "Preset to start from (default: the ID, when it is one)")
 	add.Flags().BoolVar(&opts.keyStdin, "key-stdin", false, "Read the API key from standard input")
 	add.Flags().StringVar(&opts.key, "key", "", "API key (kept by shell history; prefer --key-stdin)")
+	add.Flags().BoolVar(&opts.clearKey, "clear-key", false, "Remove the saved key (needed when changing a URL without a new key)")
+	add.Flags().BoolVar(&opts.clearHeaders, "clear-headers", false, "Remove saved headers (needed when changing a URL that has them)")
 	add.Flags().StringVar(&opts.name, "name", "", "Display name")
 	add.Flags().StringVar(&opts.chat, "chat", "", "OpenAI Chat Completions base URL, e.g. https://host/v1")
 	add.Flags().StringVar(&opts.anthropic, "anthropic", "", "Anthropic Messages base URL (without /v1)")

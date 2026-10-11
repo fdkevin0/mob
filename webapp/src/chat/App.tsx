@@ -3,7 +3,7 @@ import { useConversation } from './useConversation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
-import { api, defaultURL, type Config, type Connection, type Conversation, type Snapshot } from './api';
+import { api, defaultURL, type Connection, type Conversation, type Snapshot } from './api';
 
 import { Plugins } from './Plugins';
 
@@ -41,7 +41,6 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
   const [plugins, setPlugins] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
-  const [config, setConfig] = useState<Config>();
   const [model, setModel] = useState<string>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,8 +61,8 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
     let live = true;
     void (async () => {
       try {
-        const [configuration, list, runtime] = await Promise.all([api<Config>(connection, '/config'), api<Conversation[]>(connection, '/conversations'), api<{background:boolean}>(connection, '/runtime')]);
-        if (!live) return; setConfig(configuration); setConversations(list); setBackground(runtime.background);
+        const [list, runtime] = await Promise.all([api<Conversation[]>(connection, '/conversations'), api<{background:boolean}>(connection, '/runtime')]);
+        if (!live) return; setConversations(list); setBackground(runtime.background);
         if (list.length) await open(list[0].id); else await create();
       } catch (e) { if (live) setError(errorText(e)); }
     })();
@@ -76,7 +75,7 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
       <button className="plain" disabled={busy} onClick={() => setPlugins(true)}>Plugins & cloud services</button>
       <div className="sidebar-footer"><span className="status-dot" /> History · on this computer<button className="plain" onClick={disconnect} disabled={busy}>Disconnect</button></div>
     </aside>
-    <main className="chat-main"><header><div><p className="eyebrow">YOUR WORKSPACE</p><strong title="This conversation's model; /model NAME switches it">{config?.demo ? 'Demo mode · no model calls' : model ?? 'Connecting…'}</strong></div><span className="badge" title={background ? "Continues after this window closes" : "Lifetime is controlled by the process that started the service"}>{background ? "Background service" : "Session service"}</span></header>
+    <main className="chat-main"><header><div><p className="eyebrow">YOUR WORKSPACE</p><strong title="This conversation's model; /model NAME switches it">{model?.startsWith('demo/') ? 'Demo mode · no model calls' : model ?? 'Connecting…'}</strong></div><span className="badge" title={background ? "Continues after this window closes" : "Lifetime is controlled by the process that started the service"}>{background ? "Background service" : "Session service"}</span></header>
       {error && <div className="error" role="alert">{error}<button className="plain" onClick={() => void refreshList().catch(e => setError(errorText(e)))}>Refresh</button></div>}
       {selected ? <Thread key={selected.id} connection={connection} id={selected.id} initial={selected.snapshot} onModel={setModel} onBusy={setBusy} onChanged={() => { void refreshList().catch(e => setError(errorText(e))); }} /> : <div className="loading" role="status">Opening workspace…</div>}
     </main>

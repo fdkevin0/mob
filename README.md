@@ -63,6 +63,11 @@ mob provider ls                              # keys shown masked
 mob provider rm work
 ```
 
+Pointing a provider at another URL requires its key again (`--key-stdin`) or
+`--clear-key`, and `--clear-headers` when it has saved headers, so credentials
+never follow a provider to a new host. The service and CLI lock `providers.json`
+while changing it.
+
 Presets: `opencode`, `openai`, `anthropic`, `deepseek`, `google`, `openrouter`,
 `moonshot`, `zhipu`, `ollama`, `lmstudio`. Any other OpenAI- or Anthropic-compatible
 endpoint is added with `--chat` or `--anthropic`.

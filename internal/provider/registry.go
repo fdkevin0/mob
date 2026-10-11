@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/fdkevin0/mob/internal/llm/anthropic"
 	"github.com/fdkevin0/mob/internal/llm/demo"
 	"github.com/fdkevin0/mob/internal/llm/openai"
+	"github.com/gofrs/flock"
 )
 
 // listFresh is how long a vendor's model list is used before /models asks again.
@@ -55,9 +57,7 @@ type list struct {
 // endpoint or key changes under the same ID is asked again.
 func fingerprint(p Provider) string {
 	h := sha256.New()
-	for _, v := range []string{p.Preset, p.Endpoint(Chat), p.Endpoint(Anthropic), p.ModelsURL, p.Key} {
-		h.Write([]byte(v + "\x00"))
-	}
+	h.Write([]byte(p.Destination() + "\x00" + p.Key + "\x00"))
 	for _, k := range slices.Sorted(maps.Keys(p.Headers)) {
 		h.Write([]byte(k + "\x00" + p.Headers[k] + "\x00"))
 	}
@@ -119,6 +119,16 @@ func (r *Registry) Update(change func(*File) error) error {
 	defer r.mu.Unlock()
 	f := r.file
 	if r.Path != "" {
+		// The service and CLI each change the file; a lock across processes
+		// keeps one's read-change-save from overwriting the other's.
+		if err := os.MkdirAll(filepath.Dir(r.Path), 0700); err != nil {
+			return err
+		}
+		lock := flock.New(r.Path + ".lock")
+		if err := lock.Lock(); err != nil {
+			return fmt.Errorf("cannot lock providers.json: %w", err)
+		}
+		defer lock.Unlock()
 		// A file removed meanwhile is rewritten from the providers in
 		// effect, never from the initial configuration.
 		if disk, err := read(r.Path); err == nil {
