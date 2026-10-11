@@ -15,6 +15,9 @@ demo: false
 # data_dir: /absolute/path/to/mob-data
 # state_dir: /absolute/path/to/mob-state
 
-# Container runtime for `mob container`; empty uses the platform's own:
-# containerd (via nerdctl) on Linux, apple on macOS, wslc on Windows.
-# container_runtime: containerd
+# Let the model run any command in a throwaway container. Only
+# data_dir/sandbox/<conversation> is shared, at /workspace. Reloads live.
+# sandbox:
+#   enabled: true
+#   runtime: ""            # containerd (Linux, via nerdctl), apple (macOS), wslc (Windows)
+#   image: python:3.13-slim

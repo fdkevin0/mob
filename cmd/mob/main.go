@@ -190,6 +190,6 @@ func newRootCommand() *cobra.Command {
 		fmt.Fprintf(cmd.OutOrStdout(), "Configuration valid: %s\nProviders: %s\nData directory: %s\nState directory: %s\n", config.Loader.Path(), config.Loader.ProvidersPath(), config.Dir, config.StateDir)
 		return nil
 	}})
-	root.AddCommand(check, providerCommand(func() string { return config.Loader.ProvidersPath() }), containerCommand(func() string { return config.ContainerRuntime }))
+	root.AddCommand(check, providerCommand(func() string { return config.Loader.ProvidersPath() }), containerCommand(func() string { return config.Sandbox.Runtime }))
 	return root
 }

@@ -20,7 +20,8 @@ const (
 )
 
 // Run owns the model loop and message persistence; transports serialize its events.
-func Run(ctx context.Context, store *Store, model llm.Model, conversationID string, message Message, note string, emit func(Event) error) (runErr error) {
+// box may be nil: the sandbox tool is then not offered.
+func Run(ctx context.Context, store *Store, model llm.Model, box Sandbox, conversationID string, message Message, note string, emit func(Event) error) (runErr error) {
 	lastSave := time.Now()
 	send := func(e Event) error {
 		if err := ctx.Err(); err != nil {
@@ -68,6 +69,10 @@ func Run(ctx context.Context, store *Store, model llm.Model, conversationID stri
 	}
 	if info.Tools {
 		req.Tools = tools
+		if box != nil {
+			req.Tools = append(append([]llm.Tool(nil), tools...), sandboxTool)
+			req.System += " Use the sandbox tool for any command, code or file work; it is isolated, so it needs no permission."
+		}
 	}
 	if len(memories) > 0 {
 		data, _ := json.Marshal(memories)
@@ -149,7 +154,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, conversationID stri
 				toolErr = errors.New("tool arguments must be a JSON object")
 			} else {
 				var waiting bool
-				output, waiting, toolErr, err = executeTool(store, conversationID, &message, call, part, input, send)
+				output, waiting, toolErr, err = executeTool(ctx, store, box, conversationID, &message, call, part, input, send)
 				if err != nil {
 					return err
 				}

@@ -54,7 +54,7 @@ func TestExecAndCheck(t *testing.T) {
 	r.Run = func(_ context.Context, name string, args []string, _ io.Reader, stdout, stderr io.Writer) (int, error) {
 		calls = append(calls, append([]string{name}, args...))
 		if args[0] == "system" {
-			io.WriteString(stderr, "apiserver is not running\nhint")
+			io.WriteString(stderr, "level=info msg=starting\napiserver is not running\n")
 			return 1, nil
 		}
 		io.WriteString(stdout, "hi\n")
