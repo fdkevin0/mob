@@ -23,7 +23,9 @@ type Environment struct {
 	Demo bool
 	// Sandbox is where Mob runs commands for the model, isolated from the host.
 	Sandbox sandbox.Settings
-	Loader  *Loader
+	// MaxToolSteps bounds the model calls one turn makes while it uses tools.
+	MaxToolSteps int
+	Loader       *Loader
 }
 
 type settings struct {
@@ -32,7 +34,16 @@ type settings struct {
 	Addr     string           `mapstructure:"addr"`
 	Demo     bool             `mapstructure:"demo"`
 	Sandbox  sandbox.Settings `mapstructure:"sandbox"`
+	// MaxToolSteps is max_tool_steps, 1 to MaxToolSteps.
+	MaxToolSteps int `mapstructure:"max_tool_steps"`
 }
+
+// MaxToolSteps is the most max_tool_steps may allow; DefaultToolSteps is used
+// when the configuration does not say.
+const (
+	MaxToolSteps     = 100
+	DefaultToolSteps = 20
+)
 
 // Loader holds immutable startup flags. Each read uses a fresh Viper instance;
 // Viper itself is never shared between the watcher and request goroutines.
@@ -99,6 +110,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	v.SetDefault("state_dir", filepath.Join(xdg.StateHome, "mob"))
 	v.SetDefault("addr", "127.0.0.1:8787")
 	v.SetDefault("demo", false)
+	v.SetDefault("max_tool_steps", DefaultToolSteps)
 	v.SetDefault("sandbox.enabled", false)
 	v.SetDefault("sandbox.runtime", "")
 	v.SetDefault("sandbox.image", sandbox.DefaultImage)
@@ -126,6 +138,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 		if runtime.GOOS != "windows" && mode.Perm()&0022 != 0 {
 			return fail("configuration must not be writable by group or others")
 		}
+	}
+	if err := v.BindEnv("max_tool_steps", "MOB_MAX_TOOL_STEPS"); err != nil {
+		return Environment{}, err
 	}
 	for _, key := range []string{"data_dir", "state_dir", "addr", "demo"} {
 		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(key)); err != nil {
@@ -156,6 +171,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if data.DataDir == "" || data.StateDir == "" {
 		return fail("data_dir and state_dir must not be empty")
 	}
+	if data.MaxToolSteps < 1 || data.MaxToolSteps > MaxToolSteps {
+		return fail("max_tool_steps must be 1 to " + strconv.Itoa(MaxToolSteps))
+	}
 	if err := data.Sandbox.Validate(); err != nil {
 		return Environment{}, err
 	}
@@ -167,7 +185,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, Loader: l}, nil
+	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

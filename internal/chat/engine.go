@@ -30,7 +30,13 @@ type Agent struct {
 	// Owner is set for the owner's turns, which run calls their remembered
 	// approvals cover without asking.
 	Owner bool
+	// Steps bounds the model calls of a turn; zero means DefaultSteps.
+	Steps int
 }
+
+// DefaultSteps is how many model calls a turn makes at most unless its agent
+// says otherwise.
+const DefaultSteps = 20
 
 // Turn is one run of the model loop as hooks see it.
 type Turn struct {
@@ -124,7 +130,11 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		req.Messages = append(req.Messages, llm.Message{Role: "user", Text: note})
 	}
 	seenCalls := map[string]bool{}
-	for step := 0; step < 5; step++ {
+	steps := agent.Steps
+	if steps <= 0 {
+		steps = DefaultSteps
+	}
+	for step := 0; step < steps; step++ {
 		if err := send(Event{Kind: StepStarted}); err != nil {
 			return err
 		}
@@ -226,7 +236,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			return nil
 		}
 	}
-	return errors.New("tool step limit reached (5); send another message to continue")
+	return fmt.Errorf("tool step limit reached (%d); send another message to continue", steps)
 }
 
 // runTool runs an offered tool after the BeforeTool hooks allow it, and

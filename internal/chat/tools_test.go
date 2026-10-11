@@ -310,3 +310,29 @@ func TestUnavailableToolsAreNotOffered(t *testing.T) {
 		t.Fatal("an owner-only tool was offered to someone else, or not to the owner")
 	}
 }
+
+// looping calls its tool on every step.
+type looping struct{ calls int }
+
+func (m *looping) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "looping"} }
+func (m *looping) Info() llm.Info { return llm.Info{ID: "looping", Tools: true} }
+func (m *looping) Stream(context.Context, llm.Request, func(string, string) error) (llm.Result, error) {
+	m.calls++
+	return llm.Result{Calls: []llm.ToolCall{{ID: NewID(), Name: "tick", Arguments: `{}`}}}, nil
+}
+
+func TestTurnStepLimit(t *testing.T) {
+	s, id, m := turnFixture(t)
+	model := &looping{}
+	agent := Agent{Tools: []Tool{echoTool("tick", func(context.Context, ToolCall) (any, error) { return "ok", nil })}, Steps: 3}
+	err := Run(context.Background(), s, model, agent, id, m, "", func(Event) error { return nil })
+	if err == nil || err.Error() != "tool step limit reached (3); send another message to continue" || model.calls != 3 {
+		t.Fatalf("limit 3: %d calls, %v", model.calls, err)
+	}
+	m, _ = s.Begin(id, NewID(), "go", "test/looping")
+	model.calls, agent.Steps = 0, 0
+	Run(context.Background(), s, model, agent, id, m, "", func(Event) error { return nil })
+	if model.calls != DefaultSteps {
+		t.Fatalf("default limit: %d calls", model.calls)
+	}
+}

@@ -14,7 +14,7 @@ import (
 
 func cleanEnvironment(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY", "MOB_SANDBOX_ISOLATION"} {
+	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY", "MOB_SANDBOX_ISOLATION", "MOB_MAX_TOOL_STEPS"} {
 		t.Setenv(name, "")
 	}
 }
@@ -75,6 +75,20 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 	}
 	t.Setenv("MOB_SANDBOX_RUNTIME", "")
 	t.Setenv("MOB_SANDBOX_ISOLATION", "")
+	if got, err = loader.Read(); err != nil || got.MaxToolSteps != DefaultToolSteps {
+		t.Fatalf("default tool steps: %d %v", got.MaxToolSteps, err)
+	}
+	t.Setenv("MOB_MAX_TOOL_STEPS", "40")
+	if got, err = loader.Read(); err != nil || got.MaxToolSteps != 40 {
+		t.Fatalf("tool steps not read from the environment: %d %v", got.MaxToolSteps, err)
+	}
+	for _, bad := range []string{"0", "101"} {
+		t.Setenv("MOB_MAX_TOOL_STEPS", bad)
+		if _, err = loader.Read(); err == nil || !strings.Contains(err.Error(), "max_tool_steps") {
+			t.Fatalf("max_tool_steps %s accepted: %v", bad, err)
+		}
+	}
+	t.Setenv("MOB_MAX_TOOL_STEPS", "")
 	// Freeze parsed flags: later changes to a caller's FlagSet cannot alter the loader.
 	flags.Set("addr", "127.0.0.1:1004")
 	got, err = loader.Read()
