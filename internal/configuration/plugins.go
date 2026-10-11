@@ -34,11 +34,13 @@ type SecretUpdate struct {
 }
 type Updates map[string]SecretUpdate
 
-func secret(old, legacy string, sameOwner bool, update SecretUpdate) (string, error) {
+// secret resolves a credential from the saved value, the value submitted in
+// the form field and an explicit update.
+func secret(old, submitted string, sameOwner bool, update SecretUpdate) (string, error) {
 	switch update.Mode {
 	case "":
-		if legacy != "" {
-			return legacy, nil
+		if submitted != "" {
+			return submitted, nil
 		}
 		if sameOwner {
 			return old, nil
@@ -141,7 +143,7 @@ func (s *Service) UpdatePlugin(name string, raw []byte) (Plugins, error) {
 		}
 		err = next.Validate()
 		c.Cloudflare = next
-	case "wechat_ilink", "wechatilink":
+	case "wechat_ilink":
 		var next wechatilink.Config
 		if err = decode(raw, &next); err != nil {
 			return c, err
