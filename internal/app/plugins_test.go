@@ -288,7 +288,7 @@ func TestPluginRoutes(t *testing.T) {
 	request := func(method, path, body string) int {
 		t.Helper()
 		req := httptest.NewRequest(method, "http://127.0.0.1"+path, strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+srv.Token)
+		req.Header.Set("Authorization", "Bearer "+srv.Token())
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		return w.Code
