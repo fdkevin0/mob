@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -44,6 +45,9 @@ type Texts struct {
 	Unsupported string
 	// Empty answers a turn that said nothing.
 	Empty string
+	// Used, when set, follows the reply of a turn that called tools, to say
+	// which in a line.
+	Used func([]Use) string
 }
 
 // Message is one message someone sent Mob in an app.
@@ -137,35 +141,79 @@ func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 	return reply, err
 }
 
-// turn runs one turn and collects what the sender sees of it: the text it
-// writes, its failures and the approvals it asks for, but not its reasoning or
-// tool calls.
+// turn runs one turn and collects what the sender sees of it: the text of its
+// last step that wrote any, which concludes the turn, the tools it used, its
+// failures and the approvals it asks for. Text written between tool calls,
+// reasoning and tool calls stay in the local conversation.
 func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest) (Reply, error) {
-	var text strings.Builder
+	input.Channel = b.Name
+	var step, last, failures strings.Builder
+	var used []Use
 	var approvals []chat.PendingApproval
 	err := b.Conversation.Execute(ctx, input, func(event chat.Event) error {
 		switch event.Kind {
+		case chat.StepStarted:
+			if strings.TrimSpace(step.String()) != "" {
+				last.Reset()
+				last.WriteString(step.String())
+			}
+			step.Reset()
 		case chat.SegmentDelta:
 			if event.Segment == "text" {
-				text.WriteString(event.Text)
+				step.WriteString(event.Text)
 			}
+		case chat.ToolInput:
+			used = use(used, event.ToolName)
 		case chat.ApprovalRequested:
 			approvals = append(approvals, chat.PendingApproval{ID: event.ApprovalID, Tool: event.ToolName, Input: event.Input})
 		case chat.TurnFailed:
-			text.WriteString("\nError: " + event.Error)
+			failures.WriteString("\nError: " + event.Error)
 		}
-		if b.over(text.Len(), approvals) {
+		if b.over(max(step.Len(), last.Len())+failures.Len(), approvals) {
 			return b.overLimit()
 		}
 		return nil
 	})
-	if len(approvals) > 0 {
-		text.WriteString(b.Texts.Approvals(approvals, len(b.Conversation.Pending(input.ID))))
+	text := step.String()
+	if strings.TrimSpace(text) == "" {
+		text = last.String()
 	}
-	if err == nil && b.Limit > 0 && text.Len() > b.Limit {
+	text = strings.TrimSpace(text)
+	if len(used) > 0 && b.Texts.Used != nil {
+		text += b.Texts.Used(used)
+	}
+	text += failures.String()
+	if len(approvals) > 0 {
+		text += b.Texts.Approvals(approvals, len(b.Conversation.Pending(input.ID)))
+	}
+	if err == nil && b.Limit > 0 && len(text) > b.Limit {
 		err = b.overLimit()
 	}
-	return Reply{Text: text.String(), Approvals: approvals}, err
+	return Reply{Text: text, Approvals: approvals}, err
+}
+
+// Use is a tool a turn called and how many times.
+type Use struct {
+	Tool  string
+	Times int
+}
+
+// String is the tool's name, with how many times when more than once.
+func (u Use) String() string {
+	if u.Times > 1 {
+		return u.Tool + " ×" + strconv.Itoa(u.Times)
+	}
+	return u.Tool
+}
+
+func use(used []Use, tool string) []Use {
+	for i := range used {
+		if used[i].Tool == tool {
+			used[i].Times++
+			return used
+		}
+	}
+	return append(used, Use{Tool: tool, Times: 1})
 }
 
 // over reports whether a reply of n bytes followed by the prompt for

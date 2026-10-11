@@ -146,3 +146,37 @@ func TestApprovalPromptCountsTowardTheLimit(t *testing.T) {
 		t.Fatalf("reply %q %+v (err: %v)", reply.Text, reply.Approvals, err)
 	}
 }
+
+// worker looks the time up twice, commenting as it goes, then concludes. It
+// keeps the system prompt it was given.
+type worker struct{ system *string }
+
+func (worker) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "worker"} }
+func (worker) Info() llm.Info { return llm.Info{ID: "worker", Context: 100000, Tools: true} }
+func (w worker) Stream(_ context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	*w.system = req.System
+	calls := 0
+	for _, m := range req.Messages {
+		calls += len(m.ToolCalls)
+	}
+	if calls < 2 {
+		call := llm.ToolCall{ID: chat.NewID(), Name: "datetime", Arguments: "{}"}
+		return llm.Result{Text: "Let me check.", Calls: []llm.ToolCall{call}}, emit("text", "Let me check.")
+	}
+	return llm.Result{Text: "It is noon."}, emit("text", "It is noon.")
+}
+
+func TestAnswerConcludesWithTheLastStepAndTheToolsUsed(t *testing.T) {
+	b := bridge(t)
+	var system string
+	b.Conversation = chat.NewConversation(b.Store, oneModel{worker{&system}})
+	t.Cleanup(b.Conversation.Close)
+	b.Texts.Used = func(used []Use) string { return "\n(used " + used[0].String() + ")" }
+	reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "time?"})
+	if err != nil || reply.Text != "It is noon.\n(used datetime ×2)" {
+		t.Fatalf("reply %q (err: %v)", reply.Text, err)
+	}
+	if !strings.Contains(system, "reading in Test") {
+		t.Fatalf("the model was not told how the reply is read: %q", system)
+	}
+}

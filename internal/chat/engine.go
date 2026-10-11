@@ -38,6 +38,9 @@ type Agent struct {
 	// Saver, when set, keeps tool outputs too large to read in place where
 	// the model can read them; without one the model reads their ends.
 	Saver Saver
+	// Prompt, when set, follows the system prompt, such as how the reader
+	// will see the reply.
+	Prompt string
 }
 
 // DefaultSteps is how many model calls a turn makes at most unless its agent
@@ -69,6 +72,9 @@ type Hooks struct {
 func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conversationID string, message Message, note string, emit func(Event) error) (runErr error) {
 	info := model.Info()
 	turn := &Turn{ConversationID: conversationID, Model: info, Request: &llm.Request{System: systemPrompt}}
+	if agent.Prompt != "" {
+		turn.Request.System += "\n" + agent.Prompt
+	}
 	lastSave := time.Now()
 	send := func(e Event) error {
 		if err := ctx.Err(); err != nil {

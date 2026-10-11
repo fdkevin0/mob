@@ -48,6 +48,13 @@ var texts = channel.Texts{
 	},
 	Unsupported: "这个命令需要在桌面端或终端使用。",
 	Empty:       "（无回复内容）",
+	Used: func(used []channel.Use) string {
+		names := make([]string, len(used))
+		for i, u := range used {
+			names[i] = u.String()
+		}
+		return "\n\n（使用了 " + strings.Join(names, "、") + "，详情见桌面端会话。）"
+	},
 }
 
 // message is what senderID wrote, as the bridge reads it; id is empty for a
