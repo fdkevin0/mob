@@ -132,8 +132,10 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			return err
 		}
 	}
+	// limit is what a prompt may use of the window, leaving room for the reply.
 	var omitted bool
-	budget := info.Context - reserve - tokens(req.System)
+	limit := info.Context - reserve
+	budget := limit - tokens(req.System) - toolTokens(req.Tools)
 	req.Messages, omitted = Prompt(history, message.ID, budget)
 	if size := promptTokens(req.Messages); info.Context > 0 && size > budget {
 		return fmt.Errorf("the latest message is about %d tokens, more than %s has room for (%d); shorten it or pick a model with a larger context", size, info.ID, max(budget, 0))
@@ -144,12 +146,20 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	if note != "" {
 		req.Messages = append(req.Messages, llm.Message{Role: "user", Text: note})
 	}
+	// size is the prompt's tokens: estimated at first, then as the provider
+	// counted the last step, plus estimates for what was added since.
+	size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages)
 	seenCalls := map[string]bool{}
 	steps := agent.Steps
 	if steps <= 0 {
 		steps = DefaultSteps
 	}
 	for step := 0; step < steps; step++ {
+		// Tool results can fill the window within a turn; stop before the
+		// provider refuses the request.
+		if info.Context > 0 && step > 0 && size > limit {
+			return fmt.Errorf("this turn has filled %s's context (about %d of %d tokens); send another message to continue", info.ID, size, limit)
+		}
 		if err := send(Event{Kind: StepStarted}); err != nil {
 			return err
 		}
@@ -190,7 +200,13 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			return errors.New("model produced no answer")
 		}
 		// Reasoning goes back within the turn, to the model that produced it.
-		req.Messages = append(req.Messages, llm.Message{Role: "assistant", Text: result.Text, Reasoning: result.Reasoning, Signature: result.Signature, ToolCalls: result.Calls})
+		reply := llm.Message{Role: "assistant", Text: result.Text, Reasoning: result.Reasoning, Signature: result.Signature, ToolCalls: result.Calls}
+		req.Messages = append(req.Messages, reply)
+		if result.Usage != nil && result.Usage.Input > 0 {
+			size = result.Usage.Input + result.Usage.Output
+		} else {
+			size += promptTokens([]llm.Message{reply})
+		}
 		pending := false
 		for _, call := range result.Calls {
 			if call.ID == "" || call.Name == "" {
@@ -245,7 +261,9 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 				}
 			}
 			file, _ := part["outputFile"].(string)
-			req.Messages = append(req.Messages, llm.Message{Role: "tool", Text: modelOutput(output, file), ToolCallID: call.ID, ToolName: call.Name})
+			read := llm.Message{Role: "tool", Text: modelOutput(output, file), ToolCallID: call.ID, ToolName: call.Name}
+			req.Messages = append(req.Messages, read)
+			size += promptTokens([]llm.Message{read})
 		}
 		if err := send(Event{Kind: StepFinished}); err != nil {
 			return err
@@ -296,6 +314,16 @@ func add(total *llm.Usage, u llm.Usage) *llm.Usage {
 // tokens estimates a text's prompt tokens; models.dev limits are only as
 // exact as this needs to be.
 func tokens(s string) int { return len(s)/3 + 1 }
+
+// toolTokens estimates the prompt tokens of tool definitions, which every
+// model call sends with the messages.
+func toolTokens(tools []llm.Tool) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	raw, _ := json.Marshal(tools)
+	return tokens(string(raw))
+}
 
 // promptTokens estimates the prompt tokens of model messages.
 func promptTokens(messages []llm.Message) int {
