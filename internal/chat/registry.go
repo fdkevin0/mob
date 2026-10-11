@@ -15,6 +15,7 @@ const (
 	ClientTUI      = "tui"
 	ClientTelegram = "telegram"
 	ClientWeChat   = "wechat"
+	ClientEmail    = "email"
 )
 
 // CommandSpec describes a slash command once for help, completion and

@@ -7,11 +7,17 @@ export type Endpoint = {
   password?: string;
   hasPassword?: boolean;
 };
+export type EmailChannel = {
+  enabled: boolean;
+  owner: string;
+  verifier: string;
+};
 export type EmailConfig = {
   enabled: boolean;
   from: string;
   imap: Endpoint;
   smtp: Endpoint;
+  channel: EmailChannel;
 };
 export type TelegramConfig = {
   enabled: boolean;

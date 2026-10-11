@@ -21,6 +21,7 @@ type definition struct {
 
 var definitions = []definition{
 	{"Endpoint", email.Endpoint{}},
+	{"EmailChannel", email.Channel{}},
 	{"EmailConfig", email.Config{}},
 	{"TelegramConfig", telegram.Config{}},
 	{"CloudflareConfig", cloudflare.Config{}},

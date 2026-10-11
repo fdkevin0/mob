@@ -39,6 +39,18 @@ type Config struct {
 	From    string   `json:"from"`
 	IMAP    Endpoint `json:"imap"`
 	SMTP    Endpoint `json:"smtp"`
+	Channel Channel  `json:"channel"`
+}
+
+// Channel is whether and to whom Mob answers mail in INBOX.
+type Channel struct {
+	Enabled bool `json:"enabled"`
+	// Owner is the only address whose mail Mob answers, as the owner.
+	Owner string `json:"owner"`
+	// Verifier is the authserv-id the mail provider names itself with in the
+	// Authentication-Results header it adds, such as mx.google.com. Mail is
+	// answered only when that header says the owner's domain signed it.
+	Verifier string `json:"verifier"`
 }
 
 func (c Config) Public() Config {
@@ -61,6 +73,15 @@ func (c Config) Validate() error {
 		}
 		if e.Security != "tls" && e.Security != "starttls" {
 			return errors.New("email: choose TLS or STARTTLS")
+		}
+	}
+	if c.Channel.Enabled {
+		owner, err := mail.ParseAddress(c.Channel.Owner)
+		if err != nil || owner.Address != c.Channel.Owner || !strings.Contains(owner.Address, "@") {
+			return errors.New("email: enter the owner's address to answer mail from")
+		}
+		if c.Channel.Verifier == "" || strings.ContainsAny(c.Channel.Verifier, "; \t\r\n") {
+			return errors.New("email: enter the authserv-id your provider writes in Authentication-Results, such as mx.google.com")
 		}
 	}
 	return nil
@@ -93,11 +114,21 @@ func connect(ctx context.Context, e Endpoint) (net.Conn, func(), error) {
 	return conn, close, nil
 }
 func (c Config) imap(ctx context.Context) (*client.Client, func(), error) {
+	return c.session(ctx, nil)
+}
+
+// session signs in to IMAP. With updates set, it reports the server's
+// unilateral updates there and the connection stays open until ctx ends;
+// otherwise it ends at the usual deadline.
+func (c Config) session(ctx context.Context, updates chan<- client.Update) (*client.Client, func(), error) {
 	conn, close, err := connect(ctx, c.IMAP)
 	if err != nil {
 		return nil, nil, err
 	}
 	cl, err := client.New(conn)
+	if err == nil && updates != nil {
+		cl.Updates = updates
+	}
 	if err == nil && c.IMAP.Security == "starttls" {
 		err = cl.StartTLS(c.IMAP.tlsConfig())
 	}
@@ -107,6 +138,9 @@ func (c Config) imap(ctx context.Context) (*client.Client, func(), error) {
 	if err != nil {
 		close()
 		return nil, nil, errors.New("IMAP: TLS or login failed; check credentials/app password")
+	}
+	if updates != nil {
+		conn.SetDeadline(time.Time{})
 	}
 	return cl, close, nil
 }
@@ -239,11 +273,23 @@ func (c Config) Read(ctx context.Context, uid, validity uint32) (Mail, error) {
 	return result, err
 }
 func parseBody(r io.Reader) (string, []string, error) {
+	_, text, attachments, err := parse(r)
+	return text, attachments, err
+}
+
+// parse reads a message's header, its text, preferring plain text to HTML,
+// and its attachments' names.
+func parse(r io.Reader) (message.Header, string, []string, error) {
 	mr, err := message.CreateReader(io.LimitReader(r, 2<<20))
 	if err != nil {
-		return "", nil, errors.New("cannot decode email")
+		return message.Header{}, "", nil, errors.New("cannot decode email")
 	}
 	defer mr.Close()
+	text, attachments, err := parts(mr)
+	return mr.Header, text, attachments, err
+}
+
+func parts(mr *message.Reader) (string, []string, error) {
 	text, htmlText := "", ""
 	attachments := []string{}
 	for {
@@ -322,16 +368,24 @@ func (d Draft) Validate() error {
 	return nil
 }
 func (c Config) Send(ctx context.Context, d Draft) error {
+	_, err := c.send(ctx, d, "")
+	return err
+}
+
+// send sends d with header, which is complete header lines, and returns the
+// message's ID.
+func (c Config) send(ctx context.Context, d Draft, header string) (string, error) {
 	if err := c.active(); err != nil {
-		return err
+		return "", err
 	}
 	if err := d.Validate(); err != nil {
-		return err
+		return "", err
 	}
 	from, err := mail.ParseAddress(c.From)
 	if err != nil {
-		return err
+		return "", err
 	}
+	id := rand.Text() + "@" + from.Address[strings.LastIndex(from.Address, "@")+1:]
 	recipients, _ := mail.ParseAddressList(d.To)
 	names := make([]string, len(recipients))
 	for i, a := range recipients {
@@ -339,38 +393,38 @@ func (c Config) Send(ctx context.Context, d Draft) error {
 	}
 	cl, close, err := c.smtp(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer close()
 	if err = cl.Mail(from.Address); err != nil {
-		return errors.New("SMTP rejected sender")
+		return "", errors.New("SMTP rejected sender")
 	}
 	for _, to := range recipients {
 		if err = cl.Rcpt(to.Address); err != nil {
-			return errors.New("SMTP rejected recipient")
+			return "", errors.New("SMTP rejected recipient")
 		}
 	}
 	w, err := cl.Data()
 	if err != nil {
-		return errors.New("SMTP refused message")
+		return "", errors.New("SMTP refused message")
 	}
-	_, err = fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@mob.local>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n", from.String(), strings.Join(names, ", "), mime.QEncoding.Encode("utf-8", d.Subject), time.Now().Format(time.RFC1123Z), rand.Text())
+	_, err = fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s>\r\n%sMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n", from.String(), strings.Join(names, ", "), mime.QEncoding.Encode("utf-8", d.Subject), time.Now().Format(time.RFC1123Z), id, header)
 
 	if err != nil {
-		return errors.New("SMTP delivery interrupted before body")
+		return "", errors.New("SMTP delivery interrupted before body")
 	}
 	q := quotedprintable.NewWriter(w)
 	if _, err = io.WriteString(q, d.Text); err != nil {
-		return errors.New("SMTP delivery interrupted while writing body")
+		return "", errors.New("SMTP delivery interrupted while writing body")
 	}
 	if err = q.Close(); err != nil {
-		return errors.New("SMTP delivery interrupted while encoding body")
+		return "", errors.New("SMTP delivery interrupted while encoding body")
 	}
 	if err = w.Close(); err != nil {
-		return errors.New("SMTP delivery status unknown; check the recipient before retrying")
+		return "", errors.New("SMTP delivery status unknown; check the recipient before retrying")
 	}
 
-	return nil
+	return id, nil
 }
 
 func (c Config) active() error {

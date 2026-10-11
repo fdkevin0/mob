@@ -49,8 +49,9 @@ func (s *Server) plugins() []plugin {
 	telegramRun := telegram.Extension(bot, s.Store, s.ConversationService)
 	wechatRun := wechatilink.Extension(wechat)
 	mcpRun := mcp.Extension(s.MCP)
+	mailRun := email.Extension(mail.Config, s.Store, s.ConversationService)
 	return []plugin{
-		{name: "email", commands: email.Commands(mail), tools: email.Tools(mail.Config), routes: email.Routes(mail)},
+		{name: "email", commands: email.Commands(mail), tools: email.Tools(mail.Config), routes: email.Routes(mail), background: &mailRun},
 		{name: "telegram", background: &telegramRun},
 		{name: "cloudflare", commands: cloudflare.Commands(cloud), tools: cloudflare.Tools(cloud), routes: cloudflare.Routes(cloud)},
 		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
@@ -116,7 +117,7 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 			respond(w, nil, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"config": c.Public(), "sections": configuration.Sections(), "telegramStatus": s.extensions.Status("telegram"), "wechatStatus": s.extensions.Status("wechat_ilink")})
+		writeJSON(w, 200, map[string]any{"config": c.Public(), "sections": configuration.Sections(), "telegramStatus": s.extensions.Status("telegram"), "emailStatus": s.extensions.Status("email"), "wechatStatus": s.extensions.Status("wechat_ilink")})
 	})
 	mux.HandleFunc("POST /api/plugins/{plugin}", s.savePlugin)
 	mux.HandleFunc("POST /api/plugins/{plugin}/test", func(w http.ResponseWriter, r *http.Request) {

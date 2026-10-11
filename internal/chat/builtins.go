@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	everyClient = []string{ClientWeb, ClientTUI, ClientTelegram, ClientWeChat}
+	everyClient = []string{ClientWeb, ClientTUI, ClientTelegram, ClientWeChat, ClientEmail}
 	interactive = []string{ClientWeb, ClientTUI}
-	messaging   = []string{ClientTelegram, ClientWeChat}
+	messaging   = []string{ClientTelegram, ClientWeChat, ClientEmail}
 )
 
 // builtins are the commands about conversations and models.
