@@ -26,6 +26,13 @@ func (s *Server) pluginConfig() (configuration.Plugins, error) {
 	return c, err
 }
 
+// tools are what the email and Cloudflare plugins let the model do.
+func (s *Server) tools() []chat.Tool {
+	mail := func() (email.Config, error) { c, err := s.pluginConfig(); return c.Email, err }
+	cloud := func() (cloudflare.Config, error) { c, err := s.pluginConfig(); return c.Cloudflare, err }
+	return append(email.Tools(mail), cloudflare.Tools(cloud)...)
+}
+
 // channels are the plugins that run in the background: each polls its
 // service while its configuration has it on.
 func (s *Server) channels() []extension.Extension {

@@ -241,3 +241,31 @@ func TestSavingAChannelRestartsIt(t *testing.T) {
 		t.Fatalf("saved while stopping: %v", err)
 	}
 }
+
+func TestPluginToolsFollowTheirPlugins(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := NewServer(store, provider.Offline(), strings.Repeat("t", 32))
+	defer srv.Close()
+	available := func() (names []string) {
+		for _, tool := range srv.Tools.List() {
+			if tool.Available == nil || tool.Available() {
+				names = append(names, tool.Name)
+			}
+		}
+		return names
+	}
+	if got := strings.Join(available(), " "); got != "datetime remember" {
+		t.Fatalf("with plugins off: %s", got)
+	}
+	var c configuration.Plugins
+	c.Email.Enabled = true
+	c.Cloudflare.Enabled = true
+	store.SaveSetting("plugins", c)
+	if got := strings.Join(available(), " "); got != "datetime remember email_inbox email_read email_send cloudflare" {
+		t.Fatalf("with plugins on: %s", got)
+	}
+}

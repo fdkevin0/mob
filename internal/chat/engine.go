@@ -20,7 +20,7 @@ const (
 )
 
 // systemPrompt starts every turn's instructions; tools and hooks add to it.
-const systemPrompt = "You are Mob, a concise personal assistant. Reply in the user's language. Only claim a tool succeeded if its result says so. Remember requests require user approval and end the current turn."
+const systemPrompt = "You are Mob, a concise personal assistant. Reply in the user's language. Only claim a tool succeeded if its result says so. A tool call that asks for the user's approval ends the current turn."
 
 // Agent is what a turn uses besides its model: the tools it offers and the
 // hooks around it.
