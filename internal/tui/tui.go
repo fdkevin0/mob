@@ -57,7 +57,10 @@ type model struct {
 	failure, listText   string
 	generation          uint64
 	busy, remoteBusy    bool
-	width               int
+	width, height       int
+	suggestions         []chat.Suggestion
+	selected            int
+	completionSeq       uint64
 	events              chan streamEvent
 	ctx                 context.Context
 	cancel              context.CancelFunc
@@ -229,11 +232,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
+		m.width, m.height = msg.Width, msg.Height
 		m.input.SetWidth(max(20, msg.Width-4))
 		m.viewport.SetWidth(max(20, msg.Width-4))
-		m.viewport.SetHeight(max(3, msg.Height-10))
+		m.layout()
 		m.render()
+	case completions:
+		if msg.Seq == m.completionSeq && msg.Text == m.input.Value() {
+			m.setSuggestions(msg.List)
+		}
 	case snapshot:
 		if msg.Generation != m.generation {
 			return m, nil
@@ -310,6 +317,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if cmd, ok := m.suggestionKey(msg.String()); ok {
+			return m, cmd
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			m.cancel()
@@ -339,6 +349,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.input.Reset()
+			m.completionSeq++
+			m.setSuggestions(nil)
 			m.failure = ""
 			m.listText = ""
 			m.generation++
@@ -404,7 +416,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !m.configured {
 		return m, nil
 	}
+	before := m.input.Value()
 	m.input, cmd = m.input.Update(msg)
+	if m.input.Value() != before {
+		return m, tea.Batch(cmd, m.refreshCompletion())
+	}
 	return m, cmd
 }
 
@@ -455,7 +471,7 @@ func (m *model) render() {
 }
 func (m model) View() tea.View {
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Render("Mob / terminal")
-	body := title + "\n" + safe(m.status) + "\n" + safe(m.failure) + "\n" + m.viewport.View() + "\n" + m.input.View() + "\n/new /list /open ID · /model /models · /plugins /email /mail /cloud /deliveries · Ctrl+P connections · Ctrl+S stop · Ctrl+C quit · PgUp/PgDn scroll"
+	body := title + "\n" + safe(m.status) + "\n" + safe(m.failure) + "\n" + m.viewport.View() + "\n" + m.suggestionView() + m.input.View() + "\n/ commands · Tab complete · Ctrl+P connections · Ctrl+S stop · Ctrl+C quit · PgUp/PgDn scroll"
 	if !m.configured {
 		body = title + "\nConnecting… (Ctrl+R retry · Ctrl+C quit)\n" + safe(m.failure)
 	}

@@ -29,6 +29,9 @@ var definitions = []definition{
 	{"Config", configuration.Snapshot{}},
 	{"SecretUpdate", configuration.SecretUpdate{}},
 	{"Delivery", chat.Delivery{}},
+	{"CommandSpec", chat.CommandSpec{}},
+	{"Suggestion", chat.Suggestion{}},
+	{"CompletionRequest", chat.CompletionRequest{}},
 }
 
 func contract() string {

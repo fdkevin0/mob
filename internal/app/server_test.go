@@ -140,3 +140,46 @@ func TestDesktopOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandRoutes(t *testing.T) {
+	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	httpServer := httptest.NewServer(server.Handler(nil))
+	defer httpServer.Close()
+	call := func(method, path string, body any, dest any) {
+		t.Helper()
+		raw, _ := json.Marshal(body)
+		req, _ := http.NewRequest(method, httpServer.URL+path, bytes.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer "+server.Token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatal(resp.Status)
+		}
+		if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var specs []chat.CommandSpec
+	call("GET", "/api/commands?client=web", nil, &specs)
+	if len(specs) != 2 || specs[0].Name != "model" || specs[1].Name != "models" {
+		t.Fatalf("web commands: %+v", specs)
+	}
+	var suggestions []chat.Suggestion
+	call("POST", "/api/commands/complete", chat.CompletionRequest{Client: "web", Text: "/models"}, &suggestions)
+	if len(suggestions) != 1 || suggestions[0].Value != "/models" || suggestions[0].Detail == "" {
+		t.Fatalf("suggestions: %+v", suggestions)
+	}
+	call("POST", "/api/commands/complete", chat.CompletionRequest{Client: "web", Text: "hello"}, &suggestions)
+	if suggestions == nil || len(suggestions) != 0 {
+		t.Fatalf("free text must complete to an empty list: %+v", suggestions)
+	}
+}
