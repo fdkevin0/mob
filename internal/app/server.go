@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -20,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -119,6 +119,7 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	})
 	mux.HandleFunc("POST /api/commands/run", s.runCommand)
 	mux.HandleFunc("POST /api/chat", s.chat)
+	mux.HandleFunc("GET /api/chat/{id}/stream", s.resume)
 	mux.HandleFunc("POST /api/pairing", s.pair)
 	mux.HandleFunc("POST /api/pairing/claim", s.claim)
 	mux.HandleFunc("POST /api/token/rotate", s.rotate)
@@ -203,33 +204,48 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	// Holders of the local token run this Mob.
 	input.Owner = true
-	started := false
-	emit := func(e chat.Event) error {
-		if !started {
-			beginStream(w)
-			started = true
-		}
-		return writeEvent(w, e)
-	}
-	err := s.Execute(r.Context(), input, emit)
+	run, err := s.Start(input)
 	if err != nil {
-		if !started {
-			var command *chat.CommandError
-			if errors.As(err, &command) {
-				http.Error(w, command.Message, command.Status)
-			} else if errors.Is(err, chat.ErrStaleApproval) {
-				http.Error(w, err.Error(), 409)
-			} else {
-				respond(w, nil, err)
-			}
-			return
-		}
-		if errors.Is(err, context.Canceled) {
-			_ = emit(chat.Event{Kind: chat.TurnAborted})
+		var command *chat.CommandError
+		if errors.As(err, &command) {
+			http.Error(w, command.Message, command.Status)
+		} else if errors.Is(err, chat.ErrStaleApproval) {
+			http.Error(w, err.Error(), 409)
 		} else {
-			_ = emit(chat.Event{Kind: chat.TurnFailed, Error: err.Error()})
+			respond(w, nil, err)
 		}
-		_ = emit(chat.Event{Kind: chat.TurnFinished, Reason: "error"})
+		return
+	}
+	// The turn belongs to the service now, but a replaced token still ends it.
+	go func() {
+		select {
+		case <-revocation(r.Context()):
+			run.Stop()
+		case <-run.Done():
+		}
+	}()
+	follow(w, r, run, 0)
+}
+
+// resume streams the conversation's running turn from the start, or from the
+// event after Last-Event-ID; 204 means no turn is running.
+func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
+	run := s.Watch(r.PathValue("id"))
+	if run == nil {
+		w.WriteHeader(204)
+		return
+	}
+	after, _ := strconv.Atoi(r.Header.Get("Last-Event-ID"))
+	follow(w, r, run, max(after, 0))
+}
+
+// follow streams a turn's events until it ends. A client that leaves ends only
+// its own stream, never the turn.
+func follow(w http.ResponseWriter, r *http.Request, run *chat.Running, after int) {
+	beginStream(w)
+	_ = run.Follow(r.Context(), after, func(seq int, e chat.Event) error { return writeEvent(w, seq, e) })
+	if r.Context().Err() != nil {
+		return
 	}
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	_ = http.NewResponseController(w).Flush()
@@ -241,12 +257,12 @@ func beginStream(w http.ResponseWriter) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(200)
 }
-func writeEvent(w http.ResponseWriter, e chat.Event) error {
+func writeEvent(w http.ResponseWriter, seq int, e chat.Event) error {
 	raw, err := json.Marshal(protocol.Encode(e))
 	if err != nil {
 		return err
 	}
-	if _, err = fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
+	if _, err = fmt.Fprintf(w, "id: %d\ndata: %s\n\n", seq, raw); err != nil {
 		return err
 	}
 	return http.NewResponseController(w).Flush()

@@ -104,3 +104,19 @@ it('asks the service to remember an approval', async () => {
   act(() => { void result.current.decide('a1', true, undefined, 'always'); });
   await waitFor(() => expect(chats.some(c => c.includes('"approval":{"id":"a1","approved":true,"remember":"always"}'))).toBe(true));
 });
+it('follows a turn that is already running, such as after a reload', async () => {
+  const chunks = [{ type: 'start', messageId: 'reply' }, { type: 'start-step' }, { type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: 'Hello again' }, { type: 'text-end', id: 't' }, { type: 'finish-step' }, { type: 'finish', finishReason: 'stop' }];
+  const streamed = chunks.map((c, i) => `id: ${i + 1}\ndata: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n';
+  let active = true;
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+    requests.push(`${options?.method ?? 'GET'} ${url}`);
+    if (url.endsWith('/chat/one/stream')) { active = false; return Promise.resolve(new Response(streamed, { headers: { 'Content-Type': 'text/event-stream' } })); }
+    const reply = { id: 'reply', role: 'assistant', parts: [{ type: 'text', text: active ? 'Hel' : 'Hello again' }], metadata: { status: active ? 'streaming' : 'complete' } };
+    return Promise.resolve(Response.json({ messages: [{ id: 'ask', role: 'user', parts: [{ type: 'text', text: 'hi' }] }, reply], active, model: 'demo/echo' }));
+  }));
+  const { result } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: true, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
+  await waitFor(() => expect(result.current.messages.at(-1)?.parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Hello again' })));
+  expect(result.current.messages.map(m => m.id)).toEqual(['ask', 'reply']);
+  expect(requests).toContain('GET http://localhost/api/chat/one/stream');
+});

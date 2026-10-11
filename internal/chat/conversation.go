@@ -34,7 +34,7 @@ type ConversationService struct {
 	mu      sync.Mutex
 	sandbox Sandbox
 	steps   int
-	active  map[string]context.CancelFunc
+	active  map[string]*Running
 	wg      sync.WaitGroup
 	closing bool
 }
@@ -55,7 +55,44 @@ func (s *ConversationService) Model(id string) (string, error) {
 	return s.Models.Default(), nil
 }
 
+// Execute runs a turn until it finishes or parent is done, calling emit with
+// each event; clients can also follow it through Watch.
 func (s *ConversationService) Execute(parent context.Context, input ChatRequest, emit func(Event) error) error {
+	return s.execute(parent, input, emit, nil)
+}
+
+// Start admits a turn that keeps running whoever started it, until it
+// finishes, Stop or Close. Errors before the turn emits anything, such as a
+// busy conversation or a repeated request, are returned instead.
+func (s *ConversationService) Start(input ChatRequest) (*Running, error) {
+	admitted := make(chan *Running, 1)
+	var early error
+	go func() {
+		var run *Running
+		err := s.execute(context.Background(), input, func(Event) error { return nil }, func(r *Running) { run = r; admitted <- r })
+		if run == nil {
+			early = err
+			close(admitted)
+		}
+	}()
+	run, ok := <-admitted
+	if !ok {
+		return nil, early
+	}
+	if begun, err := run.begun(); !begun && err != nil {
+		return nil, err
+	}
+	return run, nil
+}
+
+// Watch is the conversation's running turn, or nil.
+func (s *ConversationService) Watch(id string) *Running {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active[id]
+}
+
+func (s *ConversationService) execute(parent context.Context, input ChatRequest, emit func(Event) error, admitted func(*Running)) (err error) {
 	input.Text = strings.TrimSpace(input.Text)
 	if len(input.ID) != 32 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32 || len(input.Approval.Reason) > 2000 || input.Approval.Approved && input.Approval.Reason != "" || !rememberable(*input.Approval))) {
 		return &CommandError{400, "invalid conversation, text, request ID, or approval"}
@@ -92,16 +129,28 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 		cancel()
 		return &CommandError{409, "conversation is busy; wait or stop the active turn"}
 	}
-	s.active[input.ID] = cancel
+	run := newRunning(cancel)
+	s.active[input.ID] = run
 	s.wg.Add(1)
 	s.mu.Unlock()
-	defer func() { cancel(); s.mu.Lock(); delete(s.active, input.ID); s.mu.Unlock(); s.wg.Done() }()
+	defer func() {
+		cancel()
+		run.finish(err)
+		s.mu.Lock()
+		delete(s.active, input.ID)
+		s.mu.Unlock()
+		s.wg.Done()
+	}()
+	if admitted != nil {
+		admitted(run)
+	}
+	caller := emit
+	emit = func(e Event) error { run.record(e); return caller(e) }
 	if command {
 		return s.command(ctx, input, emit)
 	}
 	note := ""
 	if input.Approval != nil {
-		var err error
 		input.Approval.Reason = strings.TrimSpace(input.Approval.Reason)
 		decision, err := s.Store.Decide(input.ID, input.Approval.ID, input.Approval.Approved, input.Approval.Reason)
 		if err != nil {
@@ -135,7 +184,7 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 }
 
 func NewConversation(store *Store, models Models) *ConversationService {
-	s := &ConversationService{Store: store, Models: models, Commands: &Registry{}, Tools: &ToolRegistry{}, active: map[string]context.CancelFunc{}}
+	s := &ConversationService{Store: store, Models: models, Commands: &Registry{}, Tools: &ToolRegistry{}, active: map[string]*Running{}}
 	s.Commands.Register(s.builtins()...)
 	s.Tools.Register(DefaultTools()...)
 	s.Hooks.BeforeTurn = append(s.Hooks.BeforeTurn, s.recall)
@@ -238,17 +287,17 @@ func (s *ConversationService) Active(id string) bool {
 func (s *ConversationService) Stop(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cancel := s.active[id]
-	if cancel != nil {
-		cancel()
+	run := s.active[id]
+	if run != nil {
+		run.Stop()
 	}
-	return cancel != nil
+	return run != nil
 }
 func (s *ConversationService) Close() {
 	s.mu.Lock()
 	s.closing = true
-	for _, cancel := range s.active {
-		cancel()
+	for _, run := range s.active {
+		run.Stop()
 	}
 	s.mu.Unlock()
 	s.wg.Wait()

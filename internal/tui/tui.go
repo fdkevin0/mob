@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -178,6 +179,16 @@ func (m model) load(id string, create bool) tea.Cmd {
 }
 
 func (m *model) stream(input chat.ChatRequest) tea.Cmd {
+	return m.consume("POST", "/api/chat", input)
+}
+
+// follow streams the conversation's running turn from its start, whichever
+// client started it.
+func (m *model) follow() tea.Cmd {
+	return m.consume("GET", "/api/chat/"+m.id+"/stream", nil)
+}
+
+func (m *model) consume(method, path string, body any) tea.Cmd {
 	m.busy = true
 	m.draft = ""
 	m.status = "Generating…"
@@ -194,7 +205,7 @@ func (m *model) stream(input chat.ChatRequest) tea.Cmd {
 	}
 	return tea.Batch(func() tea.Msg {
 		defer cancel()
-		resp, err := copy.request(ctx, "POST", "/api/chat", input)
+		resp, err := copy.request(ctx, method, path, body)
 		if err == nil {
 			defer resp.Body.Close()
 			err = llm.ReadSSE(resp.Body, func(_ string, raw []byte) error {
@@ -285,7 +296,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modelRef = msg.Model
 		m.status = "Ready · " + m.modelRef + " · " + m.id
 		if m.remoteBusy {
-			m.status = "Another client is generating · Ctrl+S to stop"
+			// Follow the running turn live; the stream replaces its saved draft.
+			m.messages = slices.DeleteFunc(m.messages, func(message chat.Message) bool { return message.Metadata["status"] == "streaming" })
+			cmd := m.follow()
+			m.render()
+			return m, cmd
 		}
 		m.render()
 	case commandRan:
@@ -321,7 +336,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.busy = false
 			m.draft = ""
 			if msg.Err != nil {
+				// The next tick reloads, so a failing stream is not retried at once.
 				m.failure = msg.Err.Error()
+				return m, nil
 			}
 			return m, m.load(m.id, false)
 		}
