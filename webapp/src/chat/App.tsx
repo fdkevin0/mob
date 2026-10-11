@@ -170,7 +170,7 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction 
         {completion.suggestions.map((s, i) => <li key={`${i}-${s.value}`} id={`suggestion-${i}`} role="option" aria-selected={i === completion.selected} onMouseDown={e => { e.preventDefault(); completion.accept(i); }}>
           <span>{s.label}</span>{s.detail && <small>{s.detail}</small>}</li>)}
       </ul>}
-      <form className="composer" onSubmit={submit}><label className="sr-only" htmlFor="message">Message</label><textarea id="message" placeholder="Message Mob…" value={input} onChange={e => setInput(e.target.value)} maxLength={16000} rows={2}
+      <form className="composer" onSubmit={submit}><label className="sr-only" htmlFor="message">Message</label><textarea id="message" placeholder="Message Mob…" value={input} onChange={e => setInput(e.target.value)} rows={2}
         aria-autocomplete="list" aria-controls={completion.suggestions.length ? 'command-suggestions' : undefined} aria-activedescendant={completion.suggestions.length ? `suggestion-${completion.selected}` : undefined}
         onKeyDown={e => { if (completion.onKeyDown(e)) return; if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} />
         {busy ? <button type="button" onClick={() => void cancel()}>Stop</button> : <button disabled={!input.trim()}>Send ↑</button>}

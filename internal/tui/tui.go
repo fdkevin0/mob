@@ -81,7 +81,8 @@ func Run(connection local.Connection) error {
 	input.Placeholder = "Message · Enter send · Alt+Enter newline"
 	input.SetHeight(3)
 	input.KeyMap.InsertNewline.SetKeys("alt+enter", "shift+enter", "ctrl+j")
-	input.CharLimit = 16000
+	// A message is bounded by the model's context, not by the input box.
+	input.CharLimit, input.MaxHeight = 0, 0
 	input.Focus()
 	style := "light"
 	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {

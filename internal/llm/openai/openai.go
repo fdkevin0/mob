@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 )
@@ -103,8 +102,7 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	}
 	httpReq.Body = io.NopCloser(bytes.NewReader(raw))
 	httpReq.ContentLength = int64(len(raw))
-	client := http.Client{Transport: m.config.Transport, Timeout: 3 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(httpReq)
+	resp, err := llm.Send(m.config.Transport, httpReq)
 	if err != nil {
 		return result, fmt.Errorf("model connection failed: %w", err)
 	}

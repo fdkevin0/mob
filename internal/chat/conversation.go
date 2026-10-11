@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 )
@@ -58,7 +57,7 @@ func (s *ConversationService) Model(id string) (string, error) {
 
 func (s *ConversationService) Execute(parent context.Context, input ChatRequest, emit func(Event) error) error {
 	input.Text = strings.TrimSpace(input.Text)
-	if len(input.ID) != 32 || len(input.Text) > 16000 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32 || len(input.Approval.Reason) > 2000 || input.Approval.Approved && input.Approval.Reason != "" || !rememberable(*input.Approval))) {
+	if len(input.ID) != 32 || (input.Approval == nil && (input.Text == "" || len(input.RequestID) == 0 || len(input.RequestID) > 100)) || (input.Approval != nil && (input.Text != "" || len(input.Approval.ID) != 32 || len(input.Approval.Reason) > 2000 || input.Approval.Approved && input.Approval.Reason != "" || !rememberable(*input.Approval))) {
 		return &CommandError{400, "invalid conversation, text, request ID, or approval"}
 	}
 	if input.Approval != nil && input.Approval.Remember != "" && !input.Owner {
@@ -84,7 +83,9 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 			return &CommandError{503, "Model " + ref + " is unavailable: " + err.Error() + ". Use /models to pick another."}
 		}
 	}
-	ctx, cancel := context.WithTimeout(parent, 5*time.Minute)
+	// A turn has no deadline: it ends when it finishes or is stopped, and each
+	// model call and tool bounds its own wait.
+	ctx, cancel := context.WithCancel(parent)
 	s.mu.Lock()
 	if _, busy := s.active[input.ID]; busy || s.closing {
 		s.mu.Unlock()

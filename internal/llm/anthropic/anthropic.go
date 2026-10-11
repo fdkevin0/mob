@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/llm/openai"
@@ -34,6 +33,9 @@ type Model struct {
 func New(ref llm.Ref, info llm.Info, c Config) *Model { return &Model{ref, info, c} }
 func (m *Model) Ref() llm.Ref                         { return m.ref }
 func (m *Model) Info() llm.Info                       { return m.info }
+
+// defaultOutput is the reply size for a model whose output limit is unknown.
+const defaultOutput = 32000
 
 // budgets are thinking tokens per effort; "none" leaves thinking off.
 var budgets = map[string]int{"minimal": 1024, "low": 2048, "medium": 4096, "high": 8192, "xhigh": 16384, "max": 32000}
@@ -90,15 +92,20 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	var result llm.Result
 	maxTokens := req.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 4096
+		maxTokens = defaultOutput
 	}
 	body := map[string]any{"model": m.ref.Model, "messages": messages(req), "stream": true}
 	if req.System != "" {
 		body["system"] = req.System
 	}
 	if budget := budgets[m.ref.Effort]; budget > 0 {
-		body["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
 		maxTokens += budget
+		// Thinking counts toward the model's output limit and must leave room for the answer.
+		if limit := m.info.Output; limit > 0 && maxTokens > limit {
+			maxTokens = limit
+			budget = min(budget, max(limit/2, 1024))
+		}
+		body["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
 	}
 	body["max_tokens"] = maxTokens
 	if len(req.Tools) > 0 {
@@ -124,8 +131,7 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	for k, v := range m.config.Headers {
 		httpReq.Header.Set(k, v)
 	}
-	client := http.Client{Transport: m.config.Transport, Timeout: 3 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(httpReq)
+	resp, err := llm.Send(m.config.Transport, httpReq)
 	if err != nil {
 		return result, fmt.Errorf("model connection failed: %w", err)
 	}
