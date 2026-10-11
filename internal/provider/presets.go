@@ -14,6 +14,9 @@ type Preset struct {
 	NoKey bool `json:"noKey,omitempty"`
 	// PublicKey is sent when the user saved none (OpenCode Zen's free tier).
 	PublicKey string `json:"-"`
+	// AppKey is sent when the user saved none, to a local gateway that
+	// takes any key and tells apps apart by it (magpie).
+	AppKey string `json:"-"`
 	// Default is the model a new installation starts on.
 	Default string `json:"-"`
 	quirk   quirk
@@ -32,6 +35,9 @@ var presets = []Preset{
 	{ID: "zhipu", Name: "Zhipu GLM", Chat: "https://open.bigmodel.cn/api/paas/v4", Catalog: "zhipuai", KeysURL: "https://open.bigmodel.cn/usercenter/apikeys"},
 	{ID: "ollama", Name: "Ollama", Chat: "http://localhost:11434/v1", NoKey: true},
 	{ID: "lmstudio", Name: "LM Studio", Chat: "http://localhost:1234/v1", NoKey: true},
+	// The address is magpie's default; `mob provider add magpie` finds the
+	// port magpie is set to.
+	{ID: "magpie", Name: "Magpie", Chat: "http://127.0.0.1:3425/v1", Anthropic: "http://127.0.0.1:3425", NoKey: true, AppKey: magpieKey},
 }
 
 func Presets() []Preset { return append([]Preset(nil), presets...) }

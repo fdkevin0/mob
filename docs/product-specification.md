@@ -169,7 +169,8 @@ See [ADR 0052](./adr/0052-providers-json-and-per-conversation-models.md).
    sent with the anonymous `public` key and OpenCode's client headers (a preset quirk).
 2. **Providers**: any number, in `providers.json` (0600, atomic, `.bak` kept, reloaded live),
    managed with `mob provider add|ls|rm`. Presets cover OpenCode Zen, OpenAI, Anthropic,
-   DeepSeek, Gemini, OpenRouter, Kimi, GLM, Ollama and LM Studio; other endpoints are added by URL.
+   DeepSeek, Gemini, OpenRouter, Kimi, GLM, Ollama, LM Studio and the local magpie gateway;
+   other endpoints are added by URL.
    A provider may serve Chat Completions and Anthropic Messages; each model uses one.
 3. **Catalog**: model capabilities, limits and prices from models.dev, cached and refreshed daily.
 4. **Switching**: `/models` lists, `/model NAME` switches the conversation, `/model default NAME`

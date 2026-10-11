@@ -289,6 +289,8 @@ func (r *Registry) build(p Provider, ref llm.Ref) (llm.Model, error) {
 		switch {
 		case pr.PublicKey != "" && openCodeFree(ref.Model):
 			key = pr.PublicKey
+		case pr.AppKey != "":
+			key = pr.AppKey
 		case !pr.NoKey:
 			return nil, fmt.Errorf("provider %s has no API key; run: mob provider add %s --key-stdin", p.ID, p.ID)
 		}
@@ -461,7 +463,7 @@ func (r *Registry) Fetch(ctx context.Context, p Provider) ([]string, error) {
 	}
 	key := p.Key
 	if pr := p.preset(); key == "" && pr != nil {
-		key = pr.PublicKey
+		key = cmp.Or(pr.PublicKey, pr.AppKey)
 	}
 	if key != "" {
 		if anthropicAPI {
