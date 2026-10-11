@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/adrg/xdg"
+	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/spf13/pflag"
 )
 
@@ -102,7 +103,7 @@ func TestXDGDefaultsAndOptionalFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Dir != defaultDataDir() || got.StateDir != filepath.Join(xdg.StateHome, "mob") || got.Provider.Model != "deepseek-flash" {
+	if got.Dir != defaultDataDir() || got.StateDir != filepath.Join(xdg.StateHome, "mob") || got.Provider.Model != chat.DefaultOpenCodeZenModel || got.Provider.APIKey != "" || got.KeySource != "" {
 		t.Fatal("incorrect defaults")
 	}
 	target := filepath.Join(t.TempDir(), "target.yaml")
@@ -110,6 +111,69 @@ func TestXDGDefaultsAndOptionalFile(t *testing.T) {
 	if err = os.Symlink(target, loader.path); err == nil {
 		if _, err = loader.Read(); err == nil {
 			t.Fatal("symlink accepted")
+		}
+	}
+}
+
+func TestLegacyKeysAndExplicitProviderOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		name, config, mobKey, deepseekKey, baseURL, model string
+		flags                                             []string
+		wantURL, wantModel, wantKey                       string
+	}{
+		{name: "MOB key only", mobKey: "private", wantURL: "https://api.deepseek.com", wantModel: "deepseek-flash", wantKey: "private"},
+		{name: "DeepSeek key only", deepseekKey: "private", wantURL: "https://api.deepseek.com", wantModel: "deepseek-flash", wantKey: "private"},
+		{name: "file key only", config: "api_key: private\n", wantURL: "https://api.deepseek.com", wantModel: "deepseek-flash", wantKey: "private"},
+		{name: "selected public key", mobKey: "public", deepseekKey: "private", wantURL: chat.DefaultOpenCodeZenBaseURL, wantModel: chat.DefaultOpenCodeZenModel, wantKey: "public"},
+		{name: "environment endpoint", mobKey: "private", baseURL: chat.DefaultOpenCodeZenBaseURL, wantURL: chat.DefaultOpenCodeZenBaseURL, wantModel: chat.DefaultOpenCodeZenModel, wantKey: "private"},
+		{name: "file endpoint", mobKey: "private", config: "base_url: https://opencode.ai/zen/v1\n", wantURL: chat.DefaultOpenCodeZenBaseURL, wantModel: chat.DefaultOpenCodeZenModel, wantKey: "private"},
+		{name: "flag endpoint", mobKey: "private", flags: []string{"--base-url", chat.DefaultOpenCodeZenBaseURL}, wantURL: chat.DefaultOpenCodeZenBaseURL, wantModel: chat.DefaultOpenCodeZenModel, wantKey: "private"},
+		{name: "environment model", deepseekKey: "private", model: chat.DefaultOpenCodeZenModel, wantURL: "https://api.deepseek.com", wantModel: chat.DefaultOpenCodeZenModel, wantKey: "private"},
+		{name: "file model", deepseekKey: "private", config: "model: mimo-v2.6-flash-free\n", wantURL: "https://api.deepseek.com", wantModel: chat.DefaultOpenCodeZenModel, wantKey: "private"},
+		{name: "flag model", deepseekKey: "private", flags: []string{"--model", chat.DefaultOpenCodeZenModel}, wantURL: "https://api.deepseek.com", wantModel: chat.DefaultOpenCodeZenModel, wantKey: "private"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cleanEnvironment(t)
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tc.config), 0600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("MOB_CONFIG", path)
+			t.Setenv("MOB_API_KEY", tc.mobKey)
+			t.Setenv("DEEPSEEK_API_KEY", tc.deepseekKey)
+			t.Setenv("MOB_BASE_URL", tc.baseURL)
+			t.Setenv("MOB_MODEL", tc.model)
+			flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			AddFlags(flags)
+			if err := flags.Parse(tc.flags); err != nil {
+				t.Fatal(err)
+			}
+			loader, err := NewLoader(flags)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := loader.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Provider.BaseURL != tc.wantURL || got.Provider.Model != tc.wantModel || got.Provider.APIKey != tc.wantKey {
+				t.Fatalf("incorrect provider selection: URL=%s model=%s", got.Provider.BaseURL, got.Provider.Model)
+			}
+		})
+	}
+}
+
+func TestKeylessConfigPermissions(t *testing.T) {
+	cleanEnvironment(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("model: test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MOB_CONFIG", path)
+	for _, key := range []string{"", "environment-secret"} {
+		t.Setenv("MOB_API_KEY", key)
+		if _, err := Load(); err != nil {
+			t.Fatalf("keyless config rejected: %v", err)
 		}
 	}
 }

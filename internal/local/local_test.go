@@ -85,6 +85,76 @@ func TestSetupPersistsAndEnvironmentWins(t *testing.T) {
 	request("POST", `{"apiKey":"replacement"}`, 409)
 }
 
+func TestLoadedProviderResolvesSavedKeyBeforeFreeFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name, baseURL, model, savedURL, savedKey, fileKey, wantKey, wantSource string
+		configured                                                             bool
+	}{
+		{name: "anonymous Zen", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, wantKey: "public", wantSource: "default", configured: true},
+		{name: "saved Zen", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, savedURL: chat.DefaultOpenCodeZenBaseURL, savedKey: "saved-key", wantKey: "saved-key", wantSource: "saved", configured: true},
+		{name: "saved DeepSeek", baseURL: "https://api.deepseek.com", model: "deepseek-flash", savedURL: "https://api.deepseek.com", savedKey: "saved-key", wantKey: "saved-key", wantSource: "saved", configured: true},
+		{name: "foreign saved key", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, savedURL: "https://api.deepseek.com", savedKey: "saved-key", wantKey: "public", wantSource: "default", configured: true},
+		{name: "paid Zen without key", baseURL: chat.DefaultOpenCodeZenBaseURL, model: "paid-model", wantSource: "none"},
+		{name: "explicit empty key", baseURL: chat.DefaultOpenCodeZenBaseURL, model: chat.DefaultOpenCodeZenModel, savedURL: chat.DefaultOpenCodeZenBaseURL, savedKey: "saved-key", fileKey: "api_key: ''\n", wantSource: "file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, name := range []string{"MOB_CONFIG", "MOB_TOKEN", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_BASE_URL", "MOB_MODEL", "MOB_API_KEY", "DEEPSEEK_API_KEY", "MOB_DEMO"} {
+				t.Setenv(name, "")
+			}
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.yaml")
+			if err := os.WriteFile(path, []byte(fmt.Sprintf("data_dir: %q\naddr: 127.0.0.1:0\nbase_url: %q\nmodel: %q\n%s", dir, tc.baseURL, tc.model, tc.fileKey)), 0600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("MOB_CONFIG", path)
+			c, err := LoadConfig()
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := chat.OpenStore(filepath.Join(dir, "mob.sqlite"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.savedKey != "" {
+				if err := store.SaveAPIKeyFor(tc.savedKey, tc.savedURL); err != nil {
+					store.Close()
+					t.Fatal(err)
+				}
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+			app, err := Start(c, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer app.Close()
+			p, snapshot, err := app.Server.Configuration.Effective()
+			if err != nil || p.APIKey != tc.wantKey || app.Server.Provider().APIKey != tc.wantKey || snapshot.KeySource != tc.wantSource || snapshot.Configured != tc.configured {
+				t.Fatalf("incorrect effective provider: %+v, %v", snapshot, err)
+			}
+			if key, err := app.Server.Store.APIKey(); err != nil || key != tc.savedKey {
+				t.Fatal("fallback changed the saved credential")
+			}
+			if tc.fileKey == "" {
+				req, err := http.NewRequest("POST", app.Connection.URL+"/api/config", strings.NewReader(`{"apiKey":"replacement"}`))
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("Authorization", "Bearer "+app.Connection.Token)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp.Body.Close()
+				if resp.StatusCode != 200 || app.Server.Provider().APIKey != "replacement" {
+					t.Fatalf("UI key update failed: HTTP %d", resp.StatusCode)
+				}
+			}
+		})
+	}
+}
+
 func TestBackgroundShutdownAndUIAttachment(t *testing.T) {
 	t.Setenv("MOB_TOKEN", "")
 	c := Config{Dir: t.TempDir(), Addr: "127.0.0.1:0", Provider: chat.Provider{Demo: true}}

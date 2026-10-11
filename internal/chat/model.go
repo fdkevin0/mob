@@ -77,11 +77,19 @@ func (p Provider) stream(ctx context.Context, messages []ModelMessage, emit func
 	}
 	var result ModelResult
 	if p.APIKey == "" {
-		return result, errors.New("set DEEPSEEK_API_KEY (or MOB_API_KEY), or explicitly enable MOB_DEMO=1")
+		if p.IsOpenCodeFreeTier() {
+			p.APIKey = DefaultOpenCodeZenKey
+		} else {
+			return result, errors.New("set MOB_API_KEY (or DEEPSEEK_API_KEY), or configure a model provider")
+		}
+	}
+	effectiveTools := toolDefinitions
+	if p.IsOpenCodeFreeTier() {
+		effectiveTools = EnsureOpenCodeFreeTools(toolDefinitions)
 	}
 	requestBody := map[string]any{"model": p.Model, "messages": messages, "stream": true, "stream_options": map[string]bool{"include_usage": true}, "max_tokens": 2048}
-	if len(toolDefinitions) > 0 {
-		requestBody["tools"] = toolDefinitions
+	if len(effectiveTools) > 0 {
+		requestBody["tools"] = effectiveTools
 	}
 	body, err := json.Marshal(requestBody)
 	if err != nil {
@@ -93,6 +101,9 @@ func (p Provider) stream(ctx context.Context, messages []ModelMessage, emit func
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	if p.IsOpenCodeZen() {
+		p.ApplyOpenCodeHeaders(req.Header, "")
+	}
 	client := http.Client{Transport: p.Transport, Timeout: 3 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -119,9 +130,10 @@ func (p Provider) stream(ctx context.Context, messages []ModelMessage, emit func
 			Choices []struct {
 				Finish *string `json:"finish_reason"`
 				Delta  struct {
-					Content   string `json:"content"`
-					Reasoning string `json:"reasoning_content"`
-					Calls     []struct {
+					Content      string `json:"content"`
+					Reasoning    string `json:"reasoning_content"`
+					AltReasoning string `json:"reasoning"`
+					Calls        []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Function struct {
@@ -148,7 +160,11 @@ func (p Provider) stream(ctx context.Context, messages []ModelMessage, emit func
 		if c.Finish != nil {
 			finished = true
 		}
-		for _, d := range []struct{ kind, text string }{{"reasoning", c.Delta.Reasoning}, {"text", c.Delta.Content}} {
+		reasoningText := c.Delta.Reasoning
+		if reasoningText == "" {
+			reasoningText = c.Delta.AltReasoning
+		}
+		for _, d := range []struct{ kind, text string }{{"reasoning", reasoningText}, {"text", c.Delta.Content}} {
 			size += len(d.text)
 			if size > 2<<20 {
 				return errors.New("model response exceeded limit")

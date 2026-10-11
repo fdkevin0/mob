@@ -46,10 +46,11 @@ storage until Disconnect or tab close.
 For frontend-only development, run `bun run dev` alongside `mob serve`.
 
 Start `./build/mob tui` or open the desktop app directly. Both start a local service
-when needed and check configuration before opening chat. If an API key is missing,
-enter it in the masked setup form and save; it takes effect immediately.
-Get a DeepSeek key at https://platform.deepseek.com/api_keys.
-Saving validates format only; the first model request verifies the credential.
+when needed and check configuration before opening chat. With no provider overrides,
+Mob uses OpenCode Zen Free (`mimo-v2.6-flash-free`) with an anonymous public token.
+No API key setup is needed. For a custom provider, set its base URL and model; if
+a key is missing, enter it in the masked setup form and save. It takes effect
+immediately. Saving validates format only; the first request verifies access.
 
 The key is saved in the local SQLite database (unencrypted, file permissions 0600).
 It is never returned by the configuration API or added to chat history.
@@ -57,6 +58,8 @@ Environment variables override the file and saved key: `MOB_API_KEY`, then
 `DEEPSEEK_API_KEY`. A file-provided key also overrides the saved database key.
 Demo mode skips key setup. An already running service determines configuration.
 Conversations and saved facts are sent to the configured model provider.
+The default free model may use collected data to improve the model; see
+[OpenCode Zen privacy](https://docs.opencode.ai/docs/zen/#privacy).
 
 `mob start` detaches the runtime. GUI/TUI attach to it and can close without stopping
 Telegram. `mob stop` authenticates to that background instance and waits for shutdown;
@@ -98,9 +101,9 @@ images and attachments are not implemented in this first version.
 | `MOB_STATE_DIR` | XDG state home + `mob`; background logs |
 | `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
 | `MOB_TOKEN` | Optional existing local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
-| `MOB_API_KEY` | Model API key; falls back to `DEEPSEEK_API_KEY` |
-| `MOB_BASE_URL` | `https://api.deepseek.com`; HTTPS required except localhost models |
-| `MOB_MODEL` | `deepseek-flash` |
+| `MOB_API_KEY` | Model API key; falls back to `DEEPSEEK_API_KEY`, then an origin-scoped saved key; Zen free models use `public` when no key is available |
+| `MOB_BASE_URL` | `https://opencode.ai/zen/v1`; HTTPS required except localhost models |
+| `MOB_MODEL` | `mimo-v2.6-flash-free` |
 | `MOB_DEMO` | `1` explicitly selects offline simulation |
 
 The CLI uses [Cobra](https://github.com/spf13/cobra), paths use
@@ -108,6 +111,13 @@ The CLI uses [Cobra](https://github.com/spf13/cobra), paths use
 [Viper](https://github.com/spf13/viper). Precedence is **explicit CLI flags →
 environment → configuration file → defaults**. Plugins and UI-saved model keys
 remain in SQLite. There is no `.env` auto-loader.
+
+For compatibility, a private key supplied by `MOB_API_KEY`, `DEEPSEEK_API_KEY`
+or the config file without an explicit base URL retains the original DeepSeek
+endpoint and `deepseek-flash` default. Explicit model overrides are preserved.
+Set `--base-url`, `MOB_BASE_URL` or `base_url` when selecting another provider.
+For an existing SQLite-saved DeepSeek key, explicitly select the DeepSeek endpoint
+and model so the key stays with its recorded origin.
 
 Start from [config.example.yaml](config.example.yaml). Supported file formats are
 YAML, JSON and TOML. On macOS the default file is
@@ -148,7 +158,9 @@ fail startup. An absent default file is optional and can be created later.
 
 A key supplied by file/environment cannot be changed by the UI. `api_key: ""`
 explicitly suppresses a saved key; omitting the field restores the saved key for its
-recorded API origin. UI-saved keys and their origins commit together. Legacy
+recorded API origin. When no matching saved key exists, Zen free models use the
+public token. This fallback remains editable through the configuration API and
+is not stored as a private key. UI-saved keys and their origins commit together. Legacy
 unscoped keys are restricted to the original DeepSeek endpoint; re-enter a key for a
 custom endpoint. Live changes to another API origin require a replacement key or
 explicit empty key, preventing accidental forwarding of an existing credential.
@@ -189,7 +201,7 @@ Typical ports: IMAP 993/TLS or 143/STARTTLS; SMTP 465/TLS or 587/STARTTLS.
 - MIME text is decoded; HTML-only messages become plain text without loading remote
   images or scripts. Attachment filenames are shown, not downloaded.
 - **Analyze with AI** sends the selected email's text to the configured model for
-  importance, category and summary. The model receives no tools for this operation.
+  importance, category and summary. Analysis never executes model tool calls.
   This is explicit on-demand analysis, not background ingestion or auto-forwarding.
 - Compose/reply opens a draft; **Review email → Send email** is the sending action.
   Repeated submission of the same attempt cannot send twice. An uncertain SMTP
@@ -244,7 +256,7 @@ Scope the token to that account and the required service operations.
 
 For Workers AI chat, select a chat model supporting the tools/streaming you need.
 `MOB_DEMO=1` continues to override the chat model with simulation. Disabling the
-Cloudflare chat option restores the configured DeepSeek/OpenAI-compatible provider.
+Cloudflare chat option restores the configured Zen/DeepSeek/OpenAI-compatible provider.
 For Vectorize, use the same embedding model/dimensions used to populate the index.
 No automatic import, extraction or synchronization of local memory occurs yet.
 

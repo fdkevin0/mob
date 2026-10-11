@@ -22,10 +22,10 @@ func ValidateProviderURL(raw string) error {
 	return errors.New("MOB_BASE_URL requires HTTPS except for localhost models")
 }
 
-// Empty base URLs in older callers refer to the original default provider.
+// Empty base URLs refer to the default provider.
 func ProviderOrigin(raw string) string {
 	if raw == "" {
-		raw = "https://api.deepseek.com"
+		raw = DefaultOpenCodeZenBaseURL
 	}
 	u, err := url.Parse(raw)
 	if err != nil {

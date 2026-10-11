@@ -97,8 +97,8 @@ func (l *Loader) read(required bool) (Environment, error) {
 	v.SetDefault("data_dir", defaultDataDir())
 	v.SetDefault("state_dir", filepath.Join(xdg.StateHome, "mob"))
 	v.SetDefault("addr", "127.0.0.1:8787")
-	v.SetDefault("base_url", "https://api.deepseek.com")
-	v.SetDefault("model", "deepseek-flash")
+	v.SetDefault("base_url", chat.DefaultOpenCodeZenBaseURL)
+	v.SetDefault("model", chat.DefaultOpenCodeZenModel)
 	v.SetDefault("api_key", "")
 	v.SetDefault("demo", false)
 	raw, mode, err := readConfigFile(l.path)
@@ -121,7 +121,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 		if runtime.GOOS != "windows" && mode.Perm()&0022 != 0 {
 			return fail("configuration must not be writable by group or others")
 		}
-		if runtime.GOOS != "windows" && v.GetString("api_key") != "" && mode.Perm()&0077 != 0 {
+		if runtime.GOOS != "windows" && v.InConfig("api_key") && v.GetString("api_key") != "" && mode.Perm()&0077 != 0 {
 			return fail("configuration containing api_key must have owner-only permissions (chmod 600)")
 		}
 	}
@@ -139,6 +139,13 @@ func (l *Loader) read(required bool) (Environment, error) {
 	var data settings
 	if v.UnmarshalExact(&data) != nil {
 		return fail("invalid configuration fields or types (contents omitted)")
+	}
+	// Legacy key-only configurations belong to DeepSeek; changing providers requires an explicit URL.
+	if strings.TrimSpace(data.APIKey) != "" && !strings.EqualFold(strings.TrimSpace(data.APIKey), chat.DefaultOpenCodeZenKey) && os.Getenv("MOB_BASE_URL") == "" && !l.flags.Lookup("base-url").Changed && !v.InConfig("base_url") {
+		data.BaseURL = "https://api.deepseek.com"
+		if os.Getenv("MOB_MODEL") == "" && !l.flags.Lookup("model").Changed && !v.InConfig("model") {
+			data.Model = "deepseek-flash"
+		}
 	}
 	host, port, err := net.SplitHostPort(data.Addr)
 	if err != nil {

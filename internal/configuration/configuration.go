@@ -57,7 +57,12 @@ func (s *Service) effective(base chat.Provider, keySource string) (chat.Provider
 		keySource = "saved"
 	}
 	if p.APIKey == "" && keySource == "saved" {
-		keySource = "none"
+		if p.IsOpenCodeFreeTier() {
+			p.APIKey = chat.DefaultOpenCodeZenKey
+			keySource = "default"
+		} else {
+			keySource = "none"
+		}
 	}
 	return p, Snapshot{Model: p.Model, BaseURL: p.BaseURL, Demo: p.Demo, Configured: p.Demo || p.APIKey != "", Source: source, KeySource: keySource}, nil
 }
