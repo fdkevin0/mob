@@ -184,13 +184,17 @@ With the sandbox enabled, the model can run any shell command in a throwaway
 container, without asking: install packages, run code, fetch from the network.
 Only the conversation's workspace (`data_dir/sandbox/<conversation>`, mounted
 at `/workspace`) persists between commands, and it is the only host path the
-container sees (ADR 0055).
+container sees (ADR 0055). Optional limits cut off the network and cap each
+command's CPUs and memory (ADR 0056).
 
 ```yaml
 sandbox:
   enabled: true
   runtime: ""            # containerd (Linux), apple (macOS), wslc (Windows); empty: the platform's own
   image: python:3.13-slim
+  network: ""            # none: no network; empty: the runtime's default
+  cpus: 0                # whole CPUs per command; 0: the runtime's default
+  memory: ""             # e.g. 512m or 2g, at least 64m; empty: the runtime's default
 ```
 
 Linux uses containerd through `nerdctl` (with CNI plugins; rootless is

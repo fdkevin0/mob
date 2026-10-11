@@ -56,10 +56,9 @@ VM, while each platform now has a first-party container runtime of its own.
   and with rootful containerd a container escape is root on the host. Apple's
   runtime and `wslc` put each container or session in a VM. Prefer rootless
   containerd on Linux.
-- Network access and CPU/memory limits are not restricted: the three CLIs do not
-  document the same flags, and a limit that silently does nothing on one
-  platform is worse than none. Commands can therefore reach the internet and the
-  host's network services; a workspace can hold whatever the model downloads.
+- Network access and CPU/memory limits are not restricted by default: commands
+  can reach the internet and the host's network services, and a workspace can
+  hold whatever the model downloads. ADR 0056 adds optional limits.
 - Files the container writes into the workspace may be owned by its user (often
   root) on Linux hosts.
 - containerd needs `nerdctl` and CNI plugins beside it; plain `ctr` is not

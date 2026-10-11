@@ -29,6 +29,8 @@ const (
 	MaxTimeout     = 5 * time.Minute
 	// outputCap bounds each of stdout and stderr returned to the model.
 	outputCap = 16 << 10
+	// minMemoryMiB is the least memory a shell and Python start in reliably.
+	minMemoryMiB = 64
 )
 
 // Settings is the sandbox section of config.yaml.
@@ -36,6 +38,13 @@ type Settings struct {
 	Enabled bool   `mapstructure:"enabled"`
 	Runtime string `mapstructure:"runtime"`
 	Image   string `mapstructure:"image"`
+	// Network "none" cuts the container off from every network; empty keeps
+	// the runtime's default, which reaches the internet.
+	Network string `mapstructure:"network"`
+	// CPUs and Memory (e.g. 512m, 2g) cap one command; zero and empty keep
+	// the runtime's defaults.
+	CPUs   int    `mapstructure:"cpus"`
+	Memory string `mapstructure:"memory"`
 }
 
 // Validate rejects settings that could never run, without naming their values.
@@ -48,7 +57,26 @@ func (s Settings) Validate() error {
 	if s.Image == "" || strings.HasPrefix(s.Image, "-") || strings.ContainsAny(s.Image, " \t\r\n") {
 		return errors.New("sandbox.image must be an image reference")
 	}
-	return nil
+	_, err := s.limits()
+	return err
+}
+
+func (s Settings) limits() (container.Limits, error) {
+	l := container.Limits{Network: s.Network, CPUs: s.CPUs}
+	if s.Network != "" && s.Network != container.NoNetwork {
+		return l, errors.New(`sandbox.network must be "none" or empty`)
+	}
+	if s.CPUs < 0 {
+		return l, errors.New("sandbox.cpus must be a whole number of CPUs, or 0 for the runtime's default")
+	}
+	if s.Memory != "" {
+		mib, err := container.ParseMemory(s.Memory)
+		if err != nil || mib < minMemoryMiB {
+			return l, fmt.Errorf("sandbox.memory must be a size of at least %dm, such as 512m or 2g, or empty", minMemoryMiB)
+		}
+		l.MemoryMiB = mib
+	}
+	return l, nil
 }
 
 // Result is what one command produced. A nonzero exit is a result, not an error.
@@ -64,6 +92,7 @@ type Result struct {
 type Sandbox struct {
 	Runtime *container.Runtime
 	Image   string
+	Limits  container.Limits
 	// Root holds one workspace directory per conversation.
 	Root string
 
@@ -83,8 +112,12 @@ func New(s Settings, dataDir string) (*Sandbox, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Sandbox{Runtime: r, Image: s.Image, Root: filepath.Join(dataDir, "sandbox")}, nil
+	limits, _ := s.limits()
+	return &Sandbox{Runtime: r, Image: s.Image, Limits: limits, Root: filepath.Join(dataDir, "sandbox")}, nil
 }
+
+// Offline reports whether commands run without any network.
+func (b *Sandbox) Offline() bool { return b.Limits.Network == container.NoNetwork }
 
 // Workspace is the host directory a conversation's containers share.
 func (b *Sandbox) Workspace(conversationID string) (string, error) {
@@ -112,7 +145,7 @@ func (b *Sandbox) Exec(ctx context.Context, conversationID, command string, time
 		return Result{}, err
 	}
 	name := "mob-" + random()
-	spec := container.Spec{Name: name, Image: b.Image, Command: []string{"sh", "-c", command}, Mounts: []container.Mount{{Source: workspace, Target: Workdir}}, Workdir: Workdir}
+	spec := container.Spec{Name: name, Image: b.Image, Command: []string{"sh", "-c", command}, Mounts: []container.Mount{{Source: workspace, Target: Workdir}}, Workdir: Workdir, Limits: b.Limits}
 	run, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	stdout, stderr := &capped{}, &capped{}

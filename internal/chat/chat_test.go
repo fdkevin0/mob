@@ -203,6 +203,19 @@ func (f *fakeSandbox) Exec(_ context.Context, conversationID, command string, _ 
 	return sandbox.Result{ExitCode: 0, Stdout: "Linux\n"}, nil
 }
 
+type offlineSandbox struct{ fakeSandbox }
+
+func (offlineSandbox) Offline() bool { return true }
+
+func TestSandboxToolSaysWhenOffline(t *testing.T) {
+	if d := sandboxTool(&fakeSandbox{}).Description; !strings.Contains(d, "use the network") {
+		t.Fatalf("online description: %q", d)
+	}
+	if d := sandboxTool(&offlineSandbox{}).Description; !strings.Contains(d, "no network") || strings.Contains(d, "use the network") {
+		t.Fatalf("offline description: %q", d)
+	}
+}
+
 func TestSandboxRunsWithoutApproval(t *testing.T) {
 	s, err := OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
 	if err != nil {

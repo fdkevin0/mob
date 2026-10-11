@@ -20,10 +20,12 @@ checkout, then checks the following and prints `PASS`/`FAIL` per check:
 | writes reach the host | the bind mount is read-write |
 | exit status | a container's exit code comes back |
 | stdin with `-i` | piped input reaches the container |
+| `--network none`, `--cpus 1`, `--memory 256m` | the limits take effect: only `lo`, one CPU's quota (or one VM CPU), 256 MiB of memory |
 | tool runs without approval | `mob serve --demo` offers the `sandbox` tool and runs it in `/workspace` |
 | workspace persists, the rest is discarded | only `/workspace` survives between calls |
 | workspace on the host | it is `data_dir/sandbox/<conversation>` |
 | nonzero exit, output capped | the tool reports `exitCode` and `truncated` |
+| limits apply | `sandbox.network`, `cpus` and `memory` reach the tool's containers |
 | stop removes the container | `--name` plus the runtime's force-remove work |
 
 A failed run keeps its work directory (config, `serve.log`, workspaces) and
