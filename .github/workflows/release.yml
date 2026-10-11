@@ -31,11 +31,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - uses: oven-sh/setup-bun@v2
@@ -50,7 +50,7 @@ jobs:
         run: |
           version="$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d HEAD).$(git rev-parse HEAD | cut -c1-7)"
           echo "NIGHTLY_VERSION=$version" >> "$GITHUB_ENV"
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -62,7 +62,7 @@ jobs:
             echo "::error::The binary reports $version, expected $NIGHTLY_VERSION"
             exit 1
           fi
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/*.tar.gz
@@ -96,7 +96,7 @@ jobs:
     steps:
       # A release PR opened with the default token does not start CI; set
       # RELEASE_PLEASE_TOKEN to a token that can open pull requests so it does.
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
@@ -113,11 +113,11 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag }}
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - uses: oven-sh/setup-bun@v2
@@ -128,7 +128,7 @@ jobs:
         run: bun run build
       # Without HOMEBREW_TAP_TOKEN the cask is built but not pushed to
       # fdkevin0/homebrew-tap.
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -143,7 +143,7 @@ jobs:
             echo "::error::The binary reports $version, expected ${{ needs.release-please.outputs.tag }}"
             exit 1
           fi
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/*.tar.gz
