@@ -20,11 +20,17 @@ services, and a server runs in its own process. This is step six of that plan.
   official Go SDK, `github.com/modelcontextprotocol/go-sdk`.
 - `ToolRegistry.RegisterSource` adds tools that change while Mob runs. Each
   MCP tool is `mcp__<server>__<tool>`, offered only to the owner's turns and
-  only while its server is connected.
-- Every MCP call asks for approval. The approval records the server's command
-  line or URL, and the call runs only against that same target. Always
-  allowing a tool covers it on that target only, so a server renamed or
-  reconfigured asks again.
+  only while its server is connected. A name with characters models refuse,
+  or longer than 64, is cut and ends in a hash of the real name, so two tools
+  never share one.
+- Every MCP call asks for approval. The approval shows the server's command
+  line or URL and records a fingerprint of its whole configuration,
+  environment, directory and headers included. The call runs only while the
+  fingerprint is unchanged. Always allowing a tool covers that tool on that
+  configuration only, so a server switched to another account or program
+  asks again.
+- Configured headers go only to the server's own origin, and a redirect to
+  another origin is refused.
 - A command inherits Mob's environment without the `MOB_*` variables, such
   as the service token, plus its own `env`.
 - `/mcp` shows each server's status and tools.

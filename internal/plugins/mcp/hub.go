@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"reflect"
@@ -171,7 +173,22 @@ func (h *Hub) transport(server Server) sdk.Transport {
 		if base == nil {
 			base = http.DefaultTransport
 		}
-		return &sdk.StreamableClientTransport{Endpoint: server.URL, HTTPClient: &http.Client{Transport: headers{server.Headers, base}}}
+		origin, _ := url.Parse(server.URL)
+		client := &http.Client{
+			Transport: headers{server.Headers, origin, base},
+			// A redirect elsewhere could take the configured headers with
+			// it, or reach a server the user did not configure.
+			CheckRedirect: func(r *http.Request, via []*http.Request) error {
+				if !sameOrigin(r.URL, origin) {
+					return errors.New("refusing a redirect to " + r.URL.Scheme + "://" + r.URL.Host)
+				}
+				if len(via) >= 10 {
+					return errors.New("stopped after 10 redirects")
+				}
+				return nil
+			},
+		}
+		return &sdk.StreamableClientTransport{Endpoint: server.URL, HTTPClient: client}
 	}
 	cmd := exec.Command(server.Command, server.Args...)
 	cmd.Dir = server.Dir
@@ -191,18 +208,25 @@ func environment() []string {
 	return env
 }
 
-// headers adds a server's configured headers to each request.
+// headers adds a server's configured headers to each request to its origin.
 type headers struct {
 	values map[string]string
+	origin *url.URL
 	base   http.RoundTripper
 }
 
 func (t headers) RoundTrip(r *http.Request) (*http.Response, error) {
-	r = r.Clone(r.Context())
-	for key, value := range t.values {
-		r.Header.Set(key, value)
+	if sameOrigin(r.URL, t.origin) {
+		r = r.Clone(r.Context())
+		for key, value := range t.values {
+			r.Header.Set(key, value)
+		}
 	}
 	return t.base.RoundTrip(r)
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	return a != nil && b != nil && strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
 }
 
 // set changes a server's state while the hub serves it.

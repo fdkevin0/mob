@@ -3,11 +3,15 @@
 package mcp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -77,13 +81,41 @@ func (s Servers) names() []string {
 	return names
 }
 
-// target is what an approved call reaches: the command line or the URL. A
-// call approved for one target does not run against another.
+// target is what an approval shows the server as: its URL, or its command
+// and each argument quoted.
 func (s Server) target() string {
 	if s.URL != "" {
 		return s.URL
 	}
-	return strings.Join(append([]string{s.Command}, s.Args...), " ")
+	words := []string{strconv.Quote(s.Command)}
+	for _, arg := range s.Args {
+		words = append(words, strconv.Quote(arg))
+	}
+	return strings.Join(words, " ")
+}
+
+// fingerprint identifies the whole configuration of a server, its
+// environment, directory and headers included, without showing their values.
+// An approved call runs only while the fingerprint is unchanged, so a server
+// switched to another account or program asks again.
+func (s Server) fingerprint() string {
+	canonical := struct {
+		Command, Dir, URL string
+		Args, Env         []string
+		Headers           map[string]string
+	}{s.Command, s.Dir, s.URL, s.Args, s.Env, s.Headers}
+	if len(canonical.Args) == 0 {
+		canonical.Args = nil
+	}
+	if len(canonical.Env) == 0 {
+		canonical.Env = nil
+	}
+	if len(canonical.Headers) == 0 {
+		canonical.Headers = nil
+	}
+	raw, _ := json.Marshal(canonical)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:12])
 }
 
 // errUnknown is a call to a server that is not configured any more.
