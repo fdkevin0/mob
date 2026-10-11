@@ -48,11 +48,9 @@ func target(c Config, operation string) string {
 // Tools let the model use the configured Cloudflare services while the plugin
 // is enabled. config reads the saved configuration.
 func Tools(config func() (Config, error)) []chat.Tool {
-	run := func(ctx context.Context, r request) (any, error) {
-		c, err := config()
-		if err != nil {
-			return nil, err
-		}
+	// run uses the configuration c it is given, so an approved call runs with
+	// the configuration whose target was checked.
+	run := func(ctx context.Context, c Config, r request) (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 		defer cancel()
 		result, err := c.Do(ctx, Action{Operation: r.Operation, Text: r.Argument, Key: r.Argument, Cursor: r.Argument, SQL: r.Argument, Params: r.Params})
@@ -90,12 +88,12 @@ func Tools(config func() (Config, error)) []chat.Tool {
 			if !slices.Contains(operations, r.Operation) {
 				return nil, errors.New("unknown Cloudflare operation")
 			}
-			if slices.Contains(readOperations, r.Operation) {
-				return run(ctx, r)
-			}
 			c, err := config()
 			if err != nil {
 				return nil, err
+			}
+			if slices.Contains(readOperations, r.Operation) {
+				return run(ctx, c, r)
 			}
 			r.Target = target(c, r.Operation)
 			return nil, call.RequestApproval(r)
@@ -112,7 +110,7 @@ func Tools(config func() (Config, error)) []chat.Tool {
 			if target(c, r.Operation) != r.Target {
 				return nil, errors.New("the Cloudflare configuration changed after the request; ask again so the user can approve the new target")
 			}
-			return run(ctx, r)
+			return run(ctx, c, r)
 		},
 	}}
 }
