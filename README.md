@@ -5,6 +5,27 @@ built with AI Elements + AI SDK UI, and a Bubble Tea / Bubbles / Lip Gloss TUI.
 Bun manages the frontend toolchain. The original Telegram / Cloudflare modules
 remain as reference; the local integrations described below are implemented in Go.
 
+## Amp orbs
+
+`.agents/setup` prepares Debian orbs with the Go version from `go.mod`, the Bun
+version from `package.json`, `just`, and Linux Wails build prerequisites. It installs
+locked dependencies and builds the frontend and CLI, preserving module and build
+caches in Amp's project snapshot. Exact snapshots skip setup; stale snapshots rerun
+it without reinstalling unchanged toolchains or dependencies. Both scripts must
+reach the project's default branch before future orbs use them.
+
+`.agents/resume` only checks tool availability; it does not install dependencies,
+start services, or authenticate. Setup persists tool paths for non-interactive login
+shells. Run `just test` to check Go, UI, and offline integration behavior. No provider
+credentials or external database are required. The optional container sandbox runtime
+is not installed by setup.
+
+To expose the offline app through an orb portal, start a supervised service:
+
+```bash
+amp orb service start mob --command './build/mob serve --demo' --port 8787 --portal
+```
+
 ## Run locally
 
 Requirements: Go 1.26+, Bun 1.4.3, and the platform prerequisites for

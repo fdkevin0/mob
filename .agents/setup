@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+step() {
+	local label="$1" start=$SECONDS
+	shift
+	printf '\n==> %s\n' "$label"
+	"$@"
+	printf '==> %s completed in %ss\n' "$label" "$((SECONDS - start))"
+}
+
+# Check first: stale snapshots should not refresh apt or reinstall packages.
+packages=(ca-certificates curl unzip build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev)
+missing=()
+for package in "${packages[@]}"; do
+	if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then
+		missing+=("$package")
+	fi
+done
+if ((${#missing[@]})); then
+	step 'Refresh system package index' sudo -n apt-get update -qq
+	step 'Install build and Wails prerequisites' sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+
+case "$(uname -m)" in
+	x86_64) go_arch=amd64; bun_arch=x64; just_arch=x86_64 ;;
+	aarch64) go_arch=arm64; bun_arch=aarch64; just_arch=aarch64 ;;
+	*) echo 'Unsupported orb architecture' >&2; exit 1 ;;
+esac
+
+go_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+bun_version="$(sed -n 's/.*"packageManager": "bun@\([^"]*\)".*/\1/p' package.json)"
+just_version=1.58.0
+tool_root="$HOME/.local/share/mob-orb"
+export PATH="$tool_root/go/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+mkdir -p "$tool_root" "$HOME/.local/bin"
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
+
+if [[ "$(go version 2>/dev/null || true)" != "go version go$go_version linux/$go_arch" ]]; then
+	step "Download Go $go_version" curl -fsSL --retry 3 "https://go.dev/dl/go${go_version}.linux-${go_arch}.tar.gz" -o "$scratch/go.tar.gz"
+	tar -xzf "$scratch/go.tar.gz" -C "$scratch"
+	rm -rf "$tool_root/go"
+	mv "$scratch/go" "$tool_root/go"
+fi
+if [[ "$(bun --version 2>/dev/null || true)" != "$bun_version" ]]; then
+	step "Download Bun $bun_version" curl -fsSL --retry 3 "https://github.com/oven-sh/bun/releases/download/bun-v${bun_version}/bun-linux-${bun_arch}.zip" -o "$scratch/bun.zip"
+	unzip -q "$scratch/bun.zip" -d "$scratch"
+	mkdir -p "$HOME/.bun/bin"
+	install -m 755 "$scratch/bun-linux-${bun_arch}/bun" "$HOME/.bun/bin/bun"
+fi
+if [[ "$(just --version 2>/dev/null || true)" != "just $just_version" ]]; then
+	step "Download just $just_version" curl -fsSL --retry 3 "https://github.com/casey/just/releases/download/${just_version}/just-${just_version}-${just_arch}-unknown-linux-musl.tar.gz" -o "$scratch/just.tar.gz"
+	tar -xzf "$scratch/just.tar.gz" -C "$scratch" just
+	install -m 755 "$scratch/just" "$HOME/.local/bin/just"
+fi
+
+# Amp and supervised services use separate login shells after setup exits.
+marker='# Mob orb toolchain'
+if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+	cat >> "$HOME/.bash_profile" <<'EOF'
+
+# Mob orb toolchain
+export PATH="$HOME/.local/share/mob-orb/go/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+EOF
+fi
+
+go version
+bun --version
+just --version
+step 'Install locked frontend dependencies' bun install --frozen-lockfile
+step 'Download Go modules' go mod download
+step 'Build frontend and CLI (warm Go build cache)' bun run build:cli

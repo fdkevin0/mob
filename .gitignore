@@ -1,5 +1,6 @@
 node_modules/
 .env
+.amp/portals/*
 dist/
 /build/*
 !/build/darwin/
@@ -14,4 +15,3 @@ package.json.md5
 !webapp/dist/
 webapp/dist/*
 !webapp/dist/.gitkeep
-
