@@ -340,3 +340,29 @@ func TestCommandRequestsGetThePluginTimeout(t *testing.T) {
 		}
 	}
 }
+
+func TestLongPasteIsSentWhole(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	input := textarea.New()
+	input.CharLimit, input.MaxHeight = 0, 0
+	input.Focus()
+	m := model{configured: true, id: chat.NewID(), ctx: ctx, cancel: cancel, input: input, viewport: viewport.New(), width: 80}
+	// More lines than the input component itself keeps.
+	long := strings.Repeat("x\n", 10001) + "TAIL"
+	updated, _ := m.Update(tea.PasteMsg{Content: long})
+	m = updated.(model)
+	if got := m.input.Value(); got != "[Pasted text #1 · 10002 lines]" {
+		t.Fatalf("long paste shown as %q", got)
+	}
+	updated, _ = m.Update(tea.PasteMsg{Content: " and a note"})
+	m = updated.(model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(model)
+	if last := m.messages[len(m.messages)-1]; chat.Text(last) != long+" and a note" {
+		t.Fatalf("sent %d bytes, want %d", len(chat.Text(last)), len(long)+len(" and a note"))
+	}
+	if m.input.Value() != "" || m.pastes != nil {
+		t.Fatal("paste kept after sending")
+	}
+}

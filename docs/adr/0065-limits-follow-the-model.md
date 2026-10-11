@@ -16,14 +16,19 @@ to the model (see `research/limits-and-context-management.md`).
 
 - A chat message has no length limit of its own. The chat request body is
   capped at 8 MiB only to stop runaway bodies, and neither the web composer nor
-  the terminal input limits what is typed or pasted. A message that alone
-  exceeds what the model's context leaves room for ends the turn with an error
-  naming its size and the model, before any model request.
+  the terminal input limits what is typed or pasted. The terminal's input
+  component keeps at most 10000 lines, so a bracketed paste of 100 lines or
+  more is held aside, shown as `[Pasted text #1 · N lines]`, and sent whole.
+  A message that alone exceeds what the model's context leaves room for ends
+  the turn with an error naming its size and the model, before any model
+  request.
 - A reply may use the model's output limit, up to 32000 tokens and at most a
   quarter of its context window. Without a known limit, the OpenAI-compatible
   driver lets the provider choose and the Anthropic driver asks for 32000;
-  history still leaves room for a 32000-token reply. Anthropic thinking counts
-  toward the model's output limit and keeps room for the answer.
+  history still leaves room for a 32000-token reply. Anthropic thinking comes
+  out of those reserved tokens, at most half of them, so `max_tokens` never
+  exceeds what history was fitted around; a reply under 2048 tokens has no
+  thinking, as Anthropic requires at least 1024.
 - A turn has no deadline. It ends when it finishes, when it is stopped, or when
   it reaches the tool step limit; each model call and tool bounds its own wait.
 - A model request fails with "model stopped responding" when its response does
