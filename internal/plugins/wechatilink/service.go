@@ -189,10 +189,15 @@ func (s *Service) handleApproval(ctx context.Context, senderID string, answer ch
 		Approval: &answer,
 	}
 
+	// The turn that follows a decision may ask for more approvals.
 	var reply strings.Builder
+	var approvals []chat.PendingApproval
 	err := s.Conversation.Execute(ctx, input, func(e chat.Event) error {
-		if e.Kind == chat.SegmentDelta {
+		switch e.Kind {
+		case chat.SegmentDelta:
 			reply.WriteString(e.Text)
+		case chat.ApprovalRequested:
+			approvals = append(approvals, chat.PendingApproval{ID: e.ApprovalID, Tool: e.ToolName, Input: e.Input})
 		}
 		return nil
 	})
@@ -219,6 +224,9 @@ func (s *Service) handleApproval(ctx context.Context, senderID string, answer ch
 	}
 	if out := reply.String(); out != "" {
 		result += "\n\n" + out
+	}
+	if len(approvals) > 0 {
+		result += approvalPrompt(approvals, len(s.Conversation.Pending(convID)))
 	}
 	return result, nil
 }

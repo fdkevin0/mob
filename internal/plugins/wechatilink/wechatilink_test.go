@@ -3,6 +3,7 @@ package wechatilink_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/plugins/wechatilink"
 	"github.com/fdkevin0/mob/internal/provider"
 )
@@ -218,5 +220,49 @@ func TestWeChatILinkServiceProcessing(t *testing.T) {
 	approvalReply, err := svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx_1", "批准 12345678901234567890123456789012")
 	if err != nil || !strings.Contains(approvalReply, "审批指令无效或该审批已过期") {
 		t.Fatalf("expected stale approval response, got: %s (err: %v)", approvalReply, err)
+	}
+}
+
+// rememberer asks to remember a new fact whenever the user, or a note about a
+// decision, speaks last.
+type rememberer struct{ facts int }
+
+func (m *rememberer) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "rememberer"} }
+func (m *rememberer) Info() llm.Info { return llm.Info{ID: "rememberer", Tools: true, Context: 100000} }
+func (m *rememberer) Stream(_ context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	if req.Messages[len(req.Messages)-1].Role != "user" {
+		return llm.Result{Text: "ok"}, emit("text", "ok")
+	}
+	m.facts++
+	args, _ := json.Marshal(map[string]string{"fact": fmt.Sprintf("fact-%d", m.facts)})
+	return llm.Result{Calls: []llm.ToolCall{{ID: chat.NewID(), Name: "remember", Arguments: string(args)}}}, nil
+}
+
+type oneModel struct{ model llm.Model }
+
+func (o oneModel) Default() string                          { return "test/rememberer" }
+func (o oneModel) Resolve(string) (llm.Model, error)        { return o.model, nil }
+func (o oneModel) SetDefault(string) (llm.Ref, error)       { return o.model.Ref(), nil }
+func (o oneModel) List(context.Context, string) []llm.Group { return nil }
+
+func TestDecisionShowsTheNextApproval(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "test.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	conversation := chat.NewConversation(store, oneModel{&rememberer{}})
+	defer conversation.Close()
+	svc := &wechatilink.Service{Store: store, Conversation: conversation}
+	cfg := wechatilink.Config{Enabled: true, AllowedUsers: []string{"wx_alice"}}
+	if reply, err := svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx", "记点东西"); err != nil || !strings.Contains(reply, "fact: fact-1") {
+		t.Fatalf("first request: %s (err: %v)", reply, err)
+	}
+	for _, c := range []struct{ decision, next string }{{"批准", "fact-2"}, {"拒绝 换一个", "fact-3"}} {
+		decision, next := c.decision, c.next
+		reply, err := svc.ProcessMessage(context.Background(), cfg, "wx_alice", "ctx", decision)
+		if err != nil || !strings.Contains(reply, "【操作审批】remember\nfact: "+next) || !strings.Contains(reply, "允许请回复「批准」") {
+			t.Fatalf("%s did not show the next request: %s (err: %v)", decision, reply, err)
+		}
 	}
 }

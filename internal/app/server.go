@@ -87,6 +87,12 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/conversations", func(w http.ResponseWriter, r *http.Request) { data, err := s.Store.List(); respond(w, data, err) })
 	mux.HandleFunc("POST /api/conversations", func(w http.ResponseWriter, r *http.Request) { data, err := s.Store.Create(); respond(w, data, err) })
 	mux.HandleFunc("GET /api/conversations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		// A client showing the snapshot must not offer a decision on an
+		// approval that has expired.
+		if err := s.Store.ExpireApprovals(r.PathValue("id")); err != nil {
+			respond(w, nil, err)
+			return
+		}
 		messages, err := s.Store.History(r.PathValue("id"))
 		if err != nil {
 			respond(w, nil, err)
