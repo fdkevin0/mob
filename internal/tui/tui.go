@@ -220,6 +220,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.plugin = newPluginForm()
 		m.plugin.config = msg.Config
+		m.plugin.sections = msg.Sections
 		m.failure = ""
 		return m, nil
 	case pluginSaved:

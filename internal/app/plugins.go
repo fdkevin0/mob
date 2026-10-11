@@ -80,7 +80,7 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 			respond(w, nil, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"config": c.Public(), "telegramStatus": s.extensions.Status("telegram"), "wechatStatus": s.extensions.Status("wechat_ilink")})
+		writeJSON(w, 200, map[string]any{"config": c.Public(), "sections": configuration.Sections(), "telegramStatus": s.extensions.Status("telegram"), "wechatStatus": s.extensions.Status("wechat_ilink")})
 	})
 	mux.HandleFunc("POST /api/plugins/{plugin}", s.savePlugin)
 	mux.HandleFunc("POST /api/plugins/{plugin}/test", func(w http.ResponseWriter, r *http.Request) {
@@ -186,36 +186,20 @@ func (s *Server) pluginRoutes(mux *http.ServeMux) {
 // testPlugin checks an enabled plugin's connection. A disabled or unknown
 // plugin is a *chat.CommandError.
 func (s *Server) testPlugin(ctx context.Context, name string) (any, error) {
+	section, ok := configuration.Lookup(name)
+	if !ok {
+		return nil, &chat.CommandError{Status: 404, Message: "unknown plugin " + name}
+	}
 	c, err := s.pluginConfig()
 	if err != nil {
 		return nil, err
 	}
+	if !section.Enabled(c) {
+		return nil, &chat.CommandError{Status: 409, Message: section.Label + " is disabled"}
+	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	disabled := func(label string) error { return &chat.CommandError{Status: 409, Message: label + " is disabled"} }
-	switch name {
-	case "email":
-		if !c.Email.Enabled {
-			return nil, disabled("email plugin")
-		}
-		return map[string]bool{"ok": true}, c.Email.Test(ctx)
-	case "telegram":
-		if !c.Telegram.Enabled {
-			return nil, disabled("Telegram")
-		}
-		return c.Telegram.Test(ctx)
-	case "cloudflare":
-		if !c.Cloudflare.Enabled {
-			return nil, disabled("Cloudflare")
-		}
-		return c.Cloudflare.Test(ctx)
-	case "wechat_ilink":
-		if !c.WeChatILink.Enabled {
-			return nil, disabled("WeChat iLink")
-		}
-		return c.WeChatILink.Test(ctx)
-	}
-	return nil, &chat.CommandError{Status: 404, Message: "unknown plugin " + name}
+	return section.Test(ctx, c)
 }
 
 // enabledEmail is the email configuration, or a *chat.CommandError when the

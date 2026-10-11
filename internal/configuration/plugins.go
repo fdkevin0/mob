@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 
 	"github.com/fdkevin0/mob/internal/plugins/cloudflare"
 	"github.com/fdkevin0/mob/internal/plugins/email"
@@ -97,72 +98,15 @@ func (s *Service) UpdatePlugin(name string, raw []byte) (Plugins, error) {
 	if err != nil {
 		return c, err
 	}
-	allowed := map[string]bool{}
-	switch name {
-	case "email":
-		var next email.Config
-		if err = decode(raw, &next); err != nil {
-			return c, err
-		}
-		allowed = map[string]bool{"imap.password": true, "smtp.password": true}
-		next.IMAP.Password, err = secret(c.Email.IMAP.Password, next.IMAP.Password, next.IMAP.Host == c.Email.IMAP.Host && next.IMAP.Username == c.Email.IMAP.Username, updates["imap.password"])
-		if err != nil {
-			return c, err
-		}
-		next.SMTP.Password, err = secret(c.Email.SMTP.Password, next.SMTP.Password, next.SMTP.Host == c.Email.SMTP.Host && next.SMTP.Username == c.Email.SMTP.Username, updates["smtp.password"])
-		if err != nil {
-			return c, err
-		}
-		err = next.Validate()
-		c.Email = next
-	case "telegram":
-		var next telegram.Config
-		if err = decode(raw, &next); err != nil {
-			return c, err
-		}
-		allowed = map[string]bool{"token": true}
-		next.Token, err = secret(c.Telegram.Token, next.Token, true, updates["token"])
-		if err != nil {
-			return c, err
-		}
-		err = next.Validate()
-		c.Telegram = next
-	case "cloudflare":
-		var next cloudflare.Config
-		if err = decode(raw, &next); err != nil {
-			return c, err
-		}
-		allowed = map[string]bool{"token": true, "secretKey": true}
-		next.Token, err = secret(c.Cloudflare.Token, next.Token, next.AccountID == c.Cloudflare.AccountID, updates["token"])
-		if err != nil {
-			return c, err
-		}
-		next.SecretKey, err = secret(c.Cloudflare.SecretKey, next.SecretKey, next.AccountID == c.Cloudflare.AccountID && next.AccessKey == c.Cloudflare.AccessKey, updates["secretKey"])
-		if err != nil {
-			return c, err
-		}
-		err = next.Validate()
-		c.Cloudflare = next
-	case "wechat_ilink":
-		var next wechatilink.Config
-		if err = decode(raw, &next); err != nil {
-			return c, err
-		}
-		allowed = map[string]bool{"botToken": true}
-		next.BotToken, err = secret(c.WeChatILink.BotToken, next.BotToken, true, updates["botToken"])
-		if err != nil {
-			return c, err
-		}
-		err = next.Validate()
-		c.WeChatILink = next
-	default:
-		return c, errors.New("unknown plugin")
+	section, ok := Lookup(name)
+	if !ok {
+		return c, errUnknownPlugin
 	}
-	if err != nil {
+	if err = section.update(&c, raw, updates); err != nil {
 		return c, err
 	}
 	for name := range updates {
-		if !allowed[name] {
+		if !slices.Contains(section.Secrets, name) {
 			return c, errors.New("unknown secret field")
 		}
 	}

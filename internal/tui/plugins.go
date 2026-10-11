@@ -10,10 +10,22 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-type pluginField struct{ path, label, kind string }
+type pluginField struct {
+	Path  string `json:"path"`
+	Label string `json:"label"`
+	Kind  string `json:"kind"`
+}
+
+// pluginSection is a plugin as the service describes its configuration.
+type pluginSection struct {
+	Name   string        `json:"name"`
+	Title  string        `json:"title"`
+	Fields []pluginField `json:"fields"`
+}
 type pluginForm struct {
 	name      string
 	config    map[string]map[string]any
+	sections  []pluginSection
 	fields    []pluginField
 	index     int
 	input     textinput.Model
@@ -21,8 +33,9 @@ type pluginForm struct {
 	requestID string
 }
 type pluginsLoaded struct {
-	Config map[string]map[string]any `json:"config"`
-	Err    error
+	Config   map[string]map[string]any `json:"config"`
+	Sections []pluginSection           `json:"sections"`
+	Err      error
 }
 type pluginSaved struct{ Err error }
 
@@ -35,21 +48,19 @@ func newPluginForm() *pluginForm {
 	input.Focus()
 	return &pluginForm{input: input, index: -1}
 }
-func fieldsFor(name string) []pluginField {
-	switch name {
-	case "email":
-		return []pluginField{
-			{"enabled", "Enable email (true/false)", "bool"}, {"from", "From address", "text"},
-			{"imap.host", "IMAP host", "text"}, {"imap.port", "IMAP port (993 TLS / 143 STARTTLS)", "int"}, {"imap.security", "IMAP security (tls/starttls)", "text"}, {"imap.username", "IMAP username", "text"}, {"imap.password", "IMAP password (blank keeps existing for same host/user)", "secret"},
-			{"smtp.host", "SMTP host", "text"}, {"smtp.port", "SMTP port (465 TLS / 587 STARTTLS)", "int"}, {"smtp.security", "SMTP security (tls/starttls)", "text"}, {"smtp.username", "SMTP username", "text"}, {"smtp.password", "SMTP password (blank keeps existing for same host/user)", "secret"}}
-	case "telegram":
-		return []pluginField{{"enabled", "Enable Telegram (true/false)", "bool"}, {"token", "Bot Token (blank keeps saved token)", "secret"}, {"userId", "Allowed Telegram user ID (private messages only)", "int"}}
-	case "cloudflare":
-		return []pluginField{{"enabled", "Enable Cloudflare (true/false)", "bool"}, {"accountId", "Cloudflare account ID", "text"}, {"token", "API Token (blank keeps existing for same account)", "secret"}, {"model", "Workers AI model for /cloud ai.run", "text"}, {"embeddingModel", "Workers AI embedding model", "text"}, {"index", "Vectorize index", "text"}, {"databaseId", "D1 database ID", "text"}, {"namespaceId", "KV namespace ID", "text"}, {"bucket", "R2 bucket", "text"}, {"accessKey", "R2 S3 Access Key ID", "text"}, {"secretKey", "R2 S3 Secret Access Key (blank keeps saved value)", "secret"}}
-	case "compose":
-		return []pluginField{{"to", "Recipient(s)", "text"}, {"subject", "Subject", "text"}, {"text", "Message body (single paragraph; GUI supports multiple lines)", "text"}}
+
+// composeFields are the message the /mail form sends.
+var composeFields = []pluginField{{"to", "Recipient(s)", "text"}, {"subject", "Subject", "text"}, {"text", "Message body (single paragraph; GUI supports multiple lines)", "text"}}
+
+// choices are the plugins this form can configure: those with fields.
+func (f *pluginForm) choices() []pluginSection {
+	var list []pluginSection
+	for _, s := range f.sections {
+		if len(s.Fields) > 0 {
+			list = append(list, s)
+		}
 	}
-	return nil
+	return list
 }
 func (f *pluginForm) value(path string) (map[string]any, string) {
 	parts := strings.Split(path, ".")
@@ -75,20 +86,20 @@ func (f *pluginForm) focus() {
 		return
 	}
 	field := f.fields[f.index]
-	if field.kind == "secret" {
+	if field.Kind == "secret" {
 		f.input.EchoMode = textinput.EchoPassword
 		return
 	}
-	value, key := f.value(field.path)
+	value, key := f.value(field.Path)
 	if v := value[key]; v != nil {
 		f.input.SetValue(fmt.Sprint(v))
 	}
 }
 func (f *pluginForm) accept() error {
 	field := f.fields[f.index]
-	value, key := f.value(field.path)
+	value, key := f.value(field.Path)
 	raw := f.input.Value()
-	switch field.kind {
+	switch field.Kind {
 	case "bool":
 		v, err := strconv.ParseBool(raw)
 		if err != nil {
@@ -105,7 +116,7 @@ func (f *pluginForm) accept() error {
 		value[key] = raw
 	}
 	f.index++
-	if field.path == "enabled" && value[key] == false {
+	if field.Path == "enabled" && value[key] == false {
 		f.index = len(f.fields)
 	}
 	f.focus()
@@ -126,17 +137,12 @@ func (m model) pluginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.checkConfig()
 	}
 	if f.index < 0 {
-		switch msg.String() {
-		case "1":
-			f.name = "email"
-		case "2":
-			f.name = "telegram"
-		case "3":
-			f.name = "cloudflare"
-		default:
+		choices := f.choices()
+		n, err := strconv.Atoi(msg.String())
+		if err != nil || n < 1 || n > len(choices) {
 			return m, nil
 		}
-		f.fields = fieldsFor(f.name)
+		f.name, f.fields = choices[n-1].Name, choices[n-1].Fields
 		f.index = 0
 		f.focus()
 		return m, nil
@@ -174,20 +180,27 @@ func (m model) pluginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 func (f *pluginForm) view() string {
 	if f.index < 0 {
-		return "Connections\n\n1 Email plugin · SMTP / IMAP\n2 Telegram Bot API\n3 Cloudflare services\n\nChoose 1–3 · Esc back"
+		choices := f.choices()
+		var b strings.Builder
+		b.WriteString("Connections\n\n")
+		for i, s := range choices {
+			fmt.Fprintf(&b, "%d %s\n", i+1, s.Title)
+		}
+		fmt.Fprintf(&b, "\nChoose 1–%d · Esc back", len(choices))
+		return safe(b.String())
 	}
 	title := "Configure " + f.name
 	if f.index < len(f.fields) {
-		return title + fmt.Sprintf(" · %d/%d\n\n", f.index+1, len(f.fields)) + f.fields[f.index].label + "\n" + f.input.View() + "\n\nEnter next · Ctrl+B previous · Esc cancel"
+		return title + fmt.Sprintf(" · %d/%d\n\n", f.index+1, len(f.fields)) + f.fields[f.index].Label + "\n" + f.input.View() + "\n\nEnter next · Ctrl+B previous · Esc cancel"
 	}
 	var b strings.Builder
 	b.WriteString(title + "\n\n")
 	for _, field := range f.fields {
-		if field.kind == "secret" {
+		if field.Kind == "secret" {
 			continue
 		}
-		value, key := f.value(field.path)
-		fmt.Fprintf(&b, "%s: %v\n", field.label, value[key])
+		value, key := f.value(field.Path)
+		fmt.Fprintf(&b, "%s: %v\n", field.Label, value[key])
 	}
 	if f.saving {
 		b.WriteString("\nSaving…")

@@ -149,7 +149,7 @@ func (m model) apply(a *chat.Action) (tea.Model, tea.Cmd) {
 		m.plugin = newPluginForm()
 		m.plugin.name = "compose"
 		m.plugin.config = map[string]map[string]any{"compose": {}}
-		m.plugin.fields = fieldsFor("compose")
+		m.plugin.fields = composeFields
 		m.plugin.index = 0
 		m.plugin.requestID = chat.NewID()
 		m.plugin.focus()
