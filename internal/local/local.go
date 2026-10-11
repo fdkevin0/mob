@@ -59,20 +59,18 @@ func Credentials(c Config) (Connection, error) {
 	return Connection{"http://" + c.Addr, token}, nil
 }
 
-func Start(c Config, assets fs.FS) (*App, error)       { return start(c, assets, false) }
-func StartDaemon(c Config, assets fs.FS) (*App, error) { return start(c, assets, true) }
-func start(c Config, assets fs.FS, background bool) (*App, error) {
-	// Bind first: another local service must not have its live DB marked interrupted.
-	listener, err := net.Listen("tcp", c.Addr)
+// openStore takes the database and reads the token under the token lock, so an
+// offline mob token rotate never replaces the file between the two.
+func openStore(c Config) (*chat.Store, Connection, error) {
+	unlock, err := lockToken(c.Dir)
 	if err != nil {
-		return nil, err
+		return nil, Connection{}, err
 	}
-	store, err := chat.OpenStore(filepath.Join(c.Dir, "mob.sqlite"))
+	defer unlock()
+	store, err := chat.OpenStore(storePath(c))
 	if err != nil {
-		listener.Close()
-		return nil, err
+		return nil, Connection{}, err
 	}
-	cleanup := func() { listener.Close(); store.Close() }
 	if os.Getenv("MOB_TOKEN") == "" {
 		path := filepath.Join(c.Dir, "token")
 		file, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -83,15 +81,34 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 			e = os.Chmod(path, 0600)
 		}
 		if e != nil {
-			cleanup()
-			return nil, e
+			store.Close()
+			return nil, Connection{}, e
 		}
 	}
 	connection, err := Credentials(c)
 	if err != nil {
-		cleanup()
+		store.Close()
+		return nil, Connection{}, err
+	}
+	return store, connection, nil
+}
+
+func storePath(c Config) string { return filepath.Join(c.Dir, "mob.sqlite") }
+
+func Start(c Config, assets fs.FS) (*App, error)       { return start(c, assets, false) }
+func StartDaemon(c Config, assets fs.FS) (*App, error) { return start(c, assets, true) }
+func start(c Config, assets fs.FS, background bool) (*App, error) {
+	// Bind first: another local service must not have its live DB marked interrupted.
+	listener, err := net.Listen("tcp", c.Addr)
+	if err != nil {
 		return nil, err
 	}
+	store, connection, err := openStore(c)
+	if err != nil {
+		listener.Close()
+		return nil, err
+	}
+	cleanup := func() { listener.Close(); store.Close() }
 	connection.URL = "http://" + listener.Addr().String()
 	providersPath := ""
 	if c.Loader != nil {

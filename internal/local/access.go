@@ -9,18 +9,19 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/app"
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/gofrs/flock"
 )
 
 // RotateToken replaces the local access token. A running service switches to
 // the new token at once, so every signed-in browser, TUI and desktop window
-// must sign in again. Only when nothing listens on the service address does it
-// rewrite the token file alone.
+// must sign in again. Only when no service holds the database does it rewrite
+// the token file alone.
 func RotateToken(c Config) error {
 	if os.Getenv("MOB_TOKEN") != "" {
 		return app.ErrTokenFromEnvironment
@@ -36,32 +37,52 @@ func RotateToken(c Config) error {
 		}
 		status, err := probe(connection)
 		switch {
-		case refused(err):
-			return rotateOffline(c, connection)
-		case err != nil:
-			return fmt.Errorf("cannot reach Mob at %s to rotate its token: %w", connection.URL, err)
-		case status == http.StatusOK:
+		case err == nil && status == http.StatusOK:
 			_, err = call(connection, "/api/token/rotate", http.StatusNoContent)
 			return err
-		case status != http.StatusUnauthorized:
+		case err == nil && status == http.StatusUnauthorized:
+			continue
+		case err == nil:
 			return fmt.Errorf("Mob at %s answered HTTP %d", connection.URL, status)
 		}
+		stopped, offline := rotateOffline(c)
+		if offline != nil || stopped {
+			return offline
+		}
+		return fmt.Errorf("Mob is starting or not responding at %s; run mob token rotate again: %w", connection.URL, err)
 	}
 	return errors.New("the token file does not match the running Mob; restart Mob, then run mob token rotate again")
 }
 
-// rotateOffline rewrites the token file, then checks that no service started
-// meanwhile with the token it replaced.
-func rotateOffline(c Config, previous Connection) error {
-	next := Connection{URL: previous.URL, Token: chat.NewID() + chat.NewID()}
-	if err := writeToken(c.Dir, next.Token); err != nil {
-		return err
+// rotateOffline rewrites the token file when no service holds the database.
+// It holds the token lock that service startup takes around opening the
+// database and reading the token, so a starting service reads either the old
+// file before this runs or the new one after.
+func rotateOffline(c Config) (stopped bool, err error) {
+	unlock, err := lockToken(c.Dir)
+	if err != nil {
+		return false, err
 	}
-	status, err := probe(next)
-	if refused(err) || (err == nil && status == http.StatusOK) {
-		return nil
+	defer unlock()
+	database := flock.New(storePath(c) + ".lock")
+	held, err := database.TryLock()
+	if err != nil || !held {
+		return false, err
 	}
-	return errors.New("Mob started while its token was being replaced; run mob token rotate again")
+	defer database.Unlock()
+	return true, writeToken(c.Dir, chat.NewID()+chat.NewID())
+}
+
+// lockToken serializes token file replacement with service startup across processes.
+func lockToken(dir string) (func(), error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	lock := flock.New(filepath.Join(dir, "token.lock"))
+	if err := lock.Lock(); err != nil {
+		return nil, err
+	}
+	return func() { _ = lock.Unlock() }, nil
 }
 
 func probe(connection Connection) (int, error) {
@@ -76,13 +97,6 @@ func probe(connection Connection) (int, error) {
 	}
 	resp.Body.Close()
 	return resp.StatusCode, nil
-}
-
-// refused reports a connection refused because nothing listens on the address.
-func refused(err error) bool {
-	var errno syscall.Errno
-	// 10061 is WSAECONNREFUSED, which Windows reports instead of ECONNREFUSED.
-	return errors.As(err, &errno) && (errno == syscall.ECONNREFUSED || errno == 10061)
 }
 
 // PairingURL returns a link that signs a browser in to the running service once.
