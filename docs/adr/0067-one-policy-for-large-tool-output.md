@@ -1,4 +1,4 @@
-# 66. One policy for large tool output
+# 67. One policy for large tool output
 
 Date: 2026-10-11
 Status: Accepted
