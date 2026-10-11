@@ -1,0 +1,16 @@
+# Default: XDG_CONFIG_HOME/mob/config.yaml (platform defaults from adrg/xdg).
+# CLI flags > MOB_* environment > this file > defaults.
+addr: 127.0.0.1:8787
+base_url: https://api.deepseek.com
+model: deepseek-flash
+demo: false
+
+# Optional startup-only directory overrides:
+# data_dir: /absolute/path/to/mob-data
+# state_dir: /absolute/path/to/mob-state
+
+# Prefer MOB_API_KEY (or DEEPSEEK_API_KEY) for credentials.
+# If api_key is present, the file must be owner-readable only: chmod 600.
+# api_key: "replace-with-your-key"
+# An explicit empty api_key disables the saved database key; omitting it uses
+# the saved key only for the API origin where it was entered.
