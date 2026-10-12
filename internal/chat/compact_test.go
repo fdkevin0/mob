@@ -206,3 +206,57 @@ func TestStoredSummaryLeavesRoomForTheLatestMessage(t *testing.T) {
 		t.Fatal("the stored summary crowded out the latest message")
 	}
 }
+
+// A summary written to fit a turn is read again on the next one rather than
+// written anew.
+func TestSummaryThatFitsIsReused(t *testing.T) {
+	s, id, m := longHistory(t, 10)
+	m, _ = s.Begin(id, NewID(), strings.Repeat("y", 9000), "test/summarizing")
+	model := &summarizing{info: llm.Info{ID: "summarizing", Context: 10000, Output: 4000}, long: strings.Repeat("s", 11400)}
+	if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if summary, _ := s.Summary(id); len(summary.Text) != 11400 {
+		t.Fatalf("the summary was not stored: %d bytes", len(summary.Text))
+	}
+	before := len(model.summaries)
+	m, _ = s.Begin(id, NewID(), "continue", "test/summarizing")
+	if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(model.summaries) != before || !strings.Contains(model.requests[1].System, summaryNotice) {
+		t.Fatalf("the stored summary was written again in %d requests", len(model.summaries)-before)
+	}
+}
+
+// A call that changes after it was summarized, here an approval that expired,
+// drops the summary, so the model reads the call as it is now.
+func TestSummaryOfAChangedCallIsDropped(t *testing.T) {
+	s, id, m := turnFixture(t)
+	service := NewConversation(s, nil)
+	service.Tools.Register(echoTool("deploy", func(_ context.Context, call ToolCall) (any, error) {
+		return nil, call.RequestApproval(map[string]string{"target": "prod"})
+	}))
+	var approval string
+	err := Run(context.Background(), s, &scripted{call: llm.ToolCall{ID: "c1", Name: "deploy", Arguments: `{}`}}, service.agent(true), id, m, "", func(e Event) error {
+		if e.Kind == ApprovalRequested {
+			approval = e.ApprovalID
+		}
+		return nil
+	})
+	if err != nil || approval == "" {
+		t.Fatalf("request: %v", err)
+	}
+	if err = s.Summarize(id, Summary{Text: "deploy is waiting for approval", Through: m.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec("UPDATE approvals SET expires_at=0 WHERE id=?", approval); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ExpireApprovals(id); err != nil {
+		t.Fatal(err)
+	}
+	if summary, _ := s.Summary(id); summary.Text != "" || summary.Through != "" {
+		t.Fatalf("the summary still tells of the waiting call: %+v", summary)
+	}
+}
