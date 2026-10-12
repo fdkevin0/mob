@@ -4,7 +4,7 @@ import { useCompletion } from './useCompletion';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
-import { api, defaultURL, unauthorizedEvent, type Connection, type Conversation, type Snapshot } from './api';
+import { api, defaultURL, isPublicWeb, readOffer, unauthorizedEvent, type Connection, type Conversation, type Snapshot } from './api';
 import type { Action } from './contracts';
 
 import { Plugins } from './Plugins';
@@ -14,6 +14,7 @@ const errorText = (error: unknown) => error instanceof Error ? error.message : S
 export function App() {
   const [connection, setConnection] = useState<Connection>();
   const [token, setToken] = useState('');
+  const [address, setAddress] = useState(serviceURL);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -22,11 +23,15 @@ export function App() {
       desktop.Connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => setLoading(false));
       return;
     }
-    const code = pairingCode();
     const saved = savedToken();
-    const restore = code ? claimPairing(code) : saved ? verify({ url: defaultURL(), token: saved }) : Promise.resolve(undefined);
-    restore.then(next => { if (next) { saveToken(next.token); setConnection(next); } })
-      .catch(e => setError(current => current || errorText(e))).finally(() => setLoading(false));
+    let url = serviceURL();
+    const restore = async () => {
+      const link = signInLink();
+      if (link) { url = link.url; return claimPairing(link); }
+      return saved ? verify({ url, token: saved }) : undefined;
+    };
+    restore().then(next => { if (next) { saveConnection(next); setConnection(next); } })
+      .catch(e => setError(current => current || reachText(url, e))).finally(() => setLoading(false));
   }, []);
   // A replaced token signs this window out; the desktop reads the new token instead.
   const active = useRef<Connection | undefined>(undefined); active.current = connection;
@@ -37,23 +42,23 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
-      clearToken(rejected); setConnection(undefined); setError('The access token was replaced. Run mob open to sign in again.');
+      clearToken(rejected); setConnection(undefined); setError(`The access token was replaced. Run ${openCommand()} to sign in again.`);
     };
     window.addEventListener(unauthorizedEvent, signOut);
     return () => window.removeEventListener(unauthorizedEvent, signOut);
   }, []);
   async function connect(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
-    const next = { url: defaultURL(), token: token.trim() };
-    try { await api(next, '/config'); saveToken(next.token); setConnection(next); }
-    catch (e) { setError(errorText(e)); } finally { setLoading(false); }
+    const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
+    try { await api(next, '/config'); saveConnection(next); setConnection(next); }
+    catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
   if (connection) return <Workspace connection={connection} disconnect={() => { clearToken(); setConnection(undefined); }} />;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.go?.main?.Desktop) return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   return <main className="connect"><p className="eyebrow">MOB / LOCAL WORKSPACE</p><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>
-    <form onSubmit={connect}><label htmlFor="token">Local access token</label><input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
-      <p className="muted">Run <code>mob open</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</button></form>
+    <form onSubmit={connect}>{isPublicWeb() && <><label htmlFor="address">Mob address</label><input id="address" type="url" value={address} onChange={e => setAddress(e.target.value)} required /></>}<label htmlFor="token">Local access token</label><input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
+      <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</button></form>
     {error && <p role="alert">{error}</p>}</main>;
 }
 
@@ -72,19 +77,40 @@ function clearToken(only?: string) {
   } catch { /* nothing stored */ }
 }
 
-// pairingCode takes a one-time code from the link mob open prints, removing it from the address bar.
-function pairingCode() {
-  const code = new URLSearchParams(window.location.hash.slice(1)).get('pair');
-  if (code) window.history.replaceState(null, '', window.location.pathname + window.location.search);
-  return code;
+// serviceURL is where the API is: the page's own origin, or for the public web
+// the Mob address the last sign-in link gave.
+function serviceURL() {
+  if (!isPublicWeb()) return defaultURL();
+  try { return localStorage.getItem(urlKey) ?? 'http://127.0.0.1:8787'; } catch { return 'http://127.0.0.1:8787'; }
+}
+const urlKey = 'mob-url';
+function saveConnection(connection: Connection) {
+  saveToken(connection.token);
+  if (isPublicWeb()) try { localStorage.setItem(urlKey, connection.url); } catch { /* the address field keeps its default */ }
+}
+const openCommand = () => isPublicWeb() ? 'mob open --web' : 'mob open';
+// reachText explains a failed request; the public web adds why a browser may refuse to reach Mob.
+function reachText(url: string, error: unknown) {
+  if (!isPublicWeb() || !(error instanceof TypeError)) return errorText(error);
+  return `This page could not reach Mob at ${url}. Check that Mob is running, and allow access to apps on this device if the browser asks. Safari does not let this page reach Mob; use mob open there instead.`;
+}
+
+// signInLink takes the one-time code from the link mob open prints, removing it
+// from the address bar. The public web's link also says where Mob listens.
+function signInLink() {
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const offer = isPublicWeb() ? fragment.get('offer') : null;
+  const code = isPublicWeb() ? null : fragment.get('pair');
+  if (offer || code) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  if (offer) return readOffer(offer);
+  return code ? { url: defaultURL(), code } : undefined;
 }
 // verify checks a saved token before opening the workspace; a 401 signs out through unauthorizedEvent.
 async function verify(connection: Connection) {
   await api(connection, '/config');
   return connection;
 }
-async function claimPairing(code: string): Promise<Connection> {
-  const url = defaultURL();
+async function claimPairing({ url, code }: { url: string; code: string }): Promise<Connection> {
   const response = await fetch(`${url}/api/pairing/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }), signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
   const { token } = await response.json() as { token: string };

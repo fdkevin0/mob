@@ -17,6 +17,7 @@ func (s *Server) ReloadConfiguration(next configuration.Environment) error {
 		return errors.New("demo changes require a restart; current configuration retained")
 	}
 	s.SetToolSteps(next.MaxToolSteps)
+	s.SetWebURL(next.WebURL)
 	if s.MCP.Configure(next.MCPServers) {
 		if err := s.extensions.Reload("mcp"); err != nil {
 			return err

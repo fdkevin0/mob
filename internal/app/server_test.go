@@ -142,6 +142,46 @@ func TestDesktopOrigin(t *testing.T) {
 	}
 }
 
+func TestWebOrigin(t *testing.T) {
+	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	handler := server.Handler(nil)
+	send := func(method, origin string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "http://127.0.0.1:8787/api/conversations", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Authorization", "Bearer "+server.Token())
+		req.Header.Set("Access-Control-Request-Private-Network", "true")
+		r := httptest.NewRecorder()
+		handler.ServeHTTP(r, req)
+		return r
+	}
+	if r := send("GET", "https://mob.example"); r.Code != http.StatusForbidden {
+		t.Fatalf("public origin allowed before web_url: %d", r.Code)
+	}
+	server.SetWebURL("https://mob.example/app/")
+	r := send("OPTIONS", "https://mob.example")
+	if r.Code != http.StatusNoContent || r.Header().Get("Access-Control-Allow-Origin") != "https://mob.example" || r.Header().Get("Access-Control-Allow-Private-Network") != "true" {
+		t.Fatalf("preflight: %d %v", r.Code, r.Header())
+	}
+	if r = send("GET", "https://mob.example"); r.Code != http.StatusOK {
+		t.Fatalf("public origin with token: %d", r.Code)
+	}
+	for _, origin := range []string{"https://evil.example", "https://mob.example.evil.example", "http://mob.example"} {
+		if r = send("GET", origin); r.Code != http.StatusForbidden {
+			t.Fatalf("%s allowed: %d", origin, r.Code)
+		}
+	}
+	server.SetWebURL("")
+	if r = send("GET", "https://mob.example"); r.Code != http.StatusForbidden {
+		t.Fatalf("public origin allowed after web_url emptied: %d", r.Code)
+	}
+}
+
 func TestCommandRoutes(t *testing.T) {
 	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
 	if err != nil {

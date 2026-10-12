@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -28,7 +29,9 @@ type Environment struct {
 	MaxToolSteps int
 	// MCPServers are the MCP servers whose tools the model may use.
 	MCPServers mcp.Servers
-	Loader     *Loader
+	// WebURL is the public web UI mob open --web signs in to; empty turns it off.
+	WebURL string
+	Loader *Loader
 }
 
 type settings struct {
@@ -40,6 +43,7 @@ type settings struct {
 	// MaxToolSteps is max_tool_steps, 1 to MaxToolSteps.
 	MaxToolSteps int         `mapstructure:"max_tool_steps"`
 	MCPServers   mcp.Servers `mapstructure:"mcp_servers"`
+	WebURL       string      `mapstructure:"web_url"`
 }
 
 // MaxToolSteps is the most max_tool_steps may allow; DefaultToolSteps is used
@@ -48,6 +52,42 @@ const (
 	MaxToolSteps     = 100
 	DefaultToolSteps = 20
 )
+
+// DefaultWebURL is the public web UI deployed to Cloudflare Workers from this
+// repository (wrangler.jsonc). It holds no data: the page talks to the Mob
+// running on the computer whose mob open --web link it was given.
+const DefaultWebURL = "https://mob.fdkevin.cloud"
+
+// WebOrigin returns the origin a web_url's pages send, or "" when it is empty.
+// The page must be served over https, or over http from a loopback host while
+// developing it.
+func WebOrigin(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	invalid := errors.New("web_url must be an https URL without credentials, query or fragment")
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
+		return "", invalid
+	}
+	scheme, host := strings.ToLower(u.Scheme), strings.ToLower(u.Hostname())
+	ip := net.ParseIP(host)
+	switch {
+	case scheme == "https":
+	case scheme == "http" && (host == "localhost" || ip != nil && ip.IsLoopback()):
+	default:
+		return "", invalid
+	}
+	switch port := u.Port(); {
+	case port == "" || scheme == "https" && port == "443" || scheme == "http" && port == "80":
+		if ip != nil && ip.To4() == nil {
+			host = "[" + host + "]"
+		}
+		return scheme + "://" + host, nil
+	default:
+		return scheme + "://" + net.JoinHostPort(host, port), nil
+	}
+}
 
 // Loader holds immutable startup flags. Each read uses a fresh Viper instance;
 // Viper itself is never shared between the watcher and request goroutines.
@@ -115,6 +155,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	v.SetDefault("addr", "127.0.0.1:8787")
 	v.SetDefault("demo", false)
 	v.SetDefault("max_tool_steps", DefaultToolSteps)
+	v.SetDefault("web_url", DefaultWebURL)
 	v.SetDefault("sandbox.enabled", false)
 	v.SetDefault("sandbox.runtime", "")
 	v.SetDefault("sandbox.image", sandbox.DefaultImage)
@@ -144,6 +185,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 		}
 	}
 	if err := v.BindEnv("max_tool_steps", "MOB_MAX_TOOL_STEPS"); err != nil {
+		return Environment{}, err
+	}
+	if err := v.BindEnv("web_url", "MOB_WEB_URL"); err != nil {
 		return Environment{}, err
 	}
 	for _, key := range []string{"data_dir", "state_dir", "addr", "demo"} {
@@ -178,6 +222,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if data.MaxToolSteps < 1 || data.MaxToolSteps > MaxToolSteps {
 		return fail("max_tool_steps must be 1 to " + strconv.Itoa(MaxToolSteps))
 	}
+	if _, err := WebOrigin(data.WebURL); err != nil {
+		return Environment{}, err
+	}
 	if err := data.Sandbox.Validate(); err != nil {
 		return Environment{}, err
 	}
@@ -192,7 +239,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, Loader: l}, nil
+	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, WebURL: data.WebURL, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

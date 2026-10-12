@@ -1,0 +1,15 @@
+// The public web UI at https://mob.fdkevin.cloud: static assets only, no Worker
+// code and no data. The page talks to the Mob a `mob open --web` link points it
+// at. Cloudflare Workers Builds deploys it from this repository with build
+// command `bun install --frozen-lockfile && bun run build:web` and deploy
+// command `npx wrangler deploy`.
+{
+	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+	"name": "mob",
+	"compatibility_date": "2026-10-01",
+	"assets": {
+		"directory": "./webapp/dist-public",
+		"not_found_handling": "single-page-application"
+	},
+	"routes": [{ "pattern": "mob.fdkevin.cloud", "custom_domain": true }]
+}

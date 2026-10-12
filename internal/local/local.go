@@ -126,6 +126,7 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 		server.PersistToken = func(token string) error { return writeToken(c.Dir, token) }
 	}
 	server.SetToolSteps(c.MaxToolSteps)
+	server.SetWebURL(c.WebURL)
 	server.MCP.Configure(c.MCPServers)
 	if err := server.ApplySandbox(c.Sandbox, c.Dir); err != nil {
 		cleanup()

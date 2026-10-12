@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 type Server struct {
@@ -40,6 +41,8 @@ type Server struct {
 	// MCP connects to the configured MCP servers.
 	MCP    *mcp.Hub
 	access access
+	// webOrigin is the public web UI's origin, which may call the API with a token.
+	webOrigin atomic.Value
 }
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
@@ -135,7 +138,7 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		origin := r.Header.Get("Origin")
-		if !allowedOrigin(origin, r.Host) {
+		if !allowedOrigin(origin, r.Host) && (origin == "" || origin != s.webOrigin.Load()) {
 			http.Error(w, "origin denied", http.StatusForbidden)
 			return
 		}
@@ -146,6 +149,10 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		if r.Method == "OPTIONS" {
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			// Chrome asks before a public page may reach a loopback address.
+			if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+				w.Header().Set("Access-Control-Allow-Private-Network", "true")
+			}
 			w.WriteHeader(204)
 			return
 		}
@@ -174,6 +181,14 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+// SetWebURL lets the pages of the public web UI at raw call the API; empty
+// allows none. The pages still need the access token, which only a mob open
+// --web link hands them.
+func (s *Server) SetWebURL(raw string) {
+	origin, _ := configuration.WebOrigin(raw)
+	s.webOrigin.Store(origin)
 }
 
 func allowedOrigin(origin, host string) bool {
