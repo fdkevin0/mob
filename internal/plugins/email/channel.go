@@ -159,11 +159,7 @@ func (m *Mailer) check(ctx context.Context, c Config, cl *client.Client, key str
 	if err != nil {
 		return at, errors.New("IMAP: cannot search INBOX")
 	}
-	for _, uid := range uids {
-		// A range ending in * always includes the newest message.
-		if uid <= at.UID {
-			continue
-		}
+	for _, uid := range newer(uids, at.UID) {
 		raw, err := fetch(cl, uid)
 		if err != nil {
 			return at, err
@@ -188,23 +184,44 @@ func (m *Mailer) check(ctx context.Context, c Config, cl *client.Client, key str
 	return at, nil
 }
 
+// newer is the UIDs after last, oldest first. SEARCH may answer in any
+// order, and the cursor must never pass a message not yet handled; a range
+// ending in * always includes the newest message, even an old one.
+func newer(uids []uint32, last uint32) []uint32 {
+	uids = slices.DeleteFunc(slices.Clone(uids), func(uid uint32) bool { return uid <= last })
+	slices.Sort(uids)
+	return slices.Compact(uids)
+}
+
+// maxMail is the largest message the channel reads; larger ones are skipped.
+const maxMail = 2 << 20
+
 // fetch reads a whole message without marking it read, or nil for one too
-// large to answer.
+// large to answer. Its size is asked for first, and the body fetch is
+// bounded, so a large message is never downloaded.
 func fetch(cl *client.Client, uid uint32) ([]byte, error) {
 	set := new(imap.SeqSet)
 	set.AddNum(uid)
-	section := &imap.BodySectionName{Peek: true}
+	sizes := make(chan *imap.Message, 1)
+	if err := cl.UidFetch(set, []imap.FetchItem{imap.FetchUid, imap.FetchRFC822Size}, sizes); err != nil {
+		return nil, errors.New("IMAP: could not read new mail")
+	}
+	small := false
+	for msg := range sizes {
+		small = msg.Size > 0 && msg.Size <= maxMail
+	}
+	if !small {
+		return nil, nil
+	}
+	section := &imap.BodySectionName{Peek: true, Partial: []int{0, maxMail}}
 	ch := make(chan *imap.Message, 1)
-	if err := cl.UidFetch(set, []imap.FetchItem{imap.FetchUid, imap.FetchRFC822Size, section.FetchItem()}, ch); err != nil {
+	if err := cl.UidFetch(set, []imap.FetchItem{imap.FetchUid, section.FetchItem()}, ch); err != nil {
 		return nil, errors.New("IMAP: could not read new mail")
 	}
 	var raw []byte
 	for msg := range ch {
-		if msg.Size > 2<<20 {
-			continue
-		}
 		if body := msg.GetBody(section); body != nil {
-			raw, _ = io.ReadAll(io.LimitReader(body, 2<<20))
+			raw, _ = io.ReadAll(io.LimitReader(body, maxMail))
 		}
 	}
 	return raw, nil

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -186,6 +187,7 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 		t.Fatal("answered mail that was already in INBOX")
 	}
 	deliver(ownerMail("From: Eve <eve@example.org>\r\nMessage-ID: <eve@example.org>\r\n", "hi"))
+	deliver(ownerMail("Message-ID: <big@example.org>\r\nSubject: Large\r\n", strings.Repeat("x", 3<<20)))
 	deliver(ownerMail("Message-ID: <q1@example.org>\r\nSubject: Question\r\n", "Hello there"))
 	run(1)
 	first := reply()
@@ -193,7 +195,7 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 		t.Fatalf("first reply: %+v", first)
 	}
 	if len(replies) != 0 {
-		t.Fatal("answered another sender")
+		t.Fatal("answered another sender or mail over the size limit")
 	}
 	deliver(ownerMail("Message-ID: <q2@example.org>\r\nSubject: Re: Question\r\nIn-Reply-To: <reply@example.org>\r\nReferences: <q1@example.org> <reply@example.org>\r\n", "/new\r\n\r\nOn Monday Mob wrote:\r\n> hi"))
 	run(1)
@@ -206,5 +208,13 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 	}
 	if list, _ := store.List(); len(list) != 2 {
 		t.Fatalf("%d conversations, want the first and the one /new started", len(list))
+	}
+}
+
+func TestNewerHandlesUIDsOldestFirst(t *testing.T) {
+	// SEARCH may answer in any order; the cursor must not pass UID 11
+	// before it is handled.
+	if got := newer([]uint32{12, 10, 11, 12, 9}, 10); !slices.Equal(got, []uint32{11, 12}) {
+		t.Fatalf("newer: %v", got)
 	}
 }
