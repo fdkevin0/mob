@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DefaultChatTransport, isToolUIPart, readUIMessageStream, validateUIMessages, type UIMessage } from 'ai';
+import { ConversationClient, MobClient, type ChatMessage } from '@mob/client';
 
 const dir = await mkdtemp(join(tmpdir(), 'mob-contract-'));
 const binary = join(dir, 'mob');
@@ -38,6 +39,99 @@ async function turn(id: string, body: object) {
   let final: UIMessage | undefined;
   for await (const message of readUIMessageStream({ stream, terminateOnError: true })) final = message;
   return final;
+}
+
+async function until(check: () => boolean | Promise<boolean>, description: string) {
+  const deadline = Date.now() + 12_000;
+  while (!await check()) {
+    assert(Date.now() < deadline, `Timed out: ${description}`);
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+}
+function textOf(messages: ChatMessage[]) {
+  return messages.flatMap(m => m.parts).filter(p => p.type === 'text').map(p => p.text).join('\n');
+}
+
+async function sharedClients() {
+  const client = new MobClient({ url, token });
+  const { id } = await client.createConversation();
+  let web = new ConversationClient({ client, id, initial: await client.openConversation(id), clientType: 'web' });
+  let detachWeb = web.start();
+  let detachTui: (() => void) | undefined;
+  let follows = 0;
+  try {
+    await web.submit('/list');
+    assert(web.getSnapshot().commandResult?.includes(id), 'web command output omitted the conversation');
+    const prompt = '共同阅读 中文\n'.repeat(160).trim();
+    const sending = web.submit(prompt);
+    await until(async () => (await client.openConversation(id)).active, 'service-owned turn starts');
+    const tuiClient = new MobClient({ url, token }, { fetch: async (input, init) => {
+      if (String(input).endsWith(`/chat/${id}/stream`) && ++follows === 1) throw new TypeError('simulated lost connection');
+      return fetch(input, init);
+    } });
+    const tui = new ConversationClient({ client: tuiClient, id, initial: await client.openConversation(id), clientType: 'tui' });
+    detachTui = tui.start();
+    await until(() => tui.getSnapshot().failure === 'simulated lost connection', 'tui surfaces follow failure');
+    await until(() => follows >= 2 && textOf(tui.getSnapshot().messages).includes('Received:'), 'tui reconnects to the same live turn');
+    assert(web.getSnapshot().streaming && tui.getSnapshot().busy, 'both clients must read the same live turn');
+    detachWeb();
+    await sending;
+    assert((await client.openConversation(id)).active, 'detaching Web must not stop the turn');
+    web = new ConversationClient({ client, id, initial: await client.openConversation(id), clientType: 'web' });
+    detachWeb = web.start();
+    const expected = `[Demo mode — no model request]\n\nReceived: ${prompt}\n\nUse /remember a fact to exercise persistent approval.`;
+    await until(() => !web.getSnapshot().busy && !tui.getSnapshot().busy && textOf(web.getSnapshot().messages).includes(expected) && textOf(tui.getSnapshot().messages).includes(expected), 'both readers receive complete replayed text');
+    const saved = await client.openConversation(id);
+    assert.equal(saved.messages.filter(m => m.role === 'user').length, 1, 'reconnecting must not submit the prompt twice');
+    assert.equal(saved.messages.filter(m => m.role === 'assistant').length, 1, 'replaying must not duplicate the reply');
+    assert.equal(saved.messages.at(-1)?.parts.filter(p => p.type === 'text').map(p => p.text).join(''), expected);
+    assert.deepEqual(web.getSnapshot().messages.map(m => m.id), saved.messages.map(m => m.id));
+    assert.deepEqual(tui.getSnapshot().messages.map(m => m.id), saved.messages.map(m => m.id));
+    await tui.submit('/list');
+    assert(tui.getSnapshot().commandResult?.includes(id), 'tui command output omitted the conversation');
+    assert.deepEqual((await client.complete(id, '/model d', 'tui')).map(s => s.value), ['default', 'demo/echo']);
+
+    await tui.submit('/remember shared-approved-fact');
+    const pending = (await client.openConversation(id)).messages.flatMap(m => m.parts).find(p => isToolUIPart(p) && p.state === 'approval-requested');
+    assert(pending && isToolUIPart(pending) && pending.state === 'approval-requested');
+    await web.submit(`/approve ${pending.approval.id} conversation`);
+    let afterApproval = await client.openConversation(id);
+    assert.equal(afterApproval.messages.flatMap(m => m.parts).filter(p => isToolUIPart(p) && p.toolCallId === pending.toolCallId && p.state === 'output-available').length, 1, 'approved effect has exactly one result');
+    await until(() => !tui.getSnapshot().busy, 'tui is idle before stale approval');
+    await tui.decide(pending.approval.id, true);
+    assert(tui.getSnapshot().failure.includes('already decided'), `duplicate decision must be refused: ${tui.getSnapshot().failure}`);
+    assert.deepEqual((await client.openConversation(id)).messages, afterApproval.messages, 'duplicate decision must not change history or rerun the effect');
+
+    await web.submit('/remember covered-by-conversation-grant');
+    afterApproval = await client.openConversation(id);
+    const covered = afterApproval.messages.flatMap(m => m.parts).filter(isToolUIPart).find(p => (p.input as { fact?: string })?.fact === 'covered-by-conversation-grant');
+    assert(covered?.state === 'output-available', 'conversation grant must run the covered call without asking again');
+    await web.submit('/revoke all');
+    await web.submit('/remember shared-denied-fact');
+    const denied = (await client.openConversation(id)).messages.flatMap(m => m.parts).find(p => isToolUIPart(p) && p.state === 'approval-requested');
+    assert(denied && isToolUIPart(denied) && denied.state === 'approval-requested');
+    await until(() => !tui.getSnapshot().busy, 'tui ready to deny');
+    await tui.submit(`/deny ${denied.approval.id} do not retain this`);
+    const denial = await client.openConversation(id);
+    assert(denial.messages.flatMap(m => m.parts).some(p => isToolUIPart(p) && p.toolCallId === denied.toolCallId && p.state === 'output-denied'));
+    assert(!denial.messages.flatMap(m => m.parts).some(p => isToolUIPart(p) && p.toolCallId === denied.toolCallId && p.state === 'output-available'), 'denied effect must not run');
+    assert(textOf(denial.messages).includes('do not retain this'), 'denial reason must reach the continuation');
+
+    await until(() => !web.getSnapshot().busy, 'web ready for cancellation scenario');
+    const stopping = web.submit('stop-target '.repeat(180));
+    await until(() => web.getSnapshot().streaming && textOf(web.getSnapshot().messages).includes('Received: stop-target'), 'partial reply before Stop');
+    await tui.cancel();
+    await stopping;
+    await until(async () => !(await client.openConversation(id)).active, 'service turn stops');
+    const stopped = await client.openConversation(id);
+    assert.equal(stopped.messages.at(-1)?.metadata?.status, 'cancelled');
+    assert(textOf([stopped.messages.at(-1)!]).length < 'stop-target '.repeat(180).length, 'Stop must leave a partial, not completed, reply');
+    await until(() => !web.getSnapshot().busy && !tui.getSnapshot().busy, 'both clients observe Stop');
+    await validateUIMessages({ messages: stopped.messages });
+    console.log('Shared client ↔ Go: web/tui commands, Chinese multiline text, concurrent readers, reconnect/detach, history, approval scope, stale decision, denial and cross-client Stop passed.');
+  } finally {
+    detachWeb(); detachTui?.();
+  }
 }
 try {
   await writeFile(join(dir, 'config.yaml'), '{}\n', { mode: 0o600 });
@@ -75,6 +169,7 @@ try {
   const restored = await (await request(`/conversations/${id}`)).json();
   assert.deepEqual(restored.messages, snapshot.messages, 'history changed across restart');
   console.log('Go ↔ AI SDK UI: text, /models, approvals, denial, deduplication, validation and restart passed.');
+  await sharedClients();
 } finally {
   await stop(); await rm(dir, { recursive: true, force: true });
 }
