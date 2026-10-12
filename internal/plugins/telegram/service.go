@@ -24,6 +24,10 @@ type Service struct {
 	mu     sync.Mutex
 	// stops stops the turn each draft shows, for a tap on its stop button.
 	stops map[int64]func()
+	// callbacks holds the commands of buttons too long for Telegram to
+	// carry, by the token each button carries instead; tokens numbers them.
+	callbacks map[string]string
+	tokens    int64
 	// edits orders changes to approval buttons; decided holds, per message,
 	// the buttons first seen and the approvals decided since.
 	edits   sync.Mutex
@@ -148,7 +152,11 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 				}
 				m := update.Message
 				if m != nil && m.From.ID == c.UserID && m.Chat.ID == c.UserID && m.Chat.Type == "private" {
-					if m.Text == "" && m.Caption != "" {
+					if m.Tap {
+						if m.Text = s.command(m.Text); m.Text == "" {
+							replies.Go(func() { _ = c.Send(ctx, m.Chat.ID, expired, menuButtons...) })
+						}
+					} else if m.Text == "" && m.Caption != "" {
 						m.Text = m.Caption
 					}
 					if m.Text == "" {
@@ -236,7 +244,7 @@ func (s *Service) done(draft int64) {
 const mediaUnsupported = "Mob reads only text here for now; send photos, files and voice notes from the desktop app, or describe them in a message."
 
 var texts = channel.Texts{
-	Help: "Mob is connected. Send a message to chat. This computer must remain running.",
+	Help: "Mob is connected. Send a message to chat, or tap a button below; every command is also in the / menu. This computer must remain running.",
 	Approvals: func(approvals []chat.PendingApproval, pending int) string {
 		var b strings.Builder
 		for _, a := range approvals {
@@ -244,7 +252,7 @@ var texts = channel.Texts{
 		}
 		return b.String() + "\n\n" + decideHint(pending)
 	},
-	Busy:    "Still working on your last message. Send /stop to stop it, then send this again.",
+	Busy:    "Still working on your last message. Tap Stop to stop it, then send this again.",
 	Stopped: "Stopped.",
 	Stale:   func(id string) string { return "Approval " + id + " is unknown, expired, or already decided." },
 	Failed: func(err error) string {
@@ -321,8 +329,10 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 			started(stop)
 		}
 	}
-	answer := func(ctx context.Context) (channel.Reply, error) {
+	var rows [][]button
+	answer := func(ctx context.Context) (r channel.Reply, err error) {
 		defer s.done(draft)
+		defer func() { r, rows = s.present(ctx, c, botID, m.Text, r) }()
 		// The placeholder's requests end with the answer, so that none holds
 		// back the reply.
 		placeholding, cancel := context.WithCancel(ctx)
@@ -332,9 +342,14 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 		return b.Answer(ctx, m)
 	}
 	return b.Finish(ctx, m.ID, answer, func(ctx context.Context, r channel.Reply) error {
-		err := c.Send(ctx, u.Message.Chat.ID, r.Text, r.Approvals...)
-		if r.Settled != "" && u.Message.Buttons != nil {
-			s.settle(ctx, c, *u.Message.Buttons, r.Settled)
+		err := c.Send(ctx, u.Message.Chat.ID, r.Text, append(buttons(r.Approvals), rows...)...)
+		switch tap := u.Message.Buttons; {
+		case tap == nil:
+		case r.Settled != "":
+			s.settle(ctx, c, *tap, r.Settled)
+		case picked(u.Message.Text) && r.Text != texts.Busy:
+			// Best effort: a stale choice only does what it says again.
+			_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{"chat_id": tap.Chat, "message_id": tap.Message, "reply_markup": keyboard{Rows: [][]button{}}}, nil)
 		}
 		return err
 	})
@@ -395,13 +410,15 @@ func (s *Service) Reply(ctx context.Context, c Config, botID, requestID, text st
 func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text string) (channel.Reply, error) {
 	m := message(c, botID, Update{Message: &Message{Text: text}})
 	m.ID = requestID
-	return s.bridge().Answer(ctx, m)
+	r, err := s.bridge().Answer(ctx, m)
+	r, _ = s.present(ctx, c, botID, m.Text, r)
+	return r, err
 }
 
 // decideHint tells the owner how to answer, given how many requests are pending.
 func decideHint(pending int) string {
 	if pending > 1 {
-		return "Tap a button, or reply /approve ID, or /deny ID with an optional reason. Always allow stops asking for calls like this; /grants lists them."
+		return "Tap a button to decide, or reply /deny ID with a reason. Always allow stops asking for calls like this; Remembered approvals in the menu lists them."
 	}
-	return "Tap a button, or reply /approve, or /deny with an optional reason. Always allow stops asking for calls like this; /grants lists them."
+	return "Tap a button to decide, or reply /deny with a reason. Always allow stops asking for calls like this; Remembered approvals in the menu lists them."
 }

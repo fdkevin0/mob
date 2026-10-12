@@ -59,7 +59,7 @@ commands, approvals, delivery records and replies behave the same everywhere.
   attempt.
 - Polling continues while a reply is written: each message is answered in its
   own goroutine, in the order it arrived. A message sent while the
-  conversation's turn runs gets a busy reply naming `/stop`, so it is never
+  conversation's turn runs gets a busy reply with a Stop button, so it is never
   queued behind the turn.
 - After a second, a reply in progress shows as a "Thinking…" draft
   (`sendMessageDraft`) with Telegram's stop button, renewed until the reply is
@@ -78,6 +78,22 @@ commands, approvals, delivery records and replies behave the same everywhere.
   `/approve` or `/deny` message it stands for, and its row is removed once that
   approval is decided or found stale. A tap while another turn runs leaves the
   row in place.
+- Buttons stand in for typing commands. A tap on any button is handled as the
+  command its data holds, as if the owner had typed it; a command longer than
+  Telegram's 64-byte limit rides on a short token kept in memory, and a tap on
+  a token from before a restart answers that the button expired, with the
+  menu.
+  - `/start` and `/help` answer with a short note and a menu: New
+    conversation, Conversations, Model, Compact and Remembered approvals. The
+    command list stays in the bot's `/` menu.
+  - Conversations (`/list`, or `/open` alone) shows the 20 most recent
+    conversations as buttons, the current one marked ✓, plus New
+    conversation; a tap switches the bot to that conversation and says so.
+  - `/model` and `/models` offer the models the registry suggests (and
+    following the default) as buttons; `/grants` and `/revoke` alone offer
+    Forget buttons for each remembered approval and for all of them.
+  - A tap on one of a list's choices removes that list's buttons, since the
+    list no longer stands.
 - The bot's `/` menu comes from the [command registry](commands.md).
 
 ## WeChat iLink

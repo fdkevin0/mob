@@ -34,7 +34,7 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 		}
 		return got
 	}
-	if help := reply("/start"); !strings.Contains(help, "Mob is connected") || !strings.Contains(help, "/approve [ID]") {
+	if help := reply("/start"); help != texts.Help {
 		t.Fatalf("/start: %s", help)
 	}
 	if list, _ := store.List(); len(list) != 0 {
@@ -49,7 +49,7 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 	}
 	answer, err := service.reply(context.Background(), config, "bot", chat.NewID(), "/remember 简洁")
 	got, approvals := answer.Text, answer.Approvals
-	if err != nil || !strings.Contains(got, "**Approval needed**\n```\nremember\nfact: 简洁\n```") || !strings.Contains(got, "reply /approve, or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
+	if err != nil || !strings.Contains(got, "**Approval needed**\n```\nremember\nfact: 简洁\n```") || !strings.Contains(got, "Tap a button to decide, or reply /deny with a reason") || len(approvals) != 1 || approvals[0].Tool != "remember" {
 		t.Fatalf("approval request: %s %+v %v", got, approvals, err)
 	}
 	if got := reply("/approve"); !strings.Contains(got, "approved remember and it ran") {
@@ -102,7 +102,7 @@ func TestApprovalButtonsAndTaps(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
 	})}
-	if err := c.Send(context.Background(), 7, strings.Repeat("x", 3000)+"\n\n"+strings.Repeat("y", 3000), chat.PendingApproval{ID: a, Tool: "email_send"}, chat.PendingApproval{ID: b, Tool: "remember"}); err != nil {
+	if err := c.Send(context.Background(), 7, strings.Repeat("x", 3000)+"\n\n"+strings.Repeat("y", 3000), buttons([]chat.PendingApproval{{ID: a, Tool: "email_send"}, {ID: b, Tool: "remember"}})...); err != nil {
 		t.Fatal(err)
 	}
 	if len(sent) != 2 || sent[0]["reply_markup"] != nil {
@@ -122,16 +122,19 @@ func TestApprovalButtonsAndTaps(t *testing.T) {
 		}
 		return u
 	}
-	if m := tap(7, "/approve "+a).Message; m == nil || m.Text != "/approve "+a || m.From.ID != 7 || m.Chat.ID != 7 || m.Chat.Type != "private" {
+	if m := tap(7, "/approve "+a).Message; m == nil || m.Text != "/approve "+a || !m.Tap || m.From.ID != 7 || m.Chat.ID != 7 || m.Chat.Type != "private" {
 		t.Fatalf("owner tap: %+v", m)
 	}
 	if m := tap(8, "/approve "+a).Message; m != nil {
 		t.Fatalf("a stranger's tap became a message: %+v", m)
 	}
-	if m := tap(7, "/new").Message; m != nil {
-		t.Fatalf("a tap became another command: %+v", m)
+	if m := tap(7, "/new").Message; m == nil || m.Text != "/new" || !m.Tap {
+		t.Fatalf("a menu tap: %+v", m)
 	}
-	if len(answered) != 2 {
+	if m := tap(7, "hello").Message; m != nil {
+		t.Fatalf("a tap on data that is no command became a message: %+v", m)
+	}
+	if len(answered) != 3 {
 		t.Fatalf("owner taps answered: %v", answered)
 	}
 }
@@ -172,7 +175,7 @@ func TestPublishCommandsFromRegistry(t *testing.T) {
 			t.Fatalf("%s has no description", c.Command)
 		}
 	}
-	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models compact new approve deny grants revoke stop help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
+	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models compact new list open approve deny grants revoke stop help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
 		t.Fatalf("published %s %v %+v", path, names, sent.Scope)
 	}
 }
