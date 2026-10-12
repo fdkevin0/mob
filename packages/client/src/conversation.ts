@@ -246,6 +246,14 @@ export class ConversationClient {
 		}
 	};
 
+	// Continue is an explicit new turn; retain any draft already in the editor.
+	proceed = async () => {
+		if (!this.active || this.state.busy) return;
+		this.generation++;
+		this.chat.clearError();
+		await this.send('Continue');
+	};
+
 	private async send(text: string) {
 		this.submittedText = text;
 		await this.chat.sendMessage({ text });
