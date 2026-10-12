@@ -11,8 +11,21 @@ servers. Each server runs in its own process; Mob never loads code into itself.
   stdin and stdout, or
 - a Streamable HTTP `url` (with `headers`).
 
-The file is owner-only and reloads live; a change reconnects the servers. Names
-use a-z, 0-9, `-` and single `_`, since tool names carry them.
+```yaml
+mcp_servers:
+  github:                       # tools appear as mcp__github__<tool>
+    command: npx
+    args: [-y, "@modelcontextprotocol/server-github"]
+    env: [GITHUB_PERSONAL_ACCESS_TOKEN=...]
+  docs:
+    url: https://example.com/mcp
+    headers:
+      Authorization: Bearer ...
+```
+
+Keep `config.yaml` owner-only (`chmod 600`) when it holds keys. It reloads live;
+a change reconnects the servers. Names use a-z, 0-9, `-` and single `_`, since
+tool names carry them.
 
 ## Behaviour
 

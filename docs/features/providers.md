@@ -3,6 +3,42 @@
 Users add any number of model providers and switch models inside a conversation
 with `/model` and `/models`. There is no automatic routing between models.
 
+## Using it
+
+With no `providers.json`, Mob uses OpenCode Zen Free
+(`opencode/mimo-v2.6-flash-free`) with OpenCode's anonymous public key, so a
+first run needs no setup. That free model may use collected data to improve the
+model; see [OpenCode Zen privacy](https://docs.opencode.ai/docs/zen/#privacy).
+Conversations and saved facts are sent to the chosen model's provider.
+
+```bash
+mob provider add deepseek --key-stdin        # presets need only a key
+mob provider add work --chat https://relay.example/v1 --key-stdin --models gpt-6,claude-sonnet-5
+mob provider add ollama                      # local servers need no key
+mob provider add magpie                      # the magpie gateway on this machine
+mob provider ls                              # keys shown masked
+mob provider rm work
+```
+
+Preset IDs: `opencode`, `openai`, `anthropic`, `deepseek`, `google`,
+`openrouter`, `moonshot`, `zhipu`, `ollama`, `lmstudio`, `magpie`. Any other
+OpenAI- or Anthropic-compatible endpoint is added with `--chat` or
+`--anthropic`.
+
+In any conversation, in every client and channel:
+
+- `/models [FILTER]` lists the models of every provider, with what each can do.
+- `/model NAME` switches this conversation. NAME may be `provider/model`, a model
+  ID, or a unique fragment (`/model sonnet`); `:low`/`:high`… picks a reasoning
+  level.
+- `/model default NAME` sets the default for conversations without their own.
+
+[magpie](https://github.com/yetone/magpie) serves every provider signed in to it
+from a gateway on this machine. `mob provider add magpie` reads the port from
+magpie's `settings.json` (read only), checks that magpie answers there, and
+lists the models turned on in magpie. Calls carry the key `magpie-mob`, so
+magpie's usage and routing rules see them as Mob's.
+
 ## Concepts
 
 | Concept | Answers | Lives in |
@@ -19,14 +55,15 @@ with `/model` and `/models`. There is no automatic routing between models.
   never an empty list. Keys are never read from environment variables.
 - The API and CLI show keys masked. The running service reloads the file when
   it changes; a rejected change leaves the providers in effect unchanged.
-- `mob provider add|ls|rm` edits it directly. Pointing a provider at another URL
-  requires its key again, so credentials never follow a provider to a new host.
+- `mob provider add|ls|rm` edits it directly; the service and CLI lock the file
+  while changing it. Pointing a provider at another URL requires its key again
+  (`--key-stdin`) or `--clear-key`, and `--clear-headers` when it has saved
+  headers, so credentials never follow a provider to a new host.
 
 ## Presets and model lists
 
-- **Presets** are curated (OpenCode Zen, OpenAI, Anthropic, DeepSeek, Gemini,
-  OpenRouter, Kimi, GLM, Ollama, LM Studio, magpie): models.dev has no key pages,
-  regional or multi-protocol endpoints. Any other vendor is added by URL.
+- **Presets** are curated because models.dev has no key pages, regional or
+  multi-protocol endpoints.
 - **Vendor quirks** belong to presets (OpenCode's client headers and free-tier
   tool stubs), never to URL sniffing.
 - **Model lists** come from the vendor's `/models` (or `modelsURL`), else the
@@ -42,8 +79,8 @@ with `/model` and `/models`. There is no automatic routing between models.
   usage, priced from the catalog.
 - `/model` and `/models` are answered by the service for every client and
   channel, stored in the transcript as `kind='command'` and never sent to a
-  model. Only the owner may switch: the local UI, the Telegram bot's user, and
-  the first allowed WeChat user.
+  model. Only the owner may switch: the local UI, the Telegram bot's user, the
+  first allowed WeChat user and email's owner address.
 - History is replayed as real tool calls and results, so one model can continue
   another's work. Reasoning from earlier turns is not replayed; it belongs to
   its model. How history is fitted to the model is in

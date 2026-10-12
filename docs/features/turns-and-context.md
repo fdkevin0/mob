@@ -28,9 +28,10 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   builds the reply from fresh state and replaces the saved draft; one reconnect
   is in flight at a time, polling pauses until it ends, and a failed attempt
   waits for the next poll. The terminal follows the same way.
-- The log is not persisted. The saved message is the result once a turn ends,
-  and a service restart cancels running turns; requests in progress are marked
-  interrupted, not rerun.
+- The reply is saved about once a second while it streams, so a forced
+  termination can lose the last second. The event log is not persisted: the
+  saved message is the result once a turn ends, and a service restart marks
+  turns in progress interrupted rather than rerunning them.
 
 ## Limits follow the model
 
@@ -64,12 +65,30 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - At the start of a turn, history is fitted to that budget from an estimate of
   about three bytes a token. When the model's window is unknown, the last 40
   messages are kept. Older history remains visible in the UI.
+- When history does not fit, old tool outputs are cleared first (below); only
+  then are whole turns omitted, oldest first.
 - Within a turn, the prompt's size is what the provider reported for the last
   step, its input and output, plus an estimate of the tool results added since.
   Without a report, every added message is estimated.
-- Before each further step, a prompt over budget ends the turn with an error
+- Before each further step, a prompt over budget first clears outputs the
+  model has already read. If that is not enough, the turn ends with an error
   naming the model and the size, and asks the user to send another message,
   whose turn fits history to the window again.
+
+## Clearing old tool outputs
+
+- Tool outputs are replaced, oldest first, with a short note naming the tool
+  and the size of what was cleared. The note gives the saved file's path when
+  there is one, so the model can read it again; otherwise it says to run the
+  tool again.
+- When history is fitted, the latest turn keeps its outputs. Within a turn,
+  outputs from the step just run are never cleared, and once the provider has
+  counted the prompt only outputs whose size was measured from its usage are
+  cleared, so clearing never claims more room than it frees.
+- Outputs smaller than about twice their note are left as they are. Stored
+  messages keep every output; clearing changes only what the model reads.
+- Clearing changes the prompt's prefix, so the provider's prompt cache misses
+  once after each clearing. The code is in `internal/chat/prune.go`.
 
 ## Large tool output
 
@@ -92,5 +111,4 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 
 ## Not done yet
 
-Clearing old tool results and compacting history, so a long turn can continue
-instead of ending at the context limit.
+Summarizing older history (compaction) when clearing outputs is not enough.

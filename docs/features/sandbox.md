@@ -102,9 +102,16 @@ configuration is refused rather than failing on the first command.
 
 ## Checking a machine
 
-`mob container status|pull|run` uses the same runtime directly, with
-`--network`, `--cpus`, `--memory` and `--isolation`, so a user can confirm it
-works before enabling the sandbox. `scripts/verify-sandbox.sh` and
+`mob container` uses the same runtime directly, with `--network`, `--cpus`,
+`--memory` and `--isolation`, so a user can confirm it works before enabling the
+sandbox:
+
+```bash
+mob container status                       # which runtime, and is it running
+mob container pull python:3.13-slim
+mob container run -v "$PWD:/work" -w /work alpine:3.20 ls -la
+```
+ `scripts/verify-sandbox.sh` and
 `scripts/verify-sandbox.ps1` check a machine end to end, including from inside a
 container that each limit took effect; see
 [sandbox-verification.md](../sandbox-verification.md).
