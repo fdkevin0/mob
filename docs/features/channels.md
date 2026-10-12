@@ -39,8 +39,16 @@ commands, approvals, delivery records and replies behave the same everywhere.
 
 ## Telegram
 
-- Connects through the Bot API with long polling and answers only its configured
-  owner, in a private chat.
+- Setup: enter the BotFather token and your numeric allowed user ID, then
+  enable. Mob long-polls the Bot API and answers only that user's private chat;
+  no public listener is needed, and this machine must stay running.
+- The bot must not have an active webhook or another polling process. Mob
+  reports the conflict and does not remove an existing webhook. `/test telegram`
+  checks the bot's identity and webhook state.
+- An update is acknowledged only after its receipt commits, and polling offsets
+  survive restart. Restart marks in-flight processing failed and in-flight sends
+  uncertain; neither is replayed. There is no resend: a new message is a new
+  attempt.
 - Approvals show Approve, Always allow and Deny buttons; a tap is handled as the
   `/approve` or `/deny` message it stands for.
 - The bot's `/` menu comes from the [command registry](commands.md).
@@ -48,8 +56,11 @@ commands, approvals, delivery records and replies behave the same everywhere.
 ## WeChat iLink
 
 - Connects natively through Tencent's WeChat iLink HTTP API
-  (`ilinkai.weixin.qq.com`) in pure Go: QR-code sign-in in the web UI, long
-  polling with `getupdates`, context-bound `sendmessage` and typing indicators.
+  (`ilinkai.weixin.qq.com`) in pure Go (`internal/plugins/wechatilink`).
+- Sign-in is a QR code shown in the web UI (`get_bot_qrcode`, then
+  `get_qrcode_status` until confirmed); the bot token and ID are stored locally.
+- Messages arrive by long polling `getupdates` with its sync cursor; replies use
+  `sendmessage` bound to the incoming `context_token`, with typing indicators.
 - Refuses senders not on its allowlist and treats only its first allowed user as
   the owner. Reads 批准 and 拒绝 as `/approve` and `/deny`, and accepts a bare
   reply when one request is pending.
@@ -57,8 +68,10 @@ commands, approvals, delivery records and replies behave the same everywhere.
 
 ## Email
 
-`email.Config.Channel` turns on answering mail. It names the owner's address and
-the provider's authserv-id. A background extension named `email` holds one IMAP
+**Answer mail** in the email plugin's settings (`email.Config.Channel`) turns on
+answering mail. It names the owner's address and the authserv-id the provider
+writes first in the `Authentication-Results` header of mail it receives
+(`mx.google.com` for Gmail; a received message's original source shows yours). A background extension named `email` holds one IMAP
 connection, waits with IDLE (or polls where the server has none), and answers
 new INBOX mail as the `email` client.
 
