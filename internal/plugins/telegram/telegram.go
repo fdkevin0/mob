@@ -107,7 +107,9 @@ type Message struct {
 	// Media is set when the message carries something other than text,
 	// such as a photo, file, voice note or sticker.
 	Media bool `json:"-"`
-	// Buttons, for a tap on an approval button, is the message holding them.
+	// Tap says the message stands for a tap on a button, whose data is Text.
+	Tap bool `json:"-"`
+	// Buttons, for a tap, is the message holding them.
 	Buttons *shown `json:"-"`
 	From    struct {
 		ID int64 `json:"id"`
@@ -147,7 +149,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 type Update struct {
 	ID      int64    `json:"update_id"`
 	Message *Message `json:"message"`
-	// CallbackQuery is a tap on an approval button.
+	// CallbackQuery is a tap on a button.
 	CallbackQuery *struct {
 		ID   string `json:"id"`
 		Data string `json:"data"`
@@ -181,8 +183,8 @@ type button struct {
 	Data string `json:"callback_data"`
 }
 
-// tapped makes the owner's tap on an approval button the private message it
-// stands for. acknowledge answers the tap, best effort; it is nil for a tap
+// tapped makes the owner's tap on a button the private message it stands for:
+// the command, or the token of a command, its data holds. acknowledge answers the tap, best effort; it is nil for a tap
 // that is not the owner's, and may run alongside polling.
 func (c Config) tapped(u Update) (_ Update, acknowledge func(context.Context)) {
 	q := u.CallbackQuery
@@ -193,10 +195,10 @@ func (c Config) tapped(u Update) (_ Update, acknowledge func(context.Context)) {
 		// An unanswered tap only keeps its spinner a little longer.
 		_ = c.Call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID}, nil)
 	}
-	if !strings.HasPrefix(q.Data, "/approve ") && !strings.HasPrefix(q.Data, "/deny ") {
+	if !strings.HasPrefix(q.Data, "/") && !strings.HasPrefix(q.Data, "#") {
 		return u, acknowledge
 	}
-	m := &Message{Text: q.Data}
+	m := &Message{Text: q.Data, Tap: true}
 	m.From.ID, m.Chat.ID, m.Chat.Type = c.UserID, c.UserID, "private"
 	if q.Message != nil && q.Message.ReplyMarkup != nil {
 		m.Buttons = &shown{Chat: q.Message.Chat.ID, Message: q.Message.ID, Keyboard: *q.Message.ReplyMarkup}
@@ -205,7 +207,7 @@ func (c Config) tapped(u Update) (_ Update, acknowledge func(context.Context)) {
 	return u, acknowledge
 }
 
-// shown is a message's approval buttons as a tap saw them.
+// shown is a message's buttons as a tap saw them.
 type shown struct {
 	Chat, Message int64
 	Keyboard      keyboard
@@ -228,15 +230,15 @@ func (c Config) Updates(ctx context.Context, offset int64) ([]Update, error) {
 	return result, err
 }
 
-// Send sends Markdown text formatted as Telegram shows it, with Approve and
-// Deny buttons under its last message for each pending approval. A message
-// Telegram cannot format is sent as plain text.
-func (c Config) Send(ctx context.Context, chatID int64, text string, approvals ...chat.PendingApproval) error {
+// Send sends Markdown text formatted as Telegram shows it, with rows of
+// buttons under its last message. A message Telegram cannot format is sent as
+// plain text.
+func (c Config) Send(ctx context.Context, chatID int64, text string, rows ...[]button) error {
 	list := chunks(text, chunkLimit)
 	for i, part := range list {
 		message := map[string]any{"chat_id": chatID, "text": part.HTML, "parse_mode": "HTML", "link_preview_options": map[string]any{"is_disabled": true}}
-		if i == len(list)-1 && len(approvals) > 0 {
-			message["reply_markup"] = map[string]any{"inline_keyboard": buttons(approvals)}
+		if i == len(list)-1 && len(rows) > 0 {
+			message["reply_markup"] = keyboard{Rows: rows}
 		}
 		err := c.Call(ctx, "sendMessage", message, nil)
 		if rejected(err) {
@@ -264,17 +266,17 @@ func (c Config) Typing(ctx context.Context, chatID int64) error {
 
 // buttons is one Approve/Always allow/Deny row per approval; a tap arrives as
 // a callback query whose data is the matching command.
-func buttons(approvals []chat.PendingApproval) [][]map[string]string {
-	rows := make([][]map[string]string, len(approvals))
+func buttons(approvals []chat.PendingApproval) [][]button {
+	rows := make([][]button, len(approvals))
 	for i, a := range approvals {
 		label := ""
 		if len(approvals) > 1 {
 			label = " " + a.Tool
 		}
-		rows[i] = []map[string]string{
-			{"text": "Approve" + label, "callback_data": "/approve " + a.ID},
-			{"text": "Always allow" + label, "callback_data": "/approve " + a.ID + " " + chat.RememberAlways},
-			{"text": "Deny" + label, "callback_data": "/deny " + a.ID},
+		rows[i] = []button{
+			{Text: "Approve" + label, Data: "/approve " + a.ID},
+			{Text: "Always allow" + label, Data: "/approve " + a.ID + " " + chat.RememberAlways},
+			{Text: "Deny" + label, Data: "/deny " + a.ID},
 		}
 	}
 	return rows

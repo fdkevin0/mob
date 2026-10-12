@@ -12,6 +12,8 @@ var (
 	everyClient = []string{ClientWeb, ClientTUI, ClientTelegram, ClientWeChat, ClientEmail}
 	interactive = []string{ClientWeb, ClientTUI}
 	messaging   = []string{ClientTelegram, ClientWeChat, ClientEmail}
+	// browsing are the clients that can show conversations to pick from.
+	browsing = []string{ClientWeb, ClientTUI, ClientTelegram}
 )
 
 // builtins are the commands about conversations and models.
@@ -21,8 +23,8 @@ func (s *ConversationService) builtins() []Command {
 		{CommandSpec: CommandSpec{"models", "/models [FILTER]", "List available models", everyClient, true}},
 		{CommandSpec: CommandSpec{"compact", "/compact", "Summarize the conversation so far, so later turns read the summary in its place", everyClient, true}},
 		{CommandSpec: CommandSpec{"new", "/new", "Start a new conversation", everyClient, false}, Run: s.newConversation},
-		{CommandSpec: CommandSpec{"list", "/list", "List conversations", interactive, false}, Run: s.listConversations},
-		{CommandSpec: CommandSpec{"open", "/open ID", "Switch to a conversation", interactive, false}, Args: []Argument{s.conversations}, Run: s.openConversation},
+		{CommandSpec: CommandSpec{"list", "/list", "List conversations", browsing, false}, Run: s.listConversations},
+		{CommandSpec: CommandSpec{"open", "/open ID", "Switch to a conversation", browsing, false}, Args: []Argument{s.conversations}, Run: s.openConversation},
 		{CommandSpec: CommandSpec{"approve", "/approve [ID] [conversation|always]", "Approve a pending tool request, optionally remembering it", everyClient, false}, Args: []Argument{s.approvals, Choices(RememberConversation, RememberAlways)}, Run: s.decide(true)},
 		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", everyClient, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
 		{CommandSpec: CommandSpec{"grants", "/grants", "List remembered approvals", everyClient, false}, OwnerOnly: true, Run: s.listGrants},

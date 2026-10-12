@@ -47,7 +47,7 @@ func TestComplete(t *testing.T) {
 		client, text string
 		want         []string
 	}{
-		{ClientTelegram, "/", []string{"/model", "/models", "/compact", "/new", "/approve", "/deny", "/grants", "/revoke", "/stop", "/help"}},
+		{ClientTelegram, "/", []string{"/model", "/models", "/compact", "/new", "/list", "/open", "/approve", "/deny", "/grants", "/revoke", "/stop", "/help"}},
 		{ClientWeb, "/mo", []string{"/model", "/models"}},
 		{ClientWeb, "/models", []string{"/models"}},
 		{ClientWeb, "/de", []string{"/deny"}},
@@ -117,7 +117,7 @@ func TestRun(t *testing.T) {
 			t.Fatalf("%s: %+v", text, got)
 		}
 	}
-	if help := run(ClientTelegram, "/help").Markdown; !strings.Contains(help, "/approve [ID]") || strings.Contains(help, "/list") {
+	if help := run(ClientTelegram, "/help").Markdown; !strings.Contains(help, "/approve [ID]") || !strings.Contains(help, "/open ID") {
 		t.Fatalf("telegram help: %s", help)
 	}
 	service.Commands.Register(Command{CommandSpec: CommandSpec{Name: "secret", Clients: []string{ClientWeb}}, OwnerOnly: true,
