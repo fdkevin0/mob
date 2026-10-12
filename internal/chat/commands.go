@@ -23,10 +23,14 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 	name, args, _ := strings.Cut(input.Text, " ")
 	args = strings.TrimSpace(args)
 	var reply string
+	var usage *llm.Usage
 	var err error
-	if name == "/models" {
+	switch name {
+	case "/models":
 		reply, err = s.models(ctx, input.ID, args)
-	} else {
+	case "/compact":
+		reply, usage, err = s.compact(ctx, input.ID)
+	default:
 		reply, err = s.switchModel(input.ID, args, input.Owner)
 	}
 	if err != nil {
@@ -38,6 +42,15 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 			return &CommandError{409, "request already accepted; refresh history"}
 		}
 		return err
+	}
+	if usage != nil {
+		message.Usage = usage
+		if err := s.Store.Save(message, "complete", ""); err != nil {
+			return err
+		}
+		if err := emit(Event{Kind: UsageReported, Usage: *usage}); err != nil {
+			return err
+		}
 	}
 	id := NewID()
 	for _, e := range []Event{{Kind: TurnStarted, MessageID: message.ID}, {Kind: StepStarted}, {Kind: SegmentStarted, Segment: "text", ID: id},

@@ -165,7 +165,7 @@ func TestPublishCommandsFromRegistry(t *testing.T) {
 			t.Fatalf("%s has no description", c.Command)
 		}
 	}
-	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models new approve deny grants revoke help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
+	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models compact new approve deny grants revoke help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
 		t.Fatalf("published %s %v %+v", path, names, sent.Scope)
 	}
 }

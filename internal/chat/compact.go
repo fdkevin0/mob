@@ -95,6 +95,51 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 	return summary, usage, nil
 }
 
+// compact summarizes every message since the conversation's summary, so
+// later turns read the summary in their place. A conversation without a model
+// or messages to summarize is told so in the reply.
+func (s *ConversationService) compact(ctx context.Context, id string) (string, *llm.Usage, error) {
+	ref, err := s.Model(id)
+	if err != nil {
+		return "", nil, err
+	}
+	if ref == "" {
+		return "No model is configured to write the summary; pick one with /model.", nil, nil
+	}
+	model, err := s.Models.Resolve(ref)
+	if err != nil {
+		return "Model " + ref + " is unavailable to write the summary: " + err.Error() + ".", nil, nil
+	}
+	history, err := s.Store.History(id)
+	if err != nil {
+		return "", nil, err
+	}
+	summary, err := s.Store.Summary(id)
+	if err != nil {
+		return "", nil, err
+	}
+	var covered []Message
+	for _, m := range since(history, summary.Through) {
+		if transcript(m) != "" {
+			covered = append(covered, m)
+		}
+	}
+	if len(covered) == 0 {
+		return "There is nothing new to summarize.", nil, nil
+	}
+	text, usage, err := summarize(ctx, model, summary.Text, covered, summaryTokens)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", usage, ctx.Err()
+		}
+		return "The conversation was not summarized: " + err.Error() + ".", usage, nil
+	}
+	if err := s.Store.Summarize(id, Summary{Text: text, Through: covered[len(covered)-1].ID}); err != nil {
+		return "", usage, err
+	}
+	return fmt.Sprintf("Summarized %d messages; later turns read the summary in their place.", len(covered)), usage, nil
+}
+
 // transcript is a stored message as a summary reads it: who said what, and
 // what tools were called with and returned, their outputs cut short.
 func transcript(m Message) string {
