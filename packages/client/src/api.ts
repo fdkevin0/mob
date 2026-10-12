@@ -1,0 +1,58 @@
+import type { UIMessage } from 'ai';
+import type { Suggestion } from './contracts';
+
+export type Connection = { url: string; token: string };
+export type Conversation = { id: string; title: string; updatedAt: number };
+export type ChatMessage = UIMessage<{ status?: string; error?: string; model?: string; command?: boolean }>;
+export type Snapshot = { messages: ChatMessage[]; active: boolean; model: string };
+export type ClientType = 'web' | 'tui';
+
+// Plugin operations and commands can take as long as the service's remote calls.
+export function timeoutFor(path: string) {
+	return path.startsWith('/plugins') || path === '/commands/run' ? 60_000 : 10_000;
+}
+
+export class MobClient {
+	readonly fetch: typeof fetch;
+
+	constructor(
+		readonly connection: Connection,
+		options: { fetch?: typeof fetch; onUnauthorized?: (token: string) => void } = {},
+	) {
+		this.fetch = async (input, init) => {
+			const response = await (options.fetch ?? globalThis.fetch)(input, init);
+			if (response.status === 401) options.onUnauthorized?.(connection.token);
+			return response;
+		};
+	}
+
+	async request<T>(path: string, body?: object): Promise<T> {
+		const response = await this.fetch(`${this.connection.url}/api${path}`, {
+			method: body === undefined ? 'GET' : 'POST',
+			headers: { Authorization: `Bearer ${this.connection.token}`, 'Content-Type': 'application/json' },
+			body: body === undefined ? undefined : JSON.stringify(body),
+			signal: AbortSignal.timeout(timeoutFor(path)),
+		});
+		if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+		return response.json();
+	}
+
+	listConversations() {
+		return this.request<Conversation[]>('/conversations');
+	}
+	createConversation() {
+		return this.request<Conversation>('/conversations', {});
+	}
+	openConversation(id: string) {
+		return this.request<Snapshot>(`/conversations/${id}`);
+	}
+	complete(id: string, text: string, clientType: ClientType) {
+		return this.request<Suggestion[]>('/commands/complete', { client: clientType, conversationId: id, text });
+	}
+}
+
+// Suggestions replace the final whitespace-separated token, in either UI.
+export function lastToken(text: string): [string, string] {
+	const i = Math.max(text.lastIndexOf(' '), text.lastIndexOf('\t')) + 1;
+	return [text.slice(0, i), text.slice(i)];
+}
