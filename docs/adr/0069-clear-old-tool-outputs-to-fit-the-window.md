@@ -20,8 +20,14 @@ summarizing anything else (see `research/limits-and-context-management.md`).
   outputs the model has already read, oldest first. Outputs from the step
   just run are never cleared. The turn ends with the ADR 0068 error only if
   that is not enough.
-- When the output was saved (ADR 0067), the note gives its path, so the model
-  can read it again. Otherwise it says to run the tool again.
+- Once the provider counts the prompt (ADR 0068), clearing claims only room
+  it can show it freed. A step's outputs are measured by how much the next
+  request grew, credited with that or their estimate, whichever is smaller,
+  and cleared together. Outputs without a measurement are not cleared then,
+  as an estimate could claim more room than tokens actually freed.
+- When the output was saved (ADR 0067), the note gives the path of that
+  output's own file, so the model can read it again. Otherwise it says to run
+  the tool again.
 - Outputs smaller than about twice their note are left as they are. Stored
   messages keep every output; clearing changes only what the model reads.
 

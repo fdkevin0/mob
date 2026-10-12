@@ -151,3 +151,83 @@ func TestFirstRequestFitsWithItsAdditions(t *testing.T) {
 		t.Fatalf("first request of about %d tokens exceeds the %d a prompt may use", size, info.Context-req.MaxTokens)
 	}
 }
+
+// compact counts a request as a provider whose tokenizer packs repeated
+// characters four times tighter than the estimate.
+func compact(req llm.Request) int {
+	size := tokens(req.System) + toolTokens(req.Tools)
+	for _, m := range req.Messages {
+		if strings.Contains(m.Text, "yyyyyyyy") {
+			size += len(m.Text) / 12
+		} else {
+			size += promptTokens([]llm.Message{m})
+		}
+	}
+	return size
+}
+
+// With the provider counting the prompt, clearing claims only what it can
+// show it freed, so no request outgrows the window however outputs tokenize.
+func TestClearingWithUsageKeepsRequestsInTheWindow(t *testing.T) {
+	s, id, m := turnFixture(t)
+	// An output that tokenizes compactly is followed by ones the estimate
+	// counts right, so clearing the first to make room for the others must
+	// not count it at its estimate.
+	calls := 0
+	tool := echoTool("read", func(context.Context, ToolCall) (any, error) {
+		calls++
+		if calls%3 == 1 {
+			return strings.Repeat("y", 100000), nil
+		}
+		return strings.Repeat("z", 100000), nil
+	})
+	model := &filling{info: llm.Info{ID: "filling", Context: 16000, Output: 1000, Tools: true}}
+	model.usage = func(step int) *llm.Usage { return &llm.Usage{Input: compact(model.requests[step-1]), Output: 10} }
+	err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}, Steps: 12}, id, m, "", func(Event) error { return nil })
+	if err == nil {
+		t.Fatal("turn ended without an error")
+	}
+	cleared := false
+	for i, req := range model.requests {
+		if size := compact(req); size > 16000-req.MaxTokens {
+			t.Fatalf("request %d had %d tokens with %d reserved for the reply: %v", i+1, size, req.MaxTokens, err)
+		}
+		cleared = cleared || len(req.Messages) > 2 && strings.Contains(req.Messages[2].Text, `"cleared":true`)
+	}
+	if !cleared || len(model.requests) < 6 {
+		t.Fatalf("outputs were not cleared to go on: %d requests, %v", len(model.requests), err)
+	}
+}
+
+// Call IDs repeat across turns; a cleared output names its own saved file.
+func TestClearedOutputsNameTheirOwnFiles(t *testing.T) {
+	s, id, m := turnFixture(t)
+	dir := t.TempDir()
+	for _, text := range []string{"first", "second"} {
+		tool := echoTool("exec", func(context.Context, ToolCall) (any, error) { return strings.Repeat(text, 12000), nil })
+		model := &scripted{call: llm.ToolCall{ID: "call-1", Name: "exec", Arguments: `{}`}}
+		if err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}, Saver: folder{dir}}, id, m, "", func(Event) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		m, _ = s.Begin(id, NewID(), "next", "test/sized")
+	}
+	history, _ := s.History(id)
+	var files []string
+	for _, h := range history {
+		for _, part := range h.Parts {
+			if file, ok := part["outputFile"].(string); ok {
+				files = append(files, file)
+			}
+		}
+	}
+	messages, _ := Prompt(history, m.ID, 1000)
+	var notes []string
+	for _, msg := range messages {
+		if msg.Role == "tool" && strings.Contains(msg.Text, `"cleared":true`) {
+			notes = append(notes, msg.Text)
+		}
+	}
+	if len(files) != 2 || len(notes) != 2 || !strings.Contains(notes[0], files[0]) || !strings.Contains(notes[1], files[1]) {
+		t.Fatalf("cleared outputs %q do not name their files %q", notes, files)
+	}
+}
