@@ -151,6 +151,11 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	if err != nil {
 		return err
 	}
+	// A summary written for a larger model can crowd this one out; the turn
+	// then reads the messages it covers instead, as many as fit.
+	if summaryCost(summary.Text) > budget/2 {
+		summary = Summary{}
+	}
 	history = since(history, summary.Through)
 	var saved []string
 	var through string
