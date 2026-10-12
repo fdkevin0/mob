@@ -11,7 +11,7 @@ import (
 // The schema version lives in PRAGMA user_version; the meta table records the
 // release that last opened the database.
 //
-// Migrations are kept for one migration window (docs/adr/0054). Closing a
+// Migrations are kept for one migration window (docs/features/releases.md). Closing a
 // window removes its oldest migrations: the baseline is rewritten to create the
 // schema they produced, first moves up to that schema, and the last release that
 // still had them is appended to retired, so an older database can be upgraded

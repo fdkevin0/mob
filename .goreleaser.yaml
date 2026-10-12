@@ -1,4 +1,4 @@
-# Builds every Mob release (docs/adr/0057). The web UI must be built first
+# Builds every Mob release (docs/features/releases.md). The web UI must be built first
 # (bun run build) so that it is embedded in the binary.
 #
 #   stable:  goreleaser release --clean           on a vX.Y.Z tag

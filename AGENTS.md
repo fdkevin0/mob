@@ -7,7 +7,7 @@ Mob is a local Go assistant with SQLite persistence, a React web UI, a Wails des
 - `cmd/mob/` contains the CLI; `main.go` launches the desktop app.
 - `internal/` contains application services, chat, providers, configuration, plugins, and TUI packages. Go tests sit beside their implementation.
 - `webapp/src/chat/` contains the current UI; `webapp/src/components/ai-elements/` holds shared UI components. Built assets in `webapp/dist/` are embedded into Go binaries.
-- `docs/adr/` records architecture decisions; `scripts/check-chat.ts` exercises the Go/AI SDK integration.
+- `docs/features/` describes how each feature behaves; `scripts/check-chat.ts` exercises the Go/AI SDK integration.
 
 ## Build, Test, and Development Commands
 
@@ -25,7 +25,7 @@ Use Go 1.26+ and Bun 1.4.3. Desktop development also needs Wails platform prereq
 
 ## Coding Style & Naming Conventions
 
-Change the database schema only by adding a migration to `internal/chat/migrations.go` with `Added` set to today's UTC date (`YYYYMMDD`); migrations are retired after their window (`docs/adr/0054`). Format Go with `gofmt`; use lowercase package names and exported PascalCase identifiers. Follow `.editorconfig`: tabs with width two, LF endings, and final newlines. `.prettierrc` specifies tabs, single quotes, semicolons, and a 140-character print width. Use PascalCase React components and `use`-prefixed hooks. Keep generated contracts synchronized through the generator.
+Change the database schema only by adding a migration to `internal/chat/migrations.go` with `Added` set to today's UTC date (`YYYYMMDD`); migrations are retired after their window (`docs/features/releases.md`). Format Go with `gofmt`; use lowercase package names and exported PascalCase identifiers. Follow `.editorconfig`: tabs with width two, LF endings, and final newlines. `.prettierrc` specifies tabs, single quotes, semicolons, and a 140-character print width. Use PascalCase React components and `use`-prefixed hooks. Keep generated contracts synchronized through the generator.
 
 ## Testing Guidelines
 
@@ -33,7 +33,9 @@ Use Go's `testing` package with `*_test.go` and `TestName` functions. UI tests u
 
 ## Commit & Pull Request Guidelines
 
-`main` changes only through pull requests; each merge that passes CI is published as a nightly `{date}.{sha}` prerelease, and merging the release-please PR publishes a stable `vX.Y.Z` (`.github/workflows/release.yml`, `docs/adr/0057`). Follow history's `type(scope): description` convention, such as `fix(models): close reload race`. Keep commits focused. Describe the behavior change, link relevant issues, record validation commands and results, and include screenshots for UI changes.
+`main` changes only through pull requests; each merge that passes CI is published as a nightly `{date}.{sha}` prerelease, and merging the release-please PR publishes a stable `vX.Y.Z` (`.github/workflows/release.yml`, `docs/features/releases.md`). Follow history's `type(scope): description` convention, such as `fix(models): close reload race`. Keep commits focused. Describe the behavior change, link relevant issues, record validation commands and results, and include screenshots for UI changes.
+
+Do not write architecture decision records. Discuss designs in issues and pull requests. When a change alters how a feature behaves, update its page in `docs/features/` in the same pull request.
 
 ## Security & Configuration
 

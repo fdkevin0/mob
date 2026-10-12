@@ -1,0 +1,75 @@
+# Tools and approvals
+
+The model works through tools. Any tool may ask the owner to approve a call
+before it has an effect, and the owner can decide from any client or channel.
+
+## Built-in and plugin tools
+
+- Built in: `datetime`, `remember` (saves a fact after approval) and, when the
+  [sandbox](sandbox.md) is enabled, `sandbox`.
+- The email plugin offers `email_inbox`, `email_read` and `email_send`; the
+  Cloudflare plugin offers `cloudflare`. Each is defined in its own package and
+  offered only while its plugin is enabled.
+- [MCP servers](mcp.md) add `mcp__<server>__<tool>` tools.
+- An `OwnerOnly` tool is offered only to the owner's turns, and only the owner
+  can approve its calls: another allowed WeChat user cannot read or send the
+  owner's mail. Plugin and MCP tools are owner-only.
+- Mail text and Cloudflare results sent to the model are bounded, and the model
+  is told they are untrusted data.
+
+## What asks for approval
+
+- Reading runs at once. Sending mail, Workers AI (`ai.run`, and
+  `vectorize.query`, which embeds with Workers AI), D1 queries that may write,
+  `remember` and every MCP call wait for approval. A single D1 `SELECT`
+  statement runs without approval; SQL the check cannot be sure of still asks.
+- The approval names what the call acts on (the sender and SMTP account, or the
+  Cloudflare account and model, index or database), and an approved call runs
+  only while the configuration still names the same target, so changing the
+  configuration cannot redirect it.
+
+## Deciding
+
+- An approval request carries the tool name and the input to approve.
+  `chat.DescribeApproval` renders it as plain text for channels. The AI SDK
+  `tool-approval-request` chunk carries only the approval and call IDs.
+- The web UI and TUI show the request in the conversation; `/approve` and
+  `/deny` work in every client. Telegram shows Approve, Always allow and Deny
+  buttons; WeChat iLink accepts 批准 and 拒绝, or a bare reply when one request is
+  pending. `/approve` and `/deny` without an ID decide the only pending request.
+- A denial may carry a reason (`chat.Answer.Reason`). It is written into the
+  denial note, and the model answers in a new turn. A denial without a reason
+  ends quietly.
+- An approval left undecided past its hour is marked expired and its call
+  failed, so the model and channels stop waiting on it.
+
+## Exactly once
+
+- `Store.Decide` records the decision once and marks an approved call
+  `approval-responded`. The service then runs the tool's `Approved` and
+  `Store.Complete` records its result. A retried approval is refused as stale,
+  so the effect happens at most once. A crash in between leaves the call
+  reported as not completed, not repeated.
+- Effects outside Mob can key on the approval ID: an approved email's delivery
+  is keyed `email:<approval ID>`.
+- After a decision the model receives a note naming the tool: "The user
+  approved remember and it ran. Result: …" or "The user denied the remember
+  request."
+
+## Remembered approvals
+
+- The owner may remember an approval for the conversation or always
+  (`chat.Answer.Remember`). A grant covers the tool's calls whose `Tool.Scope`
+  matches the approved input's: the recipients and sender for `email_send`, the
+  operation and target for `cloudflare`, the server configuration for MCP tools,
+  any call for a tool without `Scope`.
+- Covered calls in the owner's turns run `Approved` at once with a fresh
+  approval ID; other callers' turns always ask.
+- Grants live in the `grants` table. `/grants` lists them and `/revoke ID|all`
+  forgets them. A grant outlives configuration changes only as far as its scope
+  does: a new SMTP account or D1 database gives a new scope, which asks again.
+  Remembering is coarse for tools without `Scope`, so a tool whose inputs differ
+  in risk should define one.
+
+Writing a tool, including `RequestApproval`, `Approved` and `Scope`, is covered
+in [Extensions](extensions.md).

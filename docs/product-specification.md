@@ -162,7 +162,7 @@ stateDiagram-v2
 
 ## 7. Model Providers & Per-Conversation Models
 
-See [ADR 0052](./adr/0052-providers-json-and-per-conversation-models.md).
+See [Model providers](./features/providers.md).
 
 1. **Zero configuration**: without `providers.json`, the only provider is OpenCode Zen
    (`https://opencode.ai/zen/v1`) and the default is `opencode/mimo-v2.6-flash-free`,
