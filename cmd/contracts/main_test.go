@@ -6,7 +6,7 @@ import (
 )
 
 func TestContractIsCurrent(t *testing.T) {
-	raw, err := os.ReadFile("../../webapp/src/chat/contracts.ts")
+	raw, err := os.ReadFile("../../packages/client/src/contracts.ts")
 	if err != nil {
 		t.Fatal(err)
 	}

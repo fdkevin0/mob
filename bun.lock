@@ -6,6 +6,7 @@
       "name": "mob",
       "dependencies": {
         "@ai-sdk/react": "4.0.139",
+        "@mob/client": "workspace:*",
         "ai": "7.0.136",
         "qrcode.react": "4.2.0",
         "react": "^19.3.0",
@@ -27,6 +28,13 @@
         "typescript": "^7.0.2",
         "vite": "^8.3.0",
         "vitest": "^5.0.0",
+      },
+    },
+    "packages/client": {
+      "name": "@mob/client",
+      "dependencies": {
+        "@ai-sdk/react": "4.0.139",
+        "ai": "7.0.136",
       },
     },
   },
@@ -132,6 +140,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.6.0", "", {}, "sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "3.1.2", "@jridgewell/sourcemap-codec": "1.6.0" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@mob/client": ["@mob/client@workspace:packages/client"],
 
     "@oxc-project/types": ["@oxc-project/types@0.151.0", "", {}, "sha512-J1yXrIlNDZVzE3ada310xeAw7nH8yCAyLPuUIsjKatFPmfn5bS1oW+cM+QsGOtVWd5nhSpbwZWx/rue+r5Z+PA=="],
 
