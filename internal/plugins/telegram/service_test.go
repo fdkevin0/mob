@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/provider"
 )
 
@@ -46,7 +48,7 @@ func TestReplyRunsRegistryCommands(t *testing.T) {
 	}
 	answer, err := service.reply(context.Background(), config, "bot", chat.NewID(), "/remember 简洁")
 	got, approvals := answer.Text, answer.Approvals
-	if err != nil || !strings.Contains(got, "Approval needed: remember\nfact: 简洁") || !strings.Contains(got, "reply /approve, or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
+	if err != nil || !strings.Contains(got, "**Approval needed**\n```\nremember\nfact: 简洁\n```") || !strings.Contains(got, "reply /approve, or /deny") || len(approvals) != 1 || approvals[0].Tool != "remember" {
 		t.Fatalf("approval request: %s %+v %v", got, approvals, err)
 	}
 	if got := reply("/approve"); !strings.Contains(got, "approved remember and it ran") {
@@ -99,7 +101,7 @@ func TestApprovalButtonsAndTaps(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
 	})}
-	if err := c.Send(context.Background(), 7, strings.Repeat("x", 2001), chat.PendingApproval{ID: a, Tool: "email_send"}, chat.PendingApproval{ID: b, Tool: "remember"}); err != nil {
+	if err := c.Send(context.Background(), 7, strings.Repeat("x", 3000)+"\n\n"+strings.Repeat("y", 3000), chat.PendingApproval{ID: a, Tool: "email_send"}, chat.PendingApproval{ID: b, Tool: "remember"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(sent) != 2 || sent[0]["reply_markup"] != nil {
@@ -165,7 +167,7 @@ func TestPublishCommandsFromRegistry(t *testing.T) {
 			t.Fatalf("%s has no description", c.Command)
 		}
 	}
-	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models compact new approve deny grants revoke help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
+	if path != "/bot123:secret/setMyCommands" || strings.Join(names, " ") != "model models compact new approve deny grants revoke stop help" || sent.Scope.Type != "chat" || sent.Scope.ChatID != 7 {
 		t.Fatalf("published %s %v %+v", path, names, sent.Scope)
 	}
 }
@@ -205,5 +207,159 @@ func TestLoopPublishesMenuAfterConnecting(t *testing.T) {
 	service.Loop(ctx, config, func(string) {})
 	if got := strings.Join(calls, " "); !strings.HasPrefix(got, "getMe getWebhookInfo setMyCommands getUpdates") {
 		t.Fatalf("calls: %s", got)
+	}
+}
+
+func TestSendFallsBackToPlainTextWhenTelegramRejectsHTML(t *testing.T) {
+	var sent []map[string]any
+	c := Config{Token: "1:x", Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		sent = append(sent, body)
+		if body["parse_mode"] == "HTML" {
+			return &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error_code":400}`))}, nil
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":{}}`))}, nil
+	})}
+	if err := c.Send(context.Background(), 7, "**hi** <there>"); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 2 || sent[0]["text"] != "<b>hi</b> &lt;there&gt;" || sent[1]["text"] != "hi <there>" || sent[1]["parse_mode"] != nil {
+		t.Fatalf("sent: %v", sent)
+	}
+}
+
+func TestTapRemovesTheDecidedButtons(t *testing.T) {
+	a, b := chat.NewID(), chat.NewID()
+	var edited map[string]any
+	c := Config{Token: "1:x", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/editMessageReplyMarkup") {
+			json.NewDecoder(r.Body).Decode(&edited)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
+	})}
+	markup, _ := json.Marshal(map[string]any{"inline_keyboard": buttons([]chat.PendingApproval{{ID: a, Tool: "x"}, {ID: b, Tool: "y"}})})
+	var u Update
+	if err := json.Unmarshal([]byte(`{"update_id":9,"callback_query":{"id":"q","data":"/deny `+a+`","from":{"id":7},"message":{"message_id":42,"chat":{"id":7},"reply_markup":`+string(markup)+`}}}`), &u); err != nil {
+		t.Fatal(err)
+	}
+	if m := c.tapped(context.Background(), u).Message; m == nil || m.Text != "/deny "+a {
+		t.Fatalf("tap: %+v", m)
+	}
+	rows, _ := json.Marshal(edited["reply_markup"])
+	if edited["message_id"] != float64(42) || strings.Contains(string(rows), a) || !strings.Contains(string(rows), "/approve "+b) {
+		t.Fatalf("edited: %v %s", edited, rows)
+	}
+}
+
+func TestMessageNotesMedia(t *testing.T) {
+	var m Message
+	if err := json.Unmarshal([]byte(`{"message_id":3,"caption":"look","photo":[{"file_id":"f"}],"from":{"id":7},"chat":{"id":7,"type":"private"}}`), &m); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Media || m.Caption != "look" || m.ID != 3 || m.From.ID != 7 || m.Chat.Type != "private" {
+		t.Fatalf("photo: %+v", m)
+	}
+	if err := json.Unmarshal([]byte(`{"text":"hi"}`), &m); err != nil || m.Media {
+		t.Fatalf("text: %+v", m)
+	}
+}
+
+// waiter writes a little, then waits until it is stopped. started closes
+// when it first waits.
+type waiter struct {
+	started chan struct{}
+	once    *sync.Once
+}
+
+func (waiter) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "waiter"} }
+func (waiter) Info() llm.Info { return llm.Info{ID: "waiter", Context: 100000} }
+func (w waiter) Stream(ctx context.Context, _ llm.Request, emit func(string, string) error) (llm.Result, error) {
+	if err := emit("text", "partial"); err != nil {
+		return llm.Result{}, err
+	}
+	w.once.Do(func() { close(w.started) })
+	<-ctx.Done()
+	return llm.Result{}, ctx.Err()
+}
+
+type oneModel struct{ model llm.Model }
+
+func (o oneModel) Default() string                          { return "test/waiter" }
+func (o oneModel) Resolve(string) (llm.Model, error)        { return o.model, nil }
+func (o oneModel) SetDefault(string) (llm.Ref, error)       { return o.model.Ref(), nil }
+func (o oneModel) List(context.Context, string) []llm.Group { return nil }
+
+func TestLoopKeepsPollingWhileAReplyIsWritten(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	w := waiter{started: make(chan struct{}), once: new(sync.Once)}
+	conversation := chat.NewConversation(store, oneModel{w})
+	defer conversation.Close()
+	service := &Service{Store: store, Conversation: conversation}
+	defer func(d time.Duration) { placeholderDelay = d }(placeholderDelay)
+	placeholderDelay = time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var mu sync.Mutex
+	var texts []string
+	drafts, polls := 0, 0
+	update := func(id int, body string) string {
+		return fmt.Sprintf(`[{"update_id":%d,"message":{"message_id":%d,%s,"from":{"id":7},"chat":{"id":7,"type":"private"}}}]`, id, id, body)
+	}
+	config := Config{Token: "123:secret", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		result := `true`
+		mu.Lock()
+		defer mu.Unlock()
+		switch method {
+		case "getMe":
+			result = `{"id":123,"username":"mob_bot"}`
+		case "getWebhookInfo":
+			result = `{"url":""}`
+		case "sendMessageDraft":
+			drafts++
+		case "sendMessage":
+			texts = append(texts, body["text"].(string))
+			result = `{}`
+		case "getUpdates":
+			polls++
+			switch polls {
+			case 1:
+				result = update(1, `"text":"long job"`)
+			case 2:
+				mu.Unlock()
+				<-w.started
+				mu.Lock()
+				result = update(2, `"photo":[{"file_id":"f"}]`)
+			case 3:
+				result = update(3, `"text":"and this"`)
+			case 4:
+				result = update(4, `"text":"/stop"`)
+			default:
+				if len(texts) >= 4 {
+					cancel()
+				}
+				result = `[]`
+			}
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":` + result + `}`))}, nil
+	})}
+	service.Loop(ctx, config, func(string) {})
+	mu.Lock()
+	defer mu.Unlock()
+	got := strings.Join(texts, " | ")
+	for _, want := range []string{"Mob reads only text", "Still working on your last message", "Stopping.", "partial\n\nStopped."} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sent %q, want %q", got, want)
+		}
+	}
+	if drafts == 0 {
+		t.Fatal("no placeholder while the reply was written")
 	}
 }

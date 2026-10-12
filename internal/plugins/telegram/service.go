@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/channel"
@@ -14,7 +16,20 @@ import (
 type Service struct {
 	Store        *chat.Store
 	Conversation *chat.ConversationService
+
+	once sync.Once
+	b    *channel.Bridge
+	// drafts counts the drafts shown, so that each reply has its own.
+	drafts atomic.Int64
 }
+
+// placeholderDelay is how long a reply may take before Mob shows that it is
+// being written; quick ones, such as commands, need no placeholder.
+var placeholderDelay = time.Second
+
+// draftRefresh is how often the placeholder is shown again; a draft lasts
+// about 30 seconds and a typing status about five.
+var draftRefresh, typingRefresh = 20 * time.Second, 4 * time.Second
 
 // botCommand is one entry of Telegram's command menu.
 type botCommand struct {
@@ -56,7 +71,17 @@ func waitTelegram(ctx context.Context) bool {
 		return true
 	}
 }
+
+// Loop answers the owner's messages until ctx is done. Replies run alongside
+// polling, so the owner can stop one or decide an approval while another is
+// being written.
 func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
+	var replies sync.WaitGroup
+	defer replies.Wait()
+	// previous closes once the message before has started; each message waits
+	// for it, so that, say, a message after /new goes to the new conversation.
+	previous := make(chan struct{})
+	close(previous)
 	botID := strings.SplitN(c.Token, ":", 2)[0]
 	offsetKey := "telegram-offset:" + botID
 	var offset int64
@@ -100,14 +125,42 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 					continue
 				}
 				update = c.tapped(ctx, update)
+				if update.Stopped != nil && update.Stopped.Chat.ID == c.UserID {
+					s.stop(botID, c)
+				}
 				m := update.Message
-				if m != nil && m.From.ID == c.UserID && m.Chat.ID == c.UserID && m.Chat.Type == "private" && m.Text != "" {
-					if err = s.Message(ctx, c, botID, update); err != nil {
+				if m != nil && m.From.ID == c.UserID && m.Chat.ID == c.UserID && m.Chat.Type == "private" {
+					if m.Text == "" && m.Caption != "" {
+						m.Text = m.Caption
+					}
+					if m.Text == "" {
+						if m.Media {
+							// Best effort: the owner can send it again as text.
+							_ = c.Send(ctx, m.Chat.ID, mediaUnsupported)
+						}
+					} else if fresh, err := s.bridge().Accept(messageID(botID, update)); err != nil {
 						status(err.Error())
-						accepted, readErr := s.Store.DeliveryAccepted("tg:" + botID + ":" + strconv.FormatInt(update.ID, 10))
+						accepted, readErr := s.Store.DeliveryAccepted(messageID(botID, update))
 						if readErr != nil || !accepted {
 							return
 						}
+					} else if fresh {
+						replies.Add(1)
+						started := make(chan struct{})
+						go func(u Update, previous <-chan struct{}) {
+							defer replies.Done()
+							var once sync.Once
+							start := func() { once.Do(func() { close(started) }) }
+							defer start()
+							select {
+							case <-previous:
+							case <-ctx.Done():
+							}
+							if err := s.finish(ctx, c, botID, u, start); err != nil {
+								status(err.Error())
+							}
+						}(update, previous)
+						previous = started
 					}
 				}
 				if ctx.Err() != nil {
@@ -125,19 +178,35 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 
 // bridge answers the owner's messages in the bot's conversation.
 func (s *Service) bridge() *channel.Bridge {
-	return &channel.Bridge{Name: "Telegram", Client: chat.ClientTelegram, Store: s.Store, Conversation: s.Conversation, Texts: texts, Limit: 32000}
+	s.once.Do(func() {
+		s.b = &channel.Bridge{Name: "Telegram", Client: chat.ClientTelegram, Store: s.Store, Conversation: s.Conversation, Texts: texts, Limit: 32000}
+	})
+	return s.b
 }
+
+// stop stops the reply in progress in the bot's conversation, for a tap on
+// a draft's stop button.
+func (s *Service) stop(botID string, c Config) {
+	var id string
+	if s.Store.Setting(conversationKey(botID, c), &id) == nil && id != "" {
+		s.Conversation.Stop(id)
+	}
+}
+
+const mediaUnsupported = "Mob reads only text here for now; send photos, files and voice notes from the desktop app, or describe them in a message."
 
 var texts = channel.Texts{
 	Help: "Mob is connected. Send a message to chat. This computer must remain running.",
 	Approvals: func(approvals []chat.PendingApproval, pending int) string {
 		var b strings.Builder
 		for _, a := range approvals {
-			b.WriteString("\n\nApproval needed: " + chat.DescribeApproval(a.Tool, a.Input) + "\nID: " + a.ID)
+			b.WriteString("\n\n**Approval needed**\n" + fence(chat.DescribeApproval(a.Tool, a.Input)) + "\nID: `" + a.ID + "`")
 		}
 		return b.String() + "\n\n" + decideHint(pending)
 	},
-	Stale: func(id string) string { return "Approval " + id + " is unknown, expired, or already decided." },
+	Busy:    "Still working on your last message. Send /stop to stop it, then send this again.",
+	Stopped: "Stopped.",
+	Stale:   func(id string) string { return "Approval " + id + " is unknown, expired, or already decided." },
 	Failed: func(err error) string {
 		return "\nMob: " + err.Error() + ". Open the desktop/TUI for the saved result."
 	},
@@ -152,6 +221,29 @@ var texts = channel.Texts{
 	},
 }
 
+// fence is text as a Markdown code block, fenced so nothing in it ends the block.
+func fence(text string) string {
+	longest, run := 0, 0
+	for _, r := range text {
+		if r == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	f := strings.Repeat("`", max(3, longest+1))
+	return f + "\n" + text + "\n" + f
+}
+
+func messageID(botID string, u Update) string {
+	return "tg:" + botID + ":" + strconv.FormatInt(u.ID, 10)
+}
+
+func conversationKey(botID string, c Config) string {
+	return "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10)
+}
+
 // message is the owner's message in update u, as the bridge reads it.
 func message(c Config, botID string, u Update) channel.Message {
 	text := u.Message.Text
@@ -159,8 +251,8 @@ func message(c Config, botID string, u Update) channel.Message {
 		text = "/help"
 	}
 	return channel.Message{
-		ID:  "tg:" + botID + ":" + strconv.FormatInt(u.ID, 10),
-		Key: "telegram-conversation:" + botID + ":" + strconv.FormatInt(c.UserID, 10),
+		ID:  messageID(botID, u),
+		Key: conversationKey(botID, c),
 		// The bot answers only its configured user, who owns this Mob.
 		Owner: true,
 		Text:  text,
@@ -169,11 +261,54 @@ func message(c Config, botID string, u Update) channel.Message {
 
 // Message answers the owner's message in update u and sends the reply once.
 func (s *Service) Message(ctx context.Context, c Config, botID string, u Update) error {
+	fresh, err := s.bridge().Accept(messageID(botID, u))
+	if !fresh || err != nil {
+		return err
+	}
+	return s.finish(ctx, c, botID, u, nil)
+}
+
+// finish answers the owner's message in update u, which the bridge accepted,
+// calling started as the bridge does, and showing that the reply is being written until it is sent.
+func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, started func()) error {
 	b, m := s.bridge(), message(c, botID, u)
-	answer := func(ctx context.Context) (channel.Reply, error) { return b.Answer(ctx, m) }
-	return b.Deliver(ctx, m.ID, answer, func(ctx context.Context, r channel.Reply) error {
+	m.Started = started
+	answer := func(ctx context.Context) (channel.Reply, error) {
+		done := make(chan struct{})
+		shown := make(chan struct{})
+		go func() { defer close(shown); s.placeholder(ctx, c, u.Message.Chat.ID, done) }()
+		defer func() { close(done); <-shown }()
+		return b.Answer(ctx, m)
+	}
+	return b.Finish(ctx, m.ID, answer, func(ctx context.Context, r channel.Reply) error {
 		return c.Send(ctx, u.Message.Chat.ID, r.Text, r.Approvals...)
 	})
+}
+
+// placeholder shows a draft with a stop button while a reply is written,
+// once it takes longer than placeholderDelay, until done closes. Where drafts
+// are unavailable it shows the bot typing instead. Both are best effort.
+func (s *Service) placeholder(ctx context.Context, c Config, chatID int64, done <-chan struct{}) {
+	draftID := s.drafts.Add(1)
+	wait, typing := placeholderDelay, false
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if !typing {
+			typing = c.Draft(ctx, chatID, draftID) != nil
+		}
+		if typing {
+			_ = c.Typing(ctx, chatID)
+			wait = typingRefresh
+		} else {
+			wait = draftRefresh
+		}
+	}
 }
 
 // Reply answers text as if the owner had sent it to the bot.
