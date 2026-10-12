@@ -8,14 +8,13 @@ anything with an effect waits for your approval.
 
 ## Install
 
-```bash
-brew install fdkevin0/tap/mob          # stable release, macOS and Linux
-```
-
-Archives for Linux, macOS and Windows are on the
-[releases page](https://github.com/fdkevin0/mob/releases): stable `vX.Y.Z`
-releases, and a nightly prerelease for every change to `main`. To build from
+Download an archive for Linux, macOS or Windows from the
+[releases page](https://github.com/fdkevin0/mob/releases). Every change to `main`
+is published there as a nightly prerelease named `{date}.{sha}`. To build from
 source, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Stable `vX.Y.Z` releases and `brew install fdkevin0/tap/mob` start with the first
+stable release; none is published yet.
 
 ## Use
 
