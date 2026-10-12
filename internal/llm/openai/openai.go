@@ -258,10 +258,14 @@ func StatusError(resp *http.Response, secrets ...string) error {
 	if len([]rune(message)) > 200 {
 		message = string([]rune(message)[:200]) + "…"
 	}
-	if message == "" {
-		return fmt.Errorf("model returned HTTP %d", resp.StatusCode)
+	err := fmt.Errorf("model returned HTTP %d", resp.StatusCode)
+	if message != "" {
+		err = fmt.Errorf("model returned HTTP %d: %s", resp.StatusCode, message)
 	}
-	return fmt.Errorf("model returned HTTP %d: %s", resp.StatusCode, message)
+	if llm.Overflow(resp.StatusCode, raw) {
+		return llm.OverflowError(err)
+	}
+	return err
 }
 
 // Secrets are the credentials a request carries: its key and header values.

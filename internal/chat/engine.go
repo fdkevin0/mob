@@ -218,6 +218,39 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// the outputs added after that reply.
 	measured, base := false, -1
 	var latest *outputs
+	// shrink makes room after a provider refused a prompt the estimate let
+	// through, as it counts tokens its own way: before the model has replied,
+	// history is fitted to less; after, older tool outputs are cleared. It
+	// frees about a quarter of the prompt and reports whether it freed any.
+	shrink := func(step int) bool {
+		need := max(size/4, 1)
+		if step > 0 {
+			freed := clearOutputs(req.Messages, groups, len(req.Messages), need, false)
+			size, base = size-freed, base-freed
+			return freed > 0
+		}
+		n := len(req.Messages)
+		if note != "" {
+			n--
+		}
+		current := promptTokens(req.Messages[:n])
+		messages, files, omitted := prompt(history, message.ID, max(current-need, 1))
+		if promptTokens(messages) >= current {
+			return false
+		}
+		if omitted != "" && through == "" {
+			req.System += omittedNotice
+		}
+		through = omitted
+		if note != "" {
+			messages, files = append(messages, llm.Message{Role: "user", Text: note}), append(files, "")
+		}
+		req.Messages, saved = messages, files
+		groups = each(req.Messages, saved)
+		size = tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages)
+		return true
+	}
+	retried := false
 	seenCalls := map[string]bool{}
 	steps := agent.Steps
 	if steps <= 0 {
@@ -239,7 +272,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		indices := map[string]int{}
 		ids := map[string]string{}
 		read = len(req.Messages)
-		result, err := model.Stream(ctx, *req, func(kind, delta string) error {
+		stream := func(kind, delta string) error {
 			index, ok := indices[kind]
 			if !ok {
 				index = len(message.Parts)
@@ -252,7 +285,19 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			}
 			message.Parts[index]["text"] = message.Parts[index]["text"].(string) + delta
 			return send(Event{Kind: SegmentDelta, Segment: kind, ID: ids[kind], Text: delta})
-		})
+		}
+		result, err := model.Stream(ctx, *req, stream)
+		// A refused prompt is made smaller and sent once more in the turn.
+		if errors.Is(err, llm.ErrContextOverflow) && !retried && len(ids) == 0 {
+			retried = true
+			if shrink(step) {
+				read = len(req.Messages)
+				result, err = model.Stream(ctx, *req, stream)
+			}
+		}
+		if errors.Is(err, llm.ErrContextOverflow) {
+			err = fmt.Errorf("%w; /compact summarizes the conversation to make room", err)
+		}
 		for _, kind := range []string{"reasoning", "text"} {
 			if id := ids[kind]; id != "" {
 				if e := send(Event{Kind: SegmentFinished, Segment: kind, ID: id}); e != nil && err == nil {

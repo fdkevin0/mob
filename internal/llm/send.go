@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -15,6 +17,33 @@ var StallTimeout = 2 * time.Minute
 
 // ErrStalled ends a model request that stopped responding.
 var ErrStalled = errors.New("model stopped responding")
+
+// ErrContextOverflow is a provider refusing a prompt longer than the model's
+// context window. A driver's error matches it with errors.Is.
+var ErrContextOverflow = errors.New("prompt exceeds the model's context window")
+
+// overflow phrases are how providers word a prompt too long for the window.
+var overflow = []string{"context_length_exceeded", "context length", "context window", "maximum context", "prompt is too long", "input is too long", "too many tokens", "too many input tokens", "reduce the length"}
+
+// Overflow reports whether a refusal with status and body is for a prompt
+// longer than the model's window.
+func Overflow(status int, body []byte) bool {
+	if status == http.StatusRequestEntityTooLarge {
+		return true
+	}
+	if status != http.StatusBadRequest && status != http.StatusUnprocessableEntity {
+		return false
+	}
+	text := strings.ToLower(string(body))
+	return slices.ContainsFunc(overflow, func(phrase string) bool { return strings.Contains(text, phrase) })
+}
+
+// OverflowError is err, matching ErrContextOverflow too.
+func OverflowError(err error) error { return overflowError{err} }
+
+type overflowError struct{ error }
+
+func (e overflowError) Unwrap() []error { return []error{e.error, ErrContextOverflow} }
 
 // Send sends a model request on transport without following redirects. The
 // request fails with ErrStalled if its response does not start, or stops
