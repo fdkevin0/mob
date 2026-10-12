@@ -204,3 +204,21 @@ it('sends a typed token from the public web only to Mob on this computer', async
     expect(fetchMock).not.toHaveBeenCalled();
   } finally { vi.unstubAllEnvs(); }
 });
+
+it('offers to continue a reply that stopped at the tool step limit', async () => {
+  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  const chats: string[] = [];
+  const messages = [
+    { id: 'u', role: 'user', parts: [{ type: 'text', text: 'fix it' }] },
+    { id: 'a', role: 'assistant', parts: [{ type: 'text', text: 'working' }], metadata: { status: 'step-limit', error: 'tool step limit reached (20); send another message to continue' } },
+  ];
+  vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+    if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }]));
+    if (url.endsWith('/chat')) { chats.push(String(options?.body)); return new Promise<Response>(() => {}); }
+    return Promise.resolve(Response.json({ messages, active: false, model: 'demo/echo' }));
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+  await waitFor(() => expect(chats.some(c => c.includes('"text":"Continue"'))).toBe(true));
+});

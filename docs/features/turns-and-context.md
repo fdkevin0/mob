@@ -52,9 +52,11 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   under 2048 tokens has no thinking, as Anthropic requires at least 1024.
 - **Time.** A turn has no deadline. It ends when it finishes, when it is
   stopped, or when it reaches the tool step limit (`max_tool_steps`, default
-  20, at most 100, reloaded live). A model request fails with "model stopped
-  responding" when its response does not start, or stops arriving, for two
-  minutes; a reply that keeps arriving is never cut off.
+  20, at most 100, reloaded live). A reply that reaches the limit is saved with
+  status `step-limit`, and the web UI offers a Continue button under it that
+  sends "Continue"; elsewhere, any message continues. A model request fails
+  with "model stopped responding" when its response does not start, or stops
+  arriving, for two minutes; a reply that keeps arriving is never cut off.
 - **Tool arguments** may be up to 1 MiB.
 
 ## Counting the context

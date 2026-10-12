@@ -348,6 +348,11 @@ func TestTurnStepLimit(t *testing.T) {
 	if err == nil || err.Error() != "tool step limit reached (3); send another message to continue" || model.calls != 3 {
 		t.Fatalf("limit 3: %d calls, %v", model.calls, err)
 	}
+	// The saved reply says it stopped at the limit, so clients can offer to
+	// continue it.
+	if history, _ := s.History(id); history[len(history)-1].Metadata["status"] != "step-limit" || !errors.Is(err, ErrStepLimit) {
+		t.Fatalf("saved as %v", history[len(history)-1].Metadata["status"])
+	}
 	m, _ = s.Begin(id, NewID(), "go", "test/looping")
 	model.calls, agent.Steps = 0, 0
 	Run(context.Background(), s, model, agent, id, m, "", func(Event) error { return nil })
