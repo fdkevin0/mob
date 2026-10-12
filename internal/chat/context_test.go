@@ -46,8 +46,9 @@ func TestToolDefinitionsCountAgainstTheWindow(t *testing.T) {
 	if len(plain.requests[0].Messages) != 6 {
 		t.Fatalf("history without tools: %d messages", len(plain.requests[0].Messages))
 	}
-	req := withTool.requests[0]
-	if len(req.Messages) >= 6 || !strings.Contains(req.System, "omitted") {
+	// Older messages are summarized, or omitted, in the turn's last request.
+	req := withTool.requests[len(withTool.requests)-1]
+	if len(req.Messages) >= 6 || !strings.Contains(req.System, "omitted") && !strings.Contains(req.System, summaryNotice) {
 		t.Fatalf("a 16000-token tool definition left all %d messages in a 20000-token window", len(req.Messages))
 	}
 	if size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages); size > info.Context-req.MaxTokens {

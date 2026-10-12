@@ -12,7 +12,7 @@ import (
 const (
 	// compactPrompt instructs the model that folds older messages into a
 	// conversation's summary.
-	compactPrompt = "You keep the summary of a conversation between a user and Mob, an assistant with tools, so that it can go on once older messages are dropped. Fold the new part of the conversation into the summary. Keep the user's goals, requests and preferences, decisions made, facts learned, names, files and paths, tool results that still matter, and unfinished work. Leave out pleasantries and whatever was superseded. Write plain text in the conversation's language, in at most about 1500 words."
+	compactPrompt = "You keep the summary of a conversation between a user and Mob, an assistant with tools, so that it can go on once older messages are dropped. Fold the new part of the conversation into the summary. Keep the user's goals, requests and preferences, decisions made, facts learned, names, files and paths, tool results that still matter, and unfinished work. Leave out pleasantries and whatever was superseded. Write plain text in the conversation's language."
 	// summaryTokens bounds a summary.
 	summaryTokens = 4000
 	// summaryNotice introduces the summary in a turn's instructions.
@@ -22,13 +22,16 @@ const (
 )
 
 // summarize folds messages into previous with model, as many messages at a
-// time as fit its window, and returns the new summary and what it cost.
-func summarize(ctx context.Context, model llm.Model, previous string, messages []Message) (string, *llm.Usage, error) {
+// time as fit its window, in a summary of at most limit tokens, and returns
+// the new summary and what it cost.
+func summarize(ctx context.Context, model llm.Model, previous string, messages []Message, limit int) (string, *llm.Usage, error) {
 	info := model.Info()
-	maxTokens := summaryTokens
+	maxTokens := min(summaryTokens, limit)
 	if info.Output > 0 {
 		maxTokens = min(maxTokens, info.Output)
 	}
+	// About three words take four tokens.
+	system := compactPrompt + fmt.Sprintf(" Use at most about %d words.", maxTokens*3/8)
 	var usage *llm.Usage
 	summary, part := previous, ""
 	flush := func() error {
@@ -39,10 +42,10 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 		if summary != "" {
 			text = "Summary so far:\n" + summary + "\n\n" + text
 		}
-		if info.Context > 0 && tokens(compactPrompt)+tokens(text)+maxTokens > info.Context {
+		if info.Context > 0 && tokens(system)+tokens(text)+maxTokens > info.Context {
 			return fmt.Errorf("summarizing would exceed %s's context", info.ID)
 		}
-		result, err := model.Stream(ctx, llm.Request{System: compactPrompt, Messages: []llm.Message{{Role: "user", Text: text}}, MaxTokens: maxTokens}, func(string, string) error { return nil })
+		result, err := model.Stream(ctx, llm.Request{System: system, Messages: []llm.Message{{Role: "user", Text: text}}, MaxTokens: maxTokens}, func(string, string) error { return nil })
 		if result.Usage != nil {
 			usage = add(usage, result.Usage.Priced(info.Cost))
 		}
@@ -61,7 +64,7 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 		if info.Context <= 0 {
 			return 100000
 		}
-		return info.Context - maxTokens - tokens(compactPrompt) - tokens(summary) - 100
+		return info.Context - maxTokens - tokens(system) - tokens(summary) - 100
 	}
 	for _, m := range messages {
 		text := transcript(m)
