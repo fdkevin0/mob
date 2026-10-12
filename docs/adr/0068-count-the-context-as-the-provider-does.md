@@ -16,7 +16,8 @@ agents count from that (see `research/limits-and-context-management.md`).
 
 - A prompt may use the model's context window less the reply's reserve
   (ADR 0065). The system prompt, the tool definitions and history count
-  against it.
+  against it, as do the notice that history was cut and the note an approved
+  call continues with, which are added after history is fitted.
 - Within a turn, the prompt's size is what the provider reported for the last
   step, its input and output, plus an estimate of the tool results added
   since. Without a report, every added message is estimated.

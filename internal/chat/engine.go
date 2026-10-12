@@ -19,6 +19,9 @@ const (
 	recentMessages = 40
 )
 
+// omittedNotice tells the model that history was cut to fit its window.
+const omittedNotice = "\nOlder conversation messages were omitted."
+
 // systemPrompt starts every turn's instructions; tools and hooks add to it.
 const systemPrompt = "You are Mob, a concise personal assistant. Reply in the user's language. Only claim a tool succeeded if its result says so. A tool call that asks for the user's approval ends the current turn."
 
@@ -135,13 +138,16 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// limit is what a prompt may use of the window, leaving room for the reply.
 	var omitted bool
 	limit := info.Context - reserve
-	budget := limit - tokens(req.System) - toolTokens(req.Tools)
+	budget := limit - tokens(req.System) - toolTokens(req.Tools) - tokens(omittedNotice)
+	if note != "" {
+		budget -= tokens(note)
+	}
 	req.Messages, omitted = Prompt(history, message.ID, budget)
 	if size := promptTokens(req.Messages); info.Context > 0 && size > budget {
 		return fmt.Errorf("the latest message is about %d tokens, more than %s has room for (%d); shorten it or pick a model with a larger context", size, info.ID, max(budget, 0))
 	}
 	if omitted {
-		req.System += "\nOlder conversation messages were omitted."
+		req.System += omittedNotice
 	}
 	if note != "" {
 		req.Messages = append(req.Messages, llm.Message{Role: "user", Text: note})

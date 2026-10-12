@@ -90,3 +90,27 @@ func TestTurnStopsWhenToolResultsFillTheWindow(t *testing.T) {
 		}
 	}
 }
+
+// What is added after history is fitted, the omission notice and an approval
+// note, is reserved when fitting it, so the first request fits too.
+func TestFirstRequestFitsWithItsAdditions(t *testing.T) {
+	s, id, m := turnFixture(t)
+	for range 8 {
+		m, _ = s.Begin(id, NewID(), strings.Repeat("x", 3000), "test/sized")
+	}
+	tool := echoTool("read", func(context.Context, ToolCall) (any, error) { return "ok", nil })
+	tool.Description = strings.Repeat("d", 12000)
+	info := llm.Info{ID: "sized", Context: 12000, Output: 1000, Tools: true}
+	model := &sized{info: info}
+	note := "The user approved read and it ran. Result: " + strings.Repeat("r", 6000)
+	if err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}}, id, m, note, func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	req := model.requests[0]
+	if !strings.Contains(req.System, "omitted") || req.Messages[len(req.Messages)-1].Text != note {
+		t.Fatalf("history was not cut or the note is missing")
+	}
+	if size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages); size > info.Context-req.MaxTokens {
+		t.Fatalf("first request of about %d tokens exceeds the %d a prompt may use", size, info.Context-req.MaxTokens)
+	}
+}
