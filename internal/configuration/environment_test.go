@@ -19,6 +19,8 @@ func cleanEnvironment(t *testing.T) {
 	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY", "MOB_SANDBOX_ISOLATION", "MOB_MAX_TOOL_STEPS", "MOB_WEB_URL"} {
 		t.Setenv(name, "")
 	}
+	// An empty MOB_WEB_URL turns the public web UI off, so it must be unset.
+	os.Unsetenv("MOB_WEB_URL")
 }
 func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 	cleanEnvironment(t)
@@ -98,7 +100,7 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 	if _, err = loader.Read(); err == nil || !strings.Contains(err.Error(), "web_url") {
 		t.Fatalf("plain http web_url accepted: %v", err)
 	}
-	t.Setenv("MOB_WEB_URL", "")
+	os.Unsetenv("MOB_WEB_URL")
 	// Freeze parsed flags: later changes to a caller's FlagSet cannot alter the loader.
 	flags.Set("addr", "127.0.0.1:1004")
 	got, err = loader.Read()
@@ -205,5 +207,29 @@ func TestWebOrigin(t *testing.T) {
 		if _, err := WebOrigin(raw); err == nil {
 			t.Errorf("WebOrigin(%q) accepted", raw)
 		}
+	}
+}
+
+func TestEmptyWebURLEnvironmentTurnsThePublicWebOff(t *testing.T) {
+	cleanEnvironment(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("web_url: https://mob.example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MOB_CONFIG", path)
+	loader, err := NewLoader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := loader.Read(); err != nil || got.WebURL != "https://mob.example" {
+		t.Fatalf("web_url from the file: %q %v", got.WebURL, err)
+	}
+	t.Setenv("MOB_WEB_URL", "")
+	if got, err := loader.Read(); err != nil || got.WebURL != "" {
+		t.Fatalf("empty MOB_WEB_URL kept %q: %v", got.WebURL, err)
+	}
+	t.Setenv("MOB_WEB_URL", "https://other.example")
+	if got, err := loader.Read(); err != nil || got.WebURL != "https://other.example" {
+		t.Fatalf("MOB_WEB_URL not read: %q %v", got.WebURL, err)
 	}
 }
