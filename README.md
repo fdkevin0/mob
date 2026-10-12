@@ -21,6 +21,7 @@ stable release; none is published yet.
 ```bash
 mob tui                    # terminal UI; starts the service when needed
 mob open                   # sign a browser in to the running service
+mob open --web             # or sign in https://mob.fdkevin.cloud to it
 mob start / status / stop  # run the service in the background
 mob serve --demo           # foreground, with an offline demo model
 ```

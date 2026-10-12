@@ -138,3 +138,52 @@ it('keeps a replacement token another tab saved when this tab signs out', async 
   await screen.findByLabelText('Local access token');
   expect(localStorage.getItem('mob-token')).toBe('replacement');
 });
+
+const offer = (value: object) => btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+it('signs the public web in to local Mob with a mob open --web link and remembers where it is', async () => {
+  vi.stubEnv('MODE', 'public');
+  window.history.replaceState(null, '', `/#offer=${offer({ v: 1, url: 'http://127.0.0.1:9000', code: 'code-1' })}`);
+  const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+    expect(url.startsWith('http://127.0.0.1:9000/api/')).toBe(true);
+    if (url.endsWith('/pairing/claim')) { expect(JSON.parse(String(options?.body))).toEqual({ code: 'code-1' }); return Response.json({ token: 'paired' }); }
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([]);
+    return Response.json({ messages: [], active: false, model: 'demo/echo' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    render(<App />);
+    await screen.findByRole('button', { name: /disconnect/i });
+    expect(window.location.hash).toBe('');
+    expect(localStorage.getItem('mob-url')).toBe('http://127.0.0.1:9000');
+    cleanup();
+    render(<App />);
+    await screen.findByRole('button', { name: /disconnect/i });
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/pairing/claim'))).toHaveLength(1);
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('ignores a public web link that points to another computer', async () => {
+  vi.stubEnv('MODE', 'public');
+  window.history.replaceState(null, '', `/#offer=${offer({ v: 1, url: 'https://evil.example', code: 'code-1' })}`);
+  const fetchMock = vi.fn(async () => Response.json({ token: 'stolen' }));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    render(<App />);
+    expect((await screen.findByRole('alert')).textContent).toContain('another computer');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Mob address')).toBeTruthy();
+    expect(localStorage.getItem('mob-url')).toBeNull();
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('explains why the public web could not reach local Mob', async () => {
+  vi.stubEnv('MODE', 'public');
+  window.history.replaceState(null, '', `/#offer=${offer({ v: 1, url: 'http://localhost:8787', code: 'code-1' })}`);
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+  try {
+    render(<App />);
+    expect((await screen.findByRole('alert')).textContent).toContain('could not reach Mob at http://localhost:8787');
+  } finally { vi.unstubAllEnvs(); }
+});

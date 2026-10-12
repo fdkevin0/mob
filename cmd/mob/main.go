@@ -187,9 +187,13 @@ func newRootCommand() *cobra.Command {
 		fmt.Fprintf(cmd.OutOrStdout(), "Access token replaced: %s\nSigned-in browsers, terminals and desktop windows must sign in again; run mob open for a browser.\n", filepath.Join(config.Dir, "token"))
 		return nil
 	}})
-	var printOnly bool
+	var printOnly, web bool
 	open := &cobra.Command{Use: "open", Short: "Sign a browser in to the running service with a one-time link", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		link, err := local.PairingURL(config)
+		pairing := local.PairingURL
+		if web {
+			pairing = local.WebURL
+		}
+		link, err := pairing(config)
 		if err != nil {
 			return err
 		}
@@ -201,6 +205,7 @@ func newRootCommand() *cobra.Command {
 		return nil
 	}}
 	open.Flags().BoolVar(&printOnly, "print", false, "Print the link without opening a browser")
+	open.Flags().BoolVar(&web, "web", false, "Open the public web UI (web_url) instead of the page this service serves")
 	root.AddCommand(token, open)
 	check := &cobra.Command{Use: "config", Short: "Inspect configuration without exposing secrets"}
 	check.AddCommand(&cobra.Command{Use: "check", Short: "Validate configuration and show its location", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {

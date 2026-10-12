@@ -9,6 +9,10 @@ demo: false
 # reaches it stops and asks you to send another message. Reloads live.
 # max_tool_steps: 20
 
+# The public web UI mob open --web signs in. Mob lets this origin call its API
+# with your token; an empty value turns it off. Reloads live.
+# web_url: https://mob.fdkevin.cloud
+
 # Model providers and their keys are not configured here. They live in
 # providers.json in this directory (owner-only, 0600), managed with:
 #   mob provider add deepseek --key-stdin

@@ -2,12 +2,14 @@ package local
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,25 +103,63 @@ func probe(connection Connection) (int, error) {
 
 // PairingURL returns a link that signs a browser in to the running service once.
 func PairingURL(c Config) (string, error) {
-	connection, err := Credentials(c)
+	connection, code, err := pairingCode(c)
 	if err != nil {
 		return "", err
 	}
+	// The fragment never reaches the server, its logs or a Referer header.
+	return connection.URL + "/#pair=" + code, nil
+}
+
+// Offer is what a mob open --web link gives the public web UI: where this Mob
+// listens and a one-time code to exchange there for the access token.
+type Offer struct {
+	Version int    `json:"v"`
+	URL     string `json:"url"`
+	Code    string `json:"code"`
+}
+
+// WebURL returns a link that signs the public web UI in to the running service
+// once. The offer travels base64url-encoded in the fragment, so the site
+// serving the page never receives it.
+func WebURL(c Config) (string, error) {
+	if c.WebURL == "" {
+		return "", errors.New("web_url is empty in the configuration; set it to use the public web UI")
+	}
+	connection, code, err := pairingCode(c)
+	if err != nil {
+		return "", err
+	}
+	// The page's content security policy lets it reach only these hosts.
+	if u, err := url.Parse(connection.URL); err != nil || u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost" {
+		return "", fmt.Errorf("the public web UI reaches Mob only at 127.0.0.1 or localhost, not %s", connection.URL)
+	}
+	offer, err := json.Marshal(Offer{Version: 1, URL: connection.URL, Code: code})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(c.WebURL, "/") + "/#offer=" + base64.RawURLEncoding.EncodeToString(offer), nil
+}
+
+func pairingCode(c Config) (Connection, string, error) {
+	connection, err := Credentials(c)
+	if err != nil {
+		return Connection{}, "", err
+	}
 	if !Reachable(connection) {
-		return "", errors.New("Mob is not running; start it with mob start")
+		return Connection{}, "", errors.New("Mob is not running; start it with mob start")
 	}
 	body, err := call(connection, "/api/pairing", http.StatusOK)
 	if err != nil {
-		return "", err
+		return Connection{}, "", err
 	}
 	var pairing struct {
 		Code string `json:"code"`
 	}
 	if err = json.Unmarshal(body, &pairing); err != nil || pairing.Code == "" {
-		return "", errors.New("Mob returned an invalid pairing code")
+		return Connection{}, "", errors.New("Mob returned an invalid pairing code")
 	}
-	// The fragment never reaches the server, its logs or a Referer header.
-	return connection.URL + "/#pair=" + pairing.Code, nil
+	return connection, pairing.Code, nil
 }
 
 func call(connection Connection, path string, want int) ([]byte, error) {

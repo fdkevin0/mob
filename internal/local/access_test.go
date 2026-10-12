@@ -1,7 +1,10 @@
 package local
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +54,27 @@ func TestRotateTokenAndPairingURL(t *testing.T) {
 	link, err := PairingURL(c)
 	if err != nil || !strings.HasPrefix(link, running.Connection.URL+"/#pair=") {
 		t.Fatalf("pairing link %q %v", link, err)
+	}
+	if _, err = WebURL(c); err == nil {
+		t.Fatal("web link without web_url")
+	}
+	c.WebURL = "https://mob.example/"
+	link, err = WebURL(c)
+	encoded, found := strings.CutPrefix(link, "https://mob.example/#offer=")
+	if err != nil || !found {
+		t.Fatalf("web link %q %v", link, err)
+	}
+	var offer Offer
+	if raw, err := base64.RawURLEncoding.DecodeString(encoded); err != nil || json.Unmarshal(raw, &offer) != nil || offer.Version != 1 || offer.URL != running.Connection.URL || offer.Code == "" {
+		t.Fatalf("offer %q: %+v %v", encoded, offer, err)
+	}
+	claim, err := http.Post(offer.URL+"/api/pairing/claim", "application/json", strings.NewReader(`{"code":"`+offer.Code+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claimed struct{ Token string }
+	if json.NewDecoder(claim.Body).Decode(&claimed); claim.Body.Close() != nil || claimed.Token != running.Server.Token() {
+		t.Fatalf("offer code claimed %d", claim.StatusCode)
 	}
 	old := running.Server.Token()
 	if err = RotateToken(c); err != nil {

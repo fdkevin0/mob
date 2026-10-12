@@ -29,6 +29,7 @@
   },
   "scripts": {
     "build": "vite build --config webapp/vite.config.ts",
+    "build:web": "vite build --config webapp/vite.config.ts --mode public",
     "test:webapp": "tsc -p webapp && vitest run --config webapp/vitest.config.ts",
     "dev": "vite --config webapp/vite.config.ts",
     "build:cli": "bun run build && go build -o build/mob ./cmd/mob",

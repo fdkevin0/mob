@@ -13,6 +13,7 @@ and channels are its clients. Start from
 | `MOB_STATE_DIR` | XDG state home + `mob`; background logs |
 | `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
 | `MOB_TOKEN` | optional local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
+| `MOB_WEB_URL` | `https://mob.fdkevin.cloud`; the public web UI `mob open --web` signs in, see [Remote access](remote-access.md) |
 | `MOB_DEMO` | `1` makes the offline `demo/echo` model the default |
 | `MOB_SANDBOX_*` | override the `sandbox` section; see [Sandbox](sandbox.md) |
 
@@ -62,5 +63,5 @@ and channels are its clients. Start from
   browser keeps it until Disconnect.
 - `mob token rotate` replaces the token and signs out every browser, terminal and
   desktop window, and stops turns started with the old token.
-- Browser dev origins on localhost port 5173 and the Wails WebView origin are
-  allowed.
+- Browser dev origins on localhost port 5173, the Wails WebView origin and the
+  `web_url` origin are allowed.

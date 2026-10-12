@@ -16,7 +16,7 @@ import (
 
 func cleanEnvironment(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY", "MOB_SANDBOX_ISOLATION", "MOB_MAX_TOOL_STEPS"} {
+	for _, name := range []string{"MOB_CONFIG", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_SANDBOX_ENABLED", "MOB_SANDBOX_RUNTIME", "MOB_SANDBOX_IMAGE", "MOB_SANDBOX_NETWORK", "MOB_SANDBOX_CPUS", "MOB_SANDBOX_MEMORY", "MOB_SANDBOX_ISOLATION", "MOB_MAX_TOOL_STEPS", "MOB_WEB_URL"} {
 		t.Setenv(name, "")
 	}
 }
@@ -91,6 +91,14 @@ func TestConfigurationPrecedenceAndSafeReads(t *testing.T) {
 		}
 	}
 	t.Setenv("MOB_MAX_TOOL_STEPS", "")
+	if got, err = loader.Read(); err != nil || got.WebURL != DefaultWebURL {
+		t.Fatalf("default web_url: %q %v", got.WebURL, err)
+	}
+	t.Setenv("MOB_WEB_URL", "http://ftp.example/")
+	if _, err = loader.Read(); err == nil || !strings.Contains(err.Error(), "web_url") {
+		t.Fatalf("plain http web_url accepted: %v", err)
+	}
+	t.Setenv("MOB_WEB_URL", "")
 	// Freeze parsed flags: later changes to a caller's FlagSet cannot alter the loader.
 	flags.Set("addr", "127.0.0.1:1004")
 	got, err = loader.Read()
@@ -176,5 +184,26 @@ func TestMCPServers(t *testing.T) {
 	}
 	if _, err := write("mcp_servers:\n  x:\n    command: x\n    unknown: 1\n").Read(); err == nil {
 		t.Fatal("unknown server field accepted")
+	}
+}
+
+func TestWebOrigin(t *testing.T) {
+	for raw, want := range map[string]string{
+		"":                             "",
+		"https://mob.example":          "https://mob.example",
+		"https://Mob.Example:443/app/": "https://mob.example",
+		"https://mob.example:8443":     "https://mob.example:8443",
+		"http://localhost:5173":        "http://localhost:5173",
+		"http://127.0.0.1/":            "http://127.0.0.1",
+		"http://[::1]:5173":            "http://[::1]:5173",
+	} {
+		if got, err := WebOrigin(raw); err != nil || got != want {
+			t.Errorf("WebOrigin(%q) = %q, %v; want %q", raw, got, err, want)
+		}
+	}
+	for _, raw := range []string{"http://mob.example", "ftp://mob.example", "https://", "mob.example", "https://user@mob.example", "https://mob.example/?q", "https://mob.example/#x", "https://mob.example/?"} {
+		if _, err := WebOrigin(raw); err == nil {
+			t.Errorf("WebOrigin(%q) accepted", raw)
+		}
 	}
 }
