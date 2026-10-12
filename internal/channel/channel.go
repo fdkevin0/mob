@@ -84,6 +84,9 @@ type Reply struct {
 	Text string
 	// Approvals are the requests the turn made, for apps that show buttons.
 	Approvals []chat.PendingApproval
+	// Settled, when the message decided an approval, is its ID once it no
+	// longer waits for a decision, for apps that remove its buttons.
+	Settled string
 }
 
 // Answer runs m as a command or a turn in the sender's conversation. On a
@@ -131,9 +134,12 @@ func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 	}
 	reply, err := b.turn(ctx, input, m.Started)
 	if input.Approval != nil && (errors.Is(err, chat.ErrStaleApproval) || errors.Is(err, sql.ErrNoRows)) {
-		return Reply{Text: b.Texts.Stale(input.Approval.ID)}, nil
+		return Reply{Text: b.Texts.Stale(input.Approval.ID), Settled: input.Approval.ID}, nil
 	}
 	var refused *chat.CommandError
+	if input.Approval != nil && !(errors.As(err, &refused) && refused.Status == 409) && !b.waits(id, input.Approval.ID) {
+		reply.Settled = input.Approval.ID
+	}
 	switch {
 	case errors.As(err, &refused) && refused.Status == 409 && b.Texts.Busy != "" && strings.TrimSpace(reply.Text) == "":
 		// The previous turn is still running; this message was not taken.
@@ -156,6 +162,16 @@ func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 		reply.Text = b.Texts.Empty
 	}
 	return reply, err
+}
+
+// waits reports whether approval is still pending in the conversation.
+func (b *Bridge) waits(conversation, approval string) bool {
+	for _, p := range b.Conversation.Pending(conversation) {
+		if p.ID == approval {
+			return true
+		}
+	}
+	return false
 }
 
 // conversation is the ID of the conversation m's sender writes to, created

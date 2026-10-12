@@ -24,6 +24,15 @@ type Service struct {
 	mu     sync.Mutex
 	// stops stops the turn each draft shows, for a tap on its stop button.
 	stops map[int64]func()
+	// edits orders changes to approval buttons; decided holds, per message,
+	// the buttons first seen and the approvals decided since.
+	edits   sync.Mutex
+	decided map[[2]int64]*decisions
+}
+
+type decisions struct {
+	keyboard keyboard
+	ids      map[string]bool
 }
 
 // placeholderDelay is how long a reply may take before Mob shows that it is
@@ -314,26 +323,54 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 	}
 	answer := func(ctx context.Context) (channel.Reply, error) {
 		defer s.done(draft)
-		done := make(chan struct{})
+		// The placeholder's requests end with the answer, so that none holds
+		// back the reply.
+		placeholding, cancel := context.WithCancel(ctx)
 		shown := make(chan struct{})
-		go func() { defer close(shown); s.placeholder(ctx, c, u.Message.Chat.ID, draft, done) }()
-		defer func() { close(done); <-shown }()
+		go func() { defer close(shown); s.placeholder(placeholding, c, u.Message.Chat.ID, draft) }()
+		defer func() { cancel(); <-shown }()
 		return b.Answer(ctx, m)
 	}
 	return b.Finish(ctx, m.ID, answer, func(ctx context.Context, r channel.Reply) error {
-		return c.Send(ctx, u.Message.Chat.ID, r.Text, r.Approvals...)
+		err := c.Send(ctx, u.Message.Chat.ID, r.Text, r.Approvals...)
+		if r.Settled != "" && u.Message.Buttons != nil {
+			s.settle(ctx, c, *u.Message.Buttons, r.Settled)
+		}
+		return err
 	})
 }
 
+// settle removes the buttons for approval id, which no longer waits for a
+// decision, from the message a tap found them on, along with those for the
+// approvals settled before. Best effort: a button left behind only answers
+// that it was decided.
+func (s *Service) settle(ctx context.Context, c Config, b shown, id string) {
+	s.edits.Lock()
+	defer s.edits.Unlock()
+	if s.decided == nil {
+		s.decided = map[[2]int64]*decisions{}
+	}
+	key := [2]int64{b.Chat, b.Message}
+	d := s.decided[key]
+	if d == nil {
+		d = &decisions{keyboard: b.Keyboard, ids: map[string]bool{}}
+		s.decided[key] = d
+	}
+	d.ids[id] = true
+	left := d.keyboard.decided(d.ids)
+	if len(left.Rows) == 0 {
+		delete(s.decided, key)
+	}
+	_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{"chat_id": b.Chat, "message_id": b.Message, "reply_markup": left}, nil)
+}
+
 // placeholder shows a draft with a stop button while a reply is written,
-// once it takes longer than placeholderDelay, until done closes. Where drafts
+// once it takes longer than placeholderDelay, until ctx is done. Where drafts
 // are unavailable it shows the bot typing instead. Both are best effort.
-func (s *Service) placeholder(ctx context.Context, c Config, chatID, draftID int64, done <-chan struct{}) {
+func (s *Service) placeholder(ctx context.Context, c Config, chatID, draftID int64) {
 	wait, typing := placeholderDelay, false
 	for {
 		select {
-		case <-done:
-			return
 		case <-ctx.Done():
 			return
 		case <-time.After(wait):

@@ -71,3 +71,14 @@ func TestChunksDropALanguageTagTooLongToFit(t *testing.T) {
 		t.Fatalf("fit took nothing: %d", n)
 	}
 }
+
+func TestChunksResolveEscapesAndEntities(t *testing.T) {
+	got := chunks("\\*literal\\* &amp; &#65; `\\* &amp;`\n\n```\n\\* &amp;\n```", chunkLimit)
+	want := "*literal* &amp; A <code>\\* &amp;amp;</code>\n\n<pre>\\* &amp;amp;</pre>"
+	if len(got) != 1 || got[0].HTML != want {
+		t.Fatalf("HTML: %+v\nwant: %s", got, want)
+	}
+	if got[0].Plain != "*literal* & A \\* &amp;\n\n\\* &amp;" {
+		t.Fatalf("plain: %q", got[0].Plain)
+	}
+}
