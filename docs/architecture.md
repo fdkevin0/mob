@@ -5,6 +5,10 @@ authenticated loopback HTTP API; the desktop app (Wails), the browser UI, the
 TUI and messaging channels are its clients. How each feature behaves is in
 [features/](features/README.md).
 
+The browser UI and the experimental TypeScript terminal share `@mob/client`.
+The experiment is launched separately from source with Bun; it does not replace
+the Bubble Tea TUI or change the single-Go-binary release.
+
 ## Where code lives
 
 | Path | Owns |
@@ -24,14 +28,26 @@ TUI and messaging channels are its clients. How each feature behaves is in
 | `internal/gateway`, `internal/node` | the experimental relay and edge-node client |
 | `internal/tui` | the Bubble Tea terminal UI |
 | `internal/version` | release versions |
-| `cmd/contracts` | generates `webapp/src/chat/contracts.ts` from Go types |
-| `webapp/src/chat` | the React UI; `useConversation.ts` owns transport, approvals and polling |
+| `cmd/contracts` | generates `packages/client/src/contracts.ts` from Go types; Web keeps a compatibility re-export |
+| `packages/client` | authenticated HTTP, AI SDK message state, commands, approvals, polling and stream recovery, shared by Web and the terminal pilot |
+| `webapp/src/chat` | the React UI; browser authentication/storage, DOM input/completion and presentation adapt the shared client |
+| `apps/tui` | the experimental OpenTUI React UI; terminal input, focus, layout and scrolling adapt the shared client |
 
 ## Boundaries
 
 - Every client and channel goes through `ConversationService`; Telegram, WeChat
   iLink and email call it in-process, other clients over HTTP. Nothing else opens
   the database.
+- `@mob/client` has no browser or terminal APIs. It uses the AI SDK's headless
+  `Chat` state container (exported by `@ai-sdk/react`), `DefaultChatTransport` and
+  `readUIMessageStream`, not a new message protocol. UIs subscribe to its stable
+  snapshot and translate their own input events. Commands still run in Go;
+  navigation/form actions return to the UI. Authentication failures carry the
+  rejected token through a callback; only Web dispatches a browser event.
+- Detaching a shared conversation client aborts its local readers, not the Go
+  turn. Explicit Stop requests the service to stop it. Grants, expiry and
+  duplicate-effect protections remain service-owned; clients never automatically
+  retry an approval decision or uncertain side effect.
 - Plugins register tools, commands, routes, configuration and background runs
   beside their own code; the engine does not name them (see
   [Extensions](features/extensions.md)). Code from outside Mob arrives only over

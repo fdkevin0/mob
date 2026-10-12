@@ -38,10 +38,12 @@ Model providers and keys live in `providers.json` beside it (see
 - `mob start` runs the service in the background; `mob status` reports it and
   any reload errors; `mob stop` authenticates to it and waits for shutdown. Start,
   status and stop must use the same address and data-directory overrides.
-- Without `mob start`, the first desktop app or TUI owns the service until it
+- Without `mob start`, the first desktop app or Bubble Tea TUI owns the service until it
   exits, and later clients attach to it. `mob serve` stays tied to its terminal.
   To change ownership, close the current owner and run `mob start` with the same
   environment. No login item or system service is installed.
+- The experimental TypeScript terminal (`bun run tui:pilot`) only attaches to
+  an existing service. It neither starts nor shuts down the Go process.
 - The database owner holds a process lock; clients use HTTP rather than opening
   the SQLite file.
 

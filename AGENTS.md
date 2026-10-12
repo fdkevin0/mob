@@ -12,7 +12,7 @@ channels.
   asking.
 - `./build/mob serve --demo` runs the app on an offline model when you want to
   see a change working.
-- Go tests fail when `webapp/src/chat/contracts.ts` is stale; regenerate it with
+- Go tests fail when `packages/client/src/contracts.ts` is stale; regenerate it with
   `bun run generate:contracts`.
 
 ## Rules tooling does not catch

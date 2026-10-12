@@ -42,6 +42,10 @@ before it has an effect, and the owner can decide from any client or channel.
   ends quietly.
 - An approval left undecided past its hour is marked expired and its call
   failed, so the model and channels stop waiting on it.
+- Web and the experimental TypeScript TUI share the approval/denial stream
+  orchestration in `@mob/client`. Their controls still send the same approval ID,
+  reason and remembered scope to Go. They display service results and failures;
+  neither retries stale decisions nor makes authorization policy locally.
 
 ## Exactly once
 

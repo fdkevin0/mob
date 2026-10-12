@@ -22,12 +22,21 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   from the event after `Last-Event-ID`, and then follows it live. It answers 204
   when no turn is running. Any number of clients can follow one turn, and a
   client that leaves ends only its own stream.
-- The web UI follows a running turn whenever a conversation snapshot says one is
-  active. It reads the replay itself (`reconnectToStream` and
+- The web UI and experimental TypeScript TUI use the same `@mob/client`
+  conversation state and follow a running turn whenever a snapshot says one is
+  active. The client reads the replay itself (`reconnectToStream` and
   `readUIMessageStream`) rather than through `resumeStream`, so every attempt
   builds the reply from fresh state and replaces the saved draft; one reconnect
   is in flight at a time, polling pauses until it ends, and a failed attempt
-  waits for the next poll. The terminal follows the same way.
+  waits for the next poll. Idle snapshots poll every two seconds. A snapshot
+  requested before a local send or view detachment cannot overwrite newer
+  state. Failed sends restore the submitted text only if no newer draft exists.
+  Successful snapshot reconciliation clears transient polling/follow errors,
+  but does not dismiss a failed command or approval decision.
+  The original Go terminal follows the same service contract independently.
+- Leaving a shared-client view cancels only that view's streams and polling;
+  explicit Stop posts to the service and cancels the local readers. The pilot
+  connects to an already running service and does not own its lifetime.
 - The reply is saved about once a second while it streams, so a forced
   termination can lose the last second. The event log is not persisted: the
   saved message is the result once a turn ends, and a service restart marks
@@ -40,10 +49,11 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   composer nor the terminal input limits what is typed or pasted. A message that
   alone exceeds what the model's context leaves room for ends the turn with an
   error naming its size and the model, before any model request.
-- **Terminal pastes.** The terminal's input keeps at most 10000 lines, so a
+- **Terminal pastes.** The original Bubble Tea input keeps at most 10000 lines, so a
   bracketed paste that would bring the input to 100 lines is held aside, shown
   as `[Pasted text #1 · N lines · <random tag>]`, and sent whole. Only the
-  placeholders the input made are expanded, in one pass.
+  placeholders the input made are expanded, in one pass. The experimental
+  TypeScript terminal uses its native textarea rather than paste placeholders.
 - **Replies.** A reply may use the model's output limit, up to 32000 tokens and
   at most a quarter of its context window. Without a known limit, the
   OpenAI-compatible driver lets the provider choose and the Anthropic driver
