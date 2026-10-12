@@ -1,12 +1,12 @@
 name: Release
 
 # Every change to main arrives by pull request. Once CI passes on a commit pushed
-# to main (docs/adr/0057):
+# to main (docs/features/releases.md):
 # - nightly: the commit is published as a prerelease tagged {date}.{sha};
 # - stable: release-please keeps a release PR with the next vX.Y.Z and its
 #   changelog up to date. When that PR is merged it tags the release, and
 #   GoReleaser adds the archives and updates the Homebrew cask.
-# Older releases stay downloadable for database upgrades (docs/adr/0054).
+# Older releases stay downloadable for database upgrades (docs/features/releases.md).
 on:
   workflow_run:
     workflows: [CI]

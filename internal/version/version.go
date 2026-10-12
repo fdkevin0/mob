@@ -1,6 +1,6 @@
 // Package version names Mob builds. Stable releases are tagged vX.Y.Z; every
 // other build is named {date}.{sha}: the UTC date of the commit it comes from
-// and that commit's short hash, for example 20261011.c0502b6 (docs/adr/0057).
+// and that commit's short hash, for example 20261011.c0502b6 (docs/features/releases.md).
 package version
 
 import (

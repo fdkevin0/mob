@@ -216,10 +216,10 @@ With the sandbox enabled, the model can run any shell command in a throwaway
 container, without asking: install packages, run code, fetch from the network.
 Only the conversation's workspace (`data_dir/sandbox/<conversation>`, mounted
 at `/workspace`) persists between commands, and it is the only host path the
-container sees (ADR 0055). Optional limits cut off the network and cap each
-command's CPUs and memory (ADR 0056). On Linux, `isolation: gvisor` runs
-commands under [gVisor](https://gvisor.dev) instead of directly on the host
-kernel (ADR 0057).
+container sees. Optional limits cut off the network and cap each command's CPUs
+and memory. On Linux, `isolation: gvisor` runs commands under
+[gVisor](https://gvisor.dev) instead of directly on the host kernel. See
+[docs/features/sandbox.md](docs/features/sandbox.md).
 
 ```yaml
 sandbox:
@@ -422,13 +422,13 @@ It runs as you, outside the sandbox, so configure only servers you trust. Keep
 - `internal/chat/store.go`, `delivery.go`, `migrations.go`: SQLite persistence,
   durable send receipts and transactional `user_version` migrations kept for a
   migration window. A database too old or too new for this release is refused
-  with the release to install instead (ADR 0054). SQLite remains the concrete
+  with the release to install instead ([releases](docs/features/releases.md)). SQLite remains the concrete
   persistence dependency, with no generic repository or external queue.
 - `internal/version`: the release version; `mob --version` and `GET /api/runtime`
   report it. Every merge to `main` that passes CI is published as a nightly
   prerelease named `{date}.{sha}` from Go's VCS build stamp. Stable `vX.Y.Z`
   releases come from merging the release-please PR and are also installable with
-  `brew install fdkevin0/tap/mob` (ADR 0057).
+  `brew install fdkevin0/tap/mob`.
 - `internal/plugins/email`: mail reading, analysis, send deduplication, SMTP/IMAP
   and MIME. `internal/plugins/telegram`: polling, private-user filtering, offset
   acknowledgement, conversation mapping and reply delivery. Neither imports the
@@ -452,9 +452,9 @@ It runs as you, outside the sandbox, so configure only servers you trust. Keep
   Each plugin panel owns its form, operation and busy state; the shell handles
   navigation. Hidden panels retain unsaved drafts across navigation.
 
-ADRs 0006–0050 in `docs/adr/` record the retired Cloudflare Worker and Telegram Mini
-App, whose code is kept at the `legacy-worker` tag; they are superseded and do not
-prescribe the runtime above. ADR 0051 onwards describe this runtime.
+[docs/features/](docs/features/README.md) describes each feature in more depth. The
+retired Cloudflare Worker and Telegram Mini App, and the decision records written
+for them, are kept at the `legacy-worker` tag.
 
 ## Verification and remaining migration
 

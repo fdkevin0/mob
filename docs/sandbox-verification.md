@@ -1,6 +1,6 @@
 # Verifying the sandbox on macOS and Windows
 
-The sandbox (ADR 0055) is unit-tested on every platform, and these scripts check
+The [sandbox](features/sandbox.md) is unit-tested on every platform, and these scripts check
 a real machine end to end. Results so far:
 
 | Platform | Runtime | Result |
