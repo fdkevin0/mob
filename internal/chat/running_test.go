@@ -3,6 +3,8 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 )
@@ -74,6 +76,29 @@ func TestStartDoesNothingWithAlreadyWithdrawnAuthority(t *testing.T) {
 		// The approval is still pending: nothing was decided for a stopped turn.
 		if _, err := service.Store.Decide(c.ID, approval, false, ""); err != nil {
 			t.Fatalf("approval was decided: %v", err)
+		}
+	}
+}
+
+// A turn that reached its step limit ends its stream as finished, not failed,
+// so clients offer to continue it rather than show an error.
+func TestStepLimitEndsTheStreamAsFinished(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		last []EventKind
+	}{
+		{fmt.Errorf("%w (3); send another message to continue", ErrStepLimit), []EventKind{StepStarted, TurnFinished}},
+		{errors.New("model returned HTTP 500"), []EventKind{StepStarted, TurnFailed, TurnFinished}},
+	} {
+		r := newRunning(func() {})
+		r.record(Event{Kind: StepStarted})
+		r.finish(c.err)
+		var kinds []EventKind
+		for _, e := range r.events {
+			kinds = append(kinds, e.Kind)
+		}
+		if !slices.Equal(kinds, c.last) {
+			t.Errorf("%v: events %v", c.err, kinds)
 		}
 	}
 }

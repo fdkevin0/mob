@@ -222,3 +222,27 @@ it('offers to continue a reply that stopped at the tool step limit', async () =>
   fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
   await waitFor(() => expect(chats.some(c => c.includes('"text":"Continue"'))).toBe(true));
 });
+
+it('ends a streamed turn that reached the step limit with Continue, not an error', async () => {
+  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  let sent = false;
+  const saved = [
+    { id: 'u', role: 'user', parts: [{ type: 'text', text: 'fix it' }] },
+    { id: 'a', role: 'assistant', parts: [{ type: 'text', text: 'working' }], metadata: { status: 'step-limit', error: 'tool step limit reached (20); send another message to continue' } },
+  ];
+  const stream = ['{"type":"start","messageId":"a"}', '{"type":"start-step"}', '{"type":"text-start","id":"t"}', '{"type":"text-delta","id":"t","delta":"working"}',
+    '{"type":"text-end","id":"t"}', '{"type":"finish-step"}', '{"type":"finish","finishReason":"tool-calls"}'].map(chunk => `data: ${chunk}\n\n`).join('') + 'data: [DONE]\n\n';
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }]));
+    if (url.endsWith('/chat')) { sent = true; return Promise.resolve(new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } })); }
+    return Promise.resolve(Response.json({ messages: sent ? saved : [], active: false, model: 'demo/echo' }));
+  }));
+  render(<App />);
+  const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+  fireEvent.change(box, { target: { value: 'fix it' } });
+  fireEvent.submit(box.closest('form')!);
+  await screen.findByRole('button', { name: 'Continue' }, { timeout: 5000 });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(box.value).toBe('');
+});
