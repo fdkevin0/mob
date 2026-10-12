@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -178,5 +179,54 @@ func TestAnswerConcludesWithTheLastStepAndTheToolsUsed(t *testing.T) {
 	}
 	if !strings.Contains(system, "reading in Test") {
 		t.Fatalf("the model was not told how the reply is read: %q", system)
+	}
+}
+
+// waiter writes a little, then waits until it is stopped. started closes
+// when it first waits.
+type waiter struct {
+	started chan struct{}
+	once    *sync.Once
+}
+
+func (waiter) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "waiter"} }
+func (waiter) Info() llm.Info { return llm.Info{ID: "waiter", Context: 100000} }
+func (w waiter) Stream(ctx context.Context, _ llm.Request, emit func(string, string) error) (llm.Result, error) {
+	if err := emit("text", "partial"); err != nil {
+		return llm.Result{}, err
+	}
+	w.once.Do(func() { close(w.started) })
+	<-ctx.Done()
+	return llm.Result{}, ctx.Err()
+}
+
+func TestAnswerWhileBusyAndStopped(t *testing.T) {
+	b := bridge(t)
+	w := waiter{started: make(chan struct{}), once: new(sync.Once)}
+	b.Conversation = chat.NewConversation(b.Store, oneModel{w})
+	t.Cleanup(b.Conversation.Close)
+	b.Client = chat.ClientTelegram
+	b.Texts.Busy, b.Texts.Stopped = "busy", "stopped"
+	type result struct {
+		reply Reply
+		err   error
+	}
+	first := make(chan result, 1)
+	go func() {
+		reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "long job"})
+		first <- result{reply, err}
+	}()
+	<-w.started
+	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "and this"}); err != nil || reply.Text != "busy" {
+		t.Fatalf("while busy: %q (err: %v)", reply.Text, err)
+	}
+	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/stop"}); err != nil || reply.Text != "Stopping." {
+		t.Fatalf("/stop: %q (err: %v)", reply.Text, err)
+	}
+	if r := <-first; r.err != nil || r.reply.Text != "partial\n\nstopped" {
+		t.Fatalf("stopped turn: %q (err: %v)", r.reply.Text, r.err)
+	}
+	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/stop"}); err != nil || reply.Text != "Nothing is running." {
+		t.Fatalf("/stop with nothing running: %q (err: %v)", reply.Text, err)
 	}
 }

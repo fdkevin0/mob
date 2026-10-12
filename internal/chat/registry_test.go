@@ -47,7 +47,7 @@ func TestComplete(t *testing.T) {
 		client, text string
 		want         []string
 	}{
-		{ClientTelegram, "/", []string{"/model", "/models", "/compact", "/new", "/approve", "/deny", "/grants", "/revoke", "/help"}},
+		{ClientTelegram, "/", []string{"/model", "/models", "/compact", "/new", "/approve", "/deny", "/grants", "/revoke", "/stop", "/help"}},
 		{ClientWeb, "/mo", []string{"/model", "/models"}},
 		{ClientWeb, "/models", []string{"/models"}},
 		{ClientWeb, "/de", []string{"/deny"}},

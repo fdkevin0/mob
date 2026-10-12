@@ -10,6 +10,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/fdkevin0/mob/internal/chat"
 )
@@ -25,6 +26,10 @@ type Bridge struct {
 	Texts        Texts
 	// Limit, when set, ends a turn whose reply grows past it, in bytes.
 	Limit int
+
+	// mu keeps messages that arrive together from each creating a
+	// conversation for the same sender.
+	mu sync.Mutex
 }
 
 // Texts are what a channel says in its own words.
@@ -48,6 +53,11 @@ type Texts struct {
 	// Used, when set, follows the reply of a turn that called tools, to say
 	// which in a line.
 	Used func([]Use) string
+	// Busy, when set, answers a message sent while the conversation's
+	// previous turn is still running.
+	Busy string
+	// Stopped, when set, follows the reply of a turn the sender stopped.
+	Stopped string
 }
 
 // Message is one message someone sent Mob in an app.
@@ -60,6 +70,11 @@ type Message struct {
 	// Owner says the sender owns this Mob.
 	Owner bool
 	Text  string
+	// Started, when set, is called once the message's turn is running, or
+	// when it has no turn, once its answer is ready; it may be called more
+	// than once. An app answering messages concurrently waits for it before
+	// answering the next, so they take effect in the order they were sent.
+	Started func()
 }
 
 // Reply is what Mob answers a message with.
@@ -72,19 +87,12 @@ type Reply struct {
 // Answer runs m as a command or a turn in the sender's conversation. On a
 // failure the reply still says what happened.
 func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
-	var id string
-	if err := b.Store.Setting(m.Key, &id); err != nil {
-		return Reply{Text: "Cannot load the " + b.Name + " conversation."}, err
+	if m.Started != nil {
+		defer m.Started()
 	}
-	if id == "" && m.Text != "/new" && m.Text != "/help" {
-		conversation, err := b.Store.Create()
-		if err != nil {
-			return Reply{Text: "Cannot create a conversation."}, err
-		}
-		id = conversation.ID
-		if err = b.Store.SaveSetting(m.Key, id); err != nil {
-			return Reply{Text: "Cannot save the " + b.Name + " conversation."}, err
-		}
+	id, failure, err := b.conversation(m)
+	if err != nil {
+		return Reply{Text: failure}, err
 	}
 	result, err := b.Conversation.Commands.Run(ctx, chat.CommandRequest{Client: b.Client, ConversationID: id, Text: m.Text}, m.Owner)
 	if err != nil {
@@ -119,12 +127,19 @@ func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 			return Reply{Text: b.Texts.Unsupported}, nil
 		}
 	}
-	reply, err := b.turn(ctx, input)
+	reply, err := b.turn(ctx, input, m.Started)
 	if input.Approval != nil && (errors.Is(err, chat.ErrStaleApproval) || errors.Is(err, sql.ErrNoRows)) {
 		return Reply{Text: b.Texts.Stale(input.Approval.ID)}, nil
 	}
 	var refused *chat.CommandError
 	switch {
+	case errors.As(err, &refused) && refused.Status == 409 && b.Texts.Busy != "" && strings.TrimSpace(reply.Text) == "":
+		// The previous turn is still running; this message was not taken.
+		reply.Text, err = b.Texts.Busy, nil
+	case errors.Is(err, context.Canceled) && ctx.Err() == nil && b.Texts.Stopped != "":
+		// Stopped by the sender rather than by Mob shutting down.
+		reply.Text += "\n\n" + b.Texts.Stopped
+		err = nil
 	case errors.As(err, &refused) && refused.Status == 403:
 		// The sender may not do this, such as a guest remembering an
 		// approval; saying so is the answer.
@@ -141,16 +156,42 @@ func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 	return reply, err
 }
 
+// conversation is the ID of the conversation m's sender writes to, created
+// for a first message; on a failure it also says what went wrong.
+func (b *Bridge) conversation(m Message) (string, string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var id string
+	if err := b.Store.Setting(m.Key, &id); err != nil {
+		return "", "Cannot load the " + b.Name + " conversation.", err
+	}
+	if id == "" && m.Text != "/new" && m.Text != "/help" && m.Text != "/stop" {
+		conversation, err := b.Store.Create()
+		if err != nil {
+			return "", "Cannot create a conversation.", err
+		}
+		id = conversation.ID
+		if err = b.Store.SaveSetting(m.Key, id); err != nil {
+			return "", "Cannot save the " + b.Name + " conversation.", err
+		}
+	}
+	return id, "", nil
+}
+
 // turn runs one turn and collects what the sender sees of it: the text of its
 // last step that wrote any, which concludes the turn, the tools it used, its
 // failures and the approvals it asks for. Text written between tool calls,
 // reasoning and tool calls stay in the local conversation.
-func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest) (Reply, error) {
+func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest, started func()) (Reply, error) {
 	input.Channel = b.Name
 	var step, last, failures strings.Builder
 	var used []Use
 	var approvals []chat.PendingApproval
 	err := b.Conversation.Execute(ctx, input, func(event chat.Event) error {
+		if started != nil {
+			// Events come only from an admitted turn.
+			started()
+		}
 		switch event.Kind {
 		case chat.StepStarted:
 			if strings.TrimSpace(step.String()) != "" {
@@ -238,37 +279,48 @@ func (b *Bridge) overLimit() error {
 // sent, is never answered or sent again, and an interrupted send is reported
 // rather than retried. A failed answer is still sent and then returned.
 func (b *Bridge) Deliver(ctx context.Context, id string, answer func(context.Context) (Reply, error), send func(context.Context, Reply) error) error {
+	fresh, err := b.Accept(id)
+	if !fresh || err != nil {
+		return err
+	}
+	return b.Finish(ctx, id, answer, send)
+}
+
+// Accept records the message with id as taken, so that a restart never
+// answers it again, and reports whether it is new and must be finished with
+// Finish. A message whose send a restart interrupted is reported instead.
+func (b *Bridge) Accept(id string) (bool, error) {
 	delivery, err := b.Store.Delivery(id)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return errors.New("Cannot read " + b.Name + " delivery state")
+		return false, errors.New("Cannot read " + b.Name + " delivery state")
 	}
-	var reply Reply
-	var answerErr error
 	switch delivery.State {
-	case "sent", "failed-or-unknown", "cancelled", "processing-failed", "processing":
-		return nil
 	case "sending":
 		if err := b.Store.UpdateDelivery(id, "failed-or-unknown", delivery.Reply, errors.New("service interrupted during send")); err != nil {
-			return err
+			return false, err
 		}
-		return errors.New(b.Name + " reply delivery is uncertain; see local conversation history")
+		return false, errors.New(b.Name + " reply delivery is uncertain; see local conversation history")
 	case "":
 		accepted, err := b.Store.AcceptDelivery(id, "processing")
 		if err != nil {
-			return errors.New("Cannot save " + b.Name + " message")
+			return false, errors.New("Cannot save " + b.Name + " message")
 		}
-		if !accepted {
-			return nil
-		}
-		reply, answerErr = answer(ctx)
+		return accepted, nil
 	}
+	return false, nil
+}
+
+// Finish answers the message with id, which Accept took, and sends the answer
+// once, as Deliver does.
+func (b *Bridge) Finish(ctx context.Context, id string, answer func(context.Context) (Reply, error), send func(context.Context, Reply) error) error {
+	reply, answerErr := answer(ctx)
 	if ctx.Err() != nil {
 		return errors.Join(ctx.Err(), b.Store.UpdateDelivery(id, "cancelled", reply.Text, ctx.Err()))
 	}
 	if err := b.Store.UpdateDelivery(id, "sending", reply.Text, nil); err != nil {
 		return errors.New("Cannot save " + b.Name + " reply")
 	}
-	err = send(ctx, reply)
+	err := send(ctx, reply)
 	state := "sent"
 	if answerErr != nil {
 		state = "processing-failed"

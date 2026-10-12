@@ -27,6 +27,7 @@ func (s *ConversationService) builtins() []Command {
 		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", everyClient, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
 		{CommandSpec: CommandSpec{"grants", "/grants", "List remembered approvals", everyClient, false}, OwnerOnly: true, Run: s.listGrants},
 		{CommandSpec: CommandSpec{"revoke", "/revoke ID|all", "Forget a remembered approval", everyClient, false}, OwnerOnly: true, Args: []Argument{s.grantIDs}, Run: s.revokeGrant},
+		{CommandSpec: CommandSpec{"stop", "/stop", "Stop the reply in progress", []string{ClientTelegram}, false}, Run: s.stop},
 		{CommandSpec: CommandSpec{"help", "/help", "Show commands", messaging, false}, Run: s.help},
 	}
 }
@@ -84,6 +85,15 @@ func (s *ConversationService) newConversation(context.Context, CommandCall) (Com
 		return CommandResult{}, err
 	}
 	return CommandResult{Markdown: "New conversation started.", Action: &Action{Kind: OpenConversation, ConversationID: c.ID}}, nil
+}
+
+// stop ends the conversation's turn in progress, which then answers that it
+// stopped.
+func (s *ConversationService) stop(_ context.Context, call CommandCall) (CommandResult, error) {
+	if !s.Stop(call.ConversationID) {
+		return CommandResult{Markdown: "Nothing is running."}, nil
+	}
+	return CommandResult{Markdown: "Stopping."}, nil
 }
 
 func (s *ConversationService) listConversations(_ context.Context, call CommandCall) (CommandResult, error) {
