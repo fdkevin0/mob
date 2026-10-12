@@ -15,6 +15,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	east "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 )
 
 // chunkLimit is the most UTF-16 code units of HTML in one message, below
@@ -278,7 +279,7 @@ func inline(n ast.Node, source []byte) string {
 func writeInline(b *strings.Builder, n ast.Node, source []byte) {
 	switch n := n.(type) {
 	case *ast.Text:
-		b.WriteString(html.EscapeString(string(n.Segment.Value(source))))
+		b.WriteString(html.EscapeString(decoded(n.Segment.Value(source))))
 		if n.HardLineBreak() || n.SoftLineBreak() {
 			b.WriteString("\n")
 		}
@@ -317,6 +318,12 @@ func writeInline(b *strings.Builder, n ast.Node, source []byte) {
 	default:
 		b.WriteString(inline(n, source))
 	}
+}
+
+// decoded is Markdown text as it reads: backslash escapes and entities
+// resolved.
+func decoded(text []byte) string {
+	return string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(text))))
 }
 
 // anchor links label to url when Telegram would accept the link, and is the

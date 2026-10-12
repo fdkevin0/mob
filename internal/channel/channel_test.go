@@ -78,7 +78,7 @@ func TestAnswerRunsCommands(t *testing.T) {
 		t.Fatalf("a guest listed grants: %q", reply.Text)
 	}
 	stale := chat.NewID()
-	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/approve " + stale}); err != nil || reply.Text != "stale "+stale {
+	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/approve " + stale}); err != nil || reply.Text != "stale "+stale || reply.Settled != stale {
 		t.Fatalf("stale approval: %q (err: %v)", reply.Text, err)
 	}
 }
@@ -221,6 +221,9 @@ func TestAnswerWhileBusyAndStopped(t *testing.T) {
 	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "and this"}); err != nil || reply.Text != "busy" {
 		t.Fatalf("while busy: %q (err: %v)", reply.Text, err)
 	}
+	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/deny " + chat.NewID()}); err != nil || reply.Text != "busy" || reply.Settled != "" {
+		t.Fatalf("a decision while busy: %q %q (err: %v)", reply.Text, reply.Settled, err)
+	}
 	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/stop"}); err != nil || reply.Text != "Stopping." {
 		t.Fatalf("/stop: %q (err: %v)", reply.Text, err)
 	}
@@ -264,8 +267,9 @@ func TestApprovedWorkStartsTheMessageAndStops(t *testing.T) {
 			return nil, ctx.Err()
 		},
 	})
-	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "deploy"}); err != nil || len(reply.Approvals) != 1 {
-		t.Fatalf("request: %q %+v (err: %v)", reply.Text, reply.Approvals, err)
+	request, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "deploy"})
+	if err != nil || len(request.Approvals) != 1 {
+		t.Fatalf("request: %q %+v (err: %v)", request.Text, request.Approvals, err)
 	}
 	started := make(chan bool, 2)
 	approved := make(chan Reply, 1)
@@ -288,7 +292,7 @@ func TestApprovedWorkStartsTheMessageAndStops(t *testing.T) {
 	if reply, _ := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/stop"}); reply.Text != "Stopping." {
 		t.Fatalf("/stop: %q", reply.Text)
 	}
-	if reply := <-approved; !strings.HasSuffix(reply.Text, "stopped") {
-		t.Fatalf("stopped approval: %q", reply.Text)
+	if reply := <-approved; !strings.HasSuffix(reply.Text, "stopped") || reply.Settled != request.Approvals[0].ID {
+		t.Fatalf("stopped approval: %q %q", reply.Text, reply.Settled)
 	}
 }

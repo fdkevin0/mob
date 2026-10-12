@@ -234,28 +234,39 @@ func TestSendFallsBackToPlainTextWhenTelegramRejectsHTML(t *testing.T) {
 	}
 }
 
-func TestTapRemovesTheDecidedButtons(t *testing.T) {
+func TestSettledApprovalsLoseTheirButtons(t *testing.T) {
 	a, b := chat.NewID(), chat.NewID()
-	var edited map[string]any
+	var edits []string
 	c := Config{Token: "1:x", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
 		if strings.HasSuffix(r.URL.Path, "/editMessageReplyMarkup") {
-			json.NewDecoder(r.Body).Decode(&edited)
+			rows, _ := json.Marshal(body["reply_markup"])
+			edits = append(edits, fmt.Sprint(body["message_id"])+" "+string(rows))
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
 	})}
 	markup, _ := json.Marshal(map[string]any{"inline_keyboard": buttons([]chat.PendingApproval{{ID: a, Tool: "x"}, {ID: b, Tool: "y"}})})
-	var u Update
-	if err := json.Unmarshal([]byte(`{"update_id":9,"callback_query":{"id":"q","data":"/deny `+a+`","from":{"id":7},"message":{"message_id":42,"chat":{"id":7},"reply_markup":`+string(markup)+`}}}`), &u); err != nil {
-		t.Fatal(err)
+	tap := func(data string) Update {
+		var u Update
+		if err := json.Unmarshal([]byte(`{"update_id":9,"callback_query":{"id":"q","data":"`+data+`","from":{"id":7},"message":{"message_id":42,"chat":{"id":7},"reply_markup":`+string(markup)+`}}}`), &u); err != nil {
+			t.Fatal(err)
+		}
+		u, acknowledge := c.tapped(u)
+		acknowledge(context.Background())
+		return u
 	}
-	u, acknowledge := c.tapped(u)
-	acknowledge(context.Background())
-	if m := u.Message; m == nil || m.Text != "/deny "+a {
-		t.Fatalf("tap: %+v", m)
+	// Both taps saw both rows; the buttons go only once each decision is
+	// settled, and the second edit keeps the first's removal.
+	first, second := tap("/deny "+a).Message, tap("/approve "+b).Message
+	if first == nil || first.Text != "/deny "+a || first.Buttons == nil || len(edits) != 0 {
+		t.Fatalf("tap: %+v, edits %v", first, edits)
 	}
-	rows, _ := json.Marshal(edited["reply_markup"])
-	if edited["message_id"] != float64(42) || strings.Contains(string(rows), a) || !strings.Contains(string(rows), "/approve "+b) {
-		t.Fatalf("edited: %v %s", edited, rows)
+	var s Service
+	s.settle(context.Background(), c, *first.Buttons, a)
+	s.settle(context.Background(), c, *second.Buttons, b)
+	if len(edits) != 2 || strings.Contains(edits[0], a) || !strings.Contains(edits[0], "/approve "+b) || edits[1] != `42 {"inline_keyboard":[]}` {
+		t.Fatalf("edits: %v", edits)
 	}
 }
 
@@ -445,5 +456,53 @@ func TestLoopPollsWhileRepliesToTheAppWait(t *testing.T) {
 	service.Loop(ctx, config, func(string) {})
 	if !errors.Is(ctx.Err(), context.Canceled) {
 		t.Fatal("polling waited for the replies to the app")
+	}
+}
+
+func TestAHeldPlaceholderNeverHoldsBackTheReply(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	w := waiter{started: make(chan struct{}), once: new(sync.Once)}
+	conversation := chat.NewConversation(store, oneModel{w})
+	defer conversation.Close()
+	service := &Service{Store: store, Conversation: conversation}
+	defer func(d time.Duration) { placeholderDelay = d }(placeholderDelay)
+	placeholderDelay = time.Millisecond
+	drafting := make(chan struct{})
+	var once sync.Once
+	sent := make(chan string, 1)
+	c := Config{Token: "123:secret", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/sendMessageDraft"):
+			// Held until the request is cancelled.
+			once.Do(func() { close(drafting) })
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		case strings.HasSuffix(r.URL.Path, "/sendMessage"):
+			sent <- body["text"].(string)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":{}}`))}, nil
+	})}
+	var u Update
+	json.Unmarshal([]byte(`{"update_id":1,"message":{"message_id":1,"text":"long job","from":{"id":7},"chat":{"id":7,"type":"private"}}}`), &u)
+	go service.Message(context.Background(), c, "123", u)
+	<-w.started
+	<-drafting
+	var id string
+	if err := store.Setting("telegram-conversation:123:7", &id); err != nil || !conversation.Stop(id) {
+		t.Fatalf("stop %q: %v", id, err)
+	}
+	select {
+	case text := <-sent:
+		if text != "partial\n\nStopped." {
+			t.Fatalf("sent %q", text)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reply waited for the placeholder")
 	}
 }

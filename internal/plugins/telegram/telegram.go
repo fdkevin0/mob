@@ -107,7 +107,9 @@ type Message struct {
 	// Media is set when the message carries something other than text,
 	// such as a photo, file, voice note or sticker.
 	Media bool `json:"-"`
-	From  struct {
+	// Buttons, for a tap on an approval button, is the message holding them.
+	Buttons *shown `json:"-"`
+	From    struct {
 		ID int64 `json:"id"`
 	} `json:"from"`
 	Chat struct {
@@ -180,39 +182,40 @@ type button struct {
 }
 
 // tapped makes the owner's tap on an approval button the private message it
-// stands for. acknowledge answers the tap and removes the decided buttons, best effort;
-// it is nil when there is nothing to do, and may run alongside polling.
+// stands for. acknowledge answers the tap, best effort; it is nil for a tap
+// that is not the owner's, and may run alongside polling.
 func (c Config) tapped(u Update) (_ Update, acknowledge func(context.Context)) {
 	q := u.CallbackQuery
 	if q == nil || q.From.ID != c.UserID {
 		return u, nil
 	}
-	decision := strings.HasPrefix(q.Data, "/approve ") || strings.HasPrefix(q.Data, "/deny ")
 	acknowledge = func(ctx context.Context) {
 		// An unanswered tap only keeps its spinner a little longer.
 		_ = c.Call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID}, nil)
-		if decision && q.Message != nil && q.Message.ReplyMarkup != nil {
-			// A button left behind only answers that it was decided.
-			_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{
-				"chat_id": q.Message.Chat.ID, "message_id": q.Message.ID,
-				"reply_markup": without(*q.Message.ReplyMarkup, strings.Fields(q.Data)[1]),
-			}, nil)
-		}
 	}
-	if !decision {
+	if !strings.HasPrefix(q.Data, "/approve ") && !strings.HasPrefix(q.Data, "/deny ") {
 		return u, acknowledge
 	}
 	m := &Message{Text: q.Data}
 	m.From.ID, m.Chat.ID, m.Chat.Type = c.UserID, c.UserID, "private"
+	if q.Message != nil && q.Message.ReplyMarkup != nil {
+		m.Buttons = &shown{Chat: q.Message.Chat.ID, Message: q.Message.ID, Keyboard: *q.Message.ReplyMarkup}
+	}
 	u.Message = m
 	return u, acknowledge
 }
 
-// without is the keyboard less the row of buttons deciding approval id.
-func without(k keyboard, id string) keyboard {
+// shown is a message's approval buttons as a tap saw them.
+type shown struct {
+	Chat, Message int64
+	Keyboard      keyboard
+}
+
+// decided is the keyboard less the rows of buttons for the decided approvals.
+func (k keyboard) decided(ids map[string]bool) keyboard {
 	rows := [][]button{}
 	for _, row := range k.Rows {
-		if len(row) == 0 || len(strings.Fields(row[0].Data)) < 2 || strings.Fields(row[0].Data)[1] != id {
+		if len(row) == 0 || len(strings.Fields(row[0].Data)) < 2 || !ids[strings.Fields(row[0].Data)[1]] {
 			rows = append(rows, row)
 		}
 	}
