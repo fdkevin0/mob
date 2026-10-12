@@ -21,6 +21,9 @@ type Service struct {
 	b    *channel.Bridge
 	// drafts counts the drafts shown, so that each reply has its own.
 	drafts atomic.Int64
+	mu     sync.Mutex
+	// stops stops the turn each draft shows, for a tap on its stop button.
+	stops map[int64]func()
 }
 
 // placeholderDelay is how long a reply may take before Mob shows that it is
@@ -126,7 +129,7 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 				}
 				update = c.tapped(ctx, update)
 				if update.Stopped != nil && update.Stopped.Chat.ID == c.UserID {
-					s.stop(botID, c)
+					s.stop(update.Stopped.DraftID)
 				}
 				m := update.Message
 				if m != nil && m.From.ID == c.UserID && m.Chat.ID == c.UserID && m.Chat.Type == "private" {
@@ -150,8 +153,8 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 						go func(u Update, previous <-chan struct{}) {
 							defer replies.Done()
 							var once sync.Once
-							start := func() { once.Do(func() { close(started) }) }
-							defer start()
+							start := func(func()) { once.Do(func() { close(started) }) }
+							defer start(nil)
 							select {
 							case <-previous:
 							case <-ctx.Done():
@@ -179,18 +182,40 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 // bridge answers the owner's messages in the bot's conversation.
 func (s *Service) bridge() *channel.Bridge {
 	s.once.Do(func() {
+		// Drafts are numbered from the time, so that a tap on a draft shown
+		// before Mob restarted matches none shown since.
+		s.drafts.Store(time.Now().UnixMilli())
 		s.b = &channel.Bridge{Name: "Telegram", Client: chat.ClientTelegram, Store: s.Store, Conversation: s.Conversation, Texts: texts, Limit: 32000}
 	})
 	return s.b
 }
 
-// stop stops the reply in progress in the bot's conversation, for a tap on
-// a draft's stop button.
-func (s *Service) stop(botID string, c Config) {
-	var id string
-	if s.Store.Setting(conversationKey(botID, c), &id) == nil && id != "" {
-		s.Conversation.Stop(id)
+// stop stops the turn draft shows, for a tap on its stop button; a tap on a
+// draft whose reply is done does nothing.
+func (s *Service) stop(draft int64) {
+	s.mu.Lock()
+	stop := s.stops[draft]
+	s.mu.Unlock()
+	if stop != nil {
+		stop()
 	}
+}
+
+// showing records stop as stopping the turn draft shows, until done.
+func (s *Service) showing(draft int64, stop func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stops == nil {
+		s.stops = map[int64]func(){}
+	}
+	s.stops[draft] = stop
+}
+
+// done forgets the turn draft showed, once its answer is ready.
+func (s *Service) done(draft int64) {
+	s.mu.Lock()
+	delete(s.stops, draft)
+	s.mu.Unlock()
 }
 
 const mediaUnsupported = "Mob reads only text here for now; send photos, files and voice notes from the desktop app, or describe them in a message."
@@ -270,13 +295,22 @@ func (s *Service) Message(ctx context.Context, c Config, botID string, u Update)
 
 // finish answers the owner's message in update u, which the bridge accepted,
 // calling started as the bridge does, and showing that the reply is being written until it is sent.
-func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, started func()) error {
+func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, started func(stop func())) error {
 	b, m := s.bridge(), message(c, botID, u)
-	m.Started = started
+	draft := s.drafts.Add(1)
+	m.Started = func(stop func()) {
+		if stop != nil {
+			s.showing(draft, stop)
+		}
+		if started != nil {
+			started(stop)
+		}
+	}
 	answer := func(ctx context.Context) (channel.Reply, error) {
+		defer s.done(draft)
 		done := make(chan struct{})
 		shown := make(chan struct{})
-		go func() { defer close(shown); s.placeholder(ctx, c, u.Message.Chat.ID, done) }()
+		go func() { defer close(shown); s.placeholder(ctx, c, u.Message.Chat.ID, draft, done) }()
 		defer func() { close(done); <-shown }()
 		return b.Answer(ctx, m)
 	}
@@ -288,8 +322,7 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 // placeholder shows a draft with a stop button while a reply is written,
 // once it takes longer than placeholderDelay, until done closes. Where drafts
 // are unavailable it shows the bot typing instead. Both are best effort.
-func (s *Service) placeholder(ctx context.Context, c Config, chatID int64, done <-chan struct{}) {
-	draftID := s.drafts.Add(1)
+func (s *Service) placeholder(ctx context.Context, c Config, chatID, draftID int64, done <-chan struct{}) {
 	wait, typing := placeholderDelay, false
 	for {
 		select {

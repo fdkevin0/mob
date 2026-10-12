@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/yuin/goldmark"
@@ -77,6 +78,11 @@ func split(n ast.Node, block string, source []byte, limit int) []string {
 		lines = strings.SplitAfter(html.EscapeString(plain(block)), "\n")
 	}
 	room := limit - units(open) - units(end)
+	if room < limit/2 {
+		// A language tag that long is not worth the room.
+		open, end = "<pre>", "</pre>"
+		room = limit - units(open) - units(end)
+	}
 	var parts []string
 	var b strings.Builder
 	for _, line := range lines {
@@ -111,8 +117,13 @@ func fit(s string, room int) int {
 		used += w
 		n = i + len(string(r))
 	}
-	if amp := strings.LastIndexByte(s[:n], '&'); amp >= 0 && !strings.Contains(s[amp:n], ";") && amp > 0 {
+	if amp := strings.LastIndexByte(s[:n], '&'); amp > 0 && !strings.Contains(s[amp:n], ";") {
 		n = amp
+	}
+	if n == 0 && s != "" {
+		// Always take a character, so that splitting ends.
+		_, size := utf8.DecodeRuneInString(s)
+		n = size
 	}
 	return n
 }

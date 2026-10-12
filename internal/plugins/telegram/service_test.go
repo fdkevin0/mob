@@ -306,7 +306,12 @@ func TestLoopKeepsPollingWhileAReplyIsWritten(t *testing.T) {
 	defer cancel()
 	var mu sync.Mutex
 	var texts []string
-	drafts, polls := 0, 0
+	polls := 0
+	var draft float64
+	drafted, busy := make(chan struct{}), make(chan struct{})
+	stopped := func(draft float64) string {
+		return fmt.Sprintf(`[{"update_id":%d,"stopped_message_generation":{"chat":{"id":7,"type":"private"},"draft_id":%d}}]`, polls, int64(draft))
+	}
 	update := func(id int, body string) string {
 		return fmt.Sprintf(`[{"update_id":%d,"message":{"message_id":%d,%s,"from":{"id":7},"chat":{"id":7,"type":"private"}}}]`, id, id, body)
 	}
@@ -323,9 +328,15 @@ func TestLoopKeepsPollingWhileAReplyIsWritten(t *testing.T) {
 		case "getWebhookInfo":
 			result = `{"url":""}`
 		case "sendMessageDraft":
-			drafts++
+			if draft == 0 {
+				draft = body["draft_id"].(float64)
+				close(drafted)
+			}
 		case "sendMessage":
 			texts = append(texts, body["text"].(string))
+			if strings.HasPrefix(body["text"].(string), "Still working") {
+				close(busy)
+			}
 			result = `{}`
 		case "getUpdates":
 			polls++
@@ -340,9 +351,16 @@ func TestLoopKeepsPollingWhileAReplyIsWritten(t *testing.T) {
 			case 3:
 				result = update(3, `"text":"and this"`)
 			case 4:
-				result = update(4, `"text":"/stop"`)
+				// A tap on another reply's draft stops nothing.
+				mu.Unlock()
+				<-drafted
+				<-busy
+				mu.Lock()
+				result = stopped(draft + 100)
+			case 5:
+				result = stopped(draft)
 			default:
-				if len(texts) >= 4 {
+				if len(texts) >= 3 {
 					cancel()
 				}
 				result = `[]`
@@ -354,12 +372,26 @@ func TestLoopKeepsPollingWhileAReplyIsWritten(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	got := strings.Join(texts, " | ")
-	for _, want := range []string{"Mob reads only text", "Still working on your last message", "Stopping.", "partial\n\nStopped."} {
+	for _, want := range []string{"Mob reads only text", "Still working on your last message", "partial\n\nStopped."} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("sent %q, want %q", got, want)
 		}
 	}
-	if drafts == 0 {
-		t.Fatal("no placeholder while the reply was written")
+
+}
+
+func TestStopButtonStopsOnlyItsOwnReply(t *testing.T) {
+	var s Service
+	stopped := 0
+	s.showing(1, func() { stopped++ })
+	s.stop(2)
+	if stopped != 0 {
+		t.Fatal("a tap on another draft stopped the reply")
+	}
+	s.stop(1)
+	s.done(1)
+	s.stop(1)
+	if stopped != 1 {
+		t.Fatalf("stopped %d times", stopped)
 	}
 }

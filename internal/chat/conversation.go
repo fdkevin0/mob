@@ -61,6 +61,12 @@ func (s *ConversationService) Execute(parent context.Context, input ChatRequest,
 	return s.execute(parent, input, emit, nil)
 }
 
+// ExecuteAdmitted is Execute, calling admitted with the turn once it is
+// admitted, before it does anything, such as carrying out an approved call.
+func (s *ConversationService) ExecuteAdmitted(parent context.Context, input ChatRequest, emit func(Event) error, admitted func(*Running)) error {
+	return s.execute(parent, input, emit, admitted)
+}
+
 // Start admits a turn that keeps running whoever started it, until it
 // finishes, Stop, Close, or stop closes; stop is watched from admission, so it
 // also ends work done before the first event, such as an approved call. Errors

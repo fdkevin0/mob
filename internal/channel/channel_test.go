@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/llm"
@@ -228,5 +229,66 @@ func TestAnswerWhileBusyAndStopped(t *testing.T) {
 	}
 	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/stop"}); err != nil || reply.Text != "Nothing is running." {
 		t.Fatalf("/stop with nothing running: %q (err: %v)", reply.Text, err)
+	}
+}
+
+// deployer calls deploy, then says it is done.
+type deployer struct{}
+
+func (deployer) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "deployer"} }
+func (deployer) Info() llm.Info { return llm.Info{ID: "deployer", Context: 100000, Tools: true} }
+func (deployer) Stream(_ context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	for _, m := range req.Messages {
+		if len(m.ToolCalls) > 0 {
+			return llm.Result{Text: "deployed"}, emit("text", "deployed")
+		}
+	}
+	return llm.Result{Calls: []llm.ToolCall{{ID: chat.NewID(), Name: "deploy", Arguments: "{}"}}}, nil
+}
+
+func TestApprovedWorkStartsTheMessageAndStops(t *testing.T) {
+	b := bridge(t)
+	b.Conversation = chat.NewConversation(b.Store, oneModel{deployer{}})
+	t.Cleanup(b.Conversation.Close)
+	b.Client = chat.ClientTelegram
+	b.Texts.Busy, b.Texts.Stopped = "busy", "stopped"
+	running := make(chan struct{})
+	b.Conversation.Tools.Register(chat.Tool{
+		Tool: llm.Tool{Name: "deploy", Parameters: map[string]any{"type": "object"}},
+		Run: func(_ context.Context, call chat.ToolCall) (any, error) {
+			return nil, call.RequestApproval(map[string]string{})
+		},
+		Approved: func(ctx context.Context, _ chat.ApprovedCall) (any, error) {
+			close(running)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	})
+	if reply, err := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "deploy"}); err != nil || len(reply.Approvals) != 1 {
+		t.Fatalf("request: %q %+v (err: %v)", reply.Text, reply.Approvals, err)
+	}
+	started := make(chan bool, 2)
+	approved := make(chan Reply, 1)
+	go func() {
+		reply, _ := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/approve", Started: func(stop func()) { started <- stop != nil }})
+		approved <- reply
+	}()
+	<-running
+	select {
+	case withStop := <-started:
+		if !withStop {
+			t.Fatal("the message started without a way to stop its turn")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the approved call ran before the message started")
+	}
+	if reply, _ := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "more"}); reply.Text != "busy" {
+		t.Fatalf("while the approved call runs: %q", reply.Text)
+	}
+	if reply, _ := b.Answer(context.Background(), Message{Key: "k", Owner: true, Text: "/stop"}); reply.Text != "Stopping." {
+		t.Fatalf("/stop: %q", reply.Text)
+	}
+	if reply := <-approved; !strings.HasSuffix(reply.Text, "stopped") {
+		t.Fatalf("stopped approval: %q", reply.Text)
 	}
 }
