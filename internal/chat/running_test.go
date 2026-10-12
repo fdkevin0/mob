@@ -89,6 +89,7 @@ func TestStepLimitEndsTheStreamAsFinished(t *testing.T) {
 	}{
 		{fmt.Errorf("%w (3); send another message to continue", ErrStepLimit), []EventKind{StepStarted, TurnFinished}},
 		{errors.New("model returned HTTP 500"), []EventKind{StepStarted, TurnFailed, TurnFinished}},
+		{errors.Join(fmt.Errorf("%w (3)", ErrStepLimit), errors.New("database is locked")), []EventKind{StepStarted, TurnFailed, TurnFinished}},
 	} {
 		r := newRunning(func() {})
 		r.record(Event{Kind: StepStarted})
