@@ -12,8 +12,10 @@ import (
 
 // summarizing answers turns with "ok" and summaries with what they fold in.
 type summarizing struct {
-	info      llm.Info
-	fail      bool
+	info llm.Info
+	fail bool
+	// long, when set, is every summary written.
+	long      string
 	requests  []llm.Request
 	summaries []llm.Request
 }
@@ -28,6 +30,9 @@ func (m *summarizing) Stream(_ context.Context, req llm.Request, _ func(string, 
 	m.summaries = append(m.summaries, req)
 	if m.fail {
 		return llm.Result{}, errors.New("summary failed")
+	}
+	if m.long != "" {
+		return llm.Result{Text: m.long}, nil
 	}
 	return llm.Result{Text: fmt.Sprintf("SUMMARY %d", len(m.summaries)), Usage: &llm.Usage{Input: 100, Output: 10}}, nil
 }
@@ -117,5 +122,47 @@ func TestFailedSummaryOmitsInstead(t *testing.T) {
 	}
 	if summary, _ := s.Summary(id); summary.Text != "" || summary.Through != "" {
 		t.Fatalf("a failed summary was stored: %+v", summary)
+	}
+}
+
+// Each message is fitted against the summary it is read with, which can
+// grow as parts are folded in.
+func TestSummaryPartsFitAsTheSummaryGrows(t *testing.T) {
+	model := &summarizing{info: llm.Info{ID: "summarizing", Context: 10000, Output: 4000}, long: strings.Repeat("s", 11970)}
+	var messages []Message
+	for i := range 3 {
+		messages = append(messages, Message{ID: NewID(), Role: "user", Parts: []Part{{"type": "text", "text": fmt.Sprint(i) + strings.Repeat("x", 30000)}}})
+	}
+	if _, _, err := summarize(context.Background(), model, "", messages); err != nil {
+		t.Fatal(err)
+	}
+	if len(model.summaries) < 2 {
+		t.Fatalf("summarized in %d parts", len(model.summaries))
+	}
+	for i, req := range model.summaries {
+		if size := tokens(req.System) + promptTokens(req.Messages); size+req.MaxTokens > 10000 {
+			t.Fatalf("summary request %d of about %d tokens and %d to write exceeds the window", i+1, size, req.MaxTokens)
+		}
+	}
+}
+
+// A summary too large for the model the conversation switched to is set
+// aside for the turn rather than leaving no room for it.
+func TestOversizedSummaryIsSetAside(t *testing.T) {
+	s, id, m := turnFixture(t)
+	if err := s.Summarize(id, Summary{Text: strings.Repeat("s", 9000), Through: m.ID}); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = s.Begin(id, NewID(), "hi", "test/summarizing")
+	model := &summarizing{info: llm.Info{ID: "summarizing", Context: 3000, Output: 500}}
+	if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	req := model.requests[0]
+	if strings.Contains(req.System, summaryNotice) || req.Messages[len(req.Messages)-1].Text != "hi" {
+		t.Fatalf("the oversized summary was read: %d messages", len(req.Messages))
+	}
+	if summary, _ := s.Summary(id); len(summary.Text) != 9000 {
+		t.Fatal("the stored summary was lost")
 	}
 }

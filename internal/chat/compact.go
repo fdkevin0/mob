@@ -39,6 +39,9 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 		if summary != "" {
 			text = "Summary so far:\n" + summary + "\n\n" + text
 		}
+		if info.Context > 0 && tokens(compactPrompt)+tokens(text)+maxTokens > info.Context {
+			return fmt.Errorf("summarizing would exceed %s's context", info.ID)
+		}
 		result, err := model.Stream(ctx, llm.Request{System: compactPrompt, Messages: []llm.Message{{Role: "user", Text: text}}, MaxTokens: maxTokens}, func(string, string) error { return nil })
 		if result.Usage != nil {
 			usage = add(usage, result.Usage.Priced(info.Cost))
@@ -52,27 +55,36 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 		summary, part = strings.TrimSpace(result.Text), ""
 		return nil
 	}
-	for _, m := range messages {
-		// Room for the conversation part beside the instructions, the summary
-		// so far and the summary to write.
-		room := info.Context - maxTokens - tokens(compactPrompt) - tokens(summary) - 100
+	// room is what the conversation part may take beside the instructions,
+	// the summary so far and the summary to write.
+	room := func() int {
 		if info.Context <= 0 {
-			room = 100000
+			return 100000
 		}
-		if room <= 0 {
-			return "", usage, fmt.Errorf("%s's context is too small to summarize this conversation", info.ID)
-		}
+		return info.Context - maxTokens - tokens(compactPrompt) - tokens(summary) - 100
+	}
+	for _, m := range messages {
 		text := transcript(m)
-		if size := tokens(text); size > room/2 {
-			head, tail := ends(text, room, room/2)
-			text = head + "\n[...]\n" + tail
-		}
-		if part != "" && tokens(part)+tokens(text) > room {
+		for {
+			// The room shrinks as the summary grows, so each message is fitted
+			// against the summary it will be read with.
+			r := room()
+			if r <= 0 {
+				return "", usage, fmt.Errorf("%s's context is too small to summarize this conversation", info.ID)
+			}
+			fitted := text
+			if tokens(fitted) > r/2 {
+				head, tail := ends(fitted, r, r/2)
+				fitted = head + "\n[...]\n" + tail
+			}
+			if part == "" || tokens(part)+tokens(fitted) <= r {
+				part += fitted
+				break
+			}
 			if err := flush(); err != nil {
 				return "", usage, err
 			}
 		}
-		part += text
 	}
 	if err := flush(); err != nil {
 		return "", usage, err
