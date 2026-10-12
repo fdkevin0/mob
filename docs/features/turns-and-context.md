@@ -78,8 +78,9 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - Providers count tokens their own way and can refuse a prompt the estimate let
   through. Drivers mark that refusal (`llm.ErrContextOverflow`), and the turn
   then frees about a quarter of the prompt once and asks again: before the
-  model has replied, by fitting history to less; after, by clearing older tool
-  outputs. A second refusal ends the turn and suggests `/compact`.
+  model has replied, by fitting history to less; after, by clearing outputs the
+  model has already read, never those of the step just run. A second refusal,
+  or nothing to free, ends the turn and suggests `/compact`.
 
 ## Clearing old tool outputs
 
@@ -134,5 +135,6 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - A failed summary, or one that comes out too long, is not used: the turn omits
   the older messages instead.
 - `/compact` summarizes every message since the summary on request, with the
-  conversation's model, and records what that cost on its reply. The code is in
+  conversation's model, and records what that cost on its reply, also when it
+  is stopped. The code is in
   `internal/chat/compact.go`.

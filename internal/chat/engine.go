@@ -220,12 +220,13 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	var latest *outputs
 	// shrink makes room after a provider refused a prompt the estimate let
 	// through, as it counts tokens its own way: before the model has replied,
-	// history is fitted to less; after, older tool outputs are cleared. It
-	// frees about a quarter of the prompt and reports whether it freed any.
-	shrink := func(step int) bool {
+	// history is fitted to less; after, outputs the model has read are
+	// cleared, never those it is about to read. It frees about a quarter of
+	// the prompt and reports whether it freed any.
+	shrink := func(step, seen int) bool {
 		need := max(size/4, 1)
 		if step > 0 {
-			freed := clearOutputs(req.Messages, groups, len(req.Messages), need, false)
+			freed := clearOutputs(req.Messages, groups, seen, need, false)
 			size, base = size-freed, base-freed
 			return freed > 0
 		}
@@ -271,6 +272,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		}
 		indices := map[string]int{}
 		ids := map[string]string{}
+		seen := read
 		read = len(req.Messages)
 		stream := func(kind, delta string) error {
 			index, ok := indices[kind]
@@ -290,7 +292,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		// A refused prompt is made smaller and sent once more in the turn.
 		if errors.Is(err, llm.ErrContextOverflow) && !retried && len(ids) == 0 {
 			retried = true
-			if shrink(step) {
+			if shrink(step, seen) {
 				read = len(req.Messages)
 				result, err = model.Stream(ctx, *req, stream)
 			}

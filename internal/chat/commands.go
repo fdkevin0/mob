@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -33,24 +34,39 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 	default:
 		reply, err = s.switchModel(input.ID, args, input.Owner)
 	}
-	if err != nil {
+	// A stopped /compact is recorded, with what its summary requests cost
+	// before it stopped, as a stopped turn is.
+	stopped := err != nil && ctx.Err() != nil && name == "/compact"
+	if err != nil && !stopped {
 		return err
 	}
-	message, err := s.Store.Command(input.ID, input.RequestID, input.Text, reply)
-	if err != nil {
+	if stopped {
+		reply = "Summarizing was stopped; nothing was summarized."
+	}
+	message, e := s.Store.Command(input.ID, input.RequestID, input.Text, reply)
+	if e != nil {
 		if s.Store.HasRequest(input.RequestID) {
 			return &CommandError{409, "request already accepted; refresh history"}
 		}
-		return err
+		return errors.Join(err, e)
+	}
+	if usage != nil || stopped {
+		message.Usage = usage
+		status, failure := "complete", ""
+		if stopped {
+			status, failure = "cancelled", err.Error()
+		}
+		if e := s.Store.Save(message, status, failure); e != nil {
+			return errors.Join(err, e)
+		}
 	}
 	if usage != nil {
-		message.Usage = usage
-		if err := s.Store.Save(message, "complete", ""); err != nil {
-			return err
+		if e := emit(Event{Kind: UsageReported, Usage: *usage}); e != nil {
+			return errors.Join(err, e)
 		}
-		if err := emit(Event{Kind: UsageReported, Usage: *usage}); err != nil {
-			return err
-		}
+	}
+	if stopped {
+		return err
 	}
 	id := NewID()
 	for _, e := range []Event{{Kind: TurnStarted, MessageID: message.ID}, {Kind: StepStarted}, {Kind: SegmentStarted, Segment: "text", ID: id},
