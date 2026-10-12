@@ -17,8 +17,8 @@ help, completion and execution from the same definition.
 
 ## Running a command
 
-- A **transcript** command (`/model`, `/models`) is answered by the chat stream
-  and recorded in the conversation.
+- A **transcript** command (`/model`, `/models`, `/compact`) is answered by the
+  chat stream and recorded in the conversation.
 - Every other command runs through `POST /api/commands/run` and returns a
   `CommandResult`: Markdown to show (tables for listings, fenced blocks for raw
   output) and an optional `Action` the client performs itself:

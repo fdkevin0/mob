@@ -65,8 +65,9 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - At the start of a turn, history is fitted to that budget from an estimate of
   about three bytes a token. When the model's window is unknown, the last 40
   messages are kept. Older history remains visible in the UI.
-- When history does not fit, old tool outputs are cleared first (below); only
-  then are whole turns omitted, oldest first.
+- When history does not fit, old tool outputs are cleared first (below), then
+  older messages are summarized (below); only when that fails are whole turns
+  omitted, oldest first.
 - Within a turn, the prompt's size is what the provider reported for the last
   step, its input and output, plus an estimate of the tool results added since.
   Without a report, every added message is estimated.
@@ -74,6 +75,11 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   model has already read. If that is not enough, the turn ends with an error
   naming the model and the size, and asks the user to send another message,
   whose turn fits history to the window again.
+- Providers count tokens their own way and can refuse a prompt the estimate let
+  through. Drivers mark that refusal (`llm.ErrContextOverflow`), and the turn
+  then frees about a quarter of the prompt once and asks again: before the
+  model has replied, by fitting history to less; after, by clearing older tool
+  outputs. A second refusal ends the turn and suggests `/compact`.
 
 ## Clearing old tool outputs
 
@@ -109,6 +115,24 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   interface shows it all and later turns read the same preview. Approved calls
   follow the same policy.
 
-## Not done yet
+## Summarizing older history
 
-Summarizing older history (compaction) when clearing outputs is not enough.
+- When history does not fit after clearing, the conversation's model folds the
+  older messages into the conversation's summary, stored with the ID of the
+  last message it covers. Turns read the summary in the system prompt in place
+  of those messages.
+- The summary covers enough that the recent messages fill at most half the room
+  beside it, so the next turns need not summarize again. It is written in parts
+  that fit the model's window, each part refitted as the summary grows, and is
+  at most 4000 tokens and no more than the latest message leaves room for.
+- A stored summary is read whenever it fits beside the latest message. One that
+  does not, as after switching to a model with a smaller window, is set aside
+  for the turn, which reads the messages it covers instead. With an unknown
+  window it is always read.
+- When an approval is decided or expires, the call's stored message changes; a
+  summary that covers it is dropped, and the next turn reads the call as it is.
+- A failed summary, or one that comes out too long, is not used: the turn omits
+  the older messages instead.
+- `/compact` summarizes every message since the summary on request, with the
+  conversation's model, and records what that cost on its reply. The code is in
+  `internal/chat/compact.go`.
