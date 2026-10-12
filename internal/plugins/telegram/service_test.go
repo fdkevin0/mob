@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -115,7 +116,11 @@ func TestApprovalButtonsAndTaps(t *testing.T) {
 	tap := func(from int64, data string) Update {
 		var u Update
 		json.Unmarshal([]byte(`{"update_id":9,"callback_query":{"id":"q","data":"`+data+`","from":{"id":`+fmt.Sprint(from)+`}}}`), &u)
-		return c.tapped(context.Background(), u)
+		u, acknowledge := c.tapped(u)
+		if acknowledge != nil {
+			acknowledge(context.Background())
+		}
+		return u
 	}
 	if m := tap(7, "/approve "+a).Message; m == nil || m.Text != "/approve "+a || m.From.ID != 7 || m.Chat.ID != 7 || m.Chat.Type != "private" {
 		t.Fatalf("owner tap: %+v", m)
@@ -243,7 +248,9 @@ func TestTapRemovesTheDecidedButtons(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"update_id":9,"callback_query":{"id":"q","data":"/deny `+a+`","from":{"id":7},"message":{"message_id":42,"chat":{"id":7},"reply_markup":`+string(markup)+`}}}`), &u); err != nil {
 		t.Fatal(err)
 	}
-	if m := c.tapped(context.Background(), u).Message; m == nil || m.Text != "/deny "+a {
+	u, acknowledge := c.tapped(u)
+	acknowledge(context.Background())
+	if m := u.Message; m == nil || m.Text != "/deny "+a {
 		t.Fatalf("tap: %+v", m)
 	}
 	rows, _ := json.Marshal(edited["reply_markup"])
@@ -393,5 +400,50 @@ func TestStopButtonStopsOnlyItsOwnReply(t *testing.T) {
 	s.stop(1)
 	if stopped != 1 {
 		t.Fatalf("stopped %d times", stopped)
+	}
+}
+
+func TestLoopPollsWhileRepliesToTheAppWait(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	service := &Service{Store: store, Conversation: chat.NewConversation(store, provider.Offline())}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var mu sync.Mutex
+	polls := 0
+	config := Config{Token: "123:secret", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+		result := `true`
+		switch method {
+		case "getMe":
+			result = `{"id":123,"username":"mob_bot"}`
+		case "getWebhookInfo":
+			result = `{"url":""}`
+		case "sendMessage", "answerCallbackQuery":
+			// Held until polling goes on without them.
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		case "getUpdates":
+			mu.Lock()
+			polls++
+			n := polls
+			mu.Unlock()
+			switch n {
+			case 1:
+				result = `[{"update_id":1,"message":{"message_id":1,"photo":[{"file_id":"f"}],"from":{"id":7},"chat":{"id":7,"type":"private"}}},` +
+					`{"update_id":2,"callback_query":{"id":"q","data":"/help","from":{"id":7}}}]`
+			default:
+				cancel()
+				result = `[]`
+			}
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":` + result + `}`))}, nil
+	})}
+	service.Loop(ctx, config, func(string) {})
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("polling waited for the replies to the app")
 	}
 }

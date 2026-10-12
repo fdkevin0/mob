@@ -127,7 +127,13 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 				if update.ID < offset {
 					continue
 				}
-				update = c.tapped(ctx, update)
+				// Replies to the app run alongside polling, so that a slow one
+				// never holds back a stop further in the batch.
+				var acknowledge func(context.Context)
+				update, acknowledge = c.tapped(update)
+				if acknowledge != nil {
+					replies.Go(func() { acknowledge(ctx) })
+				}
 				if update.Stopped != nil && update.Stopped.Chat.ID == c.UserID {
 					s.stop(update.Stopped.DraftID)
 				}
@@ -139,7 +145,7 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 					if m.Text == "" {
 						if m.Media {
 							// Best effort: the owner can send it again as text.
-							_ = c.Send(ctx, m.Chat.ID, mediaUnsupported)
+							replies.Go(func() { _ = c.Send(ctx, m.Chat.ID, mediaUnsupported) })
 						}
 					} else if fresh, err := s.bridge().Accept(messageID(botID, update)); err != nil {
 						status(err.Error())
