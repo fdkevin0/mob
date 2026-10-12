@@ -296,7 +296,7 @@ func writeInline(b *strings.Builder, n ast.Node, source []byte) {
 	case *east.Strikethrough:
 		b.WriteString("<s>" + inline(n, source) + "</s>")
 	case *ast.Link:
-		b.WriteString(anchor(string(n.Destination), inline(n, source)))
+		b.WriteString(anchor(destination(n.Destination), inline(n, source)))
 	case *ast.AutoLink:
 		url := string(n.URL(source))
 		if n.AutoLinkType == ast.AutoLinkEmail {
@@ -307,9 +307,9 @@ func writeInline(b *strings.Builder, n ast.Node, source []byte) {
 	case *ast.Image:
 		label := inline(n, source)
 		if label == "" {
-			label = html.EscapeString(string(n.Destination))
+			label = html.EscapeString(destination(n.Destination))
 		}
-		b.WriteString(anchor(string(n.Destination), label))
+		b.WriteString(anchor(destination(n.Destination), label))
 	case *ast.RawHTML:
 		for i := 0; i < n.Segments.Len(); i++ {
 			segment := n.Segments.At(i)
@@ -325,6 +325,10 @@ func writeInline(b *strings.Builder, n ast.Node, source []byte) {
 func decoded(text []byte) string {
 	return string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(text))))
 }
+
+// destination is a link destination as goldmark renders it: escapes and
+// entities resolved and the URL percent-encoded.
+func destination(raw []byte) string { return string(util.URLEscape(raw, true)) }
 
 // anchor links label to url when Telegram would accept the link, and is the
 // label alone otherwise.

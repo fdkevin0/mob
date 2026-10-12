@@ -82,3 +82,11 @@ func TestChunksResolveEscapesAndEntities(t *testing.T) {
 		t.Fatalf("plain: %q", got[0].Plain)
 	}
 }
+
+func TestChunksResolveLinkDestinations(t *testing.T) {
+	got := chunks("[results](https://example.com/search?a=1&amp;b=2\\&c=3 \"t\") ![](https://example.com/a&amp;b.png)", chunkLimit)
+	want := `<a href="https://example.com/search?a=1&amp;b=2&amp;c=3">results</a> <a href="https://example.com/a&amp;b.png">https://example.com/a&amp;b.png</a>`
+	if len(got) != 1 || got[0].HTML != want {
+		t.Fatalf("HTML: %+v\nwant: %s", got, want)
+	}
+}
