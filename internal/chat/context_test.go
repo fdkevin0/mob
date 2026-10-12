@@ -75,19 +75,56 @@ func TestTurnStopsWhenUsageFillsTheWindow(t *testing.T) {
 	}
 }
 
-// Without usage, each step's tool results are estimated as they are added.
-func TestTurnStopsWhenToolResultsFillTheWindow(t *testing.T) {
+// Without usage, each step's tool results are estimated as they are added;
+// older ones the model has read are cleared so the turn can go on.
+func TestOlderToolResultsAreClearedToContinue(t *testing.T) {
 	s, id, m := turnFixture(t)
 	tool := echoTool("read", func(context.Context, ToolCall) (any, error) { return strings.Repeat("y", 100000), nil })
 	model := &filling{info: llm.Info{ID: "filling", Context: 40000, Output: 4000, Tools: true}}
-	err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}}, id, m, "", func(Event) error { return nil })
-	if err == nil || !strings.Contains(err.Error(), "filled filling's context") || len(model.requests) < 2 {
-		t.Fatalf("turn went on: %v after %d requests", err, len(model.requests))
+	err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}, Steps: 8}, id, m, "", func(Event) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "tool step limit") {
+		t.Fatalf("turn did not run to its step limit: %v", err)
 	}
 	for i, req := range model.requests {
 		if size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages); size > 40000-req.MaxTokens {
 			t.Fatalf("request %d had about %d tokens with %d reserved for the reply", i+1, size, req.MaxTokens)
 		}
+	}
+	last := model.requests[len(model.requests)-1].Messages
+	if first := last[2].Text; !strings.Contains(first, `"cleared":true`) || !strings.Contains(first, "Run the tool again") {
+		t.Fatalf("the oldest output was not cleared: %.200s", first)
+	}
+	// The newest output, which the model has not read yet, is whole.
+	if newest := last[len(last)-1].Text; strings.Contains(newest, "cleared") || !strings.Contains(newest, "yyyy") {
+		t.Fatalf("the newest output was cleared: %.200s", newest)
+	}
+}
+
+// Fitting history clears older tool outputs before omitting whole turns, and
+// points the model at the saved output.
+func TestHistoryClearsOldOutputsBeforeOmittingTurns(t *testing.T) {
+	s, id, m := turnFixture(t)
+	tool := echoTool("exec", func(context.Context, ToolCall) (any, error) { return strings.Repeat("z", 60000), nil })
+	if err := Run(context.Background(), s, &scripted{call: llm.ToolCall{ID: "call-1", Name: "exec", Arguments: `{}`}}, Agent{Tools: []Tool{tool}, Saver: folder{t.TempDir()}}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = s.Begin(id, NewID(), "and now?", "test/sized")
+	model := &sized{info: llm.Info{ID: "sized", Context: 1800, Output: 500}}
+	if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	req := model.requests[0]
+	if strings.Contains(req.System, "omitted") || req.Messages[0].Text != "go" {
+		t.Fatalf("turns were omitted: %d messages", len(req.Messages))
+	}
+	var output string
+	for _, msg := range req.Messages {
+		if msg.Role == "tool" {
+			output = msg.Text
+		}
+	}
+	if !strings.Contains(output, `"cleared":true`) || !strings.Contains(output, "/workspace/.mob/outputs/") {
+		t.Fatalf("old output was not cleared with its file: %.200s", output)
 	}
 }
 
