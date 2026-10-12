@@ -391,7 +391,14 @@ func updatePart(tx *sql.Tx, d Decision, change func(Part)) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE messages SET parts=? WHERE id=?", string(encoded), d.MessageID)
+	if _, err = tx.Exec("UPDATE messages SET parts=? WHERE id=?", string(encoded), d.MessageID); err != nil {
+		return err
+	}
+	// A summary that covers the message tells of the call as it was; it is
+	// dropped, so the next turn reads the message as it is now.
+	_, err = tx.Exec(`UPDATE conversations SET summary='',summary_through='' WHERE summary_through<>''
+		AND id=(SELECT conversation_id FROM messages WHERE id=?)
+		AND (SELECT seq FROM messages WHERE id=?)<=(SELECT seq FROM messages WHERE id=conversations.summary_through)`, d.MessageID, d.MessageID)
 	return err
 }
 
