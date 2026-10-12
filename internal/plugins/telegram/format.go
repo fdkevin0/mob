@@ -286,7 +286,9 @@ func writeInline(b *strings.Builder, n ast.Node, source []byte) {
 	case *ast.String:
 		b.WriteString(html.EscapeString(string(n.Value)))
 	case *ast.CodeSpan:
-		b.WriteString("<code>" + html.EscapeString(string(n.Text(source))) + "</code>")
+		// A code span reads its line endings as spaces.
+		code := strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(string(n.Text(source)))
+		b.WriteString("<code>" + html.EscapeString(code) + "</code>")
 	case *ast.Emphasis:
 		t := "i"
 		if n.Level == 2 {
