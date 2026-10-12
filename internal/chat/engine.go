@@ -161,14 +161,20 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// size is the prompt's tokens: estimated at first, then as the provider
 	// counted the last step, plus estimates for what was added since.
 	size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages)
+	// read is how many of the messages the model has seen; files is where
+	// tool outputs are saved, by call.
+	read, files := 0, outputFiles(history)
 	seenCalls := map[string]bool{}
 	steps := agent.Steps
 	if steps <= 0 {
 		steps = DefaultSteps
 	}
 	for step := 0; step < steps; step++ {
-		// Tool results can fill the window within a turn; stop before the
-		// provider refuses the request.
+		// Tool results can fill the window within a turn: clear older ones
+		// the model has read, and stop before the provider refuses the request.
+		if info.Context > 0 && step > 0 && size > limit {
+			size -= clearOutputs(req.Messages[:read], files, size-limit)
+		}
 		if info.Context > 0 && step > 0 && size > limit {
 			return fmt.Errorf("this turn has filled %s's context (about %d of %d tokens); send another message to continue", info.ID, size, limit)
 		}
@@ -177,6 +183,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		}
 		indices := map[string]int{}
 		ids := map[string]string{}
+		read = len(req.Messages)
 		result, err := model.Stream(ctx, *req, func(kind, delta string) error {
 			index, ok := indices[kind]
 			if !ok {
@@ -267,15 +274,16 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 				part["output"] = output
 				if file := save(agent.Saver, conversationID, output); file != "" {
 					part["outputFile"] = file
+					files[call.ID] = file
 				}
 				if err := send(Event{Kind: ToolOutput, ToolCallID: call.ID, Output: output}); err != nil {
 					return err
 				}
 			}
 			file, _ := part["outputFile"].(string)
-			read := llm.Message{Role: "tool", Text: modelOutput(output, file), ToolCallID: call.ID, ToolName: call.Name}
-			req.Messages = append(req.Messages, read)
-			size += promptTokens([]llm.Message{read})
+			out := llm.Message{Role: "tool", Text: modelOutput(output, file), ToolCallID: call.ID, ToolName: call.Name}
+			req.Messages = append(req.Messages, out)
+			size += promptTokens([]llm.Message{out})
 		}
 		if err := send(Event{Kind: StepFinished}); err != nil {
 			return err
@@ -352,8 +360,9 @@ func promptTokens(messages []llm.Message) int {
 // Prompt replays stored history as model messages. Tool calls go back as
 // calls with their results, so any model can continue another's work;
 // earlier turns' reasoning is never replayed, as it belongs to its model.
-// With a positive budget (tokens), the oldest messages beyond it are
-// omitted; without one, only the most recent messages are kept.
+// With a positive budget (tokens), older tool outputs are cleared and then
+// the oldest messages beyond it omitted; without one, only the most recent
+// messages are kept.
 func Prompt(history []Message, current string, budget int) (messages []llm.Message, omitted bool) {
 	var turns [][]llm.Message
 	for _, m := range history {
@@ -366,7 +375,17 @@ func Prompt(history []Message, current string, budget int) (messages []llm.Messa
 	}
 	start := max(0, len(turns)-recentMessages)
 	if budget > 0 {
+		// Older tool outputs are cleared before whole turns are omitted; the
+		// latest turn keeps its own.
 		used := 0
+		for _, turn := range turns {
+			used += promptTokens(turn)
+		}
+		files := outputFiles(history)
+		for i := 0; i < len(turns)-1 && used > budget; i++ {
+			used -= clearOutputs(turns[i], files, used-budget)
+		}
+		used = 0
 		for start = len(turns); start > 0; start-- {
 			size := promptTokens(turns[start-1])
 			if used+size > budget && start < len(turns) {
