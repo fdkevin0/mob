@@ -180,28 +180,32 @@ type button struct {
 }
 
 // tapped makes the owner's tap on an approval button the private message it
-// stands for, answering the tap so Telegram stops showing it as loading.
-func (c Config) tapped(ctx context.Context, u Update) Update {
+// stands for. acknowledge answers the tap and removes the decided buttons, best effort;
+// it is nil when there is nothing to do, and may run alongside polling.
+func (c Config) tapped(u Update) (_ Update, acknowledge func(context.Context)) {
 	q := u.CallbackQuery
 	if q == nil || q.From.ID != c.UserID {
-		return u
+		return u, nil
 	}
-	// Best effort: an unanswered tap only keeps its spinner a little longer.
-	_ = c.Call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID}, nil)
-	if !strings.HasPrefix(q.Data, "/approve ") && !strings.HasPrefix(q.Data, "/deny ") {
-		return u
+	decision := strings.HasPrefix(q.Data, "/approve ") || strings.HasPrefix(q.Data, "/deny ")
+	acknowledge = func(ctx context.Context) {
+		// An unanswered tap only keeps its spinner a little longer.
+		_ = c.Call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID}, nil)
+		if decision && q.Message != nil && q.Message.ReplyMarkup != nil {
+			// A button left behind only answers that it was decided.
+			_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{
+				"chat_id": q.Message.Chat.ID, "message_id": q.Message.ID,
+				"reply_markup": without(*q.Message.ReplyMarkup, strings.Fields(q.Data)[1]),
+			}, nil)
+		}
 	}
-	if q.Message != nil && q.Message.ReplyMarkup != nil {
-		// Best effort: a button left behind only answers that it was decided.
-		_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{
-			"chat_id": q.Message.Chat.ID, "message_id": q.Message.ID,
-			"reply_markup": without(*q.Message.ReplyMarkup, strings.Fields(q.Data)[1]),
-		}, nil)
+	if !decision {
+		return u, acknowledge
 	}
 	m := &Message{Text: q.Data}
 	m.From.ID, m.Chat.ID, m.Chat.Type = c.UserID, c.UserID, "private"
 	u.Message = m
-	return u
+	return u, acknowledge
 }
 
 // without is the keyboard less the row of buttons deciding approval id.
