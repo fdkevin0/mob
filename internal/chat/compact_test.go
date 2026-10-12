@@ -23,7 +23,7 @@ type summarizing struct {
 func (m *summarizing) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "summarizing"} }
 func (m *summarizing) Info() llm.Info { return m.info }
 func (m *summarizing) Stream(_ context.Context, req llm.Request, _ func(string, string) error) (llm.Result, error) {
-	if req.System != compactPrompt {
+	if !strings.HasPrefix(req.System, compactPrompt) {
 		m.requests = append(m.requests, req)
 		return llm.Result{Text: "ok"}, nil
 	}
@@ -133,7 +133,7 @@ func TestSummaryPartsFitAsTheSummaryGrows(t *testing.T) {
 	for i := range 3 {
 		messages = append(messages, Message{ID: NewID(), Role: "user", Parts: []Part{{"type": "text", "text": fmt.Sprint(i) + strings.Repeat("x", 30000)}}})
 	}
-	if _, _, err := summarize(context.Background(), model, "", messages); err != nil {
+	if _, _, err := summarize(context.Background(), model, "", messages, summaryTokens); err != nil {
 		t.Fatal(err)
 	}
 	if len(model.summaries) < 2 {
@@ -164,5 +164,45 @@ func TestOversizedSummaryIsSetAside(t *testing.T) {
 	}
 	if summary, _ := s.Summary(id); len(summary.Text) != 9000 {
 		t.Fatal("the stored summary was lost")
+	}
+}
+
+// A summary is no longer than leaves room for the latest message, and one
+// that turns out longer is not used for the turn, which omits instead.
+func TestSummaryLeavesRoomForTheLatestMessage(t *testing.T) {
+	for _, long := range []string{"", strings.Repeat("s", 11970)} {
+		s, id, m := longHistory(t, 10)
+		m, _ = s.Begin(id, NewID(), strings.Repeat("y", 18000), "test/summarizing")
+		model := &summarizing{info: llm.Info{ID: "summarizing", Context: 10000, Output: 4000}, long: long}
+		if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+			t.Fatalf("summary of %d bytes: %v", len(long), err)
+		}
+		if len(model.summaries) == 0 || model.summaries[0].MaxTokens >= summaryTokens {
+			t.Fatalf("summaries were not bounded by the latest message: %d", len(model.summaries))
+		}
+		req := model.requests[0]
+		if req.Messages[len(req.Messages)-1].Text != strings.Repeat("y", 18000) {
+			t.Fatal("the turn did not read the latest message")
+		}
+		if used := strings.Contains(req.System, summaryNotice); used == (long != "") {
+			t.Fatalf("summary of %d bytes used: %v", len(long), used)
+		}
+	}
+}
+
+// A stored summary that fits the window but not beside the latest message is
+// set aside for the turn.
+func TestStoredSummaryLeavesRoomForTheLatestMessage(t *testing.T) {
+	s, id, m := turnFixture(t)
+	if err := s.Summarize(id, Summary{Text: strings.Repeat("s", 9000), Through: m.ID}); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = s.Begin(id, NewID(), strings.Repeat("y", 18000), "test/summarizing")
+	model := &summarizing{info: llm.Info{ID: "summarizing", Context: 10000, Output: 4000}}
+	if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(model.requests[0].System, summaryNotice) {
+		t.Fatal("the stored summary crowded out the latest message")
 	}
 }

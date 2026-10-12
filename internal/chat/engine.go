@@ -151,22 +151,29 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	if err != nil {
 		return err
 	}
-	// A summary written for a larger model can crowd this one out; the turn
-	// then reads the messages it covers instead, as many as fit.
-	if summaryCost(summary.Text) > budget/2 {
+	// room is what a summary may take beside the latest message, which every
+	// prompt keeps.
+	last, _, _ := prompt(history, message.ID, 1)
+	room := budget - promptTokens(last)
+	// A summary written for a larger model, or before a long message, can
+	// crowd the turn out; the turn then reads the messages it covers instead,
+	// as many as fit.
+	if cost := summaryCost(summary.Text); cost > budget/2 || cost > room {
 		summary = Summary{}
 	}
 	history = since(history, summary.Through)
 	var saved []string
 	var through string
 	req.Messages, saved, through = prompt(history, message.ID, budget-summaryCost(summary.Text))
-	// History that does not fit is summarized rather than omitted. The
-	// summary covers enough that recent messages fill at most half the room
-	// left beside it, so the next turns need not summarize again.
-	half := (budget - summaryTokens - tokens(summaryNotice)) / 2
-	if through != "" && info.Context > 0 && half > 0 {
+	// History that does not fit is summarized rather than omitted, in a
+	// summary short enough to leave room for the latest message. The summary
+	// covers enough that recent messages fill at most half the room left
+	// beside it, so the next turns need not summarize again.
+	length := min(summaryTokens, room-tokens(summaryNotice))
+	half := (budget - length - tokens(summaryNotice)) / 2
+	if through != "" && info.Context > 0 && length >= summaryTokens/4 && half > 0 {
 		_, _, older := prompt(history, message.ID, half)
-		text, usage, err := summarize(ctx, model, summary.Text, until(history, older))
+		text, usage, err := summarize(ctx, model, summary.Text, until(history, older), length)
 		if usage != nil {
 			message.Usage = add(message.Usage, *usage)
 			if e := send(Event{Kind: UsageReported, Usage: *usage}); e != nil {
@@ -176,8 +183,8 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		switch {
 		case ctx.Err() != nil:
 			return ctx.Err()
-		case err == nil:
-			// Without a summary, the older messages are omitted instead.
+		case err == nil && summaryCost(text) <= room:
+			// Without a summary that fits, the older messages are omitted instead.
 			summary = Summary{Text: text, Through: older}
 			if err := store.Summarize(conversationID, summary); err != nil {
 				return err
