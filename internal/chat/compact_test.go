@@ -327,3 +327,43 @@ func TestCompactCommandSummarizesTheConversation(t *testing.T) {
 		t.Fatalf("/compact with nothing new: %q", got)
 	}
 }
+
+// stopping is stopped while writing its second summary part.
+type stopping struct {
+	*summarizing
+	stop context.CancelFunc
+}
+
+func (m stopping) Stream(ctx context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	if strings.HasPrefix(req.System, compactPrompt) && len(m.summaries) == 1 {
+		m.stop()
+		return llm.Result{}, ctx.Err()
+	}
+	return m.summarizing.Stream(ctx, req, emit)
+}
+
+// A stopped /compact is recorded with what its finished summary requests cost.
+func TestStoppedCompactKeepsItsCost(t *testing.T) {
+	s, id, _ := longHistory(t, 30)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	model := stopping{&summarizing{info: llm.Info{ID: "summarizing", Context: 10000, Output: 4000}}, stop}
+	service := NewConversation(s, only{&models{def: "test/summarizing"}, model})
+	var reported bool
+	err := service.Execute(ctx, ChatRequest{ID: id, Text: "/compact", RequestID: NewID(), Owner: true}, func(e Event) error {
+		u, _ := e.Usage.(llm.Usage)
+		reported = reported || e.Kind == UsageReported && u.Input == 100
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || len(model.summaries) != 1 {
+		t.Fatalf("%d summaries: %v", len(model.summaries), err)
+	}
+	history, _ := s.History(id)
+	command := history[len(history)-1]
+	if !command.Command || command.Usage == nil || command.Usage.Input != 100 || !reported {
+		t.Fatalf("the stopped command's cost was lost: %+v reported %v", command.Usage, reported)
+	}
+	if summary, _ := s.Summary(id); summary.Text != "" {
+		t.Fatalf("a stopped /compact stored a summary: %+v", summary)
+	}
+}

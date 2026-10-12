@@ -83,3 +83,18 @@ func TestRefusedPromptEndsTheTurnWhenItCannotShrink(t *testing.T) {
 		t.Fatalf("%d requests: %v", len(model.requests), err)
 	}
 }
+
+// Outputs the model has not read yet are never cleared to retry: a refused
+// step whose only outputs are new ends the turn with them intact.
+func TestRefusedStepKeepsUnreadOutputs(t *testing.T) {
+	s, id, m := turnFixture(t)
+	tool := echoTool("read", func(context.Context, ToolCall) (any, error) { return strings.Repeat("r", 3000), nil })
+	model := &refusing{limit: 500, calls: 1}
+	err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}}, id, m, "", func(Event) error { return nil })
+	if !errors.Is(err, llm.ErrContextOverflow) || len(model.requests) != 2 {
+		t.Fatalf("%d requests: %v", len(model.requests), err)
+	}
+	if !strings.Contains(model.requests[1].Messages[2].Text, strings.Repeat("r", 3000)) {
+		t.Fatal("the unread output was cleared")
+	}
+}
