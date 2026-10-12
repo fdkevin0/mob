@@ -90,3 +90,10 @@ func TestChunksResolveLinkDestinations(t *testing.T) {
 		t.Fatalf("HTML: %+v\nwant: %s", got, want)
 	}
 }
+
+func TestCodeSpansReadLineEndingsAsSpaces(t *testing.T) {
+	got := chunks("run `printf\nhello` now\n\n```\nprintf\nhello\n```", chunkLimit)
+	if len(got) != 1 || got[0].HTML != "run <code>printf hello</code> now\n\n<pre>printf\nhello</pre>" || got[0].Plain != "run printf hello now\n\nprintf\nhello" {
+		t.Fatalf("chunks: %+v", got)
+	}
+}

@@ -11,7 +11,15 @@ commands, approvals, delivery records and replies behave the same everywhere.
   conversation, decide an approval), and keeps only what the sender should read.
 - `Deliver` records each message under its ID in the deliveries table, so a
   message is answered and sent at most once and an interrupted send is reported,
-  not repeated. `/deliveries` lists them.
+  not repeated. `/deliveries` lists them. A channel that answers while it
+  keeps receiving calls `Accept` as each message arrives and `Finish` once it
+  answers; `Message.Started` hands it the turn's stop as soon as the turn is
+  admitted, so it can keep later messages in order.
+- A message for a conversation whose turn is still running is answered with
+  `channel.Texts.Busy` instead of waiting, and a turn stopped by the sender ends
+  with what it wrote so far and `channel.Texts.Stopped`. A decision answered
+  that way is not taken; `Reply.Settled` names an approval only once it no
+  longer waits.
 - `channel.Texts` is what a channel says in its own words: the help greeting,
   the approval prompt, the line before a decision's reply, and the answers for
   stale approvals, failures and empty turns. Telegram speaks English and WeChat
@@ -49,8 +57,27 @@ commands, approvals, delivery records and replies behave the same everywhere.
   survive restart. Restart marks in-flight processing failed and in-flight sends
   uncertain; neither is replayed. There is no resend: a new message is a new
   attempt.
+- Polling continues while a reply is written: each message is answered in its
+  own goroutine, in the order it arrived. A message sent while the
+  conversation's turn runs gets a busy reply naming `/stop`, so it is never
+  queued behind the turn.
+- After a second, a reply in progress shows as a "Thinking…" draft
+  (`sendMessageDraft`) with Telegram's stop button, renewed until the reply is
+  sent; where drafts are unavailable the bot shows typing instead. The stop
+  button and `/stop` (Telegram only) stop the running turn, which ends with
+  what it wrote and "Stopped."
+- Replies are Markdown rendered to Telegram's HTML subset: headings become bold
+  lines, lists bulleted lines and tables aligned preformatted text, and only
+  http, https and tg links are kept. Long replies are split between blocks
+  (inside a block only when it alone is too long) to fit Telegram's 4096
+  UTF-16 unit limit. Link previews are off. If Telegram rejects the HTML, the
+  same text is sent plain.
+- Captions are read as the message's text. Photos, files, voice and other media
+  are not read; a message with only media is answered with a note saying so.
 - Approvals show Approve, Always allow and Deny buttons; a tap is handled as the
-  `/approve` or `/deny` message it stands for.
+  `/approve` or `/deny` message it stands for, and its row is removed once that
+  approval is decided or found stale. A tap while another turn runs leaves the
+  row in place.
 - The bot's `/` menu comes from the [command registry](commands.md).
 
 ## WeChat iLink
