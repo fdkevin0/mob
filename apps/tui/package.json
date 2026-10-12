@@ -1,0 +1,17 @@
+{
+	"name": "@mob/tui",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "bun src/main.tsx",
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@mob/client": "workspace:*",
+		"@opentui/core": "0.6.1",
+		"@opentui/react": "0.6.1",
+		"ai": "7.0.136",
+		"react": "^19.3.0"
+	}
+}
