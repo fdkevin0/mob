@@ -43,6 +43,10 @@ type Agent struct {
 	Prompt string
 }
 
+// ErrStepLimit ends a turn that made as many model calls as it may. The turn
+// is saved with status "step-limit", so clients can offer to continue it.
+var ErrStepLimit = errors.New("tool step limit reached")
+
 // DefaultSteps is how many model calls a turn makes at most unless its agent
 // says otherwise.
 const DefaultSteps = 20
@@ -93,8 +97,11 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		if runErr != nil {
 			status = "error"
 			failure = runErr.Error()
-			if errors.Is(runErr, context.Canceled) {
+			switch {
+			case errors.Is(runErr, context.Canceled):
 				status = "cancelled"
+			case errors.Is(runErr, ErrStepLimit):
+				status = "step-limit"
 			}
 		}
 		if err := store.Save(message, status, failure); err != nil {
@@ -409,7 +416,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			return nil
 		}
 	}
-	return fmt.Errorf("tool step limit reached (%d); send another message to continue", steps)
+	return fmt.Errorf("%w (%d); send another message to continue", ErrStepLimit, steps)
 }
 
 // runTool runs an offered tool after the BeforeTool hooks allow it, and

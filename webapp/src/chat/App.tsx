@@ -170,7 +170,7 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
 }
 
 function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction }: { connection: Connection; id: string; initial: Snapshot; onModel: (model: string) => void; onBusy: (busy: boolean) => void; onChanged: () => void; onAction: (action: Action) => void }) {
-  const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel, commandResult, dismissCommand } = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
+  const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, proceed, decide, cancel, commandResult, dismissCommand } = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
   const completion = useCompletion({ connection, id, input, setInput });
   useEffect(() => { onModel(model); }, [model, onModel]);
   return <>
@@ -190,6 +190,7 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction 
             return null;
           })}
           {message.metadata?.error && <p className="error" role="status">{message.metadata.status}: {message.metadata.error}</p>}
+          {message.metadata?.status === 'step-limit' && message === messages.at(-1) && !busy && <button className="plain" onClick={proceed}>Continue</button>}
         </MessageContent></Message>)}
       {busy && <p className="muted" role="status">{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}</p>}
     </ConversationContent><ConversationScrollButton /></ChatConversation>

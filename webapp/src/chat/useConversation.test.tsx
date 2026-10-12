@@ -176,3 +176,13 @@ it('does not follow a turn after the conversation closes', async () => {
   await new Promise(resolve => setTimeout(resolve, 50));
   expect(reconnects).toBe(0);
 });
+it('continues a turn that stopped at its step limit', async () => {
+  const chats: string[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+    if (url.endsWith('/chat')) { chats.push(String(options?.body)); return new Promise<Response>(() => {}); }
+    return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
+  }));
+  const { result } = renderHook(() => useConversation({ connection, id: 'one', initial: { messages: [], active: false, model: 'demo/echo' }, onBusy: () => {}, onChanged: () => {} }));
+  act(() => result.current.proceed());
+  await waitFor(() => expect(chats.some(c => c.includes('"text":"Continue"'))).toBe(true));
+});

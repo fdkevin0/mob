@@ -74,6 +74,8 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
     const text = input.trim(); setInput(''); setFailure(''); clearError(); setCommandResult(undefined);
     if (text.startsWith('/') && !/[\r\n]/.test(text)) void run(text); else send(text);
   }
+  // proceed asks the model to go on with a turn that stopped at its step limit.
+  function proceed() { if (!busy) send('Continue'); }
   function send(text: string) {
     submittedText.current = text; clearError(); refreshGeneration.current++; busyRef.current = true;
     void sendMessage({ text });
@@ -109,5 +111,5 @@ export function useConversation({ connection, id, initial, onBusy, onChanged, on
     try { await api(connection, `/conversations/${id}/stop`, {}); approvalController.current?.abort(); followController.current?.abort(); await stop(); }
     catch (e) { setFailure(errorText(e)); }
   }
- return { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, decide, cancel, commandResult, dismissCommand: () => setCommandResult(undefined) };
+ return { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, proceed, decide, cancel, commandResult, dismissCommand: () => setCommandResult(undefined) };
 }
