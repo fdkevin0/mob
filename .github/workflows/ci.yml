@@ -35,7 +35,7 @@ jobs:
         run: go mod tidy -diff
       - name: go vet
         run: go vet ./...
-      # Reuses what vet compiled. Also checks that webapp/src/chat/contracts.ts
+      # Reuses what vet compiled. Also checks that packages/client/src/contracts.ts
       # matches the Go definitions.
       - name: go test
         run: go test ./...
@@ -71,7 +71,10 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - name: Typecheck and test
-        run: bun run test:webapp
+        run: |
+          bun run test:client
+          bun run test:webapp
+          bun run test:tui
       - name: Build
         run: bun run build
 
