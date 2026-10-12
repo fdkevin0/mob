@@ -189,8 +189,10 @@ function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction 
             </section>;
             return null;
           })}
-          {message.metadata?.error && <p className="error" role="status">{message.metadata.status}: {message.metadata.error}</p>}
-          {message.metadata?.status === 'step-limit' && message === messages.at(-1) && !busy && <button className="plain" onClick={proceed}>Continue</button>}
+          {message.metadata?.status === 'step-limit'
+            ? <div className="step-limit"><p className="muted" role="status">Stopped after reaching the tool step limit.</p>
+              {message === messages.at(-1) && !busy && <button className="secondary" onClick={proceed}>Continue</button>}</div>
+            : message.metadata?.error && <p className="error" role="status">{message.metadata.status}: {message.metadata.error}</p>}
         </MessageContent></Message>)}
       {busy && <p className="muted" role="status">{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}</p>}
     </ConversationContent><ConversationScrollButton /></ChatConversation>
