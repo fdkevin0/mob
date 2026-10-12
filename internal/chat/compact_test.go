@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,10 +23,10 @@ type summarizing struct {
 
 func (m *summarizing) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "summarizing"} }
 func (m *summarizing) Info() llm.Info { return m.info }
-func (m *summarizing) Stream(_ context.Context, req llm.Request, _ func(string, string) error) (llm.Result, error) {
+func (m *summarizing) Stream(_ context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
 	if !strings.HasPrefix(req.System, compactPrompt) {
 		m.requests = append(m.requests, req)
-		return llm.Result{Text: "ok"}, nil
+		return llm.Result{Text: "ok"}, emit("text", "ok")
 	}
 	m.summaries = append(m.summaries, req)
 	if m.fail {
@@ -276,5 +277,53 @@ func TestSummaryIsReadWhenTheWindowIsUnknown(t *testing.T) {
 	req := model.requests[0]
 	if !strings.Contains(req.System, summaryNotice+"the user needs Go 1.26") || len(req.Messages) != 1 {
 		t.Fatalf("the summary was not read with the messages after it: %d messages", len(req.Messages))
+	}
+}
+
+// /compact summarizes the conversation so far, which later turns read in
+// place of the messages it covers.
+func TestCompactCommandSummarizesTheConversation(t *testing.T) {
+	s, id, _ := turnFixture(t)
+	model := &summarizing{info: llm.Info{ID: "summarizing", Context: 100000, Output: 4000}}
+	service := NewConversation(s, only{&models{def: "test/summarizing"}, model})
+	say := func(text string) (string, []Event) {
+		var reply strings.Builder
+		var events []Event
+		err := service.Execute(context.Background(), ChatRequest{ID: id, Text: text, RequestID: NewID(), Owner: true}, func(e Event) error {
+			events = append(events, e)
+			if e.Kind == SegmentDelta && e.Segment == "text" {
+				reply.WriteString(e.Text)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", text, err)
+		}
+		return reply.String(), events
+	}
+	for i := range 3 {
+		say(fmt.Sprintf("msg-%d", i))
+	}
+	got, events := say("/compact")
+	if !strings.HasPrefix(got, "Summarized") || len(model.summaries) != 1 || !strings.Contains(model.summaries[0].Messages[0].Text, "msg-0") {
+		t.Fatalf("/compact: %q after %d summaries", got, len(model.summaries))
+	}
+	if !slices.ContainsFunc(events, func(e Event) bool { return e.Kind == UsageReported }) {
+		t.Fatal("the summary's cost was not reported")
+	}
+	history, _ := s.History(id)
+	if command := history[len(history)-1]; command.Usage == nil || command.Usage.Input != 100 {
+		t.Fatalf("the summary's cost was not saved: %+v", command.Usage)
+	}
+	say("and then?")
+	req := model.requests[len(model.requests)-1]
+	if !strings.Contains(req.System, summaryNotice+"SUMMARY 1") || len(req.Messages) != 1 || req.Messages[0].Text != "and then?" {
+		t.Fatalf("the turn did not read the summary in place of the conversation: %d messages", len(req.Messages))
+	}
+	if got, _ := say("/compact"); !strings.HasPrefix(got, "Summarized 2 messages") {
+		t.Fatalf("second /compact: %q", got)
+	}
+	if got, _ := say("/compact"); got != "There is nothing new to summarize." {
+		t.Fatalf("/compact with nothing new: %q", got)
 	}
 }

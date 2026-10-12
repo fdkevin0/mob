@@ -19,6 +19,7 @@ func (s *ConversationService) builtins() []Command {
 	return []Command{
 		{CommandSpec: CommandSpec{"model", "/model [NAME | default [NAME]]", "Show or switch this conversation's model", everyClient, true}, Args: []Argument{s.modelOrDefault, s.defaultModel}},
 		{CommandSpec: CommandSpec{"models", "/models [FILTER]", "List available models", everyClient, true}},
+		{CommandSpec: CommandSpec{"compact", "/compact", "Summarize the conversation so far, so later turns read the summary in its place", everyClient, true}},
 		{CommandSpec: CommandSpec{"new", "/new", "Start a new conversation", everyClient, false}, Run: s.newConversation},
 		{CommandSpec: CommandSpec{"list", "/list", "List conversations", interactive, false}, Run: s.listConversations},
 		{CommandSpec: CommandSpec{"open", "/open ID", "Switch to a conversation", interactive, false}, Args: []Argument{s.conversations}, Run: s.openConversation},
