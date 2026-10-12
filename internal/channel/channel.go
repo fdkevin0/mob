@@ -70,11 +70,13 @@ type Message struct {
 	// Owner says the sender owns this Mob.
 	Owner bool
 	Text  string
-	// Started, when set, is called once the message's turn is running, or
-	// when it has no turn, once its answer is ready; it may be called more
-	// than once. An app answering messages concurrently waits for it before
-	// answering the next, so they take effect in the order they were sent.
-	Started func()
+	// Started, when set, is called with a function that stops the message's
+	// turn once the turn is admitted, before it does anything, and with nil
+	// once the answer is ready; a message without a turn gets only the
+	// latter. An app answering messages concurrently waits for the first call
+	// before answering the next, so they take effect in the order they were
+	// sent.
+	Started func(stop func())
 }
 
 // Reply is what Mob answers a message with.
@@ -88,7 +90,7 @@ type Reply struct {
 // failure the reply still says what happened.
 func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 	if m.Started != nil {
-		defer m.Started()
+		defer m.Started(nil)
 	}
 	id, failure, err := b.conversation(m)
 	if err != nil {
@@ -182,16 +184,17 @@ func (b *Bridge) conversation(m Message) (string, string, error) {
 // last step that wrote any, which concludes the turn, the tools it used, its
 // failures and the approvals it asks for. Text written between tool calls,
 // reasoning and tool calls stay in the local conversation.
-func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest, started func()) (Reply, error) {
+func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest, started func(stop func())) (Reply, error) {
 	input.Channel = b.Name
 	var step, last, failures strings.Builder
 	var used []Use
 	var approvals []chat.PendingApproval
-	err := b.Conversation.Execute(ctx, input, func(event chat.Event) error {
+	admitted := func(r *chat.Running) {
 		if started != nil {
-			// Events come only from an admitted turn.
-			started()
+			started(r.Stop)
 		}
+	}
+	err := b.Conversation.ExecuteAdmitted(ctx, input, func(event chat.Event) error {
 		switch event.Kind {
 		case chat.StepStarted:
 			if strings.TrimSpace(step.String()) != "" {
@@ -214,7 +217,7 @@ func (b *Bridge) turn(ctx context.Context, input chat.ChatRequest, started func(
 			return b.overLimit()
 		}
 		return nil
-	})
+	}, admitted)
 	text := step.String()
 	if strings.TrimSpace(text) == "" {
 		text = last.String()

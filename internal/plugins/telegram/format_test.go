@@ -56,3 +56,18 @@ func TestFitKeepsEntitiesWhole(t *testing.T) {
 		t.Fatalf("fit cut a surrogate pair: %d", n)
 	}
 }
+
+func TestChunksDropALanguageTagTooLongToFit(t *testing.T) {
+	got := chunks("```"+strings.Repeat("x", 4000)+"\n"+strings.Repeat("code\n", 2000)+"```", 4000)
+	if len(got) < 3 {
+		t.Fatalf("chunks: %d", len(got))
+	}
+	for i, c := range got {
+		if units(c.HTML) > 4000 || !strings.HasPrefix(c.HTML, "<pre>code") {
+			t.Fatalf("chunk %d: %d units, %.40s", i, units(c.HTML), c.HTML)
+		}
+	}
+	if n := fit("abc", 0); n != 1 {
+		t.Fatalf("fit took nothing: %d", n)
+	}
+}
