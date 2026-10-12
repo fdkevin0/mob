@@ -260,3 +260,21 @@ func TestSummaryOfAChangedCallIsDropped(t *testing.T) {
 		t.Fatalf("the summary still tells of the waiting call: %+v", summary)
 	}
 }
+
+// A model whose window is unknown reads the stored summary beside the most
+// recent messages.
+func TestSummaryIsReadWhenTheWindowIsUnknown(t *testing.T) {
+	s, id, m := longHistory(t, 3)
+	if err := s.Summarize(id, Summary{Text: "the user needs Go 1.26", Through: m.ID}); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = s.Begin(id, NewID(), "continue", "test/summarizing")
+	model := &summarizing{info: llm.Info{ID: "summarizing"}}
+	if err := Run(context.Background(), s, model, Agent{}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	req := model.requests[0]
+	if !strings.Contains(req.System, summaryNotice+"the user needs Go 1.26") || len(req.Messages) != 1 {
+		t.Fatalf("the summary was not read with the messages after it: %d messages", len(req.Messages))
+	}
+}

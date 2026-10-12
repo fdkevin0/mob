@@ -158,8 +158,8 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// A summary written for a larger model, or before a long message, can
 	// crowd the turn out; the turn then reads the messages it covers instead,
 	// as many as fit. Otherwise it is read, as it was written to fit beside
-	// such a message.
-	if summaryCost(summary.Text) > room {
+	// such a message, and always when the window is unknown.
+	if info.Context > 0 && summaryCost(summary.Text) > room {
 		summary = Summary{}
 	}
 	history = since(history, summary.Through)
