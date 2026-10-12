@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 
@@ -185,5 +185,22 @@ it('explains why the public web could not reach local Mob', async () => {
   try {
     render(<App />);
     expect((await screen.findByRole('alert')).textContent).toContain('could not reach Mob at http://localhost:8787');
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('sends a typed token from the public web only to Mob on this computer', async () => {
+  vi.stubEnv('MODE', 'public');
+  localStorage.setItem('mob-url', 'https://mob.example');
+  const fetchMock = vi.fn(async () => Response.json({}));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    render(<App />);
+    const address = await screen.findByLabelText('Mob address') as HTMLInputElement;
+    expect(address.value).toBe('http://127.0.0.1:8787');
+    fireEvent.change(address, { target: { value: 'https://mob.example' } });
+    fireEvent.change(screen.getByLabelText('Local access token'), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Mob on this computer');
+    expect(fetchMock).not.toHaveBeenCalled();
   } finally { vi.unstubAllEnvs(); }
 });

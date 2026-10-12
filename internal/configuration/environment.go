@@ -187,9 +187,6 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err := v.BindEnv("max_tool_steps", "MOB_MAX_TOOL_STEPS"); err != nil {
 		return Environment{}, err
 	}
-	if err := v.BindEnv("web_url", "MOB_WEB_URL"); err != nil {
-		return Environment{}, err
-	}
 	for _, key := range []string{"data_dir", "state_dir", "addr", "demo"} {
 		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(key)); err != nil {
 			return Environment{}, err
@@ -221,6 +218,11 @@ func (l *Loader) read(required bool) (Environment, error) {
 	}
 	if data.MaxToolSteps < 1 || data.MaxToolSteps > MaxToolSteps {
 		return fail("max_tool_steps must be 1 to " + strconv.Itoa(MaxToolSteps))
+	}
+	// Viper ignores empty environment values, but an empty MOB_WEB_URL turns
+	// the public web UI off.
+	if raw, set := os.LookupEnv("MOB_WEB_URL"); set {
+		data.WebURL = raw
 	}
 	if _, err := WebOrigin(data.WebURL); err != nil {
 		return Environment{}, err

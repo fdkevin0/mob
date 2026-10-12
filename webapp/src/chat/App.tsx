@@ -4,7 +4,7 @@ import { useCompletion } from './useCompletion';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Conversation as ChatConversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from '../components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
-import { api, defaultURL, isPublicWeb, readOffer, unauthorizedEvent, type Connection, type Conversation, type Snapshot } from './api';
+import { api, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent, type Connection, type Conversation, type Snapshot } from './api';
 import type { Action } from './contracts';
 
 import { Plugins } from './Plugins';
@@ -50,6 +50,7 @@ export function App() {
   async function connect(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
+    if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
     try { await api(next, '/config'); saveConnection(next); setConnection(next); }
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
@@ -81,7 +82,9 @@ function clearToken(only?: string) {
 // the Mob address the last sign-in link gave.
 function serviceURL() {
   if (!isPublicWeb()) return defaultURL();
-  try { return localStorage.getItem(urlKey) ?? 'http://127.0.0.1:8787'; } catch { return 'http://127.0.0.1:8787'; }
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(urlKey); } catch { /* use the default address */ }
+  return saved && isLocalMob(saved) ? saved : 'http://127.0.0.1:8787';
 }
 const urlKey = 'mob-url';
 function saveConnection(connection: Connection) {

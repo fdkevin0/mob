@@ -33,10 +33,17 @@ export function readOffer(encoded: string): Offer {
     offer = JSON.parse(new TextDecoder().decode(bytes));
   } catch { throw new Error('This sign-in link is damaged. Run mob open --web again.'); }
   if (offer?.v !== 1 || typeof offer.url !== 'string' || typeof offer.code !== 'string' || !offer.code) throw new Error('This page does not understand the sign-in link. Run mob open --web again.');
-  let url: URL;
-  try { url = new URL(offer.url); } catch { throw new Error('This sign-in link is damaged. Run mob open --web again.'); }
-  if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') || url.origin !== offer.url) throw new Error('This sign-in link points to another computer, so it was ignored.');
+  if (!isLocalMob(offer.url)) throw new Error('This sign-in link points to another computer, so it was ignored.');
   return { url: offer.url, code: offer.code };
+}
+
+// isLocalMob tells whether the public web may send the access token to url:
+// only an origin on this computer, which is all its CSP lets it reach.
+export function isLocalMob(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') && parsed.origin === url;
+  } catch { return false; }
 }
 
 // timeoutFor bounds a request in milliseconds. Plugin routes and command

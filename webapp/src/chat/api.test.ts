@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { readOffer, timeoutFor } from './api';
+import { isLocalMob, readOffer, timeoutFor } from './api';
 
 it('gives command execution the plugin timeout and keeps completion short', () => {
   expect(timeoutFor('/commands/run')).toBe(60_000);
@@ -17,4 +17,11 @@ it('reads only offers for Mob on this computer', () => {
   expect(() => readOffer(encode({ v: 2, url: 'http://127.0.0.1:8787', code: 'c' }))).toThrow('does not understand');
   expect(() => readOffer(encode({ v: 1, url: 'http://127.0.0.1:8787', code: '' }))).toThrow('does not understand');
   expect(() => readOffer('%%%')).toThrow('damaged');
+});
+
+it('treats only http origins on 127.0.0.1 or localhost as local Mob', () => {
+  expect(isLocalMob('http://127.0.0.1:8787')).toBe(true);
+  expect(isLocalMob('http://localhost:9000')).toBe(true);
+  for (const url of ['https://mob.fdkevin.cloud', 'http://127.0.0.1:8787/', 'http://192.168.1.2:8787', 'not a url', ''])
+    expect(isLocalMob(url)).toBe(false);
 });
