@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -101,7 +103,12 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	commands := &tap{Listener: listener}
+	listener = commands
 	imapServer := server.New(backend)
+	// The tap hides that its connections are TLS, which the server would
+	// otherwise require before login.
+	imapServer.AllowInsecureAuth = true
 	served := make(chan struct{})
 	go func() { defer close(served); _ = imapServer.Serve(listener) }()
 	t.Cleanup(func() { imapServer.Close(); <-served })
@@ -191,6 +198,24 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 	deliver(ownerMail("Message-ID: <q1@example.org>\r\nSubject: Question\r\n", "Hello there"))
 	run(1)
 	first := reply()
+	// Eve's message is read before its sender is checked; the 3 MiB message
+	// after it is skipped by its size and its body never fetched; the
+	// owner's is fetched at most 2 MiB at a time.
+	var fetches []string
+	for _, line := range strings.Split(commands.String(), "\r\n") {
+		if _, command, ok := strings.Cut(line, " "); ok && strings.HasPrefix(command, "UID FETCH ") {
+			fetches = append(fetches, command)
+		}
+	}
+	var eve int
+	if len(fetches) > 0 {
+		eve, _ = strconv.Atoi(strings.Fields(fetches[0])[2])
+	}
+	size, body := "UID FETCH %d (UID RFC822.SIZE)", "UID FETCH %d (UID BODY.PEEK[]<0.2097152>)"
+	want := []string{fmt.Sprintf(size, eve), fmt.Sprintf(body, eve), fmt.Sprintf(size, eve+1), fmt.Sprintf(size, eve+2), fmt.Sprintf(body, eve+2)}
+	if !slices.Equal(fetches, want) {
+		t.Fatalf("fetches %q, want %q", fetches, want)
+	}
 	if first.draft.To != owner.Owner || first.draft.Subject != "Re: Question" || !strings.Contains(first.header, "In-Reply-To: <q1@example.org>") || first.draft.Text == "" {
 		t.Fatalf("first reply: %+v", first)
 	}
@@ -217,4 +242,35 @@ func TestNewerHandlesUIDsOldestFirst(t *testing.T) {
 	if got := newer([]uint32{12, 10, 11, 12, 9}, 10); !slices.Equal(got, []uint32{11, 12}) {
 		t.Fatalf("newer: %v", got)
 	}
+}
+
+// tap records what clients send to a listener's connections.
+type tap struct {
+	net.Listener
+	mu  sync.Mutex
+	log bytes.Buffer
+}
+
+func (t *tap) Accept() (net.Conn, error) {
+	conn, err := t.Listener.Accept()
+	return tapped{conn, t}, err
+}
+
+func (t *tap) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.log.String()
+}
+
+type tapped struct {
+	net.Conn
+	tap *tap
+}
+
+func (c tapped) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.tap.mu.Lock()
+	c.tap.log.Write(b[:n])
+	c.tap.mu.Unlock()
+	return n, err
 }
