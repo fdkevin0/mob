@@ -357,10 +357,9 @@ func (s *Service) settle(ctx context.Context, c Config, b shown, id string) {
 		s.decided[key] = d
 	}
 	d.ids[id] = true
+	// The entry stays once every row is gone, so that a late duplicate tap,
+	// which carries the keyboard as it was, cannot bring rows back.
 	left := d.keyboard.decided(d.ids)
-	if len(left.Rows) == 0 {
-		delete(s.decided, key)
-	}
 	_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{"chat_id": b.Chat, "message_id": b.Message, "reply_markup": left}, nil)
 }
 

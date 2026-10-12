@@ -265,7 +265,9 @@ func TestSettledApprovalsLoseTheirButtons(t *testing.T) {
 	var s Service
 	s.settle(context.Background(), c, *first.Buttons, a)
 	s.settle(context.Background(), c, *second.Buttons, b)
-	if len(edits) != 2 || strings.Contains(edits[0], a) || !strings.Contains(edits[0], "/approve "+b) || edits[1] != `42 {"inline_keyboard":[]}` {
+	// A late duplicate tap, carrying both rows, brings neither back.
+	s.settle(context.Background(), c, *tap("/deny " + a).Message.Buttons, a)
+	if len(edits) != 3 || strings.Contains(edits[0], a) || !strings.Contains(edits[0], "/approve "+b) || edits[1] != `42 {"inline_keyboard":[]}` || edits[2] != edits[1] {
 		t.Fatalf("edits: %v", edits)
 	}
 }
