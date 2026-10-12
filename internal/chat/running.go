@@ -31,11 +31,15 @@ func (r *Running) record(e Event) {
 }
 
 // finish ends the log. A turn that failed after it began ends with the events
-// a client needs to show why, as the turn itself only returns its error.
+// a client needs to show why, as the turn itself only returns its error. One
+// that reached its step limit did not fail: it ends as finished, and the saved
+// reply's status tells clients they can continue it.
 func (r *Running) finish(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err != nil && len(r.events) > 0 {
+	if errors.Is(err, ErrStepLimit) && len(r.events) > 0 {
+		r.events = append(r.events, Event{Kind: TurnFinished, Reason: "tool-calls"})
+	} else if err != nil && len(r.events) > 0 {
 		end := Event{Kind: TurnFailed, Error: err.Error()}
 		if errors.Is(err, context.Canceled) {
 			end = Event{Kind: TurnAborted}
