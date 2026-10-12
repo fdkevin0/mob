@@ -227,6 +227,21 @@ func (s *Store) ConversationModel(id string) (string, error) {
 	return model, err
 }
 
+// Summary is a conversation's earlier messages summarized, through the
+// message with ID Through, for models to read in their place.
+type Summary struct{ Text, Through string }
+
+func (s *Store) Summary(id string) (Summary, error) {
+	var sum Summary
+	err := s.db.QueryRow("SELECT summary,summary_through FROM conversations WHERE id=?", id).Scan(&sum.Text, &sum.Through)
+	return sum, err
+}
+
+func (s *Store) Summarize(id string, sum Summary) error {
+	_, err := s.db.Exec("UPDATE conversations SET summary=?,summary_through=? WHERE id=?", sum.Text, sum.Through, id)
+	return err
+}
+
 func (s *Store) SetConversationModel(id, model string) error {
 	result, err := s.db.Exec("UPDATE conversations SET model=? WHERE id=?", model, id)
 	if err == nil {

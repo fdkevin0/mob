@@ -142,18 +142,52 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		}
 	}
 	// limit is what a prompt may use of the window, leaving room for the reply.
-	var omitted bool
 	limit := info.Context - reserve
 	budget := limit - tokens(req.System) - toolTokens(req.Tools) - tokens(omittedNotice)
 	if note != "" {
 		budget -= tokens(note)
 	}
-	var saved []string
-	req.Messages, saved, omitted = prompt(history, message.ID, budget)
-	if size := promptTokens(req.Messages); info.Context > 0 && size > budget {
-		return fmt.Errorf("the latest message is about %d tokens, more than %s has room for (%d); shorten it or pick a model with a larger context", size, info.ID, max(budget, 0))
+	summary, err := store.Summary(conversationID)
+	if err != nil {
+		return err
 	}
-	if omitted {
+	history = since(history, summary.Through)
+	var saved []string
+	var through string
+	req.Messages, saved, through = prompt(history, message.ID, budget-summaryCost(summary.Text))
+	// History that does not fit is summarized rather than omitted. The
+	// summary covers enough that recent messages fill at most half the room
+	// left beside it, so the next turns need not summarize again.
+	half := (budget - summaryTokens - tokens(summaryNotice)) / 2
+	if through != "" && info.Context > 0 && half > 0 {
+		_, _, older := prompt(history, message.ID, half)
+		text, usage, err := summarize(ctx, model, summary.Text, until(history, older))
+		if usage != nil {
+			message.Usage = add(message.Usage, *usage)
+			if e := send(Event{Kind: UsageReported, Usage: *usage}); e != nil {
+				return e
+			}
+		}
+		switch {
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case err == nil:
+			// Without a summary, the older messages are omitted instead.
+			summary = Summary{Text: text, Through: older}
+			if err := store.Summarize(conversationID, summary); err != nil {
+				return err
+			}
+			history = since(history, older)
+			req.Messages, saved, through = prompt(history, message.ID, budget-summaryCost(summary.Text))
+		}
+	}
+	if size := promptTokens(req.Messages); info.Context > 0 && size > budget-summaryCost(summary.Text) {
+		return fmt.Errorf("the latest message is about %d tokens, more than %s has room for (%d); shorten it or pick a model with a larger context", size, info.ID, max(budget-summaryCost(summary.Text), 0))
+	}
+	if summary.Text != "" {
+		req.System += summaryNotice + summary.Text
+	}
+	if through != "" {
 		req.System += omittedNotice
 	}
 	if note != "" {
@@ -358,6 +392,34 @@ func add(total *llm.Usage, u llm.Usage) *llm.Usage {
 // exact as this needs to be.
 func tokens(s string) int { return len(s)/3 + 1 }
 
+// summaryCost estimates the prompt tokens a summary takes.
+func summaryCost(summary string) int {
+	if summary == "" {
+		return 0
+	}
+	return tokens(summaryNotice + summary)
+}
+
+// since is history after the message with ID id, or all of it.
+func since(history []Message, id string) []Message {
+	for i, m := range history {
+		if m.ID == id {
+			return history[i+1:]
+		}
+	}
+	return history
+}
+
+// until is history up to and including the message with ID id.
+func until(history []Message, id string) []Message {
+	for i, m := range history {
+		if m.ID == id {
+			return history[:i+1]
+		}
+	}
+	return nil
+}
+
 // toolTokens estimates the prompt tokens of tool definitions, which every
 // model call sends with the messages.
 func toolTokens(tools []llm.Tool) int {
@@ -387,21 +449,22 @@ func promptTokens(messages []llm.Message) int {
 // the oldest messages beyond it omitted; without one, only the most recent
 // messages are kept.
 func Prompt(history []Message, current string, budget int) (messages []llm.Message, omitted bool) {
-	messages, _, omitted = prompt(history, current, budget)
-	return messages, omitted
+	messages, _, through := prompt(history, current, budget)
+	return messages, through != ""
 }
 
 // prompt is Prompt that also gives, for each message, where its tool output
-// is saved, if it is.
-func prompt(history []Message, current string, budget int) (messages []llm.Message, saved []string, omitted bool) {
+// is saved, if it is, and the ID of the last stored message it omits.
+func prompt(history []Message, current string, budget int) (messages []llm.Message, saved []string, through string) {
 	var turns [][]llm.Message
 	var files [][]string
+	var ids []string
 	for _, m := range history {
 		if m.ID == current || m.Command {
 			continue
 		}
 		if turn, saved := replay(m); len(turn) > 0 {
-			turns, files = append(turns, turn), append(files, saved)
+			turns, files, ids = append(turns, turn), append(files, saved), append(ids, m.ID)
 		}
 	}
 	start := max(0, len(turns)-recentMessages)
@@ -431,7 +494,10 @@ func prompt(history []Message, current string, budget int) (messages []llm.Messa
 	for i := start; i < len(turns); i++ {
 		messages, saved = append(messages, turns[i]...), append(saved, files[i]...)
 	}
-	return messages, saved, start > 0
+	if start > 0 {
+		through = ids[start-1]
+	}
+	return messages, saved, through
 }
 
 // replay turns one stored message into model messages: an assistant reply

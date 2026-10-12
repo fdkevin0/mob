@@ -143,8 +143,9 @@ func TestFirstRequestFitsWithItsAdditions(t *testing.T) {
 	if err := Run(context.Background(), s, model, Agent{Tools: []Tool{tool}}, id, m, note, func(Event) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	req := model.requests[0]
-	if !strings.Contains(req.System, "omitted") || req.Messages[len(req.Messages)-1].Text != note {
+	// The turn's own request comes after any that summarized history.
+	req := model.requests[len(model.requests)-1]
+	if !strings.Contains(req.System, "Summary of the earlier conversation") || req.Messages[len(req.Messages)-1].Text != note {
 		t.Fatalf("history was not cut or the note is missing")
 	}
 	if size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages); size > info.Context-req.MaxTokens {

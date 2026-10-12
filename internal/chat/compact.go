@@ -1,0 +1,110 @@
+package chat
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/fdkevin0/mob/internal/llm"
+)
+
+const (
+	// compactPrompt instructs the model that folds older messages into a
+	// conversation's summary.
+	compactPrompt = "You keep the summary of a conversation between a user and Mob, an assistant with tools, so that it can go on once older messages are dropped. Fold the new part of the conversation into the summary. Keep the user's goals, requests and preferences, decisions made, facts learned, names, files and paths, tool results that still matter, and unfinished work. Leave out pleasantries and whatever was superseded. Write plain text in the conversation's language, in at most about 1500 words."
+	// summaryTokens bounds a summary.
+	summaryTokens = 4000
+	// summaryNotice introduces the summary in a turn's instructions.
+	summaryNotice = "\n\nSummary of the earlier conversation, whose messages are no longer shown:\n"
+	// transcriptOutput is how much of each tool output a summary reads.
+	transcriptOutput = 2000
+)
+
+// summarize folds messages into previous with model, as many messages at a
+// time as fit its window, and returns the new summary and what it cost.
+func summarize(ctx context.Context, model llm.Model, previous string, messages []Message) (string, *llm.Usage, error) {
+	info := model.Info()
+	maxTokens := summaryTokens
+	if info.Output > 0 {
+		maxTokens = min(maxTokens, info.Output)
+	}
+	var usage *llm.Usage
+	summary, part := previous, ""
+	flush := func() error {
+		if part == "" {
+			return nil
+		}
+		text := "Conversation:\n" + part + "\nWrite the summary."
+		if summary != "" {
+			text = "Summary so far:\n" + summary + "\n\n" + text
+		}
+		result, err := model.Stream(ctx, llm.Request{System: compactPrompt, Messages: []llm.Message{{Role: "user", Text: text}}, MaxTokens: maxTokens}, func(string, string) error { return nil })
+		if result.Usage != nil {
+			usage = add(usage, result.Usage.Priced(info.Cost))
+		}
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(result.Text) == "" {
+			return errors.New("model wrote an empty summary")
+		}
+		summary, part = strings.TrimSpace(result.Text), ""
+		return nil
+	}
+	for _, m := range messages {
+		// Room for the conversation part beside the instructions, the summary
+		// so far and the summary to write.
+		room := info.Context - maxTokens - tokens(compactPrompt) - tokens(summary) - 100
+		if info.Context <= 0 {
+			room = 100000
+		}
+		if room <= 0 {
+			return "", usage, fmt.Errorf("%s's context is too small to summarize this conversation", info.ID)
+		}
+		text := transcript(m)
+		if size := tokens(text); size > room/2 {
+			head, tail := ends(text, room, room/2)
+			text = head + "\n[...]\n" + tail
+		}
+		if part != "" && tokens(part)+tokens(text) > room {
+			if err := flush(); err != nil {
+				return "", usage, err
+			}
+		}
+		part += text
+	}
+	if err := flush(); err != nil {
+		return "", usage, err
+	}
+	return summary, usage, nil
+}
+
+// transcript is a stored message as a summary reads it: who said what, and
+// what tools were called with and returned, their outputs cut short.
+func transcript(m Message) string {
+	if m.Command {
+		return ""
+	}
+	who := "User"
+	if m.Role == "assistant" {
+		who = "Mob"
+	}
+	var b strings.Builder
+	for _, part := range m.Parts {
+		kind := fmt.Sprint(part["type"])
+		switch {
+		case kind == "text":
+			if text := strings.TrimSpace(fmt.Sprint(part["text"])); text != "" {
+				b.WriteString(who + ": " + text + "\n")
+			}
+		case strings.HasPrefix(kind, "tool-"):
+			head, tail := ends(outcome(part), transcriptOutput*2/3, transcriptOutput/3)
+			if tail != "" {
+				head += " [...] " + tail
+			}
+			b.WriteString(fmt.Sprintf("Mob called %s with %s; it returned %s\n", kind[5:], encode(part["input"]), head))
+		}
+	}
+	return b.String()
+}
