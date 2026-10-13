@@ -31,6 +31,8 @@ const (
 	expired          = "That button has expired. Here is the menu again."
 	// callbackLimit is the most bytes a button's data may hold.
 	callbackLimit = 64
+	// keyboardLimit is the most buttons a message may hold.
+	keyboardLimit = 100
 	// labelLimit keeps a button's label to what a phone shows on one line.
 	labelLimit = 48
 )
@@ -71,7 +73,21 @@ func (s *Service) choices(ctx context.Context, c Config, botID, command, filter 
 	if err := s.Store.Setting(conversationKey(botID, c), &current); err != nil {
 		return nil
 	}
-	suggestions := s.Conversation.Commands.Complete(ctx, chat.CommandRequest{Client: chat.ClientTelegram, ConversationID: current, Text: command + " " + filter}, true)
+	var suggestions []chat.Suggestion
+	if command == "/revoke" {
+		// Completion keeps 20 suggestions; every remembered approval needs a
+		// button, up to the most a message can hold.
+		grants, err := s.Store.Grants()
+		if err != nil {
+			return nil
+		}
+		suggestions = []chat.Suggestion{{Value: "all"}}
+		for _, g := range grants[:min(len(grants), keyboardLimit-1)] {
+			suggestions = append(suggestions, chat.Suggestion{Value: g.ID, Label: g.Tool, Detail: g.Scope})
+		}
+	} else {
+		suggestions = s.Conversation.Commands.Complete(ctx, chat.CommandRequest{Client: chat.ClientTelegram, ConversationID: current, Text: command + " " + filter}, true)
+	}
 	rows := [][]button{}
 	for _, choice := range suggestions {
 		label := choice.Label
@@ -150,10 +166,23 @@ func (s *Service) command(data string) string {
 	return s.callbacks[data]
 }
 
-// picked reports whether text, sent by a tap, picked one of a list's choices,
-// which then no longer stands.
-func picked(text string) bool {
+// picked reports whether text, sent by a tap on one of the buttons in k,
+// picked one of a list's choices, which then no longer stands. New
+// conversation under the conversation list is such a choice; the menu's is not.
+func picked(text string, k keyboard) bool {
 	name, rest, _ := strings.Cut(text, " ")
-	_, ok := picks[name]
-	return ok && strings.TrimSpace(rest) != ""
+	if _, ok := picks[name]; ok && strings.TrimSpace(rest) != "" {
+		return true
+	}
+	if text != "/new" {
+		return false
+	}
+	for _, row := range k.Rows {
+		for _, b := range row {
+			if strings.HasPrefix(b.Data, "/open ") {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -347,7 +347,7 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 		case tap == nil:
 		case r.Settled != "":
 			s.settle(ctx, c, *tap, r.Settled)
-		case picked(u.Message.Text) && r.Text != texts.Busy:
+		case picked(u.Message.Text, tap.Keyboard) && r.Text != texts.Busy:
 			// Best effort: a stale choice only does what it says again.
 			_ = c.Call(ctx, "editMessageReplyMarkup", map[string]any{"chat_id": tap.Chat, "message_id": tap.Message, "reply_markup": keyboard{Rows: [][]button{}}}, nil)
 		}

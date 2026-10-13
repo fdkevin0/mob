@@ -91,9 +91,11 @@ commands, approvals, delivery records and replies behave the same everywhere.
     conversation; a tap switches the bot to that conversation and says so.
   - `/model` and `/models` offer the models the registry suggests (and
     following the default) as buttons; `/grants` and `/revoke` alone offer
-    Forget buttons for each remembered approval and for all of them.
-  - A tap on one of a list's choices removes that list's buttons, since the
-    list no longer stands.
+    Forget buttons for every remembered approval (up to the 100 buttons a
+    message holds) and for all of them.
+  - A tap on one of a list's choices, New conversation under the
+    conversation list included, removes that list's buttons, since the list
+    no longer stands.
 - The bot's `/` menu comes from the [command registry](commands.md).
 
 ## WeChat iLink
