@@ -186,10 +186,7 @@ export class ConversationClient {
 					this.pendingSend = undefined;
 					this.chat.clearError();
 					this.update({
-						input:
-							this.state.recovery && this.inputRevision === pending.inputRevision && this.state.input === pending.text
-								? ''
-								: this.state.input,
+						input: this.inputRevision === pending.inputRevision && this.state.input === pending.text ? '' : this.state.input,
 						failure: this.state.recovery ? '' : this.state.failure,
 						recovery: undefined,
 					});
@@ -222,7 +219,16 @@ export class ConversationClient {
 			) {
 				this.publishedReloadSequence = sequence;
 				this.recoveryFailure = errorText(e);
-				this.update({ failure: this.recoveryFailure });
+				// Delivery stays unknown (and busy) until history can be read, but
+				// the original returns to an untouched editor so it is not lost.
+				const pending = this.pendingSend;
+				if (pending) {
+					this.recoveryFailure += ' · Delivery not confirmed yet. Original message kept in the editor; it was not resent.';
+					this.update({
+						failure: this.recoveryFailure,
+						input: this.inputRevision === pending.inputRevision && !this.state.input ? pending.text : this.state.input,
+					});
+				} else this.update({ failure: this.recoveryFailure });
 			}
 		}
 	}

@@ -510,13 +510,65 @@ it('keeps delivery unknown until a successful reattachment snapshot, not a snaps
 	cleanups.push(session.start());
 	await vi.advanceTimersByTimeAsync(0);
 	expect(session.getSnapshot().busy).toBe(true);
-	expect(session.getSnapshot().input).toBe('');
+	expect(session.getSnapshot().input).toBe('Keep this unresolved text');
 	expect(session.getSnapshot().recovery).toBeUndefined();
-	expect(session.getSnapshot().failure).toBe('snapshot unavailable');
+	expect(session.getSnapshot().failure).toMatch(/^snapshot unavailable · Delivery not confirmed yet/);
 	available = true;
 	await vi.advanceTimersByTimeAsync(2000);
 	expect(session.getSnapshot().busy).toBe(false);
 	expect(session.getSnapshot().input).toBe('Keep this unresolved text');
 	expect(session.getSnapshot().recovery?.text).toBe('Keep this unresolved text');
 	expect(session.getSnapshot().failure).toMatch(/not confirmed/i);
+});
+
+it.each([false, true])('returns an unverifiable send to the editor while the service is down, then settles it (accepted: %s)', async (accepted) => {
+	vi.useFakeTimers();
+	let up = true;
+	let requestId = '';
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				requestId = JSON.parse(String(init?.body)).requestId;
+				up = false;
+				throw new TypeError('fetch failed');
+			}
+			if (!up) throw new TypeError('fetch failed');
+			const messages = accepted ? [{ id: requestId, role: 'user', parts: [{ type: 'text', text: 'Lost while down' }] }] : [];
+			return Response.json({ ...initial, messages });
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(0);
+	await session.submit('Lost while down');
+	await vi.advanceTimersByTimeAsync(4000);
+	expect(session.getSnapshot().busy).toBe(true);
+	expect(session.getSnapshot().input).toBe('Lost while down');
+	expect(session.getSnapshot().failure).toMatch(/fetch failed · Delivery not confirmed yet/);
+	up = true;
+	await vi.advanceTimersByTimeAsync(2000);
+	expect(session.getSnapshot().busy).toBe(false);
+	expect(session.getSnapshot().input).toBe(accepted ? '' : 'Lost while down');
+	expect(session.getSnapshot().recovery).toEqual(accepted ? undefined : { requestId, text: 'Lost while down' });
+	expect(session.getSnapshot().failure).toMatch(accepted ? /^$/ : /not confirmed\. Original/);
+});
+
+it('keeps text typed while the service is down', async () => {
+	vi.useFakeTimers();
+	let up = true;
+	const client = new MobClient(connection, {
+		fetch: async (url) => {
+			if (String(url).endsWith('/chat')) up = false;
+			if (!up) throw new TypeError('fetch failed');
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'tui' });
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(0);
+	await session.submit('Original');
+	session.setInput('');
+	session.setInput('Newer draft');
+	await vi.advanceTimersByTimeAsync(4000);
+	expect(session.getSnapshot().input).toBe('Newer draft');
 });

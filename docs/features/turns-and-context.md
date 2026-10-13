@@ -42,6 +42,8 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   SDK-generated request ID across detach/start. Abort alone does not mean Go
   refused the request. The client stays busy until the local send settles and
   fresh history can be checked for that exact user-message ID, never by text.
+  While history cannot be read (the service is unreachable), it stays busy but
+  returns the original to an empty, unedited editor so the text is not lost.
   If found, it follows the accepted turn or shows completed history. If absent,
   it exposes `recovery: {requestId, text}` and a delivery-not-confirmed warning;
   it restores the editor only if no newer draft edit exists, even if the newer

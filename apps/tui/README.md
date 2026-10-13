@@ -69,7 +69,10 @@ An absent request restores the original text only if the editor is empty and
 has not been edited since that send. Newer drafts remain untouched, and the
 original is shown separately for review.
 Navigation never resends a prompt: Enter explicitly sends the editor contents.
-Unknown delivery remains busy while the shared client checks it. Recovery is
+Unknown delivery remains busy while the shared client checks it. If the service
+cannot be reached to check, the original returns to an empty, unedited editor
+while it stays busy; once history is readable an accepted send clears it and an
+absent one becomes a normal recovery. Recovery is
 in-memory only, not a durable outbox or a guarantee across process/service exit.
 
 Tool results render as JSON with a 240-character preview, separate error lines
