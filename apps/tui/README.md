@@ -1,8 +1,8 @@
 # TypeScript terminal pilot
 
-An explicit development pilot, not a replacement for `mob tui`. It connects to
-an already running Go service; it never starts or owns that service. Web and
-this terminal import the same `@mob/client` conversation orchestration.
+An explicit development pilot, not the default TUI. Web and this terminal
+import the same `@mob/client` conversation orchestration. `mob tui` selects
+it with `MOB_TUI=ts`; unset/empty or `MOB_TUI=go` keeps Bubble Tea.
 
 ## Runtime
 
@@ -11,8 +11,24 @@ OpenTUI library via FFI. This pilot does not build a standalone executable or
 change Go release packaging. Node and other OS/architecture combinations are
 not validated by this pilot.
 
-From the repository root, install workspace dependencies with `bun install`.
-Start a service separately, then launch with the service URL and token file:
+From the repository root, install and build, then use the normal CLI launcher:
+
+```sh
+bun install --frozen-lockfile
+bun run build:cli
+MOB_TUI=ts ./build/mob tui --demo
+```
+
+This locates the entry relative to `build/mob`, independent of your working
+directory. For an installed Go binary or a different build location, set
+`MOB_TUI_ENTRY=/absolute/path/to/mob/apps/tui/src/main.tsx`. Source and Bun are
+still required: release archives/Homebrew do not bundle this pilot. Invalid
+selectors, missing prerequisites and child failures are errors, not a fallback.
+The launcher connects to an existing authenticated Go service or starts one;
+only a service it starts is closed on exit. URL/token are passed in the child
+environment, never token arguments. `mob start` first keeps the service alive.
+
+Alternatively, start a service separately and run the connect-only entry:
 
 ```sh
 ./build/mob serve --demo
@@ -22,8 +38,9 @@ bun run tui:pilot --url http://127.0.0.1:8787 --token-file /path/to/data/token
 Alternatively set `MOB_URL` and `MOB_TOKEN`. Do not put a real token in command
 arguments, screenshots, issue reports or committed files.
 
-The existing `mob tui` command remains the fallback. Closing the pilot detaches
-its local streams, not the service-owned turn. Ctrl+S explicitly requests stop.
+Closing the direct Bun entry detaches its local streams, not the service-owned
+turn. Ctrl+S explicitly requests stop. Closing an owning `mob tui` launcher also
+closes its Go service, just as with the original terminal.
 
 ## Controls and behavior
 
@@ -38,7 +55,7 @@ its local streams, not the service-owned turn. Ctrl+S explicitly requests stop.
 | PgUp / PgDn | Scroll transcript or approval input; inspect long inputs before authorizing |
 | Esc | Return to chat / dismiss command result / cancel approval selection |
 | Ctrl+S | Request backend stop for the selected conversation |
-| Ctrl+Q | Exit the pilot, without stopping backend work |
+| Ctrl+Q | Exit the terminal; an owning `mob tui` launcher also closes its service |
 
 Bracketed paste inserts complete multiline text without treating its newlines as
 send keys. Drafts survive switching conversations **in memory only**; quitting

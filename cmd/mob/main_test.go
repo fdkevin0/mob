@@ -3,8 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -135,5 +139,142 @@ func TestGatewayRejectsLocalFlagsBeforeStarting(t *testing.T) {
 		if strings.Contains(output.String(), "listening") {
 			t.Fatal("gateway started before rejecting local flags")
 		}
+	}
+}
+
+func TestTUISelectorPreflight(t *testing.T) {
+	entry := filepath.Join(t.TempDir(), "main.tsx")
+	if err := os.WriteFile(entry, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ name, mode, entry, want string }{
+		{"invalid", "other", "", "MOB_TUI must be go or ts"},
+		{"relative entry", "ts", "apps/tui/src/main.tsx", "absolute path"},
+		{"missing entry", "ts", entry + ".missing", "source unavailable"},
+		{"directory entry", "ts", filepath.Dir(entry), "source unavailable"},
+		{"missing bun", "ts", entry, "requires Bun"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("MOB_CONFIG", filepath.Join(t.TempDir(), "absent.yaml"))
+			t.Setenv("MOB_TUI", test.mode)
+			t.Setenv("MOB_TUI_ENTRY", test.entry)
+			t.Setenv("PATH", t.TempDir())
+			command := newRootCommand()
+			command.SetArgs([]string{"tui"})
+			// Bypass unrelated config loading: none of these should reach service startup.
+			command.PersistentPreRunE = nil
+			if err := command.Execute(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("got %v, want %s", err, test.want)
+			}
+		})
+	}
+}
+
+func TestTypeScriptTUILaunch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix subprocess fixture")
+	}
+	const token = "test-token-not-a-secret-0123456789abcdef"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/config" || r.Header.Get("Authorization") != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	entry := filepath.Join(dir, "apps", "tui", "src", "main.tsx")
+	if err := os.MkdirAll(filepath.Dir(entry), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A real child process records its launch contract, forwards all streams, and exits.
+	script := `#!/bin/sh
+trap 'echo cleaned > "$MOB_TEST_CLEANUP"; exit 0' INT TERM
+read -r line
+printf 'stdout:%s\n' "$line"
+printf 'stderr\n' >&2
+printf '%s\n' "$MOB_URL" "$MOB_TOKEN" "$PWD" "$@" > "$MOB_TEST_LAUNCH"
+if [ "$MOB_TEST_EXIT" = cancel ]; then
+  while :; do :; done
+fi
+exit "$MOB_TEST_EXIT"
+`
+	if err := os.WriteFile(filepath.Join(dir, "bun"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MOB_TUI", "ts")
+	t.Setenv("MOB_TUI_ENTRY", entry)
+	t.Setenv("MOB_TOKEN", token)
+	t.Setenv("MOB_URL", "http://127.0.0.1:1") // Must be replaced with the actual connection.
+	for _, exit := range []string{"0", "7", "cancel"} {
+		t.Run("exit "+exit, func(t *testing.T) {
+			t.Setenv("MOB_TEST_EXIT", exit)
+			record := filepath.Join(t.TempDir(), "launch.txt")
+			t.Setenv("MOB_TEST_LAUNCH", record)
+			cleanup := record + ".cleaned"
+			t.Setenv("MOB_TEST_CLEANUP", cleanup)
+			config := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(config, []byte("demo: true\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			command := newRootCommand()
+			command.SetArgs([]string{"tui", "--config", config, "--addr", strings.TrimPrefix(server.URL, "http://"), "--data-dir", t.TempDir(), "--state-dir", t.TempDir()})
+			var stdout, stderr bytes.Buffer
+			command.SetIn(strings.NewReader("terminal input\n"))
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			var err error
+			if exit == "cancel" {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				done := make(chan error, 1)
+				go func() { done <- command.ExecuteContext(ctx) }()
+				deadline := time.Now().Add(5 * time.Second)
+				for {
+					if _, ready := os.Stat(record); ready == nil {
+						break
+					}
+					if time.Now().After(deadline) {
+						t.Fatal("child did not become ready")
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				cancel()
+				err = <-done
+				if raw, readErr := os.ReadFile(cleanup); readErr != nil || string(raw) != "cleaned\n" || !errors.Is(err, context.Canceled) {
+					t.Fatalf("child cleanup not allowed on cancellation: %v / %v", err, readErr)
+				}
+			} else {
+				err = command.Execute()
+			}
+			if exit == "0" && err != nil || exit == "7" && (err == nil || !strings.Contains(err.Error(), "exit status 7")) {
+				t.Fatalf("exit %s: %v", exit, err)
+			}
+			if stdout.String() != "stdout:terminal input\n" || stderr.String() != "stderr\n" {
+				t.Fatalf("streams not inherited: %q / %q", stdout.String(), stderr.String())
+			}
+			raw, err := os.ReadFile(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lines := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+			if len(lines) < 4 || lines[0] != server.URL || lines[1] != token || lines[2] != filepath.Dir(filepath.Dir(entry)) {
+				t.Fatalf("incorrect connection or working directory: %q", lines)
+			}
+			args := strings.Join(lines[3:], " ")
+			if !strings.Contains(args, entry) || strings.Contains(args, token) {
+				t.Fatal("source entry missing or token exposed in arguments")
+			}
+			response, err := http.Get(server.URL)
+			if err != nil {
+				t.Fatalf("reused service was stopped: %v", err)
+			}
+			response.Body.Close()
+		})
 	}
 }

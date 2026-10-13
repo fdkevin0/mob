@@ -50,8 +50,10 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   cleared only if it has not been edited since. A manual Send is a new request,
   not a delivery guarantee for the uncertain original. Recovery is memory-only.
 - Leaving a shared-client view cancels only that view's streams and polling;
-  explicit Stop posts to the service and cancels the local readers. The pilot
-  connects to an already running service and does not own its lifetime.
+  explicit Stop posts to the service and cancels the local readers. The direct
+  Bun pilot only attaches to an existing service. `MOB_TUI=ts mob tui` instead
+  uses the normal CLI lifecycle: it closes a service it starts when the terminal
+  exits, but leaves an already running service and its turns alone.
 - The reply is saved about once a second while it streams, so a forced
   termination can lose the last second. The event log is not persisted: the
   saved message is the result once a turn ends, and a service restart marks
