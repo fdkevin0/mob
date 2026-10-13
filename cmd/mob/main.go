@@ -36,14 +36,13 @@ func main() {
 func newRootCommand() *cobra.Command {
 	var config local.Config
 	var background bool
-	var connectGateway string
-	var nodeID string
-	var gatewayAddr string
-	var gatewayToken string
 
 	root := &cobra.Command{Use: "mob", Short: "Local assistant with desktop, terminal and background service", Version: version.Current, Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true}
 	configuration.AddFlags(root.PersistentFlags())
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == "gateway" && (cmd.Flags().Changed("token") || cmd.Flags().Changed("addr")) {
+			return errors.New("mob gateway uses --gateway-token and --gateway-addr; --token and --addr configure the local service")
+		}
 		loader, err := configuration.NewLoader(root.PersistentFlags())
 		if err != nil {
 			return err
@@ -62,30 +61,24 @@ func newRootCommand() *cobra.Command {
 		}
 		defer app.Close()
 		fmt.Fprintf(cmd.OutOrStdout(), "Mob: %s\nDemo mode: %t\nConfiguration: %s\n", app.Connection.URL, config.Demo, config.Loader.Path())
-		if os.Getenv("MOB_TOKEN") == "" {
+		if config.Token == "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "Token file: %s\n", filepath.Join(config.Dir, "token"))
 		} else {
-			fmt.Fprintln(cmd.OutOrStdout(), "Access token: supplied through MOB_TOKEN")
+			fmt.Fprintln(cmd.OutOrStdout(), "Access token: supplied through configuration")
 		}
 
-		gwURL := connectGateway
-		if gwURL == "" {
-			gwURL = os.Getenv("MOB_GATEWAY_URL")
-		}
+		gwURL := config.Gateway.URL
 		if gwURL != "" {
-			nID := nodeID
+			nID := config.Gateway.NodeID
 			if nID == "" {
-				nID = os.Getenv("MOB_NODE_ID")
-				if nID == "" {
-					hostname, _ := os.Hostname()
-					if hostname == "" {
-						hostname = "node-local"
-					}
-					nID = hostname
+				hostname, _ := os.Hostname()
+				if hostname == "" {
+					hostname = "node-local"
 				}
+				nID = hostname
 			}
 			// The gateway never receives the local access token, which controls this Mob.
-			gwTok := os.Getenv("MOB_GATEWAY_TOKEN")
+			gwTok := config.Gateway.Token
 			nodeClient := node.NewClient(gwURL, nID, gwTok, app.Server.Handler(webapp.Assets()))
 			_ = nodeClient.Start(cmd.Context())
 			defer nodeClient.Close()
@@ -101,24 +94,19 @@ func newRootCommand() *cobra.Command {
 	root.RunE = serve
 	serveCommand := &cobra.Command{Use: "serve", Short: "Run the service until interrupted", Args: cobra.NoArgs, RunE: serve}
 	serveCommand.Flags().BoolVar(&background, "background", false, "Mark this process as managed by mob start/stop")
-	serveCommand.Flags().StringVar(&connectGateway, "connect-gateway", "", "URL of central Mob Gateway to register as an edge node")
-	serveCommand.Flags().StringVar(&nodeID, "node-id", "", "Custom Node ID when registering to Gateway")
 
 	gatewayCommand := &cobra.Command{
 		Use:   "gateway",
 		Short: "Run the Cloud Gateway relay and signaling hub",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			token := gatewayToken
-			if token == "" {
-				token = os.Getenv("MOB_GATEWAY_TOKEN")
-			}
+			token := config.Gateway.Token
 			gw := gateway.New(gateway.Config{
 				Token:  token,
 				Assets: webapp.Assets(),
 			})
 			srv := &http.Server{
-				Addr:    gatewayAddr,
+				Addr:    config.Gateway.Addr,
 				Handler: gw.Handler(),
 			}
 			go func() {
@@ -127,7 +115,7 @@ func newRootCommand() *cobra.Command {
 				defer cancel()
 				_ = srv.Shutdown(ctx)
 			}()
-			fmt.Fprintf(cmd.OutOrStdout(), "Mob Gateway listening on %s\n", gatewayAddr)
+			fmt.Fprintf(cmd.OutOrStdout(), "Mob Gateway listening on %s\n", config.Gateway.Addr)
 			if token != "" {
 				fmt.Fprintln(cmd.OutOrStdout(), "Gateway authentication token: configured")
 			} else {
@@ -140,8 +128,6 @@ func newRootCommand() *cobra.Command {
 			return err
 		},
 	}
-	gatewayCommand.Flags().StringVar(&gatewayAddr, "addr", ":8788", "Address to bind the gateway server")
-	gatewayCommand.Flags().StringVar(&gatewayToken, "token", "", "Gateway access token (or MOB_GATEWAY_TOKEN env)")
 
 	root.AddCommand(serveCommand,
 		gatewayCommand,

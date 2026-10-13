@@ -25,7 +25,7 @@ import (
 // must sign in again. Only when no service holds the database does it rewrite
 // the token file alone.
 func RotateToken(c Config) error {
-	if os.Getenv("MOB_TOKEN") != "" {
+	if c.Token != "" {
 		return app.ErrTokenFromEnvironment
 	}
 	// A second attempt reads the file again in case another rotation just replaced it.

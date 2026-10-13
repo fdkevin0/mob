@@ -18,7 +18,8 @@ so web changes reach users when they merge, without a release.
   cannot point it at another server. The site holds no data and runs no Worker
   code.
 - `web_url` (`MOB_WEB_URL`) must be https, or http on a loopback host for
-  development; empty turns this off. The service lets that origin call the API
+  development. Use `--web-url=` or `web_url: ""` to turn this off; an empty
+  environment variable is ignored. The service lets that origin call the API
   and answers Chrome's Private Network Access preflight. Whoever controls the
   site's code can read the token of a browser signed in there, so only `main`
   deploys.
@@ -33,11 +34,11 @@ so web changes reach users when they merge, without a release.
 
 Two experimental pieces let a client reach Mob through a gateway.
 
-- `mob gateway` runs a relay and signaling hub (`--addr`, default `:8788`;
-  `--token` or `MOB_GATEWAY_TOKEN`). It serves the web UI, accepts edge nodes
+- `mob gateway` runs a relay and signaling hub (`--gateway-addr`, default `:8788`;
+  `--gateway-token` or `MOB_GATEWAY_TOKEN`). It serves the web UI, accepts edge nodes
   and clients over WebSocket, relays frames between them, and forwards WebRTC
   signaling messages. It warns when started without a token.
-- `mob serve --connect-gateway URL [--node-id ID]` registers the local service
+- `mob serve --gateway-url URL [--gateway-node-id ID]` registers the local service
   with a gateway as an edge node.
 
 The frame protocol is in `internal/protocol/mesh.go`; the gateway and node are

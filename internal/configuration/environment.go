@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -16,11 +17,12 @@ import (
 	"github.com/fdkevin0/mob/internal/plugins/mcp"
 	"github.com/fdkevin0/mob/internal/sandbox"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 )
 
 type Environment struct {
 	Dir, StateDir, Addr string
+	Token               string
+	Gateway             GatewaySettings
 	// Demo makes the offline model the default.
 	Demo bool
 	// Sandbox is where Mob runs commands for the model, isolated from the host.
@@ -34,7 +36,16 @@ type Environment struct {
 	Loader *Loader
 }
 
+type GatewaySettings struct {
+	URL    string `mapstructure:"url"`
+	NodeID string `mapstructure:"node_id"`
+	Addr   string `mapstructure:"addr"`
+	Token  string `mapstructure:"token"`
+}
+
 type settings struct {
+	Token    string           `mapstructure:"token"`
+	Gateway  GatewaySettings  `mapstructure:"gateway"`
 	DataDir  string           `mapstructure:"data_dir"`
 	StateDir string           `mapstructure:"state_dir"`
 	Addr     string           `mapstructure:"addr"`
@@ -98,33 +109,41 @@ type Loader struct {
 	args     []string
 }
 
-func AddFlags(flags *pflag.FlagSet) {
-	flags.String("config", "", "Configuration file (default: XDG config home/mob/config.yaml)")
-	flags.String("data-dir", "", "SQLite and local token directory")
-	flags.String("state-dir", "", "Background log directory")
-	flags.String("addr", "", "Loopback listen address")
-	flags.Bool("demo", false, "Use offline model simulation")
-}
-
 func NewLoader(flags *pflag.FlagSet) (*Loader, error) {
-	l := &Loader{path: os.Getenv("MOB_CONFIG"), flags: pflag.NewFlagSet("configuration", pflag.ContinueOnError)}
+	l := &Loader{flags: pflag.NewFlagSet("configuration", pflag.ContinueOnError)}
 	AddFlags(l.flags)
 	if flags != nil {
-		flags.VisitAll(func(f *pflag.Flag) {
-			if f.Changed && l.flags.Lookup(f.Name) != nil {
-				_ = l.flags.Set(f.Name, f.Value.String())
+		for _, o := range options() {
+			f := flags.Lookup(o.flag())
+			if f == nil || !f.Changed {
+				continue
+			}
+			if err := l.flags.Set(f.Name, f.Value.String()); err != nil {
+				return nil, errors.New("invalid configuration flag: " + f.Name)
+			}
+		}
+		l.flags.Visit(func(f *pflag.Flag) {
+			secret := false
+			for _, o := range options() {
+				if o.flag() == f.Name {
+					secret = o.secret
+					break
+				}
+			}
+			if !secret || f.Value.String() == "" {
 				l.args = append(l.args, "--"+f.Name+"="+f.Value.String())
 			}
 		})
-		if f := flags.Lookup("config"); f != nil && f.Changed {
-			l.path = f.Value.String()
-		}
 	}
+	v, err := configuredViper(l.flags, true)
+	if err != nil {
+		return nil, err
+	}
+	l.path = v.GetString("config")
 	l.required = l.path != ""
 	if l.path == "" {
 		l.path = filepath.Join(xdg.ConfigHome, "mob", "config.yaml")
 	}
-	var err error
 	l.path, err = filepath.Abs(l.path)
 	return l, err
 }
@@ -149,20 +168,10 @@ func defaultDataDir() string {
 func (l *Loader) Read() (Environment, error) { return l.read(l.required) }
 func (l *Loader) read(required bool) (Environment, error) {
 	fail := func(message string) (Environment, error) { return Environment{}, errors.New(message) }
-	v := viper.New()
-	v.SetDefault("data_dir", defaultDataDir())
-	v.SetDefault("state_dir", filepath.Join(xdg.StateHome, "mob"))
-	v.SetDefault("addr", "127.0.0.1:8787")
-	v.SetDefault("demo", false)
-	v.SetDefault("max_tool_steps", DefaultToolSteps)
-	v.SetDefault("web_url", DefaultWebURL)
-	v.SetDefault("sandbox.enabled", false)
-	v.SetDefault("sandbox.runtime", "")
-	v.SetDefault("sandbox.image", sandbox.DefaultImage)
-	v.SetDefault("sandbox.network", "")
-	v.SetDefault("sandbox.cpus", 0)
-	v.SetDefault("sandbox.memory", "")
-	v.SetDefault("sandbox.isolation", "")
+	v, err := configuredViper(l.flags, false)
+	if err != nil {
+		return Environment{}, err
+	}
 	raw, mode, err := readConfigFile(l.path)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) || required {
@@ -184,21 +193,15 @@ func (l *Loader) read(required bool) (Environment, error) {
 			return fail("configuration must not be writable by group or others")
 		}
 	}
-	if err := v.BindEnv("max_tool_steps", "MOB_MAX_TOOL_STEPS"); err != nil {
-		return Environment{}, err
+	if v.InConfig("config") {
+		return fail("config is a file selector, not a configuration field")
 	}
-	for _, key := range []string{"data_dir", "state_dir", "addr", "demo"} {
-		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(key)); err != nil {
-			return Environment{}, err
+	if value, ok := v.Get("mcp_servers").(string); ok {
+		var servers map[string]any
+		if json.Unmarshal([]byte(value), &servers) != nil || servers == nil {
+			return fail("mcp_servers must be a JSON object (contents omitted)")
 		}
-		if err := v.BindPFlag(key, l.flags.Lookup(strings.ReplaceAll(key, "_", "-"))); err != nil {
-			return Environment{}, err
-		}
-	}
-	for _, key := range []string{"sandbox.enabled", "sandbox.runtime", "sandbox.image", "sandbox.network", "sandbox.cpus", "sandbox.memory", "sandbox.isolation"} {
-		if err := v.BindEnv(key, "MOB_"+strings.ToUpper(strings.ReplaceAll(key, ".", "_"))); err != nil {
-			return Environment{}, err
-		}
+		v.Set("mcp_servers", servers)
 	}
 	var data settings
 	if v.UnmarshalExact(&data) != nil {
@@ -219,10 +222,22 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if data.MaxToolSteps < 1 || data.MaxToolSteps > MaxToolSteps {
 		return fail("max_tool_steps must be 1 to " + strconv.Itoa(MaxToolSteps))
 	}
-	// Viper ignores empty environment values, but an empty MOB_WEB_URL turns
-	// the public web UI off.
-	if raw, set := os.LookupEnv("MOB_WEB_URL"); set {
-		data.WebURL = raw
+	if data.Token != "" && len(data.Token) < 32 {
+		return fail("token must contain at least 32 bytes")
+	}
+	if mode != 0 && runtime.GOOS != "windows" && mode.Perm()&0077 != 0 && (v.InConfig("token") || v.InConfig("gateway.token")) {
+		return fail("configuration with tokens must be owner-only (chmod 600)")
+	}
+	if _, port, err := net.SplitHostPort(data.Gateway.Addr); err != nil {
+		return fail("gateway.addr must be a host and port")
+	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
+		return fail("gateway.addr must use a valid port")
+	}
+	if data.Gateway.URL != "" {
+		u, err := url.Parse(data.Gateway.URL)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return fail("gateway.url must be an http or https URL")
+		}
 	}
 	if _, err := WebOrigin(data.WebURL); err != nil {
 		return Environment{}, err
@@ -241,7 +256,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, WebURL: data.WebURL, Loader: l}, nil
+	return Environment{Token: data.Token, Gateway: data.Gateway, Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, WebURL: data.WebURL, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

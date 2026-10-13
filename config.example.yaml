@@ -48,3 +48,13 @@ demo: false
 #     url: https://example.com/mcp
 #     headers:
 #       Authorization: Bearer ...
+
+# Full flag/env/default reference: docs/environment-variables.md (generated).
+# Optional fixed local token; otherwise Mob manages the token file. Keep this
+# config owner-only (chmod 600) when token fields are present.
+# token: ""
+# gateway:
+#   url: ""               # register this service with a gateway
+#   node_id: ""           # empty uses hostname
+#   addr: ":8788"         # mob gateway listen address
+#   token: ""             # separate from the local token
