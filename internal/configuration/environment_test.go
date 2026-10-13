@@ -210,7 +210,7 @@ func TestWebOrigin(t *testing.T) {
 	}
 }
 
-func TestEmptyWebURLEnvironmentTurnsThePublicWebOff(t *testing.T) {
+func TestEmptyEnvironmentFallsBackToFile(t *testing.T) {
 	cleanEnvironment(t)
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("web_url: https://mob.example\n"), 0600); err != nil {
@@ -225,8 +225,8 @@ func TestEmptyWebURLEnvironmentTurnsThePublicWebOff(t *testing.T) {
 		t.Fatalf("web_url from the file: %q %v", got.WebURL, err)
 	}
 	t.Setenv("MOB_WEB_URL", "")
-	if got, err := loader.Read(); err != nil || got.WebURL != "" {
-		t.Fatalf("empty MOB_WEB_URL kept %q: %v", got.WebURL, err)
+	if got, err := loader.Read(); err != nil || got.WebURL != "https://mob.example" {
+		t.Fatalf("empty MOB_WEB_URL did not fall back: %q: %v", got.WebURL, err)
 	}
 	t.Setenv("MOB_WEB_URL", "https://other.example")
 	if got, err := loader.Read(); err != nil || got.WebURL != "https://other.example" {

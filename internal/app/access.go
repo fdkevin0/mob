@@ -148,8 +148,8 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"token": token})
 }
 
-// ErrTokenFromEnvironment means the token is supplied through MOB_TOKEN and cannot be rotated here.
-var ErrTokenFromEnvironment = errors.New("the access token is supplied through MOB_TOKEN; change it there and restart Mob")
+// ErrTokenFromEnvironment means the token is supplied through configuration and cannot be rotated here.
+var ErrTokenFromEnvironment = errors.New("the access token is supplied through configuration; change it there and restart Mob")
 
 // errStaleToken means the caller's token was replaced while its request waited.
 var errStaleToken = errors.New("unauthorized")

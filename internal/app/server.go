@@ -36,7 +36,7 @@ type Server struct {
 	extensions         extension.Manager
 	sandbox            sandbox.Settings
 	*chat.ConversationService
-	// PersistToken saves a rotated token; nil when the token comes from MOB_TOKEN.
+	// PersistToken saves a rotated token; nil when the token comes from configuration.
 	PersistToken func(token string) error
 	// MCP connects to the configured MCP servers.
 	MCP    *mcp.Hub

@@ -6,26 +6,14 @@ and channels are its clients. Start from
 
 ## Files and environment
 
-| Variable | Default / meaning |
-| --- | --- |
-| `MOB_CONFIG` | XDG config home + `mob/config.yaml`; an explicitly selected file must exist |
-| `MOB_DATA_DIR` | XDG data home + `mob`; existing pre-XDG databases are reused in place |
-| `MOB_STATE_DIR` | XDG state home + `mob`; background logs |
-| `MOB_ADDR` | `127.0.0.1:8787`; loopback addresses only |
-| `MOB_TOKEN` | optional local access token, at least 32 characters; otherwise generated in `MOB_DATA_DIR/token` |
-| `MOB_WEB_URL` | `https://mob.fdkevin.cloud`; the public web UI `mob open --web` signs in, see [Remote access](remote-access.md) |
-| `MOB_DEMO` | `1` makes the offline `demo/echo` model the default |
-| `MOB_SANDBOX_*` | override the `sandbox` section; see [Sandbox](sandbox.md) |
+The [configuration reference](../environment-variables.md) lists file keys,
+CLI flags, `MOB_` variables, defaults and precedence.
 
-- Precedence is explicit CLI flags, then environment, then the configuration
-  file, then defaults. Persistent flags: `--config`, `--data-dir`,
-  `--state-dir`, `--addr`, `--demo`. There is no `.env` loader.
-- On macOS the default file is `~/Library/Application Support/mob/config.yaml`;
-  on Linux normally `~/.config/mob/config.yaml`. YAML, JSON and TOML are
-  accepted. Model providers and keys live in `providers.json` beside it (see
-  [Model providers](providers.md)); plugin settings live in the database.
-- `mob config check` validates `config.yaml` and `providers.json` without
-  printing credentials.
+On macOS the default file is `~/Library/Application Support/mob/config.yaml`;
+on Linux normally `~/.config/mob/config.yaml`. YAML, JSON and TOML are accepted.
+Model providers and keys live in `providers.json` beside it (see
+[Model providers](providers.md)); plugin settings live in the database.
+`mob config check` validates both files without printing credentials.
 
 ## Live reload
 
@@ -34,8 +22,11 @@ and channels are its clients. Start from
   before applying it. Syntax errors, unsafe permissions, deletion and invalid
   values keep the last valid configuration; diagnostics omit file contents and
   appear in stderr, the background log and `/api/runtime`.
-- Changing `addr`, `data_dir`, `state_dir` or `demo` requires a restart, as do
-  environment changes and removing the watched directory.
+- Changing `addr`, `data_dir`, `state_dir`, `demo`, `token` or `gateway.url`
+  requires a restart, as do environment changes and removing the watched directory.
+  With a gateway connection configured, `gateway.node_id` and `gateway.token`
+  also require restart. Gateway server address changes do not block local
+  service reloads; restart `mob gateway` to apply them.
 - Files must be regular (not symlinks), at most 64 KiB, and not group- or
   world-writable on Unix. `providers.json` must be owner-only (`chmod 600`); on
   Windows protect it with the user directory's ACLs. A missing default file is
@@ -61,7 +52,29 @@ and channels are its clients. Start from
   one-time link that expires after 5 minutes; otherwise open
   `http://127.0.0.1:8787` and paste the token from `MOB_DATA_DIR/token`. The
   browser keeps it until Disconnect.
-- `mob token rotate` replaces the token and signs out every browser, terminal and
-  desktop window, and stops turns started with the old token.
+- `mob token rotate` replaces the managed token, signs out every client and
+  stops turns started with the old token. A token supplied through configuration
+  is fixed until restart and cannot be rotated by Mob.
+- Files declaring `token` or `gateway.token` must be owner-only on Unix
+  (`chmod 600`). Prefer a file or environment variable for secrets: CLI flags
+  are visible in the invoking process's arguments. Background startup forwards
+  secret flags through its child environment instead of child arguments.
 - Browser dev origins on localhost port 5173, the Wails WebView origin and the
   `web_url` origin are allowed.
+
+## Migrating older configuration
+
+There are no legacy aliases. Update scripts and service definitions:
+
+| Previous setting | Current setting |
+| --- | --- |
+| `MOB_NODE_ID` | `MOB_GATEWAY_NODE_ID` |
+| `--node-id` | `--gateway-node-id` |
+| `--connect-gateway` | `--gateway-url` |
+| `mob gateway --addr` | `mob gateway --gateway-addr` |
+| `mob gateway --token` | `mob gateway --gateway-token` |
+| `MOB_WEB_URL=` to disable public Web | `--web-url=` or `web_url: ""` in the file |
+
+`mob gateway` rejects explicit `--addr` and `--token` flags before startup,
+with guidance to use their `--gateway-*` counterparts. Empty environment values
+now fall back to the file or default.

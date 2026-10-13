@@ -45,7 +45,7 @@ func LoadConfig() (Config, error) { return configuration.Load() }
 var newCatalog = catalog.Default
 
 func Credentials(c Config) (Connection, error) {
-	token := os.Getenv("MOB_TOKEN")
+	token := c.Token
 	if token == "" {
 		raw, err := os.ReadFile(filepath.Join(c.Dir, "token"))
 		if err != nil {
@@ -54,7 +54,7 @@ func Credentials(c Config) (Connection, error) {
 		token = strings.TrimSpace(string(raw))
 	}
 	if len(token) < 32 {
-		return Connection{}, errors.New("MOB_TOKEN must contain at least 32 characters")
+		return Connection{}, errors.New("token must contain at least 32 bytes")
 	}
 	return Connection{"http://" + c.Addr, token}, nil
 }
@@ -71,7 +71,7 @@ func openStore(c Config) (*chat.Store, Connection, error) {
 	if err != nil {
 		return nil, Connection{}, err
 	}
-	if os.Getenv("MOB_TOKEN") == "" {
+	if c.Token == "" {
 		path := filepath.Join(c.Dir, "token")
 		file, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if e == nil {
@@ -122,7 +122,7 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	}
 	registry.Demo = c.Demo
 	server := app.NewServer(store, registry, connection.Token)
-	if os.Getenv("MOB_TOKEN") == "" {
+	if c.Token == "" {
 		server.PersistToken = func(token string) error { return writeToken(c.Dir, token) }
 	}
 	server.SetToolSteps(c.MaxToolSteps)
@@ -149,8 +149,11 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 		a.stopWatch = append(a.stopWatch, stopFresh)
 		go models.KeepFresh(fresh, func(err error) { log.Printf("Model catalog refresh failed: %s", err) })
 		stop, err := c.Loader.Watch(context.Background(), func(next configuration.Environment) error {
-			if next.Dir != c.Dir || next.StateDir != c.StateDir || next.Addr != c.Addr {
-				return errors.New("data_dir, state_dir and addr changes require a restart; current configuration retained")
+			if next.Dir != c.Dir || next.StateDir != c.StateDir || next.Addr != c.Addr || next.Token != c.Token {
+				return errors.New("data_dir, state_dir, addr and token changes require a restart; current configuration retained")
+			}
+			if next.Gateway.URL != c.Gateway.URL || c.Gateway.URL != "" && (next.Gateway.NodeID != c.Gateway.NodeID || next.Gateway.Token != c.Gateway.Token) {
+				return errors.New("active gateway connection changes require a restart; current configuration retained")
 			}
 			return server.ReloadConfiguration(next)
 		}, func(err error) {

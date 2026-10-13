@@ -16,7 +16,7 @@ TUI and messaging channels are its clients. How each feature behaves is in
 | `internal/protocol` | maps conversation events to AI SDK UI stream chunks; the gateway frame protocol |
 | `internal/llm` | the provider-neutral model interface and its drivers (`openai`, `anthropic`, `demo`) |
 | `internal/provider`, `internal/catalog` | `providers.json` and presets; the models.dev catalog |
-| `internal/configuration` | XDG/Viper loading, live reload, plugin configuration sections and secrets |
+| `internal/configuration` | shared option definitions for Cobra/Viper/generated reference, XDG loading, live reload, plugin configuration sections and secrets |
 | `internal/extension` | the lifecycle of plugins that run in the background, and plugin routes |
 | `internal/channel` | the bridge messaging channels answer through |
 | `internal/plugins/*` | email, Cloudflare, Telegram, WeChat iLink and MCP, each with its own tools, commands, routes and background run |

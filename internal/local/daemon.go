@@ -68,6 +68,7 @@ func StartBackground(c Config) error {
 	}
 	args := append([]string{"serve", "--background"}, c.Loader.Arguments()...)
 	command := exec.Command(executable, args...)
+	command.Env = c.Loader.Environ()
 	command.Stdout = log
 	command.Stderr = log
 	detach(command)

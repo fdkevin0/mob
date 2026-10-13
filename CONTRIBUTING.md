@@ -39,9 +39,19 @@ service and reads its stream with the real AI SDK UI parser. CI also runs
 `gofmt`, `go mod tidy -diff`, `go vet` and the race detector.
 
 Tests use temporary data directories, local fixtures and fake providers, so
-they need no keys and send nothing to real models, mailboxes or chats. Go tests
-also fail when `webapp/src/chat/contracts.ts` is out of date; regenerate it with
-`bun run generate:contracts`.
+they need no keys and send nothing to real models, mailboxes or chats.
+
+## Generated references
+
+Edit the source and regenerate the affected artifact. Go tests reject stale output.
+
+| Artifact | Source | Regenerate from the repository root |
+| --- | --- | --- |
+| `webapp/src/chat/contracts.ts` | Go contracts in `cmd/contracts` | `bun run generate:contracts` |
+| `docs/environment-variables.md` | `internal/configuration/options.go` | `go run ./cmd/configdocs` |
+
+For documentation writing or organization, the repository skill
+[mob-docs](.agents/skills/mob-docs/SKILL.md) points to the relevant sources.
 
 ## Changes
 

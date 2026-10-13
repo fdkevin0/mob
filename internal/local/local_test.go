@@ -172,3 +172,77 @@ func offlineCatalog(t *testing.T, dir string) {
 	catalog.URL = "http://127.0.0.1:1/unreachable"
 	t.Cleanup(func() { newCatalog, catalog.URL = catalog.Default, url })
 }
+
+func TestGatewayReloadOnlyRejectsActiveRelayChanges(t *testing.T) {
+	for _, active := range []bool{false, true} {
+		t.Run(fmt.Sprint(active), func(t *testing.T) {
+			for _, name := range []string{"MOB_CONFIG", "MOB_TOKEN", "MOB_DATA_DIR", "MOB_STATE_DIR", "MOB_ADDR", "MOB_DEMO", "MOB_GATEWAY_URL", "MOB_GATEWAY_NODE_ID", "MOB_GATEWAY_TOKEN", "MOB_GATEWAY_ADDR"} {
+				t.Setenv(name, "")
+			}
+			dir := t.TempDir()
+			offlineCatalog(t, dir)
+			path := filepath.Join(dir, "config.yaml")
+			gatewayURL := ""
+			if active {
+				gatewayURL = "https://relay.example"
+			}
+			body := func(demo bool, addr, token, node, url string) string {
+				return fmt.Sprintf("data_dir: %q\nstate_dir: %q\naddr: 127.0.0.1:0\ndemo: %t\ngateway:\n  addr: %q\n  token: %q\n  node_id: %q\n  url: %q\n", dir, dir, demo, addr, token, node, url)
+			}
+			write := func(raw string) {
+				t.Helper()
+				if err := os.WriteFile(path+".tmp", []byte(raw), 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Rename(path+".tmp", path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(body(true, ":8788", "original", "node", gatewayURL))
+			t.Setenv("MOB_CONFIG", path)
+			c, err := LoadConfig()
+			if err != nil {
+				t.Fatal(err)
+			}
+			app, err := Start(c, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer app.Close()
+			wait := func(want string) {
+				t.Helper()
+				for deadline := time.Now().Add(4 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+					got := app.ConfigError()
+					if want == "" && got == "" || want != "" && strings.Contains(got, want) {
+						return
+					}
+					if time.Now().After(deadline) {
+						t.Fatalf("reload error = %q, want %q", got, want)
+					}
+				}
+			}
+			write(body(false, ":8788", "original", "node", gatewayURL))
+			wait("demo changes")
+			token, node := "original", "node"
+			if !active {
+				token, node = "changed", "changed"
+			}
+			valid := body(true, ":9000", token, node, gatewayURL)
+			write(valid)
+			wait("")
+			if active {
+				for _, changed := range []string{
+					body(true, ":9000", "changed", node, gatewayURL),
+					body(true, ":9000", token, "changed", gatewayURL),
+				} {
+					write(changed)
+					wait("gateway")
+					write(valid)
+					wait("")
+				}
+			}
+			write(body(true, ":9000", token, node, "https://other.example"))
+			wait("gateway")
+		})
+	}
+}

@@ -101,7 +101,7 @@ func TestRotateTokenAndPairingURL(t *testing.T) {
 		t.Fatal("rotation with a stale token file changed the file or the service")
 	}
 
-	t.Setenv("MOB_TOKEN", strings.Repeat("e", 32))
+	c.Token = strings.Repeat("e", 32)
 	if err = RotateToken(c); !errors.Is(err, app.ErrTokenFromEnvironment) {
 		t.Fatalf("MOB_TOKEN rotation: %v", err)
 	}
