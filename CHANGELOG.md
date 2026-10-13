@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/fdkevin0/mob/compare/v0.1.0...v0.1.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **release:** correct Homebrew tap token template ([8e6afb7](https://github.com/fdkevin0/mob/commit/8e6afb7b5483098b06fcef9542be7d8246529fd0))
+
 ## 0.1.0 (2026-10-12)
 
 
