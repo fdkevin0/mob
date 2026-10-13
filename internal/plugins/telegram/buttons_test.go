@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -54,12 +55,14 @@ func TestRepliesOfferButtonsInPlaceOfCommands(t *testing.T) {
 	if _, rows := present("/new"); rows != nil {
 		t.Fatalf("/new offers buttons: %v", labels(rows))
 	}
-	var first string
+	var first, second string
 	store.Setting("telegram-conversation:bot:7", &first)
 	present("/new")
+	store.Setting("telegram-conversation:bot:7", &second)
 	text, rows := present("/list")
 	got := labels(rows)
-	if text != pickConversation || len(got) != 3 || !strings.HasPrefix(got[0], "✓ ") || !strings.HasSuffix(got[1], "=/open "+first) || got[2] != "New conversation=/new" {
+	// Both conversations may share a timestamp, so their order is not checked.
+	if text != pickConversation || len(got) != 3 || !slices.Contains(got, "✓ New conversation=/open "+second) || !slices.Contains(got, "New conversation=/open "+first) || got[2] != "New conversation=/new" {
 		t.Fatalf("/list: %s %v", text, got)
 	}
 	if text, _ := present("/open " + first); text != "Switched to “New conversation”." {
@@ -76,6 +79,15 @@ func TestRepliesOfferButtonsInPlaceOfCommands(t *testing.T) {
 	present("/approve always")
 	if _, rows := present("/grants"); len(rows) != 2 || rows[0][0].Text != "Forget all" || !strings.HasPrefix(rows[1][0].Text, "Forget remember") || !strings.HasPrefix(rows[1][0].Data, "/revoke ") {
 		t.Fatalf("/grants: %v", labels(rows))
+	}
+	// Every remembered approval gets a button, past completion's 20.
+	for i := range 25 {
+		if err := store.AddGrant("", fmt.Sprint("tool", i), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, rows := present("/grants"); len(rows) != 27 {
+		t.Fatalf("/grants with 26 remembered: %d rows", len(rows))
 	}
 
 	if r, rows := service.present(ctx, config, "bot", "hi", channel.Reply{Text: texts.Busy}); r.Text != texts.Busy || len(rows) != 1 || rows[0][0].Data != "/stop" {
@@ -147,5 +159,26 @@ func TestATapOnAChoiceRemovesTheList(t *testing.T) {
 	}
 	if len(calls) != 2 || !strings.Contains(calls[0], "Switched to") || calls[1] != `editMessageReplyMarkup {"chat_id":7,"message_id":42,"reply_markup":{"inline_keyboard":[]}}` {
 		t.Fatalf("a pick: %v", calls)
+	}
+}
+
+func TestPickedTellsAListsChoicesFromTheMenu(t *testing.T) {
+	list := keyboard{Rows: [][]button{{{Text: "a", Data: "/open " + chat.NewID()}}, menuButtons[0][:1]}}
+	menu := keyboard{Rows: menuButtons}
+	for _, tc := range []struct {
+		text string
+		k    keyboard
+		want bool
+	}{
+		{"/open x", list, true},
+		{"/new", list, true},
+		{"/new", menu, false},
+		{"/list", menu, false},
+		{"/model default", keyboard{}, true},
+		{"/approve x", keyboard{}, false},
+	} {
+		if got := picked(tc.text, tc.k); got != tc.want {
+			t.Errorf("picked(%q) = %v", tc.text, got)
+		}
 	}
 }
