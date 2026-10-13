@@ -67,7 +67,7 @@ Edit the source and regenerate the affected artifact. Go tests reject stale outp
 
 | Artifact | Source | Regenerate from the repository root |
 | --- | --- | --- |
-| `packages/client/src/contracts.ts` (Web compatibility re-export) | Go contracts in `cmd/contracts` | `bun run generate:contracts` |
+| `packages/client/src/contracts.ts` (`webapp/src/chat/contracts.ts` re-exports it) | Go contracts in `cmd/contracts` | `bun run generate:contracts` |
 | `docs/environment-variables.md` | `internal/configuration/options.go` | `go run ./cmd/configdocs` |
 
 For documentation writing or organization, the repository skill
