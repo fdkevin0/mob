@@ -6,8 +6,9 @@ TUI and messaging channels are its clients. How each feature behaves is in
 [features/](features/README.md).
 
 The browser UI and the experimental TypeScript terminal share `@mob/client`.
-The experiment is launched separately from source with Bun; it does not replace
-the Bubble Tea TUI or change the single-Go-binary release.
+The experiment runs from source with Bun, either directly or through
+`MOB_TUI=ts mob tui`. Bubble Tea remains the default, and the selector does not
+change the single-Go-binary release.
 
 ## Where code lives
 

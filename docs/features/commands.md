@@ -46,11 +46,23 @@ help, completion and execution from the same definition.
 
 ## Experimental TypeScript terminal
 
-Run `bun run tui:pilot` against an already running Go service. This is a
-source-only OpenTUI React 0.6.1 pilot, not a replacement for `mob tui` or a
-standalone release. It requires Bun >=1.3.14 with native FFI; Linux x64 with
-Bun 1.4.2 and local tmux have been tested. Real IME input, SSH, macOS and
-Windows have not.
+`mob tui` defaults to Bubble Tea (`MOB_TUI=go`). To select the source-only
+OpenTUI React 0.6.1 pilot, install dependencies with `bun install --frozen-lockfile`
+in the checkout, build with `bun run build:cli`, then run:
+
+```sh
+MOB_TUI=ts ./build/mob tui --demo
+# For a Go binary outside the checkout's build/ directory:
+MOB_TUI=ts MOB_TUI_ENTRY=/absolute/path/to/mob/apps/tui/src/main.tsx mob tui
+```
+
+Both variants reuse an existing service or own a new one until the terminal
+exits. Use `mob start` first to keep it running after exit. The direct
+`bun run tui:pilot` entry still requires an already running service. No silent
+fallback occurs if the selector, Bun or source entry is unavailable. This is
+not a standalone release; Go/Homebrew packaging remains unchanged.
+The pilot requires Bun >=1.3.14 with native FFI; Linux x64 with Bun 1.4.2 and
+local tmux have been tested. Real IME input, SSH, macOS and Windows have not.
 
 - Enter sends; Ctrl+J inserts a newline. Drafts survive conversation switching
   in memory, not application restarts. Pasted multiline text is sent whole.
@@ -60,7 +72,8 @@ Windows have not.
   newer drafts stay untouched and the original text is shown separately. An
   unconfirmed message is never automatically resent (see [Turns](turns-and-context.md)).
 - F2 opens conversations, F3 tool details, F4 approval controls. Ctrl+S requests
-  backend Stop; Ctrl+Q detaches without cancelling the service turn.
+  backend Stop; Ctrl+Q closes the terminal. Attached clients leave the service
+  turn running; an owning `mob tui` launcher also shuts down its service.
 - Slash commands run through the shared client, but the pilot has no autocomplete
   UI. Tab switches search/list focus in F2; Esc returns to chat.
 - Plugin settings and mail-compose forms are not implemented in the pilot;

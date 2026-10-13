@@ -17,7 +17,6 @@ import (
 	"github.com/fdkevin0/mob/internal/local"
 	"github.com/fdkevin0/mob/internal/node"
 	"github.com/fdkevin0/mob/internal/provider"
-	"github.com/fdkevin0/mob/internal/tui"
 	"github.com/fdkevin0/mob/internal/version"
 	"github.com/fdkevin0/mob/webapp"
 	"github.com/pkg/browser"
@@ -157,12 +156,7 @@ func newRootCommand() *cobra.Command {
 			return nil
 		}},
 		&cobra.Command{Use: "tui", Short: "Open the terminal UI", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-			connection, close, err := local.ConnectOrStart(config, webapp.Assets())
-			if err != nil {
-				return err
-			}
-			defer close()
-			return tui.Run(connection)
+			return runTUI(cmd, config)
 		}},
 	)
 	token := &cobra.Command{Use: "token", Short: "Manage the local access token"}

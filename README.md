@@ -40,9 +40,12 @@ In the TUI: Enter sends, Alt+Enter or Ctrl+J inserts a newline, Ctrl+S stops the
 reply, PgUp/PgDn scroll, Ctrl+P opens plugins, Ctrl+C exits.
 
 An [experimental TypeScript TUI](apps/tui/README.md) shares the Web client's
-conversation logic. Run `bun run tui:pilot -- --url URL --token-file PATH` from
-source against an existing service. It needs Bun and is not part of the Go
-release; `mob tui` still uses Bubble Tea.
+conversation logic. After installing source dependencies, run
+`MOB_TUI=ts ./build/mob tui`; use `MOB_TUI_ENTRY` for a binary outside the checkout's
+`build/` directory. It needs Bun and is not part of the Go release.
+`mob tui` defaults to Bubble Tea (`MOB_TUI=go`). The direct
+`bun run tui:pilot -- --url URL --token-file PATH` entry only connects to an
+existing service.
 
 ## Documentation
 

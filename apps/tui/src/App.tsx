@@ -172,7 +172,7 @@ export function App({
 		}
 		if (key.ctrl && key.name === 'c') {
 			key.preventDefault();
-			setNotice('Ctrl+S stops the turn; Ctrl+Q exits the pilot without stopping the service.');
+			setNotice('Ctrl+S stops the turn; Ctrl+Q exits the terminal.');
 			return;
 		}
 		if (key.name === 'f2') {

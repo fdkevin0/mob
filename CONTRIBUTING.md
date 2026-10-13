@@ -22,7 +22,10 @@ bun run desktop                   # Wails development
 
 `bun run tui:pilot -- --url http://127.0.0.1:8787 --token-file /path/to/data/token`
 launches the OpenTUI React pilot against an already running service. It shares
-`packages/client` with Web but does not start the service or replace `mob tui`.
+`packages/client` with Web. Alternatively, `MOB_TUI=ts ./build/mob tui --demo`
+uses the CLI's normal connect-or-start lifecycle; set the absolute
+`MOB_TUI_ENTRY` source path for a Go binary outside `build/`. Unset/empty
+`MOB_TUI` or `MOB_TUI=go` keeps Bubble Tea as the default.
 Use Bun >=1.3.14 and an interactive terminal; OpenTUI uses a native library via
 FFI. Node and cross-platform standalone packaging are not validated. See
 [the pilot README](apps/tui/README.md) for input controls and limitations.
