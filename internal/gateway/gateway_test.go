@@ -61,25 +61,26 @@ func TestGatewayNodeRelayAndSignaling(t *testing.T) {
 	}
 	defer client.Close()
 
-	// Wait briefly for WebSocket connection and registration
-	time.Sleep(100 * time.Millisecond)
-
-	// 2. Check Node listing via Gateway API
-	req, _ := http.NewRequest("GET", server.URL+"/api/gateway/nodes", nil)
-	req.Header.Set("Authorization", "Bearer "+gwToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("list nodes failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
+	// 2. Check Node listing via Gateway API, waiting for the node to register
 	var listResult struct {
 		Nodes []gateway.NodeInfo `json:"nodes"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&listResult)
-	resp.Body.Close()
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		req, _ := http.NewRequest("GET", server.URL+"/api/gateway/nodes", nil)
+		req.Header.Set("Authorization", "Bearer "+gwToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("list nodes failed: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&listResult)
+		resp.Body.Close()
+		if len(listResult.Nodes) > 0 || time.Now().After(deadline) {
+			break
+		}
+	}
 
 	if len(listResult.Nodes) != 1 || listResult.Nodes[0].ID != nodeID {
 		t.Fatalf("unexpected nodes: %+v", listResult.Nodes)
