@@ -98,7 +98,7 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 	roots := x509.NewCertPool()
 	roots.AddCert(fixture.Certificate())
 	fixture.Close()
-	backend := memory.New()
+	backend := newLockedBackend(memory.New())
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
 	if err != nil {
 		t.Fatal(err)
@@ -120,8 +120,10 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The server keeps reading the mailbox after a loop disconnects, so
+	// delivery goes through the same lock as its commands.
 	deliver := func(raw []byte) {
-		if err := inbox.(*memory.Mailbox).CreateMessage(nil, time.Now(), bytes.NewBuffer(raw)); err != nil {
+		if err := inbox.CreateMessage(nil, time.Now(), bytes.NewBuffer(raw)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -148,8 +150,7 @@ func TestLoopAnswersNewMailInItsThread(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// run runs the loop until it has sent want replies, or for a while when
-	// it should send none. The memory backend is not safe for concurrent use,
-	// so mail is delivered only while no loop runs.
+	// it should send none.
 	run := func(want int) {
 		t.Helper()
 		ctx, stop := context.WithCancel(ctx)
