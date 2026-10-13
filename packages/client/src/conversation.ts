@@ -1,5 +1,5 @@
 import { Chat } from '@ai-sdk/react';
-import { DefaultChatTransport, readUIMessageStream } from 'ai';
+import { DefaultChatTransport, generateId, readUIMessageStream } from 'ai';
 import { MobClient, type ChatMessage, type ClientType, type Snapshot } from './api';
 import type { Action, CommandResult } from './contracts';
 
@@ -17,6 +17,7 @@ export type ConversationState = {
 	failure: string;
 	error?: Error;
 	commandResult?: string;
+	recovery?: { requestId: string; text: string };
 };
 
 // Chat is the AI SDK's headless state container, not a React hook. Both UIs
@@ -31,12 +32,14 @@ export class ConversationClient {
 	private followRetry = 0;
 	private recoveryFailure = '';
 	private generation = 0;
+	private reloadSequence = 0;
 	private active = false;
 	private timer?: ReturnType<typeof setInterval>;
 	private unsubscribes: (() => void)[] = [];
 	private approvalController?: AbortController;
 	private followController?: AbortController;
-	private submittedText = '';
+	private inputRevision = 0;
+	private pendingSend?: { requestId: string; text: string; inputRevision: number; settled: boolean; uncertain: boolean };
 
 	constructor(
 		private readonly options: {
@@ -83,7 +86,7 @@ export class ConversationClient {
 			messages: initial.messages,
 			transport: this.transport,
 			onError: () => {
-				if (this.active && !this.state.input) this.update({ input: this.submittedText });
+				if (this.pendingSend) this.pendingSend.uncertain = true;
 			},
 		});
 	}
@@ -95,7 +98,10 @@ export class ConversationClient {
 			this.listeners.delete(listener);
 		};
 	};
-	setInput = (input: string) => this.update({ input });
+	setInput = (input: string) => {
+		this.inputRevision++;
+		this.update({ input });
+	};
 	dismissCommand = () => this.update({ commandResult: undefined });
 
 	// Detaching cancels this client's streams, never the service-owned turn.
@@ -120,6 +126,7 @@ export class ConversationClient {
 			this.unsubscribes.forEach((unsubscribe) => unsubscribe());
 			this.approvalController?.abort();
 			this.followController?.abort();
+			if (this.pendingSend) this.pendingSend.uncertain = true;
 			void this.chat.stop();
 		};
 	};
@@ -127,7 +134,13 @@ export class ConversationClient {
 	private update(patch: Partial<ConversationState>) {
 		const streaming = this.chat.status === 'submitted' || this.chat.status === 'streaming';
 		this.state = { ...this.state, ...patch, streaming };
-		this.state.busy = streaming || this.state.approvalBusy || this.state.remoteBusy || this.running || this.following;
+		this.state.busy =
+			streaming ||
+			this.state.approvalBusy ||
+			this.state.remoteBusy ||
+			this.running ||
+			this.following ||
+			(!!this.pendingSend && !this.state.recovery);
 		this.listeners.forEach((listener) => listener());
 	}
 
@@ -141,19 +154,50 @@ export class ConversationClient {
 	};
 
 	private async reload() {
-		if (!this.active || this.state.streaming || this.state.approvalBusy || this.following || this.running) return;
+		if (
+			!this.active ||
+			this.state.streaming ||
+			this.state.approvalBusy ||
+			this.following ||
+			this.running ||
+			(this.pendingSend && !this.pendingSend.settled)
+		)
+			return;
 		const generation = this.generation;
+		const sequence = ++this.reloadSequence;
 		try {
 			const snapshot = await this.options.client.openConversation(this.options.id);
 			if (
 				!this.active ||
 				generation !== this.generation ||
+				sequence !== this.reloadSequence ||
 				this.state.streaming ||
 				this.state.approvalBusy ||
 				this.following ||
 				this.running
 			)
 				return;
+			const pending = this.pendingSend;
+			if (pending) {
+				if (snapshot.messages.some((m) => m.role === 'user' && m.id === pending.requestId)) {
+					this.pendingSend = undefined;
+					this.chat.clearError();
+					this.update({
+						input:
+							this.state.recovery && this.inputRevision === pending.inputRevision && this.state.input === pending.text
+								? ''
+								: this.state.input,
+						failure: this.state.recovery ? '' : this.state.failure,
+						recovery: undefined,
+					});
+				} else {
+					this.update({
+						recovery: { requestId: pending.requestId, text: pending.text },
+						input: this.inputRevision === pending.inputRevision && !this.state.input ? pending.text : this.state.input,
+						failure: 'Delivery not confirmed. Original message retained for recovery; it was not resent.',
+					});
+				}
+			}
 			this.chat.messages = snapshot.messages;
 			this.update({
 				model: snapshot.model,
@@ -163,7 +207,7 @@ export class ConversationClient {
 			this.recoveryFailure = '';
 			if (snapshot.active) void this.follow(snapshot.messages);
 		} catch (e) {
-			if (this.active && generation === this.generation) {
+			if (this.active && generation === this.generation && sequence === this.reloadSequence) {
 				this.recoveryFailure = errorText(e);
 				this.update({ failure: this.recoveryFailure });
 			}
@@ -185,7 +229,7 @@ export class ConversationClient {
 				completed = true;
 				return;
 			}
-			this.update({ failure: '' });
+			if (!this.state.recovery) this.update({ failure: '' });
 			const earlier = baseline.filter((m) => m.metadata?.status !== 'streaming');
 			for await (const message of readUIMessageStream<ChatMessage>({ stream, terminateOnError: true })) {
 				if (!controller.signal.aborted) this.chat.messages = [...earlier.filter((m) => m.id !== message.id), message];
@@ -211,9 +255,10 @@ export class ConversationClient {
 		if (!this.active || !input.trim() || this.state.busy) return;
 		const text = input.trim();
 		this.generation++;
+		this.pendingSend = undefined;
 		this.recoveryFailure = '';
 		this.chat.clearError();
-		this.update({ input: '', failure: '', commandResult: undefined });
+		this.update({ input: '', failure: '', commandResult: undefined, recovery: undefined });
 		if (!text.startsWith('/') || /[\r\n]/.test(text)) {
 			await this.send(text);
 			return;
@@ -250,13 +295,24 @@ export class ConversationClient {
 	proceed = async () => {
 		if (!this.active || this.state.busy) return;
 		this.generation++;
+		this.pendingSend = undefined;
+		this.recoveryFailure = '';
 		this.chat.clearError();
+		this.update({ failure: '', recovery: undefined });
 		await this.send('Continue');
 	};
 
 	private async send(text: string) {
-		this.submittedText = text;
-		await this.chat.sendMessage({ text });
+		const pending = { requestId: generateId(), text, inputRevision: this.inputRevision, settled: false, uncertain: false };
+		this.pendingSend = pending;
+		try {
+			await this.chat.sendMessage({ id: pending.requestId, role: 'user', parts: [{ type: 'text', text }] });
+		} finally {
+			pending.settled = true;
+			if (!pending.uncertain) this.pendingSend = undefined;
+			this.update({});
+			if (this.active) await this.reload();
+		}
 	}
 
 	decide = async (approvalId: string, approved: boolean, reason?: string, remember?: string) => {
@@ -300,6 +356,7 @@ export class ConversationClient {
 			await this.options.client.request(`/conversations/${this.options.id}/stop`, {});
 			this.approvalController?.abort();
 			this.followController?.abort();
+			if (this.pendingSend) this.pendingSend.uncertain = true;
 			await this.chat.stop();
 			if (this.active) void this.reload();
 		} catch (e) {
