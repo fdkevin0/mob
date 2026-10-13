@@ -77,7 +77,6 @@ async function sharedClients() {
     detachWeb();
     await sending;
     assert((await client.openConversation(id)).active, 'detaching Web must not stop the turn');
-    web = new ConversationClient({ client, id, initial: await client.openConversation(id), clientType: 'web' });
     detachWeb = web.start();
     const expected = `[Demo mode — no model request]\n\nReceived: ${prompt}\n\nUse /remember a fact to exercise persistent approval.`;
     await until(() => !web.getSnapshot().busy && !tui.getSnapshot().busy && textOf(web.getSnapshot().messages).includes(expected) && textOf(tui.getSnapshot().messages).includes(expected), 'both readers receive complete replayed text');
@@ -87,6 +86,8 @@ async function sharedClients() {
     assert.equal(saved.messages.at(-1)?.parts.filter(p => p.type === 'text').map(p => p.text).join(''), expected);
     assert.deepEqual(web.getSnapshot().messages.map(m => m.id), saved.messages.map(m => m.id));
     assert.deepEqual(tui.getSnapshot().messages.map(m => m.id), saved.messages.map(m => m.id));
+    assert.equal(web.getSnapshot().recovery, undefined, 'accepted running send must not be offered for resubmission');
+    assert.equal(web.getSnapshot().input, '', 'accepted running send must not restore a duplicate draft');
     await tui.submit('/list');
     assert(tui.getSnapshot().commandResult?.includes(id), 'tui command output omitted the conversation');
     assert.deepEqual((await client.complete(id, '/model d', 'tui')).map(s => s.value), ['default', 'demo/echo']);
@@ -128,11 +129,76 @@ async function sharedClients() {
     assert(textOf([stopped.messages.at(-1)!]).length < 'stop-target '.repeat(180).length, 'Stop must leave a partial, not completed, reply');
     await until(() => !web.getSnapshot().busy && !tui.getSnapshot().busy, 'both clients observe Stop');
     await validateUIMessages({ messages: stopped.messages });
+    web.setInput('Continue must keep this unsent 草稿');
+    await web.proceed();
+    assert.equal(web.getSnapshot().input, 'Continue must keep this unsent 草稿');
+    const continued = await client.openConversation(id);
+    assert.equal(textOf(continued.messages.filter(m => m.role === 'user').slice(-1)), 'Continue');
     console.log('Shared client ↔ Go: web/tui commands, Chinese multiline text, concurrent readers, reconnect/detach, history, approval scope, stale decision, denial and cross-client Stop passed.');
   } finally {
     detachWeb(); detachTui?.();
   }
 }
+
+async function detachedSends() {
+  const client = new MobClient({ url, token });
+  for (const accepted of [false, true]) {
+    const { id } = await client.createConversation();
+    const initial = await client.openConversation(id);
+    const text = '相同文本 不同请求ID\n'.repeat(12).trim();
+    let other: Promise<UIMessage | undefined> | undefined;
+    if (!accepted) {
+      other = turn(id, { text, requestId: `other-${id}` });
+      await until(async () => (await client.openConversation(id)).active, 'another client occupies conversation');
+    }
+    let release!: () => void;
+    let requestId = '';
+    let posts = 0;
+    let status = 0;
+    const delayed = new MobClient({ url, token }, { fetch: async (input, init) => {
+      if (!String(input).endsWith('/api/chat')) return fetch(input, init);
+      posts++;
+      requestId = JSON.parse(String(init?.body)).requestId;
+      const response = await fetch(input, init);
+      status = response.status;
+      await new Promise<void>(resolve => { release = resolve; });
+      return response;
+    } });
+    const session = new ConversationClient({ client: delayed, id, initial, clientType: 'tui' });
+    let detach = session.start();
+    try {
+      const sending = session.submit(text);
+      await until(() => !!release, 'real Go response is held before SDK receives it');
+      assert.equal(status, accepted ? 200 : 409);
+      session.setInput('新草稿不能被覆盖');
+      detach();
+      await other;
+      await until(async () => !(await client.openConversation(id)).active, 'backend finishes while client is detached');
+      release();
+      await sending;
+      detach = session.start();
+      await until(() => !session.getSnapshot().busy, 'same client reconciles detached send');
+      const saved = await client.openConversation(id);
+      assert.deepEqual(session.getSnapshot().messages, saved.messages);
+      assert.equal(session.getSnapshot().input, '新草稿不能被覆盖');
+      assert.equal(posts, 1, 'reattachment must never post again');
+      assert.equal(saved.messages.filter(m => m.role === 'user').length, 1);
+      assert.equal(saved.messages.filter(m => m.role === 'assistant').length, 1);
+      if (accepted) {
+        assert.equal(saved.messages.find(m => m.role === 'user')?.id, requestId);
+        assert.equal(session.getSnapshot().recovery, undefined);
+        assert.equal(session.getSnapshot().failure, '');
+      } else {
+        assert.notEqual(saved.messages.find(m => m.role === 'user')?.id, requestId);
+        assert.equal(textOf(saved.messages.filter(m => m.role === 'user')), text);
+        assert.deepEqual(session.getSnapshot().recovery, { requestId, text });
+        assert.match(session.getSnapshot().failure, /not confirmed/i);
+      }
+    } finally { detach(); }
+  }
+  console.log('Detached sends ↔ Go: real 409 refusal with identical text under another ID, late accepted completed turn, same-instance reattach, original request IDs, preserved newer drafts, no automatic resend passed.');
+}
+
 try {
   await writeFile(join(dir, 'config.yaml'), '{}\n', { mode: 0o600 });
   const build = spawnSync('go', ['build', '-o', binary, './cmd/mob'], { stdio: 'inherit' });
@@ -170,6 +236,7 @@ try {
   assert.deepEqual(restored.messages, snapshot.messages, 'history changed across restart');
   console.log('Go ↔ AI SDK UI: text, /models, approvals, denial, deduplication, validation and restart passed.');
   await sharedClients();
+  await detachedSends();
 } finally {
   await stop(); await rm(dir, { recursive: true, force: true });
 }

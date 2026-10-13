@@ -4,8 +4,55 @@ import { ConversationClient, MobClient, type Snapshot } from './index';
 const initial: Snapshot = { messages: [], active: false, model: 'demo/echo' };
 const connection = { url: 'http://localhost', token: 'first-token' };
 const cleanups: (() => void)[] = [];
+
+function replyStream(text: string) {
+	const chunks = [
+		{ type: 'start', messageId: 'server-reply' },
+		{ type: 'text-start', id: 'text' },
+		{ type: 'text-delta', id: 'text', delta: text },
+		{ type: 'text-end', id: 'text' },
+		{ type: 'finish' },
+	];
+	return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n', {
+		headers: { 'Content-Type': 'text/event-stream' },
+	});
+}
+
 afterEach(() => {
 	cleanups.splice(0).forEach((cleanup) => cleanup());
+	vi.useRealTimers();
+});
+
+it.each(['success', 'error'])('ignores an older idle snapshot %s after a newer snapshot', async (outcome) => {
+	vi.useFakeTimers();
+	let resolveOld!: (response: Response) => void;
+	let rejectOld!: (error: Error) => void;
+	let reads = 0;
+	const current: Snapshot = {
+		...initial,
+		model: 'demo/current',
+		messages: [{ id: 'new-reply', role: 'assistant', parts: [{ type: 'text', text: 'New history' }] }],
+	};
+	const client = new MobClient(connection, {
+		fetch: async () => {
+			if (++reads === 1)
+				return new Promise<Response>((resolve, reject) => {
+					resolveOld = resolve;
+					rejectOld = reject;
+				});
+			return Response.json(current);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(2000);
+	expect(session.getSnapshot().model).toBe('demo/current');
+	if (outcome === 'success') resolveOld(Response.json({ ...initial, model: 'demo/stale' }));
+	else rejectOld(new Error('obsolete offline error'));
+	await vi.advanceTimersByTimeAsync(0);
+	expect(session.getSnapshot().model).toBe('demo/current');
+	expect(session.getSnapshot().messages).toEqual(current.messages);
+	expect(session.getSnapshot().failure).toBe('');
 });
 
 it('runs event-free tui commands and publishes replies without browser globals', async () => {
@@ -52,10 +99,12 @@ it('runs event-free tui commands and publishes replies without browser globals',
 
 it('preserves a newer draft when a send fails, and restores an empty draft', async () => {
 	let reject!: (error: Error) => void;
+	let posts = 0;
 	const client = new MobClient(connection, {
 		fetch: async (url) => {
 			if (String(url).endsWith('/chat'))
 				return new Promise<Response>((_, fail) => {
+					posts++;
 					reject = fail;
 				});
 			return Response.json(initial);
@@ -72,7 +121,7 @@ it('preserves a newer draft when a send fails, and restores an empty draft', asy
 	expect(session.getSnapshot().error?.message).toBe('offline');
 
 	const retry = session.submit('restore this');
-	await vi.waitFor(() => expect(session.getSnapshot().streaming).toBe(true));
+	await vi.waitFor(() => expect(posts).toBe(2));
 	reject(new Error('still offline'));
 	await retry;
 	expect(session.getSnapshot().input).toBe('restore this');
@@ -88,14 +137,16 @@ it('reports the rejected credential without platform-specific notification machi
 	expect(rejected).toEqual(['first-token']);
 });
 
-it('ignores a snapshot from the previous attachment after start cleanup/start', async () => {
+it.each(['success', 'error'])('ignores an old snapshot %s after start cleanup/start', async (outcome) => {
 	let resolveOld!: (response: Response) => void;
+	let rejectOld!: (error: Error) => void;
 	let reads = 0;
 	const client = new MobClient(connection, {
 		fetch: async () => {
 			if (++reads === 1)
-				return new Promise<Response>((resolve) => {
+				return new Promise<Response>((resolve, reject) => {
 					resolveOld = resolve;
+					rejectOld = reject;
 				});
 			return Response.json({ ...initial, model: 'demo/current' });
 		},
@@ -105,9 +156,11 @@ it('ignores a snapshot from the previous attachment after start cleanup/start', 
 	detach();
 	cleanups.push(session.start());
 	await vi.waitFor(() => expect(session.getSnapshot().model).toBe('demo/current'));
-	resolveOld(Response.json({ ...initial, model: 'demo/stale' }));
+	if (outcome === 'success') resolveOld(Response.json({ ...initial, model: 'demo/stale' }));
+	else rejectOld(new Error('old attachment error'));
 	await new Promise((resolve) => setTimeout(resolve, 10));
 	expect(session.getSnapshot().model).toBe('demo/current');
+	expect(session.getSnapshot().failure).toBe('');
 });
 
 it('clears an interrupted follow after idle reconciliation, but keeps command failures', async () => {
@@ -135,4 +188,301 @@ it('clears an interrupted follow after idle reconciliation, but keeps command fa
 	await new Promise((resolve) => setTimeout(resolve, 10));
 	expect(session.getSnapshot().failure).toBe('command refused');
 	expect(session.getSnapshot().input).toBe('/refused');
+});
+
+it('reconciles an aborted detached send before restoring its original text', async () => {
+	let rejectSend!: (error: Error) => void;
+	let resolveSnapshot!: (response: Response) => void;
+	let requestId = '';
+	let reattached = false;
+	let posts = 0;
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				posts++;
+				requestId = JSON.parse(String(init?.body)).requestId;
+				return new Promise<Response>((_, reject) => {
+					rejectSend = reject;
+				});
+			}
+			if (reattached)
+				return new Promise<Response>((resolve) => {
+					resolveSnapshot = resolve;
+				});
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'tui' });
+	const detach = session.start();
+	const text = '原始中文\n第二行';
+	const sending = session.submit(text);
+	await vi.waitFor(() => expect(requestId).not.toBe(''));
+	detach();
+	rejectSend(new Error('connection unavailable'));
+	await sending;
+	expect(session.getSnapshot().input).toBe('');
+	reattached = true;
+	cleanups.push(session.start());
+	await vi.waitFor(() => expect(resolveSnapshot).toBeDefined());
+	expect(session.getSnapshot().input).toBe('');
+	expect(session.getSnapshot().failure).toBe('');
+	expect(session.getSnapshot().busy).toBe(true);
+	resolveSnapshot(Response.json(initial));
+	await vi.waitFor(() => expect(session.getSnapshot().input).toBe(text));
+	expect(session.getSnapshot().failure).toMatch(/recover|not confirmed/i);
+	expect(session.getSnapshot().messages).toEqual([]);
+	expect(posts).toBe(1);
+});
+
+it.each([false, true])('confirms a later accepted ID without removing an edited recovery draft (%s)', async (edited) => {
+	vi.useFakeTimers();
+	let history = initial;
+	let requestId = '';
+	let rejectSend!: (error: Error) => void;
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				requestId = JSON.parse(String(init?.body)).requestId;
+				return new Promise<Response>((_, reject) => {
+					rejectSend = reject;
+				});
+			}
+			return Response.json(history);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'tui' });
+	const detach = session.start();
+	const text = 'Possibly accepted';
+	const sending = session.submit(text);
+	await vi.advanceTimersByTimeAsync(0);
+	detach();
+	rejectSend(new Error('connection lost'));
+	await sending;
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(0);
+	expect(session.getSnapshot().recovery).toEqual({ requestId, text });
+	expect(session.getSnapshot().input).toBe(text);
+	if (edited) {
+		session.setInput('Editing original text');
+		session.setInput(text);
+	}
+	history = { ...initial, messages: [{ id: requestId, role: 'user', parts: [{ type: 'text', text }] }] };
+	await vi.advanceTimersByTimeAsync(2000);
+	expect(session.getSnapshot().recovery).toBeUndefined();
+	expect(session.getSnapshot().failure).toBe('');
+	expect(session.getSnapshot().input).toBe(edited ? text : '');
+	expect(session.getSnapshot().messages).toEqual(history.messages);
+});
+
+it.each(['success', 'error'])('ignores an old snapshot %s after a local send', async (outcome) => {
+	let resolveOld!: (response: Response) => void;
+	let rejectOld!: (error: Error) => void;
+	let reads = 0;
+	let history = initial;
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				const body = JSON.parse(String(init?.body));
+				history = {
+					...initial,
+					messages: [
+						{ id: body.requestId, role: 'user', parts: [{ type: 'text', text: body.text }] },
+						{ id: 'server-reply', role: 'assistant', parts: [{ type: 'text', text: 'Local result' }] },
+					],
+				};
+				return replyStream('Local result');
+			}
+			if (++reads === 1)
+				return new Promise<Response>((resolve, reject) => {
+					resolveOld = resolve;
+					rejectOld = reject;
+				});
+			return Response.json(history);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	await session.submit('Local prompt');
+	if (outcome === 'success') resolveOld(Response.json({ ...initial, model: 'demo/stale' }));
+	else rejectOld(new Error('pre-send failure'));
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	expect(session.getSnapshot().messages).toEqual(history.messages);
+	expect(session.getSnapshot().model).toBe('demo/echo');
+	expect(session.getSnapshot().failure).toBe('');
+});
+
+it.each(['running', 'completed'])('reattaches an accepted %s send despite a late aborted response', async (phase) => {
+	const text = '原始输入\n已接收';
+	let history = initial;
+	let releaseSend!: (response: Response) => void;
+	let requestId = '';
+	let posts = 0;
+	const reply = { id: 'server-reply', role: 'assistant' as const, parts: [{ type: 'text' as const, text: 'Accepted server result' }] };
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				posts++;
+				requestId = JSON.parse(String(init?.body)).requestId;
+				return new Promise<Response>((resolve) => {
+					releaseSend = resolve;
+				});
+			}
+			if (String(url).endsWith('/stream')) {
+				history = { ...initial, messages: [history.messages[0], reply] };
+				return replyStream('Accepted server result');
+			}
+			return Response.json(history);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'tui' });
+	const detach = session.start();
+	const sending = session.submit(text);
+	await vi.waitFor(() => expect(releaseSend).toBeDefined());
+	session.setInput('Newer unsent draft');
+	detach();
+	cleanups.push(session.start());
+	expect(session.getSnapshot().busy).toBe(true);
+	expect(session.getSnapshot().recovery).toBeUndefined();
+	await session.submit('Must not send during reconciliation');
+	history = {
+		...initial,
+		active: phase === 'running',
+		messages: [
+			{ id: requestId, role: 'user', parts: [{ type: 'text', text }] },
+			phase === 'running' ? { ...reply, metadata: { status: 'streaming' }, parts: [{ type: 'text', text: 'Partial' }] } : reply,
+		],
+	};
+	releaseSend(replyStream('Ignore this late aborted response'));
+	await sending;
+	await vi.waitFor(() => expect(session.getSnapshot().busy).toBe(false));
+	expect(session.getSnapshot().messages).toMatchObject(history.messages);
+	expect(session.getSnapshot().input).toBe('Newer unsent draft');
+	expect(session.getSnapshot().recovery).toBeUndefined();
+	expect(session.getSnapshot().failure).toBe('');
+	expect(session.getSnapshot().error).toBeUndefined();
+	expect(posts).toBe(1);
+});
+
+it.each(['', 'Newer draft'])(
+	'keeps newer input %j and exposes original recovery despite identical text under another ID',
+	async (draft) => {
+		const text = '同样的消息\n原文';
+		let releaseSend!: (response: Response) => void;
+		let requestId = '';
+		let posts = 0;
+		const history: Snapshot = {
+			...initial,
+			messages: [
+				{ id: 'another-request', role: 'user', parts: [{ type: 'text', text }] },
+				{ id: 'another-reply', role: 'assistant', parts: [{ type: 'text', text: 'Other client already completed' }] },
+			],
+		};
+		const client = new MobClient(connection, {
+			fetch: async (url, init) => {
+				if (String(url).endsWith('/chat')) {
+					posts++;
+					requestId = JSON.parse(String(init?.body)).requestId;
+					return new Promise<Response>((resolve) => {
+						releaseSend = resolve;
+					});
+				}
+				return Response.json(history);
+			},
+		});
+		const session = new ConversationClient({ client, id: 'one', initial, clientType: 'tui' });
+		const detach = session.start();
+		const sending = session.submit(text);
+		await vi.waitFor(() => expect(releaseSend).toBeDefined());
+		session.setInput('User started a new draft');
+		session.setInput(draft);
+		detach();
+		cleanups.push(session.start());
+		expect(session.getSnapshot().recovery).toBeUndefined();
+		releaseSend(new Response('conversation is busy', { status: 409 }));
+		await sending;
+		expect(session.getSnapshot().input).toBe(draft);
+		expect(session.getSnapshot().recovery).toEqual({ requestId, text });
+		expect(session.getSnapshot().failure).toMatch(/not confirmed/i);
+		expect(session.getSnapshot().messages).toEqual(history.messages);
+		expect(session.getSnapshot().busy).toBe(false);
+		expect(posts).toBe(1);
+	},
+);
+
+it('preserves a Continue draft through detachment and absent-request reconciliation', async () => {
+	let rejectSend!: (error: Error) => void;
+	let requestId = '';
+	let posts = 0;
+	const stopped: Snapshot = {
+		...initial,
+		messages: [
+			{ id: 'limit', role: 'assistant', metadata: { status: 'step-limit' }, parts: [{ type: 'text', text: 'Reached tool step limit' }] },
+		],
+	};
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				posts++;
+				const body = JSON.parse(String(init?.body));
+				expect(body.text).toBe('Continue');
+				requestId = body.requestId;
+				return new Promise<Response>((_, reject) => {
+					rejectSend = reject;
+				});
+			}
+			return Response.json(stopped);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial: stopped, clientType: 'web' });
+	const detach = session.start();
+	session.setInput('Unsent Chinese 草稿');
+	const continuing = session.proceed();
+	await vi.waitFor(() => expect(rejectSend).toBeDefined());
+	expect(session.getSnapshot().input).toBe('Unsent Chinese 草稿');
+	detach();
+	rejectSend(new Error('lost connection'));
+	await continuing;
+	cleanups.push(session.start());
+	await vi.waitFor(() => expect(session.getSnapshot().busy).toBe(false));
+	expect(session.getSnapshot().input).toBe('Unsent Chinese 草稿');
+	expect(session.getSnapshot().recovery).toEqual({ requestId, text: 'Continue' });
+	expect(session.getSnapshot().messages).toEqual(stopped.messages);
+	expect(posts).toBe(1);
+});
+
+it('keeps delivery unknown until a successful reattachment snapshot, not a snapshot error', async () => {
+	vi.useFakeTimers();
+	let rejectSend!: (error: Error) => void;
+	let reattached = false;
+	let available = false;
+	const client = new MobClient(connection, {
+		fetch: async (url) => {
+			if (String(url).endsWith('/chat'))
+				return new Promise<Response>((_, reject) => {
+					rejectSend = reject;
+				});
+			if (reattached && !available) return new Response('snapshot unavailable', { status: 503 });
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'tui' });
+	const detach = session.start();
+	const sending = session.submit('Keep this unresolved text');
+	await vi.advanceTimersByTimeAsync(0);
+	detach();
+	rejectSend(new Error('aborted transport'));
+	await sending;
+	reattached = true;
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(0);
+	expect(session.getSnapshot().busy).toBe(true);
+	expect(session.getSnapshot().input).toBe('');
+	expect(session.getSnapshot().recovery).toBeUndefined();
+	expect(session.getSnapshot().failure).toBe('snapshot unavailable');
+	available = true;
+	await vi.advanceTimersByTimeAsync(2000);
+	expect(session.getSnapshot().busy).toBe(false);
+	expect(session.getSnapshot().input).toBe('Keep this unresolved text');
+	expect(session.getSnapshot().recovery?.text).toBe('Keep this unresolved text');
+	expect(session.getSnapshot().failure).toMatch(/not confirmed/i);
 });

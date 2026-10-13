@@ -30,10 +30,22 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   is in flight at a time, polling pauses until it ends, and a failed attempt
   waits for the next poll. Idle snapshots poll every two seconds. A snapshot
   requested before a local send or view detachment cannot overwrite newer
-  state. Failed sends restore the submitted text only if no newer draft exists.
+  state; only the latest issued idle read may publish success or failure, so
+  slow older responses cannot roll history back or introduce an obsolete error.
   Successful snapshot reconciliation clears transient polling/follow errors,
   but does not dismiss a failed command or approval decision.
   The original Go terminal follows the same service contract independently.
+- A retained shared-client instance keeps uncertain send text and its original
+  SDK-generated request ID across detach/start. Abort alone does not mean Go
+  refused the request. The client stays busy until the local send settles and
+  fresh history can be checked for that exact user-message ID, never by text.
+  If found, it follows the accepted turn or shows completed history. If absent,
+  it exposes `recovery: {requestId, text}` and a delivery-not-confirmed warning;
+  it restores the editor only if no newer draft edit exists, even if the newer
+  editor is now empty. It never automatically resends or replaces the ID.
+  Later history can confirm that ID and clear recovery; a restored editor is
+  cleared only if it has not been edited since. A manual Send is a new request,
+  not a delivery guarantee for the uncertain original. Recovery is memory-only.
 - Leaving a shared-client view cancels only that view's streams and polling;
   explicit Stop posts to the service and cancels the local readers. The pilot
   connects to an already running service and does not own its lifetime.
@@ -65,7 +77,8 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   20, at most 100, reloaded live). A reply that reaches the limit is saved with
   status `step-limit` and its stream ends as finished (`tool-calls`), not as
   an error. The web UI offers a Continue button under it that sends
-  "Continue"; channels show the limit, and any message continues. A model request fails
+  "Continue" without clearing or sending an existing editor draft; channels
+  show the limit, and any message continues. A model request fails
   with "model stopped responding" when its response does not start, or stops
   arriving, for two minutes; a reply that keeps arriving is never cut off.
 - **Tool arguments** may be up to 1 MiB.

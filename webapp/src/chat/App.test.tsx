@@ -219,8 +219,12 @@ it('offers to continue a reply that stopped at the tool step limit', async () =>
     return Promise.resolve(Response.json({ messages, active: false, model: 'demo/echo' }));
   }));
   render(<App />);
+  const editor = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+  fireEvent.change(editor, { target: { value: 'Keep my unsent 草稿' } });
   fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
   await waitFor(() => expect(chats.some(c => c.includes('"text":"Continue"'))).toBe(true));
+  expect(chats.map(body => JSON.parse(body).text)).toEqual(['Continue']);
+  expect(editor.value).toBe('Keep my unsent 草稿');
 });
 
 it('ends a streamed turn that reached the step limit with Continue, not an error', async () => {
