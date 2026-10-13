@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.0](https://github.com/fdkevin0/mob/compare/v0.1.1...v0.2.0) (2026-10-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** unify file, flag and environment configuration
+
+### Features
+
+* **client:** add shared headless client and generated contracts ([fd688b0](https://github.com/fdkevin0/mob/commit/fd688b00bdded4ed7c49883f2772ca988bdada5f)), closes [#49](https://github.com/fdkevin0/mob/issues/49)
+* **config:** unify file, flag and environment configuration ([d4ddb25](https://github.com/fdkevin0/mob/commit/d4ddb2572f4a57e9cb6ca63ff078dac261e84142))
+* **telegram:** offer buttons in place of typed commands ([7e6c182](https://github.com/fdkevin0/mob/commit/7e6c182fd18353cc85fbd9cf4e39d2030d19b5a2))
+* **tui:** add experimental shared-client terminal ([3724441](https://github.com/fdkevin0/mob/commit/37244411b467e65eccfbd4f274bfed91b76c4e50)), closes [#49](https://github.com/fdkevin0/mob/issues/49)
+* **tui:** select terminal implementation with MOB_TUI ([b247ecc](https://github.com/fdkevin0/mob/commit/b247ecc07f949faee1c281aae4c146067a892b52))
+
+
+### Bug Fixes
+
+* **client:** keep an unverifiable send's text while the service is unreachable ([10e0822](https://github.com/fdkevin0/mob/commit/10e0822e6ba2f90738e483b1ff5f300da35605de))
+* **client:** publish completed snapshots under slow polling ([#49](https://github.com/fdkevin0/mob/issues/49)) ([ea66230](https://github.com/fdkevin0/mob/commit/ea66230374c8c6c2b75cd91f0cf860f1d7b4835b))
+* **client:** reconcile uncertain sends and reject stale snapshots ([#49](https://github.com/fdkevin0/mob/issues/49)) ([5ffd6fa](https://github.com/fdkevin0/mob/commit/5ffd6fa1794e5251ec16194072b0a21172862914))
+* **telegram:** list every remembered approval and clear the picker after New ([f721670](https://github.com/fdkevin0/mob/commit/f721670af57355395237d73d37142e05fcf079ef))
+* **tui:** preserve send recovery across conversation navigation ([#49](https://github.com/fdkevin0/mob/issues/49)) ([7283efb](https://github.com/fdkevin0/mob/commit/7283efb3f38b20d5149dc857421b5bbb55aa1392))
+
 ## [0.1.1](https://github.com/fdkevin0/mob/compare/v0.1.0...v0.1.1) (2026-10-13)
 
 
