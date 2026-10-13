@@ -55,7 +55,7 @@ homebrew_casks:
     repository:
       owner: fdkevin0
       name: homebrew-tap
-      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
     homepage: https://github.com/fdkevin0/mob
     description: Local assistant with desktop, terminal and background service
     license: MIT
