@@ -33,6 +33,7 @@ export class ConversationClient {
 	private recoveryFailure = '';
 	private generation = 0;
 	private reloadSequence = 0;
+	private publishedReloadSequence = 0;
 	private active = false;
 	private timer?: ReturnType<typeof setInterval>;
 	private unsubscribes: (() => void)[] = [];
@@ -170,13 +171,15 @@ export class ConversationClient {
 			if (
 				!this.active ||
 				generation !== this.generation ||
-				sequence !== this.reloadSequence ||
+				sequence <= this.publishedReloadSequence ||
 				this.state.streaming ||
 				this.state.approvalBusy ||
 				this.following ||
-				this.running
+				this.running ||
+				(this.pendingSend && !this.pendingSend.settled)
 			)
 				return;
+			this.publishedReloadSequence = sequence;
 			const pending = this.pendingSend;
 			if (pending) {
 				if (snapshot.messages.some((m) => m.role === 'user' && m.id === pending.requestId)) {
@@ -207,7 +210,17 @@ export class ConversationClient {
 			this.recoveryFailure = '';
 			if (snapshot.active) void this.follow(snapshot.messages);
 		} catch (e) {
-			if (this.active && generation === this.generation && sequence === this.reloadSequence) {
+			if (
+				this.active &&
+				generation === this.generation &&
+				sequence > this.publishedReloadSequence &&
+				!this.state.streaming &&
+				!this.state.approvalBusy &&
+				!this.following &&
+				!this.running &&
+				(!this.pendingSend || this.pendingSend.settled)
+			) {
+				this.publishedReloadSequence = sequence;
 				this.recoveryFailure = errorText(e);
 				this.update({ failure: this.recoveryFailure });
 			}

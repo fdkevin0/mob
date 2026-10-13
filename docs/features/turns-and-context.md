@@ -30,8 +30,11 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   is in flight at a time, polling pauses until it ends, and a failed attempt
   waits for the next poll. Idle snapshots poll every two seconds. A snapshot
   requested before a local send or view detachment cannot overwrite newer
-  state; only the latest issued idle read may publish success or failure, so
-  slow older responses cannot roll history back or introduce an obsolete error.
+  state. Once an eligible result from a newer issued read has been published,
+  neither an older success nor an older error can replace it. Successes and
+  failures both advance this publication order. A later read that is merely
+  pending does not block a completed result, so reads slower than the polling
+  interval still update history and model rather than silently starving.
   Successful snapshot reconciliation clears transient polling/follow errors,
   but does not dismiss a failed command or approval decision.
   The original Go terminal follows the same service contract independently.
