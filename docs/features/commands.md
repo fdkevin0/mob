@@ -54,6 +54,11 @@ Windows have not.
 
 - Enter sends; Ctrl+J inserts a newline. Drafts survive conversation switching
   in memory, not application restarts. Pasted multiline text is sent whole.
+- The pilot retains one shared conversation client per conversation. Switching
+  detaches its readers, not the Go turn. On reopening, an uncertain send is
+  checked against history by its original request ID before offering recovery;
+  newer drafts stay untouched and the original text is shown separately. An
+  unconfirmed message is never automatically resent (see [Turns](turns-and-context.md)).
 - F2 opens conversations, F3 tool details, F4 approval controls. Ctrl+S requests
   backend Stop; Ctrl+Q detaches without cancelling the service turn.
 - Slash commands run through the shared client, but the pilot has no autocomplete

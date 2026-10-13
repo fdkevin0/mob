@@ -72,7 +72,7 @@ export function App({
 	const [details, setDetails] = useState(false);
 	const [notice, setNotice] = useState('');
 	const [opening, setOpening] = useState(false);
-	const drafts = useRef(new Map<string, string>());
+	const sessions = useRef(new Map<string, ConversationClient>());
 	const actionHandler = useRef<(action: Action) => void>(() => {});
 	const input = useRef<TextareaRenderable>(null);
 	const denial = useRef<InputRenderable>(null);
@@ -87,6 +87,8 @@ export function App({
 	};
 
 	function makeSession(id: string, snapshot: Snapshot): ConversationClient {
+		const existing = sessions.current.get(id);
+		if (existing) return existing;
 		const next = new ConversationClient({
 			client,
 			id,
@@ -94,19 +96,13 @@ export function App({
 			clientType: 'tui',
 			onAction: (action) => actionHandler.current(action),
 		});
-		next.setInput(drafts.current.get(id) ?? '');
+		sessions.current.set(id, next);
 		return next;
 	}
-	useEffect(() => {
-		const cleanup = session.start();
-		return () => {
-			drafts.current.set(current.id, session.getSnapshot().input);
-			cleanup();
-		};
-	}, [session]);
+	useEffect(() => session.start(), [session]);
 	useEffect(() => {
 		if (input.current && input.current.plainText !== state.input) input.current.setText(state.input);
-	}, [state.input, panel]);
+	}, [session, state.input, panel]);
 
 	async function open(id: string) {
 		if (opening) return;
@@ -117,7 +113,6 @@ export function App({
 			const conversations = await client.listConversations();
 			const selected = conversations.find((c) => c.id === id);
 			if (!selected) throw new Error('Conversation is no longer available.');
-			drafts.current.set(current.id, session.getSnapshot().input);
 			setSession(makeSession(id, snapshot));
 			setCurrent(selected);
 			setPanel('chat');
@@ -336,6 +331,13 @@ export function App({
 						) : (
 							state.messages.map((message) => <Message key={message.id} message={message} details={details} />)
 						)}
+						{state.recovery && (
+							<box flexDirection="column" flexShrink={0} marginBottom={1}>
+								<text fg="#fbbf24">Unconfirmed send · NOT automatically resent</text>
+								<text wrapMode="word">{safe(state.recovery.text)}</text>
+								<text fg="#94a3b8">Review original · Enter sends only editor</text>
+							</box>
+						)}
 					</scrollbox>
 					<box border borderColor="#64748b" height={Math.max(3, Math.min(6, Math.floor(height / 4)))} flexShrink={0}>
 						<textarea
@@ -352,7 +354,10 @@ export function App({
 								{ name: 'return', meta: true, action: 'newline' },
 								{ name: 'j', ctrl: true, action: 'newline' },
 							]}
-							onContentChange={() => session.setInput(input.current?.plainText ?? '')}
+							onContentChange={() => {
+								const text = input.current?.plainText ?? '';
+								if (text !== session.getSnapshot().input) session.setInput(text);
+							}}
 							onSubmit={submit}
 						/>
 					</box>

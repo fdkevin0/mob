@@ -45,6 +45,16 @@ send keys. Drafts survive switching conversations **in memory only**; quitting
 loses unsent drafts. Input remains editable during a turn, but Enter does not
 queue another message. The pilot states when a draft is kept instead of sent.
 
+Switching conversations retains the same shared client instance and detaches
+its local stream. On reopening, the shared client checks an unconfirmed send
+against service history by its exact request ID, never by matching prompt text.
+An absent request restores the original text only if the editor is empty and
+has not been edited since that send. Newer drafts remain untouched, and the
+original is shown separately for review.
+Navigation never resends a prompt: Enter explicitly sends the editor contents.
+Unknown delivery remains busy while the shared client checks it. Recovery is
+in-memory only, not a durable outbox or a guarantee across process/service exit.
+
 Tool results render as JSON with a 240-character preview, separate error lines
 and full details through F3; they are not converted into assistant prose or
 discarded. Long values wrap. Model/tool escape controls are stripped before
@@ -65,7 +75,10 @@ There is no new command engine or autocomplete UI in this pilot.
 Run `bun run test:tui` from the root. The native OpenTUI renderer tests use the
 real shared client against local HTTP/SSE fixtures, covering immediate
 paste+send, consecutive sends, Chinese 130-line paste, per-session drafts,
-full tool output/error expansion, 48×16 layout, and approval scope/denial payloads.
+full tool output/error expansion, 48×16 layout, approval scope/denial payloads,
+and send/switch/failure/reopen recovery, newer drafts and accepted requests
+without duplicate sends. The navigation regressions exercise the renderer's
+real key events and shared HTTP/SSE client, not a mock conversation controller.
 
 The initial pilot was also exercised against an isolated Go `serve --demo`
 service: streamed Chinese multiline replies, real approval/deny and persisted
