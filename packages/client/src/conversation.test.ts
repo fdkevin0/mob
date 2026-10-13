@@ -23,7 +23,39 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
-it.each(['success', 'error'])('ignores an older idle snapshot %s after a newer snapshot', async (outcome) => {
+it('publishes successive 2.5-second snapshots while polling every 2 seconds', async () => {
+	vi.useFakeTimers();
+	let reads = 0;
+	let completed = 0;
+	const client = new MobClient(connection, {
+		fetch: async () => {
+			const read = ++reads;
+			await new Promise((resolve) => setTimeout(resolve, 2500));
+			completed++;
+			return Response.json({
+				...initial,
+				model: `demo/read-${read}`,
+				messages: [{ id: `reply-${read}`, role: 'assistant', parts: [{ type: 'text', text: `Completed read ${read}` }] }],
+			});
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(7200);
+	expect(completed).toBe(3);
+	expect(session.getSnapshot().model).toBe('demo/read-3');
+	expect(session.getSnapshot().messages).toEqual([
+		{ id: 'reply-3', role: 'assistant', parts: [{ type: 'text', text: 'Completed read 3' }] },
+	]);
+	expect(session.getSnapshot().failure).toBe('');
+});
+
+it.each([
+	['success', 'success'],
+	['success', 'error'],
+	['error', 'success'],
+	['error', 'error'],
+])('keeps a newer published %s when an older idle snapshot %s completes', async (newer, outcome) => {
 	vi.useFakeTimers();
 	let resolveOld!: (response: Response) => void;
 	let rejectOld!: (error: Error) => void;
@@ -40,19 +72,21 @@ it.each(['success', 'error'])('ignores an older idle snapshot %s after a newer s
 					resolveOld = resolve;
 					rejectOld = reject;
 				});
+			if (newer === 'error') throw new Error('newer snapshot error');
 			return Response.json(current);
 		},
 	});
 	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
 	cleanups.push(session.start());
 	await vi.advanceTimersByTimeAsync(2000);
-	expect(session.getSnapshot().model).toBe('demo/current');
+	expect(session.getSnapshot().model).toBe(newer === 'success' ? 'demo/current' : 'demo/echo');
+	expect(session.getSnapshot().failure).toBe(newer === 'success' ? '' : 'newer snapshot error');
 	if (outcome === 'success') resolveOld(Response.json({ ...initial, model: 'demo/stale' }));
 	else rejectOld(new Error('obsolete offline error'));
 	await vi.advanceTimersByTimeAsync(0);
-	expect(session.getSnapshot().model).toBe('demo/current');
-	expect(session.getSnapshot().messages).toEqual(current.messages);
-	expect(session.getSnapshot().failure).toBe('');
+	expect(session.getSnapshot().model).toBe(newer === 'success' ? 'demo/current' : 'demo/echo');
+	expect(session.getSnapshot().messages).toEqual(newer === 'success' ? current.messages : []);
+	expect(session.getSnapshot().failure).toBe(newer === 'success' ? '' : 'newer snapshot error');
 });
 
 it('runs event-free tui commands and publishes replies without browser globals', async () => {
