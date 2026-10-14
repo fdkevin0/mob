@@ -259,7 +259,7 @@ func TestHeadersStayWithTheirOrigin(t *testing.T) {
 	}))
 	t.Cleanup(redirecting.Close)
 	h := &Hub{}
-	_, err := h.connect(context.Background(), "web", Server{URL: redirecting.URL, Headers: map[string]string{"authorization": "Bearer secret"}})
+	_, err := h.connect(context.Background(), "web", Server{URL: redirecting.URL, Headers: map[string]string{"authorization": "Bearer secret"}}, func() {})
 	if err == nil || leaked {
 		t.Fatalf("followed a redirect to another origin: %v, header leaked: %v", err, leaked)
 	}
