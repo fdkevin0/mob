@@ -32,10 +32,14 @@ const (
 type Hub struct {
 	// Transport, when set, returns what carries requests to URL servers.
 	Transport func() http.RoundTripper
+	// Settings keeps the OAuth sign-ins; without it they last until Mob stops.
+	Settings Settings
 
-	mu      sync.Mutex
-	servers Servers
-	states  map[string]*state
+	// grantsMu serializes saving sign-ins.
+	grantsMu sync.Mutex
+	mu       sync.Mutex
+	servers  Servers
+	states   map[string]*state
 }
 
 // state is one server as Mob last saw it.
@@ -92,7 +96,7 @@ func (h *Hub) serve(ctx context.Context, servers Servers, status func(string)) {
 func (h *Hub) keep(ctx context.Context, name string, server Server, report func()) {
 	backoff := 5 * time.Second
 	for ctx.Err() == nil {
-		session, err := h.connect(ctx, name, server)
+		session, err := h.connect(ctx, name, server, report)
 		if err == nil {
 			backoff = 5 * time.Second
 			// Closing the session when ctx ends stops the command.
@@ -121,8 +125,13 @@ func (h *Hub) keep(ctx context.Context, name string, server Server, report func(
 }
 
 // connect starts a session with server and lists its tools.
-func (h *Hub) connect(ctx context.Context, name string, server Server) (*sdk.ClientSession, error) {
-	connectCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+func (h *Hub) connect(ctx context.Context, name string, server Server, report func()) (*sdk.ClientSession, error) {
+	timeout := connectTimeout
+	if server.OAuth {
+		// Connecting may wait for the user to sign in.
+		timeout += signInTimeout
+	}
+	connectCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	client := sdk.NewClient(&sdk.Implementation{Name: "mob", Version: version.Current}, &sdk.ClientOptions{
 		ToolListChangedHandler: func(ctx context.Context, req *sdk.ToolListChangedRequest) {
@@ -137,7 +146,7 @@ func (h *Hub) connect(ctx context.Context, name string, server Server) (*sdk.Cli
 			}
 		},
 	})
-	session, err := client.Connect(connectCtx, h.transport(server), nil)
+	session, err := client.Connect(connectCtx, h.transport(name, server, report), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -164,18 +173,23 @@ func list(ctx context.Context, session *sdk.ClientSession) ([]*sdk.Tool, error) 
 	return tools, nil
 }
 
-func (h *Hub) transport(server Server) sdk.Transport {
+// base is what carries requests to URL servers.
+func (h *Hub) base() http.RoundTripper {
+	var base http.RoundTripper
+	if h.Transport != nil {
+		base = h.Transport()
+	}
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base
+}
+
+func (h *Hub) transport(name string, server Server, report func()) sdk.Transport {
 	if server.URL != "" {
-		var base http.RoundTripper
-		if h.Transport != nil {
-			base = h.Transport()
-		}
-		if base == nil {
-			base = http.DefaultTransport
-		}
 		origin, _ := url.Parse(server.URL)
 		client := &http.Client{
-			Transport: headers{server.Headers, origin, base},
+			Transport: headers{server.Headers, origin, h.base()},
 			// A redirect elsewhere could take the configured headers with
 			// it, or reach a server the user did not configure.
 			CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -188,7 +202,11 @@ func (h *Hub) transport(server Server) sdk.Transport {
 				return nil
 			},
 		}
-		return &sdk.StreamableClientTransport{Endpoint: server.URL, HTTPClient: client}
+		transport := &sdk.StreamableClientTransport{Endpoint: server.URL, HTTPClient: client}
+		if server.OAuth {
+			transport.OAuthHandler = h.signIn(name, server, report)
+		}
+		return transport
 	}
 	cmd := exec.Command(server.Command, server.Args...)
 	cmd.Dir = server.Dir
