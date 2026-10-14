@@ -11,6 +11,7 @@ import (
 	"github.com/fdkevin0/mob/internal/extension"
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/plugins/mcp"
+	"github.com/fdkevin0/mob/internal/plugins/skills"
 	"github.com/fdkevin0/mob/internal/protocol"
 	"github.com/fdkevin0/mob/internal/provider"
 	"github.com/fdkevin0/mob/internal/sandbox"
@@ -39,7 +40,11 @@ type Server struct {
 	// PersistToken saves a rotated token; nil when the token comes from configuration.
 	PersistToken func(token string) error
 	// MCP connects to the configured MCP servers.
-	MCP    *mcp.Hub
+	MCP *mcp.Hub
+	// Skills finds the skills the model can load; local sets its roots.
+	Skills *skills.Library
+	// box is the sandbox later turns use, nil while it is off.
+	box    atomic.Pointer[sandbox.Sandbox]
 	access access
 	// webOrigin is the public web UI's origin, which may call the API with a token.
 	webOrigin atomic.Value
@@ -48,6 +53,12 @@ type Server struct {
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
 	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }}
+	s.Skills = &skills.Library{Workspace: func(conversationID string) (string, error) {
+		if box := s.box.Load(); box != nil {
+			return box.Workspace(conversationID)
+		}
+		return "", nil
+	}}
 	s.Commands.Register(s.pluginCommands()...)
 	s.register()
 	return s

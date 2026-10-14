@@ -38,6 +38,7 @@ func (s *Server) ApplySandbox(settings sandbox.Settings, dataDir string) error {
 		return err
 	}
 	s.sandbox = settings
+	s.box.Store(box)
 	if box == nil {
 		s.SetSandbox(nil)
 		return nil

@@ -19,6 +19,7 @@ import (
 	"github.com/fdkevin0/mob/internal/catalog"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
+	"github.com/fdkevin0/mob/internal/plugins/skills"
 	"github.com/fdkevin0/mob/internal/provider"
 )
 
@@ -128,6 +129,7 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	server.SetToolSteps(c.MaxToolSteps)
 	server.SetWebURL(c.WebURL)
 	server.MCP.Configure(c.MCPServers)
+	server.Skills.Roots = skills.Roots(c.Dir)
 	if err := server.ApplySandbox(c.Sandbox, c.Dir); err != nil {
 		cleanup()
 		return nil, err
