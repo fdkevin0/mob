@@ -89,7 +89,9 @@ func TestToolOffersCatalogAndLoads(t *testing.T) {
 		t.Errorf("load must strip frontmatter and hidden files:\n%s", out)
 	}
 
-	l.Workspace = func(id string) (string, error) { return filepath.Join(workspace, id), os.MkdirAll(filepath.Join(workspace, id), 0700) }
+	l.Workspace = func(id string) (string, error) {
+		return filepath.Join(workspace, id), os.MkdirAll(filepath.Join(workspace, id), 0700)
+	}
 	// A stale copy is replaced.
 	write(t, filepath.Join(workspace, "abc123", ".mob", "skills", "pdf", "old.txt"), "stale", 0600)
 	out, err = call(t, l, map[string]any{"name": "pdf"})
