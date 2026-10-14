@@ -47,7 +47,7 @@ type Server struct {
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
-	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }}
+	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }, Settings: store}
 	s.Commands.Register(s.pluginCommands()...)
 	s.register()
 	return s
