@@ -50,6 +50,9 @@ demo: false
 #     url: https://example.com/mcp
 #     headers:
 #       Authorization: Bearer ...
+#   cloudflare:
+#     url: https://mcp.cloudflare.com/mcp
+#     oauth: true           # /mcp shows a sign-in link when needed
 
 # Full flag/env/default reference: docs/environment-variables.md (generated).
 # Optional fixed local token; otherwise Mob manages the token file. Keep this

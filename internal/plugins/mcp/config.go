@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"path"
@@ -32,6 +33,9 @@ type Server struct {
 	URL string `mapstructure:"url"`
 	// Headers are sent with every request to URL, such as Authorization.
 	Headers map[string]string `mapstructure:"headers"`
+	// OAuth signs in to URL with OAuth when the server asks for it: the user
+	// opens a link Mob shows, and Mob keeps the token it gets.
+	OAuth bool `mapstructure:"oauth"`
 	// Exposure is how the server's tools reach the model: deferred, the
 	// default, until tool_search loads them; direct; or hidden.
 	Exposure string `mapstructure:"exposure"`
@@ -84,9 +88,12 @@ func (s Servers) Validate() error {
 			if len(server.Args) > 0 || len(server.Env) > 0 || server.Dir != "" {
 				return fail("args, env and dir are for a command")
 			}
+			if server.OAuth && slices.ContainsFunc(slices.Collect(maps.Keys(server.Headers)), func(key string) bool { return strings.EqualFold(key, "Authorization") }) {
+				return fail("oauth sets the Authorization header itself")
+			}
 		default:
-			if len(server.Headers) > 0 {
-				return fail("headers are for a url")
+			if len(server.Headers) > 0 || server.OAuth {
+				return fail("headers and oauth are for a url")
 			}
 			for _, entry := range server.Env {
 				if key, _, ok := strings.Cut(entry, "="); !ok || key == "" {
@@ -150,7 +157,10 @@ func (s Server) fingerprint() string {
 		Command, Dir, URL string
 		Args, Env         []string
 		Headers           map[string]string
-	}{s.Command, s.Dir, s.URL, s.Args, s.Env, s.Headers}
+		// OAuth is left out when off, so servers without it keep the
+		// fingerprints their approvals were given for.
+		OAuth bool `json:",omitempty"`
+	}{s.Command, s.Dir, s.URL, s.Args, s.Env, s.Headers, s.OAuth}
 	if len(canonical.Args) == 0 {
 		canonical.Args = nil
 	}

@@ -12,7 +12,7 @@ to expose tools from DSH plugins.
 
 - a `command` (with `args`, `env` and `dir`) that Mob starts and speaks to over
   stdin and stdout, or
-- a Streamable HTTP `url` (with `headers`).
+- a Streamable HTTP `url` (with `headers`, or `oauth: true` to sign in).
 
 ```yaml
 mcp_servers:
@@ -24,6 +24,9 @@ mcp_servers:
     url: https://example.com/mcp
     headers:
       Authorization: Bearer ...
+  cloudflare:
+    url: https://mcp.cloudflare.com/mcp
+    oauth: true
 ```
 
 A server's `exposure` sets how its tools reach the model: `deferred`, the
@@ -44,6 +47,26 @@ mcp_servers:
 Keep `config.yaml` owner-only (`chmod 600`) when it holds keys. It reloads live;
 a change reconnects the servers. Names use a-z, 0-9, `-` and single `_`, since
 tool names carry them.
+
+## Signing in with OAuth
+
+With `oauth: true`, a server that refuses Mob's request (401) starts an OAuth
+sign-in, following the MCP authorization specification through the official
+SDK:
+
+- Mob finds the server's authorization server, registers itself there by
+  dynamic client registration, and asks for an authorization code with PKCE.
+- The server's status, shown by `/mcp`, becomes `sign in to connect: <link>`.
+  Open the link in a browser on the computer Mob runs on: the authorization
+  server sends the browser back to a loopback address that Mob listens on only
+  while it waits, for at most 10 minutes.
+- Mob keeps the client and token in its database and refreshes the token, so
+  a restart does not sign in again. A sign-in belongs to the server's name and
+  URL; changing the URL signs in again. Approvals do not record which account
+  signed in.
+- `oauth` cannot be combined with an `Authorization` header. Signing in from
+  a phone, through a channel, is not supported yet: the loopback address is on
+  Mob's computer.
 
 ## Behaviour
 
@@ -66,7 +89,7 @@ tool names carry them.
 
 - Every MCP call asks for [approval](tools-and-approvals.md). The approval shows
   the server's command line or URL and records a fingerprint of its whole
-  configuration, environment, directory and headers included. The call runs only
+  configuration, environment, directory, headers and `oauth` included. The call runs only
   while the fingerprint is unchanged. Always allowing a tool covers that tool on
   that configuration only, so a server switched to another account or program
   asks again.
