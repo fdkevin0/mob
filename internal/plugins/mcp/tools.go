@@ -61,7 +61,9 @@ func (h *Hub) Tools() []chat.Tool {
 			continue
 		}
 		for _, tool := range s.tools {
-			list = append(list, h.tool(name, s.server, tool))
+			t := h.tool(name, s.server, tool)
+			t.Exposure, t.Namespace = h.servers[name].exposure(tool.Name), "MCP server "+name
+			list = append(list, t)
 		}
 	}
 	return list

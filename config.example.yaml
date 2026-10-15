@@ -44,6 +44,8 @@ demo: false
 #     command: npx
 #     args: [-y, "@modelcontextprotocol/server-github"]
 #     env: [GITHUB_PERSONAL_ACCESS_TOKEN=...]
+#     # Tools wait until tool_search loads them; direct declares them every turn.
+#     tool_exposure: {"delete_*": hidden}
 #   docs:
 #     url: https://example.com/mcp
 #     headers:

@@ -81,7 +81,7 @@ func TestCommandServerTools(t *testing.T) {
 	running(t, h, "echo")
 
 	tools := h.Tools()
-	if len(tools) != 1 || tools[0].Name != "mcp__echo__shout" || !tools[0].OwnerOnly || tools[0].Parameters["type"] != "object" || !tools[0].Available() {
+	if len(tools) != 1 || tools[0].Name != "mcp__echo__shout" || !tools[0].OwnerOnly || tools[0].Parameters["type"] != "object" || !tools[0].Available() || tools[0].Exposure != chat.Deferred || tools[0].Namespace != "MCP server echo" {
 		t.Fatalf("tools: %+v", tools)
 	}
 	if !strings.Contains(tools[0].Description, "Upper-case text.") {
@@ -171,10 +171,32 @@ func TestValidate(t *testing.T) {
 		{Servers{"env": {Command: "x", Env: []string{"NOVALUE"}}}, false},
 		{Servers{"mixed": {URL: "https://example.com", Args: []string{"x"}}}, false},
 		{Servers{"mixed": {Command: "x", Headers: map[string]string{"a": "b"}}}, false},
+		{Servers{"shown": {Command: "x", Exposure: "direct", ToolExposure: map[string]string{"delete_*": "hidden"}}}, true},
+		{Servers{"shown": {Command: "x", Exposure: "always"}}, false},
+		{Servers{"shown": {Command: "x", ToolExposure: map[string]string{"[": "hidden"}}}, false},
+		{Servers{"shown": {Command: "x", ToolExposure: map[string]string{"get_*": "loud"}}}, false},
 	} {
 		if err := c.servers.Validate(); (err == nil) != c.ok {
 			t.Errorf("%+v: %v", c.servers, err)
 		}
+	}
+}
+
+func TestExposure(t *testing.T) {
+	server := Server{Exposure: "direct", ToolExposure: map[string]string{"*_issue": "deferred", "delete_*": "hidden", "delete_issue": "direct", "get_*": "deferred", "get_?ssue": "hidden"}}
+	for tool, want := range map[string]chat.Exposure{
+		"search":       chat.Direct,
+		"create_issue": chat.Deferred,
+		"delete_repo":  chat.Hidden,
+		"delete_issue": chat.Direct, // the exact name wins
+		"get_issue":    chat.Hidden, // the longer glob wins
+	} {
+		if got := server.exposure(tool); got != want {
+			t.Errorf("%s: %v, want %v", tool, got, want)
+		}
+	}
+	if got := (Server{}).exposure("any"); got != chat.Deferred {
+		t.Fatalf("default exposure: %v", got)
 	}
 }
 
