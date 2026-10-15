@@ -111,6 +111,33 @@ func TestHiddenToolsAreNotFound(t *testing.T) {
 	}
 }
 
+func TestLoadedToolsWaitForTheNextStep(t *testing.T) {
+	s, id, m := turnFixture(t)
+	ran := 0
+	issue := deferredTool("mcp__github__create_issue", "Create a new issue in a GitHub repository.", func(context.Context, ToolCall) (any, error) {
+		ran++
+		return "created", nil
+	})
+	issue.Prompt = "Name the repository when creating issues."
+	agent := Agent{Tools: []Tool{issue}}
+	model := &stepping{steps: [][]llm.ToolCall{
+		// A call beside the search that loads its tool is not yet declared.
+		{{ID: "s1", Name: searchName, Arguments: `{"query":"github issue"}`}, {ID: "c1", Name: "mcp__github__create_issue", Arguments: `{}`}},
+		{{ID: "c2", Name: "mcp__github__create_issue", Arguments: `{}`}},
+	}}
+	if err := Run(context.Background(), s, model, agent, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	history, _ := s.History(id)
+	parts := history[len(history)-1].Parts
+	if parts[1]["state"] != "output-error" || parts[2]["state"] != "output-available" || ran != 1 {
+		t.Fatalf("calls: ran %d, %+v", ran, parts)
+	}
+	if strings.Contains(model.requests[0].System, issue.Prompt) || !strings.Contains(model.requests[1].System, issue.Prompt) {
+		t.Fatalf("the loaded tool's prompt: %q, then %q", model.requests[0].System, model.requests[1].System)
+	}
+}
+
 func TestDeferredToolNotLoadedIsRefused(t *testing.T) {
 	s, id, m := turnFixture(t)
 	ran := false

@@ -35,9 +35,9 @@ namespace ("MCP server github (12)"). `tool_search` takes keywords and ranks
 what is waiting with BM25 over the tool's name, namespace, description and
 parameters (camelCase and `_` split, Han characters one word each); a query
 naming a tool exactly finds it first. It returns up to five results, ten when
-asked, and loads the tools among them: they are declared from the turn's next
-step. Calling a deferred tool that is not loaded fails with an unsupported-tool
-error.
+asked, and loads the tools among them: they are declared, with their prompts,
+from the turn's next step. Calling a deferred tool that is not loaded, even
+beside the search that loads it, fails with an unsupported-tool error.
 
 A conversation keeps the tools it loaded, and those it called before, declared
 in its later turns: they are read back from its history, so nothing else is
