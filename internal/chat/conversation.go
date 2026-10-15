@@ -284,13 +284,14 @@ func (s *ConversationService) agent(owner bool) Agent {
 	box, steps := s.sandbox, s.steps
 	s.mu.Unlock()
 	tools := slices.DeleteFunc(s.Tools.List(), func(t Tool) bool {
-		return t.OwnerOnly && !owner || t.Available != nil && !t.Available()
+		return t.OwnerOnly && !owner || t.Available != nil && !t.Available() || t.Exposure == Hidden
 	})
 	if box != nil {
 		tools = append(tools, sandboxTool(box))
 	}
+	entries := slices.DeleteFunc(s.Tools.Entries(), func(e Entry) bool { return e.OwnerOnly && !owner })
 	saver, _ := box.(Saver)
-	return Agent{Tools: tools, Hooks: s.Hooks, Owner: owner, Steps: steps, Saver: saver}
+	return Agent{Tools: tools, Entries: entries, Hooks: s.Hooks, Owner: owner, Steps: steps, Saver: saver}
 }
 
 // saver keeps large tool outputs in the sandbox's workspace, if it can.

@@ -5,8 +5,9 @@ before it has an effect, and the owner can decide from any client or channel.
 
 ## Built-in and plugin tools
 
-- Built in: `datetime`, `remember` (saves a fact after approval) and, when the
-  [sandbox](sandbox.md) is enabled, `sandbox`.
+- Built in: `datetime`, `remember` (saves a fact after approval), when the
+  [sandbox](sandbox.md) is enabled, `sandbox`, and, while there are tools to
+  load, `tool_search` (below).
 - The email plugin offers `email_inbox`, `email_read` and `email_send`; the
   Cloudflare plugin offers `cloudflare`. Each is defined in its own package and
   offered only while its plugin is enabled.
@@ -16,6 +17,36 @@ before it has an effect, and the owner can decide from any client or channel.
   owner's mail. Plugin and MCP tools are owner-only.
 - Mail text and Cloudflare results sent to the model are bounded, and the model
   is told they are untrusted data.
+
+## Exposure and tool_search
+
+Registering a tool and declaring it to the model are separate, so many tools
+cost the prompt nothing until a task needs them. `Tool.Exposure` is one of:
+
+- `Direct`, the default: declared to every turn that may use the tool.
+  Built-in and plugin tools are direct.
+- `Deferred`: declared once `tool_search` loads it. [MCP](mcp.md) tools are
+  deferred unless their server's configuration says otherwise.
+- `Hidden`: never declared and never found.
+
+While a turn has deferred tools to load, or entries such as skills to find, it
+offers `tool_search`, and the system prompt names how many wait in each
+namespace ("MCP server github (12)"). `tool_search` takes keywords and ranks
+what is waiting with BM25 over the tool's name, namespace, description and
+parameters (camelCase and `_` split, Han characters one word each); a query
+naming a tool exactly finds it first. It returns up to five results, ten when
+asked, and loads the tools among them: they are declared from the turn's next
+step. Calling a deferred tool that is not loaded fails with an unsupported-tool
+error.
+
+A conversation keeps the tools it loaded, and those it called before, declared
+in its later turns: they are read back from its history, so nothing else is
+stored. Loading changes no approval: a loaded MCP tool asks as it always does.
+
+`ToolRegistry.RegisterEntries` adds things `tool_search` finds that are not
+tools to load, each with a kind, a description and how to use it, such as a
+skill and the tool that loads it. Owner-only entries are found only in the
+owner's turns.
 
 ## What asks for approval
 

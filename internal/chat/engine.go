@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,7 +30,9 @@ const systemPrompt = "You are Mob, a concise personal assistant. Reply in the us
 // hooks around it.
 type Agent struct {
 	Tools []Tool
-	Hooks Hooks
+	// Entries are what tool_search finds besides tools, such as skills.
+	Entries []Entry
+	Hooks   Hooks
 	// Owner is set for the owner's turns, which run calls their remembered
 	// approvals cover without asking.
 	Owner bool
@@ -130,17 +133,47 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		reserve = info.Context / 4
 		req.MaxTokens = min(req.MaxTokens, reserve)
 	}
+	// offered are the tools declared to the model. Deferred tools wait until
+	// tool_search loads them, unless the conversation has loaded or called
+	// them before; loaded are those declared so far.
 	offered := map[string]Tool{}
+	var waiting, loaded []Tool
 	if info.Tools {
+		used := usedTools(history)
+		names := map[string]bool{}
 		for _, t := range agent.Tools {
-			if _, twice := offered[t.Name]; twice {
+			if names[t.Name] {
 				return fmt.Errorf("tool offered twice: %s", t.Name)
+			}
+			names[t.Name] = true
+			switch {
+			case t.Exposure == Hidden:
+				continue
+			case t.Exposure == Deferred && !used[t.Name]:
+				waiting = append(waiting, t)
+				continue
+			case t.Exposure == Deferred:
+				loaded = append(loaded, t)
 			}
 			offered[t.Name] = t
 			req.Tools = append(req.Tools, t.Tool)
 			if t.Prompt != "" {
 				req.System += " " + t.Prompt
 			}
+		}
+		if len(waiting) > 0 || len(agent.Entries) > 0 {
+			load := func(tools []Tool) {
+				for _, t := range tools {
+					waiting = slices.DeleteFunc(waiting, func(w Tool) bool { return w.Name == t.Name })
+					loaded = append(loaded, t)
+					offered[t.Name] = t
+					req.Tools = append(req.Tools, t.Tool)
+				}
+			}
+			search := toolSearch(func() []Tool { return waiting }, func() []Tool { return loaded }, agent.Entries, load)
+			offered[searchName] = search
+			req.Tools = append(req.Tools, search.Tool)
+			req.System += " " + searchPrompt(waiting, agent.Entries)
 		}
 	}
 	for _, before := range agent.Hooks.BeforeTurn {
@@ -216,6 +249,8 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// size is the prompt's tokens: estimated at first, then as the provider
 	// counted the last step, plus estimates for what was added since.
 	size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages)
+	// declared is what the tool definitions take of size; tool_search adds to them.
+	declared := toolTokens(req.Tools)
 	// read is how many of the messages the model has seen. groups are the
 	// tool outputs that can be cleared to make room, oldest first: history's
 	// estimated, then each step's, measured by the next step's usage.
@@ -409,6 +444,9 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		if len(added.list) > 0 {
 			groups, latest = append(groups, added), added
 		}
+		if n := toolTokens(req.Tools); n != declared {
+			size, declared = size+n-declared, n
+		}
 		if err := send(Event{Kind: StepFinished}); err != nil {
 			return err
 		}
@@ -440,6 +478,32 @@ func runTool(ctx context.Context, agent Agent, offered map[string]Tool, call Too
 		return tool.Approved(ctx, ApprovedCall{ConversationID: call.ConversationID, ApprovalID: NewID(), Input: g.input, Store: call.Store})
 	}
 	return output, err
+}
+
+// usedTools are the tools the conversation has called, and those tool_search
+// loaded in it, which stay declared in its later turns.
+func usedTools(history []Message) map[string]bool {
+	used := map[string]bool{}
+	for _, m := range history {
+		for _, part := range m.Parts {
+			kind := fmt.Sprint(part["type"])
+			if !strings.HasPrefix(kind, "tool-") {
+				continue
+			}
+			used[kind[5:]] = true
+			if kind != "tool-"+searchName || part["state"] != "output-available" {
+				continue
+			}
+			var output searchResult
+			raw, _ := json.Marshal(part["output"])
+			if json.Unmarshal(raw, &output) == nil {
+				for _, name := range output.Loaded {
+					used[name] = true
+				}
+			}
+		}
+	}
+	return used
 }
 
 func add(total *llm.Usage, u llm.Usage) *llm.Usage {
