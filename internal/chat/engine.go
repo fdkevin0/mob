@@ -137,7 +137,9 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// tool_search loads them, unless the conversation has loaded or called
 	// them before; loaded are those declared so far.
 	offered := map[string]Tool{}
-	var waiting, loaded []Tool
+	// staged are the tools tool_search loaded in this step, declared once
+	// the step's calls have run, so a call made beside the search is refused.
+	var waiting, loaded, staged []Tool
 	if info.Tools {
 		used := usedTools(history)
 		names := map[string]bool{}
@@ -166,8 +168,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 				for _, t := range tools {
 					waiting = slices.DeleteFunc(waiting, func(w Tool) bool { return w.Name == t.Name })
 					loaded = append(loaded, t)
-					offered[t.Name] = t
-					req.Tools = append(req.Tools, t.Tool)
+					staged = append(staged, t)
 				}
 			}
 			search := toolSearch(func() []Tool { return waiting }, func() []Tool { return loaded }, agent.Entries, load)
@@ -249,7 +250,8 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// size is the prompt's tokens: estimated at first, then as the provider
 	// counted the last step, plus estimates for what was added since.
 	size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages)
-	// declared is what the tool definitions take of size; tool_search adds to them.
+	// declared is what the tool definitions take of size; tool_search adds
+	// to them.
 	declared := toolTokens(req.Tools)
 	// read is how many of the messages the model has seen. groups are the
 	// tool outputs that can be cleared to make room, oldest first: history's
@@ -444,6 +446,15 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		if len(added.list) > 0 {
 			groups, latest = append(groups, added), added
 		}
+		for _, t := range staged {
+			offered[t.Name] = t
+			req.Tools = append(req.Tools, t.Tool)
+			if t.Prompt != "" {
+				req.System += " " + t.Prompt
+				size += tokens(" " + t.Prompt)
+			}
+		}
+		staged = nil
 		if n := toolTokens(req.Tools); n != declared {
 			size, declared = size+n-declared, n
 		}
