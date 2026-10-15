@@ -46,11 +46,15 @@ func (h *Hub) describe() string {
 				status += " (tools unavailable until it reconnects)"
 			}
 			for _, t := range s.tools {
-				tools = append(tools, "`"+toolName(name, t.Name)+"`")
+				tool := "`" + toolName(name, t.Name) + "`"
+				if e := h.servers[name].exposure(t.Name); e != chat.Deferred {
+					tool += " (" + e.String() + ")"
+				}
+				tools = append(tools, tool)
 			}
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s |\n", chat.Cell(name), chat.Cell(status), strings.Join(tools, " "))
 	}
-	b.WriteString("\nEach call waits for your approval; **Always allow** stops asking for that tool on that server.")
+	b.WriteString("\nThe model loads a server's tools with tool_search when a task needs them, unless `exposure` says otherwise. Each call waits for your approval; **Always allow** stops asking for that tool on that server.")
 	return b.String()
 }

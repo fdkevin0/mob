@@ -28,6 +28,12 @@ type Tool struct {
 	// OwnerOnly tools are offered, and their approved calls carried out, only
 	// for the person who owns this Mob.
 	OwnerOnly bool
+	// Exposure is how the tool reaches the model; the zero value declares it
+	// to every turn.
+	Exposure Exposure
+	// Namespace groups deferred tools where tool_search is described, such
+	// as "MCP server github".
+	Namespace string
 	// Available reports whether turns offer the tool now, e.g. while its
 	// plugin is enabled; nil offers it always.
 	Available func() bool
@@ -113,18 +119,22 @@ func Abort(err error) error { return abort{err} }
 type ToolRegistry struct {
 	tools   []Tool
 	sources []func() []Tool
+	entries []func() []Entry
 }
 
 // sandboxName is reserved for the sandbox tool, which ConversationService adds
 // per turn while a sandbox is set.
 const sandboxName = "sandbox"
 
+// reserved reports whether name is kept for a tool turns add themselves.
+func reserved(name string) bool { return name == sandboxName || name == searchName }
+
 func (r *ToolRegistry) Register(tools ...Tool) {
 	for _, t := range tools {
 		if t.Name == "" || t.Run == nil {
 			panic("tool needs a name and Run: " + t.Name)
 		}
-		if t.Name == sandboxName {
+		if reserved(t.Name) {
 			panic("tool name is reserved: " + t.Name)
 		}
 		if slices.ContainsFunc(r.tools, func(o Tool) bool { return o.Name == t.Name }) {
@@ -146,10 +156,25 @@ func (r *ToolRegistry) List() []Tool {
 	list := slices.Clone(r.tools)
 	for _, source := range r.sources {
 		for _, t := range source() {
-			if t.Name != "" && t.Name != sandboxName && t.Run != nil && !slices.ContainsFunc(list, func(o Tool) bool { return o.Name == t.Name }) {
+			if t.Name != "" && !reserved(t.Name) && t.Run != nil && !slices.ContainsFunc(list, func(o Tool) bool { return o.Name == t.Name }) {
 				list = append(list, t)
 			}
 		}
+	}
+	return list
+}
+
+// RegisterEntries adds things tool_search finds besides tools, such as
+// skills; Entries asks source each time.
+func (r *ToolRegistry) RegisterEntries(source func() []Entry) {
+	r.entries = append(r.entries, source)
+}
+
+// Entries are every source's entries, in registration order.
+func (r *ToolRegistry) Entries() []Entry {
+	var list []Entry
+	for _, source := range r.entries {
+		list = append(list, source()...)
 	}
 	return list
 }

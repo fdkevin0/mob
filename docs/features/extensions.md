@@ -23,15 +23,19 @@ struct still names each plugin.
   errors wrapped by `Abort`, which end the turn as failures. A tool error after
   cancellation ends the turn as cancelled.
 - `Available` says when a tool is offered (plugin tools: while their plugin is
-  enabled). `OwnerOnly` limits it to the owner's turns.
+  enabled). `OwnerOnly` limits it to the owner's turns. `Exposure` makes it
+  direct, deferred until `tool_search` loads it, or hidden, and `Namespace`
+  groups deferred tools where `tool_search` is described; see
+  [Exposure and tool_search](tools-and-approvals.md#exposure-and-tool_search).
 - To ask for approval, `Run` calls `ToolCall.RequestApproval` with the input the
   user will approve, and `Approved` carries out the call once approved. `Scope`
   decides which later calls a remembered approval covers. See
   [Tools and approvals](tools-and-approvals.md).
 - `ConversationService.Tools` is a `ToolRegistry`. Names are unique, and
-  `sandbox` is reserved: the sandbox tool is added per turn when a sandbox is
-  set. A turn offered two tools with one name fails. `RegisterSource` adds tools
-  that change while Mob runs.
+  `sandbox` and `tool_search` are reserved: turns add those tools themselves. A
+  turn offered two tools with one name fails. `RegisterSource` adds tools that
+  change while Mob runs, and `RegisterEntries` adds what `tool_search` finds
+  besides tools, such as skills.
 
 ## Hooks
 

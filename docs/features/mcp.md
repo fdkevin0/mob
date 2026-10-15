@@ -26,6 +26,21 @@ mcp_servers:
       Authorization: Bearer ...
 ```
 
+A server's `exposure` sets how its tools reach the model: `deferred`, the
+default, until `tool_search` loads them; `direct`, declared to every turn; or
+`hidden`. `tool_exposure` overrides it for tools whose names match a glob; an
+exact name wins over a glob, and a longer glob over a shorter one:
+
+```yaml
+mcp_servers:
+  github:
+    command: npx
+    args: [-y, "@modelcontextprotocol/server-github"]
+    tool_exposure:
+      search_*: direct
+      delete_*: hidden
+```
+
 Keep `config.yaml` owner-only (`chmod 600`) when it holds keys. It reloads live;
 a change reconnects the servers. Names use a-z, 0-9, `-` and single `_`, since
 tool names carry them.
@@ -40,7 +55,12 @@ tool names carry them.
   longer than 64, is cut and ends in a hash of the real name, so two tools never
   share one. Tools are added through `ToolRegistry.RegisterSource`, which allows
   tools that change while Mob runs.
-- `/mcp` shows each server's status and tools.
+- Tools wait until the model loads them with `tool_search`, which finds them by
+  name, server, description and parameters; see
+  [Exposure and tool_search](tools-and-approvals.md#exposure-and-tool_search).
+  A conversation keeps the tools it has loaded or called.
+- `/mcp` shows each server's status and tools, marking those that are direct or
+  hidden.
 
 ## Trust
 

@@ -8,11 +8,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/fdkevin0/mob/internal/chat"
 )
 
 // Server is how Mob reaches one MCP server: a command it starts and talks to
@@ -28,6 +32,13 @@ type Server struct {
 	URL string `mapstructure:"url"`
 	// Headers are sent with every request to URL, such as Authorization.
 	Headers map[string]string `mapstructure:"headers"`
+	// Exposure is how the server's tools reach the model: deferred, the
+	// default, until tool_search loads them; direct; or hidden.
+	Exposure string `mapstructure:"exposure"`
+	// ToolExposure sets the exposure of the tools whose names match a glob,
+	// such as "get_*", over Exposure. An exact name wins over a glob, and a
+	// longer glob over a shorter one.
+	ToolExposure map[string]string `mapstructure:"tool_exposure"`
 }
 
 // Servers are the configured servers by name.
@@ -48,6 +59,19 @@ func (s Servers) Validate() error {
 		fail := func(message string) error { return fmt.Errorf("mcp_servers.%s: %s", name, message) }
 		if len(name) > 32 || !serverName.MatchString(name) {
 			return fail("names use a-z, 0-9, - and single _ between them, up to 32 characters")
+		}
+		if server.Exposure != "" {
+			if _, err := chat.ParseExposure(server.Exposure); err != nil {
+				return fail(err.Error())
+			}
+		}
+		for glob, exposure := range server.ToolExposure {
+			if _, err := path.Match(glob, ""); err != nil {
+				return fail(fmt.Sprintf("tool_exposure %q is not a valid glob", glob))
+			}
+			if _, err := chat.ParseExposure(exposure); err != nil {
+				return fail("tool_exposure " + strconv.Quote(glob) + ": " + err.Error())
+			}
 		}
 		switch {
 		case (server.Command == "") == (server.URL == ""):
@@ -82,6 +106,26 @@ func (s Servers) names() []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+// exposure is how the server's tool reaches the model.
+func (s Server) exposure(tool string) chat.Exposure {
+	best, chosen, value := -1, "", s.Exposure
+	for glob, exposure := range s.ToolExposure {
+		weight := len(glob)
+		if glob == tool {
+			weight = math.MaxInt
+		}
+		// Equal globs are told apart by their text, so the choice is stable.
+		if ok, _ := path.Match(glob, tool); ok && (weight > best || weight == best && glob < chosen) {
+			best, chosen, value = weight, glob, exposure
+		}
+	}
+	e, err := chat.ParseExposure(value)
+	if err != nil {
+		return chat.Deferred
+	}
+	return e
 }
 
 // target is what an approval shows the server as: its URL, or its command
