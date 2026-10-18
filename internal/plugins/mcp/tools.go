@@ -143,7 +143,11 @@ func (h *Hub) call(ctx context.Context, r request) (any, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: r.Tool, Arguments: r.Arguments})
+	arguments := r.Arguments
+	if arguments == nil {
+		arguments = map[string]any{}
+	}
+	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: r.Tool, Arguments: arguments})
 	if err != nil {
 		return nil, err
 	}
