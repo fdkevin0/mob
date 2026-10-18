@@ -64,14 +64,27 @@ struct still names each plugin.
 - An `extension.Extension` is a name and a `Start` that reads the extension's
   current configuration and returns a `Serve` function, or nil when the
   configuration leaves it off.
+- `Requires` names other background extensions. Before starting anything, the
+  manager rejects missing dependencies and cycles, then calls `Start` in
+  dependency order. A disabled or failed dependency leaves its consumers at
+  `Waiting for <name>`; unrelated extensions still start. Register all
+  extensions before the first start/reload; later registration is refused.
+  Dependencies establish startup order and enabled state, not network readiness:
+  prepare shared resources in `Start`, or make callers wait for an explicit
+  readiness signal owned by the provider.
 - `extension.Manager` starts every registered extension (`StartAll`), restarts
   one after its configuration is saved (`Reload`), reports each one's status
   (`Disabled`, `Connecting…`, then whatever the run reports, shown by
   `/api/plugins`) and stops them all (`Close`).
-- A replacement run waits for the previous run to return, so two pollers never
-  share a connection; reports from an earlier run are dropped; `Close` waits for
-  every run, including a cancelled one still shutting down. After `Close`
-  nothing restarts.
+- Reloading an extension also reloads its transitive dependents. They stop in
+  reverse dependency order, waiting for each `Serve` to return before stopping
+  its provider, then start in dependency order. `Start` is not called until the
+  old run has released its resources. Use `defer` in `Serve` for that cleanup;
+  return promptly when its context is cancelled. A failed `Start` must release
+  any resources it acquired itself.
+- Reports from earlier runs are dropped. A run returning on its own stops its
+  dependents and is reported as `Stopped` until reloaded. `Close` waits for
+  cleanup in reverse dependency order. Nothing restarts after it closes.
 - `Start` runs under the manager's lock and reads the saved configuration, so
   concurrent saves end with the last saved configuration running.
 
