@@ -2,6 +2,8 @@ package telegram
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -339,6 +341,12 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 		shown := make(chan struct{})
 		go func() { defer close(shown); s.placeholder(placeholding, c, u.Message.Chat.ID, draft) }()
 		defer func() { cancel(); <-shown }()
+		if fields := strings.Fields(m.Text); u.Message.Tap && len(fields) >= 2 && (fields[0] == "/approve" || fields[0] == "/deny") && len(fields[1]) == 32 {
+			m.ConversationID, err = s.Store.ApprovalConversation(fields[1])
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return channel.Reply{Text: "Cannot load the approval's conversation."}, err
+			}
+		}
 		return b.Answer(ctx, m)
 	}
 	return b.Finish(ctx, m.ID, answer, func(ctx context.Context, r channel.Reply) error {

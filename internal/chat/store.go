@@ -288,6 +288,13 @@ func (s *Store) RequestApproval(conversationID string, m Message, callID string,
 
 var ErrStaleApproval = errors.New("approval is unknown, expired, or already decided")
 
+// ApprovalConversation locates the conversation a saved approval belongs to.
+func (s *Store) ApprovalConversation(id string) (string, error) {
+	var conversation string
+	err := s.db.QueryRow("SELECT conversation_id FROM approvals WHERE id=?", id).Scan(&conversation)
+	return conversation, err
+}
+
 // Decision is an approval the user has just decided.
 type Decision struct {
 	ApprovalID, MessageID, ToolCallID string
