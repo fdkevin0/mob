@@ -76,8 +76,11 @@ commands, approvals, delivery records and replies behave the same everywhere.
   are not read; a message with only media is answered with a note saying so.
 - Approvals show Approve, Always allow and Deny buttons; a tap is handled as the
   `/approve` or `/deny` message it stands for, and its row is removed once that
-  approval is decided or found stale. A tap while another turn runs leaves the
-  row in place.
+  approval is decided or found stale. A tap while that conversation's turn runs
+  leaves the row in place. Approval buttons use the conversation saved with the
+  approval, even after `/new`, `/open` or a restart, without changing the bot's
+  currently selected conversation. A conversation-scoped grant applies to that
+  original conversation.
 - Buttons stand in for typing commands. A tap on any button is handled as the
   command its data holds, as if the owner had typed it; a command longer than
   Telegram's 64-byte limit rides on a short token kept in memory, and a tap on

@@ -182,3 +182,70 @@ func TestPickedTellsAListsChoicesFromTheMenu(t *testing.T) {
 		}
 	}
 }
+
+func TestApprovalTapUsesOriginalConversationAfterNavigation(t *testing.T) {
+	for _, approve := range []bool{true, false} {
+		t.Run(fmt.Sprint(approve), func(t *testing.T) {
+			store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			conversation := chat.NewConversation(store, provider.Offline())
+			defer conversation.Close()
+			service := &Service{Store: store, Conversation: conversation}
+			var edited bool
+			config := Config{UserID: 7, Token: "1:x", Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				if strings.HasSuffix(r.URL.Path, "/editMessageReplyMarkup") {
+					edited = true
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
+			})}
+			ctx := context.Background()
+			requested, err := service.reply(ctx, config, "1", chat.NewID(), "/remember tea")
+			if err != nil || len(requested.Approvals) != 1 {
+				t.Fatalf("approval request: %+v, %v", requested, err)
+			}
+			var original, current string
+			if err := store.Setting(conversationKey("1", config), &original); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.reply(ctx, config, "1", chat.NewID(), "/new"); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Setting(conversationKey("1", config), &current); err != nil {
+				t.Fatal(err)
+			}
+			id := requested.Approvals[0].ID
+			command := "/deny " + id
+			if approve {
+				command = "/approve " + id + " conversation"
+			}
+			var tap Update
+			if err := json.Unmarshal([]byte(fmt.Sprintf(`{"update_id":1,"callback_query":{"id":"q","data":%q,"from":{"id":7},"message":{"message_id":42,"chat":{"id":7},"reply_markup":{"inline_keyboard":[]}}}}`, command)), &tap); err != nil {
+				t.Fatal(err)
+			}
+			tap, _ = config.tapped(tap)
+			// The approval's conversation must survive a plugin restart too.
+			service = &Service{Store: store, Conversation: conversation}
+			if err := service.Message(ctx, config, "1", tap); err != nil {
+				t.Fatal(err)
+			}
+			if pending := conversation.Pending(original); len(pending) != 0 || !edited {
+				t.Fatalf("pending=%v, buttons removed=%v", pending, edited)
+			}
+			var selected string
+			if err := store.Setting(conversationKey("1", config), &selected); err != nil || selected != current {
+				t.Fatalf("selected conversation changed: %q, %v", selected, err)
+			}
+			facts, err := store.Memories(original)
+			if err != nil || approve && len(facts) != 1 || !approve && len(facts) != 0 {
+				t.Fatalf("facts=%v, error=%v", facts, err)
+			}
+			grants, err := store.Grants()
+			if err != nil || approve && (len(grants) != 1 || grants[0].ConversationID != original) {
+				t.Fatalf("grant applied to wrong conversation: %+v, %v", grants, err)
+			}
+		})
+	}
+}

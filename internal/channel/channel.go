@@ -67,6 +67,9 @@ type Message struct {
 	ID string
 	// Key is the setting naming the conversation the sender writes to.
 	Key string
+	// ConversationID binds a button to its original conversation without
+	// changing the sender's current selection. Only the transport sets it.
+	ConversationID string
 	// Owner says the sender owns this Mob.
 	Owner bool
 	Text  string
@@ -95,9 +98,14 @@ func (b *Bridge) Answer(ctx context.Context, m Message) (Reply, error) {
 	if m.Started != nil {
 		defer m.Started(nil)
 	}
-	id, failure, err := b.conversation(m)
-	if err != nil {
-		return Reply{Text: failure}, err
+	id := m.ConversationID
+	if id == "" {
+		var failure string
+		var err error
+		id, failure, err = b.conversation(m)
+		if err != nil {
+			return Reply{Text: failure}, err
+		}
 	}
 	result, err := b.Conversation.Commands.Run(ctx, chat.CommandRequest{Client: b.Client, ConversationID: id, Text: m.Text}, m.Owner)
 	if err != nil {
