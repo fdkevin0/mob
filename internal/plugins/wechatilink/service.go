@@ -125,7 +125,10 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 	client := NewClient(c, nil)
 	cursorKey := "wechat-ilink-cursor:" + c.BotID
 	var cursor string
-	_ = s.Store.Setting(cursorKey, &cursor)
+	if err := s.Store.Setting(cursorKey, &cursor); err != nil {
+		status("Cannot load WeChat update cursor")
+		return
+	}
 
 	status("Connected · Polling WeChat messages")
 
@@ -156,15 +159,21 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 			}
 
 			if strings.TrimSpace(textContent) != "" && msg.FromUserID != "" {
-				if err := s.deliver(ctx, c, client, msg, textContent); err != nil {
+				if id, err := s.deliver(ctx, c, client, msg, textContent); err != nil {
 					status(err.Error())
+					if accepted, readErr := s.Store.DeliveryAccepted(id); readErr != nil || !accepted {
+						return
+					}
 				}
 			}
 		}
 
 		if res.GetUpdatesBuf != "" {
+			if err := s.Store.SaveSetting(cursorKey, res.GetUpdatesBuf); err != nil {
+				status("Cannot save WeChat update cursor")
+				return
+			}
 			cursor = res.GetUpdatesBuf
-			_ = s.Store.SaveSetting(cursorKey, cursor)
 		}
 	}
 }
@@ -186,8 +195,7 @@ func approvalPrompt(approvals []chat.PendingApproval, pending int) string {
 
 // deliver answers msg and sends the reply once. A message without an ID
 // cannot be recorded, so it is answered as it comes.
-func (s *Service) deliver(ctx context.Context, c Config, client *Client, msg InboundMessage, text string) error {
-	id := ""
+func (s *Service) deliver(ctx context.Context, c Config, client *Client, msg InboundMessage, text string) (id string, err error) {
 	if msg.MsgID != "" {
 		id = "wx:" + c.BotID + ":" + msg.MsgID
 	}
@@ -200,9 +208,9 @@ func (s *Service) deliver(ctx context.Context, c Config, client *Client, msg Inb
 	answer := func(ctx context.Context) (channel.Reply, error) { return s.answer(ctx, c, msg.FromUserID, m) }
 	if id == "" {
 		reply, err := answer(ctx)
-		return errors.Join(send(ctx, reply), err)
+		return id, errors.Join(send(ctx, reply), err)
 	}
-	return s.bridge().Deliver(ctx, id, answer, send)
+	return id, s.bridge().Deliver(ctx, id, answer, send)
 }
 
 // parseApprovalCommand reads "批准 [ID] [总是|本会话]" or "拒绝 [ID] [原因]".

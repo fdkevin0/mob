@@ -168,6 +168,9 @@ func (c *Client) GetUpdates(ctx context.Context, cursor string) (*UpdatesResult,
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return nil, err
 	}
+	if res.Ret != 0 {
+		return nil, fmt.Errorf("iLink getupdates failed: ret %d", res.Ret)
+	}
 	return &res, nil
 }
 
@@ -214,6 +217,15 @@ func (c *Client) SendMessage(ctx context.Context, toUserID, contextToken, text s
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("iLink sendmessage error %d: %s", resp.StatusCode, string(body))
+	}
+	var result struct {
+		Ret int `json:"ret"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+	if result.Ret != 0 {
+		return fmt.Errorf("iLink sendmessage failed: ret %d", result.Ret)
 	}
 	return nil
 }

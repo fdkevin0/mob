@@ -106,13 +106,21 @@ commands, approvals, delivery records and replies behave the same everywhere.
 - Connects natively through Tencent's WeChat iLink HTTP API
   (`ilinkai.weixin.qq.com`) in pure Go (`internal/plugins/wechatilink`).
 - Sign-in is a QR code shown in the web UI (`get_bot_qrcode`, then
-  `get_qrcode_status` until confirmed); the bot token and ID are stored locally.
+  `get_qrcode_status` until confirmed). After confirmation, click **Save
+  configuration** to store the bot token and ID locally and enable polling;
+  confirmation alone leaves them in the form, unsaved.
 - Messages arrive by long polling `getupdates` with its sync cursor; replies use
   `sendmessage` bound to the incoming `context_token`, with typing indicators.
 - Refuses senders not on its allowlist and treats only its first allowed user as
   the owner. Reads 批准 and 拒绝 as `/approve` and `/deny`, and accepts a bare
   reply when one request is pending.
 - Deliveries are recorded as `wx:<bot>:<message>`.
+- Messages with IDs must have saved receipts before the polling cursor advances.
+  A receipt or cursor storage failure stops polling; resolve the storage problem
+  and restart the plugin to resume. A recorded failed or uncertain send is not
+  retried when the same message arrives again.
+- A nonzero API `ret` is an error even with HTTP 200. Polling errors use the
+  normal retry delay; failed sends appear as `failed-or-unknown` in deliveries.
 
 ## Email
 

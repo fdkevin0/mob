@@ -2,6 +2,7 @@ package wechatilink_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/llm"
@@ -268,55 +270,142 @@ func TestDecisionShowsTheNextApproval(t *testing.T) {
 }
 
 func TestLoopAnswersEachMessageOnce(t *testing.T) {
-	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "test.sqlite"))
-	if err != nil {
-		t.Fatal(err)
+	for _, ret := range []int{0, -1} {
+		t.Run(fmt.Sprint(ret), func(t *testing.T) {
+			store, err := chat.OpenStore(filepath.Join(t.TempDir(), "test.sqlite"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			conversation := chat.NewConversation(store, provider.Offline())
+			defer conversation.Close()
+			svc := &wechatilink.Service{Store: store, Conversation: conversation}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			polls := 0
+			var sent []string
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /ilink/bot/getupdates", func(w http.ResponseWriter, r *http.Request) {
+				// The same message arrives twice, as after a restart before the
+				// cursor was saved.
+				if polls++; polls > 2 {
+					cancel()
+					json.NewEncoder(w).Encode(map[string]any{"ret": 0})
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]any{"ret": 0, "msgs": []map[string]any{{
+					"msg_id": "m1", "from_user_id": "wx_alice", "context_token": "ctx",
+					"item_list": []map[string]any{{"type": 1, "text_item": map[string]string{"text": "/help"}}},
+				}}})
+			})
+			mux.HandleFunc("POST /ilink/bot/sendmessage", func(w http.ResponseWriter, r *http.Request) {
+				var req struct {
+					Msg struct {
+						ItemList []struct {
+							TextItem struct{ Text string } `json:"text_item"`
+						} `json:"item_list"`
+					} `json:"msg"`
+				}
+				json.NewDecoder(r.Body).Decode(&req)
+				sent = append(sent, req.Msg.ItemList[0].TextItem.Text)
+				json.NewEncoder(w).Encode(map[string]int{"ret": ret})
+			})
+			mux.HandleFunc("POST /ilink/bot/sendtyping", func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(map[string]int{"ret": 0})
+			})
+			server := httptest.NewServer(mux)
+			defer server.Close()
+			cfg := wechatilink.Config{Enabled: true, BaseURL: server.URL, BotToken: "tok", BotID: "bot", AllowedUsers: []string{"wx_alice"}}
+			svc.Loop(ctx, cfg, func(string) {})
+			if len(sent) != 1 || !strings.Contains(sent[0], "Mob 已连接") || !strings.Contains(sent[0], "/approve") {
+				t.Fatalf("sent: %q", sent)
+			}
+			wantState := "sent"
+			if ret != 0 {
+				wantState = "failed-or-unknown"
+			}
+			if d, err := store.Delivery("wx:bot:m1"); err != nil || d.State != wantState {
+				t.Fatalf("delivery: %+v (err: %v)", d, err)
+			}
+		})
 	}
-	defer store.Close()
-	conversation := chat.NewConversation(store, provider.Offline())
-	defer conversation.Close()
-	svc := &wechatilink.Service{Store: store, Conversation: conversation}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	polls := 0
-	var sent []string
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /ilink/bot/getupdates", func(w http.ResponseWriter, r *http.Request) {
-		// The same message arrives twice, as after a restart before the
-		// cursor was saved.
-		if polls++; polls > 2 {
-			cancel()
-			json.NewEncoder(w).Encode(map[string]any{"ret": 0})
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]any{"ret": 0, "msgs": []map[string]any{{
-			"msg_id": "m1", "from_user_id": "wx_alice", "context_token": "ctx",
-			"item_list": []map[string]any{{"type": 1, "text_item": map[string]string{"text": "/help"}}},
-		}}})
-	})
-	mux.HandleFunc("POST /ilink/bot/sendmessage", func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Msg struct {
-				ItemList []struct {
-					TextItem struct{ Text string } `json:"text_item"`
-				} `json:"item_list"`
-			} `json:"msg"`
-		}
-		json.NewDecoder(r.Body).Decode(&req)
-		sent = append(sent, req.Msg.ItemList[0].TextItem.Text)
-		json.NewEncoder(w).Encode(map[string]int{"ret": 0})
-	})
-	mux.HandleFunc("POST /ilink/bot/sendtyping", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]int{"ret": 0})
-	})
-	server := httptest.NewServer(mux)
-	defer server.Close()
-	cfg := wechatilink.Config{Enabled: true, BaseURL: server.URL, BotToken: "tok", BotID: "bot", AllowedUsers: []string{"wx_alice"}}
-	svc.Loop(ctx, cfg, func(string) {})
-	if len(sent) != 1 || !strings.Contains(sent[0], "Mob 已连接") || !strings.Contains(sent[0], "/approve") {
-		t.Fatalf("sent: %q", sent)
+}
+
+func TestLoopStopsBeforeAcknowledgingStorageFailures(t *testing.T) {
+	for _, stage := range []string{"receipt", "cursor-write", "cursor-read"} {
+		t.Run(stage, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mob.sqlite")
+			store, err := chat.OpenStore(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			db, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			switch stage {
+			case "receipt":
+				_, err = db.Exec(`CREATE TRIGGER fail_receipt BEFORE INSERT ON deliveries BEGIN SELECT RAISE(ABORT, 'write failed'); END`)
+			case "cursor-write":
+				_, err = db.Exec(`CREATE TRIGGER fail_cursor BEFORE INSERT ON settings WHEN NEW.key='wechat-ilink-cursor:bot' BEGIN SELECT RAISE(ABORT, 'write failed'); END`)
+			case "cursor-read":
+				err = store.SaveSetting("wechat-ilink-cursor:bot", 42)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			polls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/ilink/bot/getupdates" {
+					fmt.Fprint(w, `{"ret":0}`)
+					return
+				}
+				polls++
+				if polls > 1 {
+					cancel()
+					fmt.Fprint(w, `{"ret":0}`)
+					return
+				}
+				fmt.Fprint(w, `{"ret":0,"get_updates_buf":"next","msgs":[{"msg_id":"one","from_user_id":"owner","item_list":[{"type":1,"text_item":{"text":"/help"}}]}]}`)
+			}))
+			defer server.Close()
+			conversation := chat.NewConversation(store, provider.Offline())
+			defer conversation.Close()
+			svc := &wechatilink.Service{Store: store, Conversation: conversation}
+			var status string
+			svc.Loop(ctx, wechatilink.Config{Enabled: true, BaseURL: server.URL, BotToken: "fake", BotID: "bot", AllowedUsers: []string{"owner"}}, func(s string) { status = s })
+			wantPolls := 1
+			if stage == "cursor-read" {
+				wantPolls = 0
+			}
+			if polls != wantPolls || !strings.Contains(status, "Cannot") {
+				t.Fatalf("polls=%d, status=%q; must stop on storage failure", polls, status)
+			}
+			if stage == "receipt" {
+				if accepted, err := store.DeliveryAccepted("wx:bot:one"); err != nil || accepted {
+					t.Fatalf("receipt=%v, error=%v", accepted, err)
+				}
+			}
+		})
 	}
-	if d, err := store.Delivery("wx:bot:m1"); err != nil || d.State != "sent" {
-		t.Fatalf("delivery: %+v (err: %v)", d, err)
+}
+
+func TestClientRejectsFailedOrInvalidResults(t *testing.T) {
+	for _, body := range []string{`{"ret":-1,"errmsg":"rejected"}`, `not JSON`, ``} {
+		t.Run(body, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+			defer server.Close()
+			client := wechatilink.NewClient(wechatilink.Config{BaseURL: server.URL}, nil)
+			if err := client.SendMessage(context.Background(), "owner", "ctx", "hello"); err == nil {
+				t.Error("sendmessage accepted a failed or invalid result")
+			}
+			if _, err := client.GetUpdates(context.Background(), ""); err == nil {
+				t.Error("getupdates accepted a failed or invalid result")
+			}
+		})
 	}
 }
