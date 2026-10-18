@@ -52,6 +52,10 @@ amp orb service start mob --command './build/mob serve --demo' --port 8787 --por
 `just test` runs the existing Go/Web/HTTP checks: `go test ./...`, the UI typecheck and Vitest suite
 (`bun run test:webapp`), and `scripts/check-chat.ts`, which starts a temporary
 service and reads its stream with the real AI SDK UI parser and shared client.
+It also runs `bun run test:dsh`: the optional DSH bridge's typecheck, runtime
+tests and Go MCP integration. Go-only environments skip that integration when
+Bun or the installed DSH dependencies are absent; CI's integration job installs
+both. See [DSH plugin setup](docs/features/deepseek-harness.md).
 Also run `bun run test:client` (headless Node tests/typecheck) and
 `bun run test:tui` (pilot typecheck/tests) when changing the shared client or TUI.
 The integration script exercises both client types, concurrent readers,

@@ -33,6 +33,7 @@ change the single-Go-binary release.
 | `packages/client` | authenticated HTTP, AI SDK message state, commands, approvals, polling and stream recovery, shared by Web and the terminal pilot |
 | `webapp/src/chat` | the React UI; browser authentication/storage, DOM input/completion and presentation adapt the shared client |
 | `apps/tui` | the experimental OpenTUI React UI; terminal input, focus, layout and scrolling adapt the shared client |
+| `apps/dsh` | optional Bun process loading official DSH/Cordis tool plugins and exposing them to Mob over MCP |
 
 ## Boundaries
 
@@ -52,7 +53,7 @@ change the single-Go-binary release.
 - Plugins register tools, commands, routes, configuration and background runs
   beside their own code; the engine does not name them (see
   [Extensions](features/extensions.md)). Code from outside Mob arrives only over
-  MCP.
+  MCP, including the optional [DeepSeek Harness tools bridge](features/deepseek-harness.md).
 - SQLite is the only persistence dependency: no generic repository and no
   external queue. Schema changes are migrations in `internal/chat/migrations.go`
   (see [Releases and upgrades](features/releases.md)).

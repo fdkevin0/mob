@@ -27,7 +27,7 @@ desktop:
 mob *args:
     ./build/mob "$@"
 
-test: test-go test-web test-integration
+test: test-go test-web test-integration test-dsh
 
 test-go:
     bun run test:go
@@ -37,6 +37,9 @@ test-web:
 
 test-integration:
     bun run test:integration
+
+test-dsh:
+    bun run test:dsh
 
 vet:
     go vet ./...
