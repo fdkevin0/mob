@@ -49,7 +49,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
             if (timerRef.current) {
               clearInterval(timerRef.current);
             }
-            setQrStatus('Scan confirmed! Saving credentials...');
+            setQrStatus('Scan confirmed. Credentials are not saved yet.');
             setConfig(prev => ({
               ...prev,
               enabled: true,
@@ -57,7 +57,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
               botId: statusRes.ilink_bot_id || prev.botId,
             }));
             setQrCode(null);
-            setNotice('WeChat authorization confirmed and Token saved.');
+            setNotice('WeChat authorization confirmed. Save configuration to finish connecting.');
           } else if (statusRes.status === 'expired') {
             if (timerRef.current) {
               clearInterval(timerRef.current);

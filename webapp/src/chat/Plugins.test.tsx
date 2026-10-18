@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Plugins } from './Plugins';
 import type { Configs } from './plugins/types';
@@ -10,7 +10,7 @@ const initial = (): Configs => ({
   cloudflare: { enabled: false, accountId: '', model: '', embeddingModel: '', index: '', databaseId: '', namespaceId: '', bucket: '' },
   wechat_ilink: { enabled: false, baseUrl: '', allowedUsers: [] },
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 it('keeps saved passwords hidden, saves configuration and requires review before sending', async () => {
   let config = initial();
   const send = vi.fn();
@@ -107,6 +107,33 @@ it('encodes the WeChat login link as a local QR image', async () => {
   expect(qr.querySelector('path')?.getAttribute('d')).toBeTruthy();
   expect(qr.getAttribute('src')).toBeNull();
   expect(screen.getByRole('status').textContent).toContain('Please scan');
+});
+
+it('asks the user to save confirmed WeChat credentials before claiming they are saved', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  const config = initial();
+  const saved = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith('/qrcode')) return Response.json({ qrcode: 'login', qrcode_img_content: 'https://example.org/login' });
+    if (url.includes('/qrcode/status?')) return Response.json({ status: 'confirmed', bot_token: 'fixture-token', ilink_bot_id: 'fixture-bot' });
+    if (url.endsWith('/plugins/wechat_ilink')) {
+      saved(JSON.parse(options!.body as string));
+      return Response.json({ ...config, wechat_ilink: { enabled: true, botId: 'fixture-bot', hasToken: true } });
+    }
+    return Response.json({ config, telegramStatus: 'Disabled' });
+  }));
+  render(<Plugins connection={connection} close={() => {}} />);
+  await screen.findByLabelText('From address');
+  fireEvent.click(screen.getByText('WeChat (iLink)', { selector: 'button' }));
+  fireEvent.click(screen.getByText('Get Login QR Code'));
+  await screen.findByRole('img', { name: 'WeChat Login QR Code' });
+  await act(() => vi.advanceTimersByTimeAsync(3000));
+  expect(screen.getByText('WeChat authorization confirmed. Save configuration to finish connecting.')).toBeDefined();
+  expect(screen.queryByText(/Token saved/)).toBeNull();
+  expect(saved).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('Save configuration'));
+  await screen.findByText('Configuration saved.');
+  expect(saved).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ enabled: true, botToken: 'fixture-token', botId: 'fixture-bot' }));
 });
 
 it('preserves email edits across plugin navigation and displays durable delivery state', async () => {
