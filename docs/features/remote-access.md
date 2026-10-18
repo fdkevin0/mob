@@ -40,6 +40,22 @@ Two experimental pieces let a client reach Mob through a gateway.
   signaling messages. It warns when started without a token.
 - `mob serve --gateway-url URL [--gateway-node-id ID]` registers the local service
   with a gateway as an edge node.
+- HTTP relay streams preserve the node's response status, headers and SSE text,
+  including event IDs and the final `[DONE]` marker. Stream frames carry a JSON
+  response envelope, with status and headers on the first chunk; update the
+  gateway and node together when upgrading from the older stream format.
+- A replacement connection with the same node ID stays registered when its old
+  connection disconnects.
+- WebSocket requests receive their stream events and final response on the
+  originating connection, with the caller's original request ID. Different
+  clients can use the same request ID safely.
+- Relays allow six minutes without a response frame, covering a five-minute
+  sandbox command plus cleanup and transit. A disconnected node fails pending
+  requests.
+- If a reader falls behind the 64-frame response buffer, its request fails
+  explicitly. An HTTP stream already in progress is aborted, so clients see
+  an incomplete response; WebSocket clients receive a `slow_consumer` error.
+  Check saved history before repeating any action.
 
 The frame protocol is in `internal/protocol/mesh.go`; the gateway and node are
 in `internal/gateway` and `internal/node`. There is no WebRTC data channel yet:

@@ -15,6 +15,7 @@ import (
 	"github.com/fdkevin0/mob/internal/gateway"
 	"github.com/fdkevin0/mob/internal/node"
 	"github.com/fdkevin0/mob/internal/protocol"
+	"golang.org/x/net/websocket"
 )
 
 func TestGatewayNodeRelayAndSignaling(t *testing.T) {
@@ -37,10 +38,11 @@ func TestGatewayNodeRelayAndSignaling(t *testing.T) {
 	})
 	localMux.HandleFunc("GET /api/stream", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
 		flusher := w.(http.Flusher)
-		_, _ = w.Write([]byte(`{"type":"delta","text":"hello"}`))
+		_, _ = w.Write([]byte("id: 1\ndata: {\"type\":\"delta\",\"text\":\"hello\"}\n\n"))
 		flusher.Flush()
-		_, _ = w.Write([]byte(`{"type":"finish"}`))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 		flusher.Flush()
 	})
 
@@ -130,8 +132,8 @@ func TestGatewayNodeRelayAndSignaling(t *testing.T) {
 	}
 	streamBody, _ := io.ReadAll(streamResp.Body)
 	streamResp.Body.Close()
-	if !strings.Contains(string(streamBody), "text-event-stream") && !strings.Contains(string(streamBody), "delta") {
-		t.Fatalf("expected streamed event data in body, got: %s", string(streamBody))
+	if string(streamBody) != "id: 1\ndata: {\"type\":\"delta\",\"text\":\"hello\"}\n\ndata: [DONE]\n\n" || streamResp.Header.Get("x-vercel-ai-ui-message-stream") != "v1" || streamResp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("stream changed in transit: headers=%v, body=%q", streamResp.Header, streamBody)
 	}
 
 	// 6. Test WebRTC Signaling forward
@@ -174,4 +176,47 @@ func TestGatewayNodeRelayAndSignaling(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized, got %d", unauthResp.StatusCode)
 	}
 	unauthResp.Body.Close()
+}
+
+func TestReplacementNodeSurvivesOldDisconnect(t *testing.T) {
+	gw := gateway.New(gateway.Config{Token: "fake"})
+	oldDone := make(chan struct{})
+	handler := gw.Handler()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("connection") == "old" {
+			defer close(oldDone)
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	connect := func(name string) *websocket.Conn {
+		t.Helper()
+		ws, err := websocket.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws/node?nodeId=same&token=fake&connection="+name, "", server.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { ws.Close() })
+		ws.SetDeadline(time.Now().Add(5 * time.Second))
+		var hello protocol.Frame
+		if err := websocket.JSON.Receive(ws, &hello); err != nil || hello.Method != "hello-ok" {
+			t.Fatalf("registration: %+v, %v", hello, err)
+		}
+		return ws
+	}
+	old := connect("old")
+	connect("new")
+	old.Close()
+	select {
+	case <-oldDone:
+	case <-time.After(time.Second):
+		t.Fatal("old connection did not close")
+	}
+	req := httptest.NewRequest("GET", "/api/gateway/nodes", nil)
+	req.Header.Set("Authorization", "Bearer fake")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	var result struct{ Nodes []gateway.NodeInfo }
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil || len(result.Nodes) != 1 || result.Nodes[0].ID != "same" {
+		t.Fatalf("replacement lost: %s (%v)", recorder.Body, err)
+	}
 }
