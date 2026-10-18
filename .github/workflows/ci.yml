@@ -95,3 +95,5 @@ jobs:
       # with the AI SDK client the web UI uses.
       - name: Check chat, commands and approvals end to end
         run: bun run test:integration
+      - name: Check DSH plugins and MCP bridge
+        run: bun run test:dsh

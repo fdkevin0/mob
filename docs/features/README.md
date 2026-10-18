@@ -16,6 +16,7 @@ keep architecture decision records.
 | [Messaging channels](channels.md) | Telegram, WeChat iLink and email, and their shared bridge |
 | [Plugins](plugins.md) | plugin settings and secrets, the email mailbox, Cloudflare |
 | [MCP servers](mcp.md) | external tools over the Model Context Protocol |
+| [DeepSeek Harness plugins](deepseek-harness.md) | DSH tool compatibility, the optional runtime, setup and limitations |
 | [Extensions](extensions.md) | how plugins add tools, hooks, commands, routes, configuration and background runs |
 | [Releases and upgrades](releases.md) | nightly and stable channels, database migration windows |
 | [Remote access](remote-access.md) | the experimental gateway and edge nodes |

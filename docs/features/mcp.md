@@ -3,6 +3,9 @@
 Tools from outside Mob come from [Model Context Protocol](https://modelcontextprotocol.io)
 servers. Each server runs in its own process; Mob never loads code into itself.
 
+The optional [DeepSeek Harness bridge](deepseek-harness.md) uses this interface
+to expose tools from DSH plugins.
+
 ## Configuration
 
 `mcp_servers` in `config.yaml` lists servers by name:

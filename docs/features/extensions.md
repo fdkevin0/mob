@@ -6,6 +6,9 @@ code, and the engine does not name them. Code from outside Mob comes in only
 through [MCP servers](mcp.md): Go's `plugin` package has no Windows support and
 cannot unload, and Mob ships as one binary.
 
+[DeepSeek Harness tools](deepseek-harness.md) use an optional Bun process with
+the official Cordis runtime, connected over that same MCP boundary.
+
 Adding a plugin is a package, one entry in `plugins()` in `internal/app`, and,
 for configuration, one `configuration.Section`. The `configuration.Plugins`
 struct still names each plugin.
