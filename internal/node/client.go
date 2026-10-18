@@ -174,6 +174,7 @@ type relayResponseWriter struct {
 	statusCode int
 	body       bytes.Buffer
 	isStream   bool
+	streamed   bool
 }
 
 func (w *relayResponseWriter) Header() http.Header {
@@ -192,11 +193,22 @@ func (w *relayResponseWriter) Write(data []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 	if w.isStream {
-		_ = w.client.send(protocol.Frame{
+		chunk := gateway.RelayResponse{Body: string(data)}
+		if !w.streamed {
+			chunk.StatusCode, chunk.Headers = w.statusCode, w.headers
+		}
+		payload, err := json.Marshal(chunk)
+		if err != nil {
+			return 0, err
+		}
+		if err := w.client.send(protocol.Frame{
 			ID:      w.frameID,
 			Type:    protocol.FrameEvent,
-			Payload: json.RawMessage(data),
-		})
+			Payload: payload,
+		}); err != nil {
+			return 0, err
+		}
+		w.streamed = true
 		return len(data), nil
 	}
 	return w.body.Write(data)

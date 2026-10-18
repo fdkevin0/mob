@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -15,6 +17,9 @@ import (
 	"github.com/fdkevin0/mob/internal/protocol"
 	"golang.org/x/net/websocket"
 )
+
+// relayIdleTimeout allows a five-minute sandbox command plus cleanup and transit.
+const relayIdleTimeout = 6 * time.Minute
 
 // Config configures the Cloud Gateway service.
 type Config struct {
@@ -39,6 +44,7 @@ type NodeSession struct {
 	mu          sync.Mutex
 	pending     map[string]chan protocol.Frame
 	pendingMu   sync.Mutex
+	closed      bool
 }
 
 func (n *NodeSession) send(f protocol.Frame) error {
@@ -50,7 +56,11 @@ func (n *NodeSession) send(f protocol.Frame) error {
 func (n *NodeSession) registerPending(reqID string) chan protocol.Frame {
 	ch := make(chan protocol.Frame, 64)
 	n.pendingMu.Lock()
-	n.pending[reqID] = ch
+	if n.closed {
+		close(ch)
+	} else {
+		n.pending[reqID] = ch
+	}
 	n.pendingMu.Unlock()
 	return ch
 }
@@ -59,6 +69,41 @@ func (n *NodeSession) unregisterPending(reqID string) {
 	n.pendingMu.Lock()
 	delete(n.pending, reqID)
 	n.pendingMu.Unlock()
+}
+
+// route fails an overloaded request explicitly instead of losing stream frames.
+func (n *NodeSession) route(frame protocol.Frame) {
+	n.pendingMu.Lock()
+	defer n.pendingMu.Unlock()
+	ch := n.pending[frame.ID]
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- frame:
+	default:
+	drain:
+		for {
+			select {
+			case <-ch:
+			default:
+				break drain
+			}
+		}
+		ch <- protocol.NewErrorRes(frame.ID, "slow_consumer", "relay response buffer filled; stream is incomplete")
+		close(ch)
+		delete(n.pending, frame.ID)
+	}
+}
+
+func (n *NodeSession) disconnect() {
+	n.pendingMu.Lock()
+	defer n.pendingMu.Unlock()
+	n.closed = true
+	for id, ch := range n.pending {
+		close(ch)
+		delete(n.pending, id)
+	}
 }
 
 // Gateway manages node routing, client WebSockets, WebRTC signaling, and relaying.
@@ -208,7 +253,7 @@ func (g *Gateway) handleRelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqID := fmt.Sprintf("req-%d", time.Now().UnixNano())
+	reqID := rand.Text()
 	relayReq := RelayRequest{
 		Method:  r.Method,
 		Path:    relPath,
@@ -240,21 +285,43 @@ func (g *Gateway) handleRelay(w http.ResponseWriter, r *http.Request) {
 			return
 		case respFrame, ok := <-ch:
 			if !ok {
+				if streamingStarted {
+					panic(http.ErrAbortHandler)
+				}
+				http.Error(w, "node disconnected", http.StatusBadGateway)
 				return
 			}
 			if respFrame.Type == protocol.FrameEvent {
-				if !streamingStarted {
-					streamingStarted = true
-					if w.Header().Get("Content-Type") == "" {
-						w.Header().Set("Content-Type", "text/event-stream")
-					}
+				var chunk RelayResponse
+				if err := json.Unmarshal(respFrame.Payload, &chunk); err != nil {
+					http.Error(w, "invalid stream chunk from node", http.StatusBadGateway)
+					return
 				}
-				fmt.Fprintf(w, "data: %s\n\n", string(respFrame.Payload))
+				if !streamingStarted {
+					if chunk.StatusCode < 200 || chunk.StatusCode > 599 {
+						http.Error(w, "invalid stream status from node", http.StatusBadGateway)
+						return
+					}
+					for k, vals := range chunk.Headers {
+						w.Header().Del(k)
+						for _, v := range vals {
+							w.Header().Add(k, v)
+						}
+					}
+					w.WriteHeader(chunk.StatusCode)
+					streamingStarted = true
+				}
+				if _, err := io.WriteString(w, chunk.Body); err != nil {
+					return
+				}
 				if isFlusher {
 					flusher.Flush()
 				}
 			} else if respFrame.Type == protocol.FrameRes {
 				if respFrame.Error != nil {
+					if streamingStarted {
+						panic(http.ErrAbortHandler)
+					}
 					http.Error(w, respFrame.Error.Message, http.StatusBadGateway)
 					return
 				}
@@ -282,7 +349,10 @@ func (g *Gateway) handleRelay(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
-		case <-time.After(30 * time.Second):
+		case <-time.After(relayIdleTimeout):
+			if streamingStarted {
+				panic(http.ErrAbortHandler)
+			}
 			http.Error(w, "gateway timeout awaiting node response", http.StatusGatewayTimeout)
 			return
 		}
@@ -351,8 +421,11 @@ func (g *Gateway) handleNodeWebSocket(ws *websocket.Conn) {
 	g.nodesMu.Unlock()
 
 	defer func() {
+		session.disconnect()
 		g.nodesMu.Lock()
-		delete(g.nodes, nodeID)
+		if g.nodes[nodeID] == session {
+			delete(g.nodes, nodeID)
+		}
 		g.nodesMu.Unlock()
 		_ = ws.Close()
 	}()
@@ -372,18 +445,7 @@ func (g *Gateway) handleNodeWebSocket(ws *websocket.Conn) {
 			return
 		}
 
-		if frame.ID != "" {
-			session.pendingMu.Lock()
-			ch, ok := session.pending[frame.ID]
-			session.pendingMu.Unlock()
-			if ok {
-				select {
-				case ch <- frame:
-				default:
-					// Drop if pending consumer has exited or buffer saturated to prevent blocking the WebSocket loop
-				}
-			}
-		}
+		session.route(frame)
 	}
 }
 
@@ -395,25 +457,62 @@ func (g *Gateway) handleClientWebSocket(ws *websocket.Conn) {
 		return
 	}
 
-	defer func() {
-		_ = ws.Close()
-	}()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer ws.Close()
+	send := func(f protocol.Frame) {
+		if websocket.JSON.Send(ws, f) != nil {
+			cancel()
+			ws.Close()
+		}
+	}
 	for {
 		var frame protocol.Frame
 		if err := websocket.JSON.Receive(ws, &frame); err != nil {
 			return
 		}
-
-		if frame.NodeID != "" {
-			g.nodesMu.RLock()
-			targetNode, ok := g.nodes[frame.NodeID]
-			g.nodesMu.RUnlock()
-			if ok {
-				_ = targetNode.send(frame)
-			} else {
-				_ = websocket.JSON.Send(ws, protocol.NewErrorRes(frame.ID, "node_offline", "target node offline"))
-			}
+		g.nodesMu.RLock()
+		target := g.nodes[frame.NodeID]
+		g.nodesMu.RUnlock()
+		if target == nil {
+			send(protocol.NewErrorRes(frame.ID, "node_offline", "target node offline"))
+			continue
 		}
+		if frame.Type != protocol.FrameReq {
+			if err := target.send(frame); err != nil {
+				send(protocol.NewErrorRes(frame.ID, "node_offline", err.Error()))
+			}
+			continue
+		}
+		originalID := frame.ID
+		frame.ID = rand.Text()
+		ch := target.registerPending(frame.ID)
+		if err := target.send(frame); err != nil {
+			target.unregisterPending(frame.ID)
+			send(protocol.NewErrorRes(originalID, "node_offline", err.Error()))
+			continue
+		}
+		go func() {
+			defer target.unregisterPending(frame.ID)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case response, ok := <-ch:
+					if !ok {
+						send(protocol.NewErrorRes(originalID, "node_offline", "node disconnected"))
+						return
+					}
+					response.ID = originalID
+					send(response)
+					if response.Type == protocol.FrameRes {
+						return
+					}
+				case <-time.After(relayIdleTimeout):
+					send(protocol.NewErrorRes(originalID, "timeout", "gateway timeout awaiting node response"))
+					return
+				}
+			}
+		}()
 	}
 }
