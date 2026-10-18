@@ -33,6 +33,7 @@ type plugin struct {
 	commands []chat.Command
 	tools    []chat.Tool
 	routes   []extension.Route
+	hooks    chat.Hooks
 	// source lists tools that change while Mob runs.
 	source func() []chat.Tool
 	// background is set for a plugin that runs while it is enabled.
@@ -59,11 +60,14 @@ func (s *Server) plugins() []plugin {
 	}
 }
 
-// register adds every plugin's commands, tools and background run.
-func (s *Server) register() {
-	for _, p := range s.plugins() {
+// register adds each plugin's contributions before serving conversations.
+func (s *Server) register(plugins ...plugin) {
+	for _, p := range plugins {
 		s.Commands.Register(p.commands...)
 		s.Tools.Register(p.tools...)
+		s.Hooks.BeforeTurn = append(s.Hooks.BeforeTurn, p.hooks.BeforeTurn...)
+		s.Hooks.BeforeTool = append(s.Hooks.BeforeTool, p.hooks.BeforeTool...)
+		s.Hooks.AfterTurn = append(s.Hooks.AfterTurn, p.hooks.AfterTurn...)
 		if p.source != nil {
 			s.Tools.RegisterSource(p.source)
 		}

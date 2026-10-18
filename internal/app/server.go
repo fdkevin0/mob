@@ -49,7 +49,7 @@ func NewServer(store *chat.Store, providers *provider.Registry, token string) *S
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
 	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }}
 	s.Commands.Register(s.pluginCommands()...)
-	s.register()
+	s.register(s.plugins()...)
 	return s
 }
 
