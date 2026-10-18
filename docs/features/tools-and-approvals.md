@@ -52,8 +52,10 @@ before it has an effect, and the owner can decide from any client or channel.
 - `Store.Decide` records the decision once and marks an approved call
   `approval-responded`. The service then runs the tool's `Approved` and
   `Store.Complete` records its result. A retried approval is refused as stale,
-  so the effect happens at most once. A crash in between leaves the call
-  reported as not completed, not repeated.
+  so the effect happens at most once. After a crash between those steps, startup
+  marks the call failed with an unknown outcome. Check the external result before asking again; Mob never
+  repeats the approved call automatically. Completed and undecided calls keep
+  their state.
 - Effects outside Mob can key on the approval ID: an approved email's delivery
   is keyed `email:<approval ID>`.
 - After a decision the model receives a note naming the tool: "The user

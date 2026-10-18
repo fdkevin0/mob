@@ -88,6 +88,10 @@ func OpenStore(path string) (*Store, error) {
 		_ = s.Close()
 		return nil, err
 	}
+	if err := s.recoverApprovals(); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
 	if err := os.Chmod(path, 0600); err != nil {
 		_ = s.Close()
 		return nil, err
@@ -400,6 +404,43 @@ func updatePart(tx *sql.Tx, d Decision, change func(Part)) error {
 		AND id=(SELECT conversation_id FROM messages WHERE id=?)
 		AND (SELECT seq FROM messages WHERE id=?)<=(SELECT seq FROM messages WHERE id=conversations.summary_through)`, d.MessageID, d.MessageID)
 	return err
+}
+
+// recoverApprovals settles calls whose decision survived but whose result did not.
+func (s *Store) recoverApprovals() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT a.id,a.message_id,a.tool_call_id FROM approvals a
+ JOIN messages m ON m.id=a.message_id, json_each(m.parts) p
+ WHERE a.status='approved' AND json_extract(p.value,'$.toolCallId')=a.tool_call_id
+ AND json_extract(p.value,'$.state')='approval-responded'`)
+	if err != nil {
+		return err
+	}
+	var unfinished []Decision
+	for rows.Next() {
+		var d Decision
+		if err := rows.Scan(&d.ApprovalID, &d.MessageID, &d.ToolCallID); err != nil {
+			rows.Close()
+			return err
+		}
+		unfinished = append(unfinished, d)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, d := range unfinished {
+		if err := updatePart(tx, d, func(p Part) {
+			p["state"] = "output-error"
+			p["errorText"] = "The service stopped before this approved call's result was saved. Its outcome is unknown; check before requesting it again."
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // expiredApproval is what the model and the user see for a call whose
