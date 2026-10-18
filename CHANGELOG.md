@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.2.0](https://github.com/fdkevin0/mob/compare/v0.1.1...v0.2.0) (2026-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** unify file, flag and environment configuration
+
+### Features
+
+* **app:** let native plugins register turn and tool hooks ([7970528](https://github.com/fdkevin0/mob/commit/79705283bdaa3d7f05f5514cf89420b6d718e84d))
+* **chat:** defer MCP tools until tool_search loads them ([f46b1c6](https://github.com/fdkevin0/mob/commit/f46b1c64039d3e383ecf33410aefe2398e5ad9e8))
+* **client:** add shared headless client and generated contracts ([fd688b0](https://github.com/fdkevin0/mob/commit/fd688b00bdded4ed7c49883f2772ca988bdada5f)), closes [#49](https://github.com/fdkevin0/mob/issues/49)
+* **config:** unify file, flag and environment configuration ([d4ddb25](https://github.com/fdkevin0/mob/commit/d4ddb2572f4a57e9cb6ca63ff078dac261e84142))
+* **dsh:** run DeepSeek Harness tool plugins over MCP ([3a1b54e](https://github.com/fdkevin0/mob/commit/3a1b54eccfd3dc974ec33ae392e9f7bbf4761265))
+* **extension:** start and reload background extensions in dependency order ([6991929](https://github.com/fdkevin0/mob/commit/69919291f4af881cfdb7eb95f57565ee316ccc80))
+* **mcp:** sign in to URL servers with OAuth ([8a980ff](https://github.com/fdkevin0/mob/commit/8a980ff603d9f7a1e470c6ec90820b2011283e31))
+* **telegram:** offer buttons in place of typed commands ([7e6c182](https://github.com/fdkevin0/mob/commit/7e6c182fd18353cc85fbd9cf4e39d2030d19b5a2))
+* **tui:** add experimental shared-client terminal ([3724441](https://github.com/fdkevin0/mob/commit/37244411b467e65eccfbd4f274bfed91b76c4e50)), closes [#49](https://github.com/fdkevin0/mob/issues/49)
+* **tui:** select terminal implementation with MOB_TUI ([b247ecc](https://github.com/fdkevin0/mob/commit/b247ecc07f949faee1c281aae4c146067a892b52))
+* **web:** choose this conversation's model from a header picker ([eaa6793](https://github.com/fdkevin0/mob/commit/eaa67931eeb098c4a205ddbf254e9039826d5809))
+
+
+### Bug Fixes
+
+* **chat:** declare loaded tools and their prompts from the next step ([f3156e0](https://github.com/fdkevin0/mob/commit/f3156e0507e21c7f63070234c48609b6df480d2e))
+* **chat:** settle approvals whose result was never saved ([e59b9d6](https://github.com/fdkevin0/mob/commit/e59b9d630e392f0923e2a2880f36b45e1dd8959e))
+* **client:** keep an unverifiable send's text while the service is unreachable ([10e0822](https://github.com/fdkevin0/mob/commit/10e0822e6ba2f90738e483b1ff5f300da35605de))
+* **client:** publish completed snapshots under slow polling ([#49](https://github.com/fdkevin0/mob/issues/49)) ([ea66230](https://github.com/fdkevin0/mob/commit/ea66230374c8c6c2b75cd91f0cf860f1d7b4835b))
+* **client:** reconcile uncertain sends and reject stale snapshots ([#49](https://github.com/fdkevin0/mob/issues/49)) ([5ffd6fa](https://github.com/fdkevin0/mob/commit/5ffd6fa1794e5251ec16194072b0a21172862914))
+* **gateway:** preserve relayed response status, headers and streams ([35486de](https://github.com/fdkevin0/mob/commit/35486de32462279798d02789002ec03383e2373f))
+* **mcp:** send an empty argument object for tools without parameters ([973e7c1](https://github.com/fdkevin0/mob/commit/973e7c1194ed5e962aa2902f25fa4d19ad60188d))
+* **telegram:** keep approval buttons bound to their original conversation ([6359627](https://github.com/fdkevin0/mob/commit/6359627d10ab6af42850b21054f0fa31848d2f15))
+* **telegram:** list every remembered approval and clear the picker after New ([f721670](https://github.com/fdkevin0/mob/commit/f721670af57355395237d73d37142e05fcf079ef))
+* **tui:** preserve send recovery across conversation navigation ([#49](https://github.com/fdkevin0/mob/issues/49)) ([7283efb](https://github.com/fdkevin0/mob/commit/7283efb3f38b20d5149dc857421b5bbb55aa1392))
+* **wechat:** keep the polling cursor behind unsaved receipts ([71460fd](https://github.com/fdkevin0/mob/commit/71460fd9395700fd537c614fd114a13b4e826b38))
+
 ## [0.1.1](https://github.com/fdkevin0/mob/compare/v0.1.0...v0.1.1) (2026-10-13)
 
 
