@@ -1,5 +1,5 @@
 import { ConversationClient } from '@mob/client';
-import { useEffect, useMemo, useRef, useSyncExternalStore, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type FormEvent } from 'react';
 import { webClient, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 
@@ -38,9 +38,16 @@ export function useConversation({
 		onBusy(state.busy);
 		return () => onBusy(false);
 	}, [state.busy, onBusy]);
+	const run = useCallback(
+		(text: string) => {
+			void conversation.submit(text);
+		},
+		[conversation],
+	);
 	return {
 		...state,
 		setInput: conversation.setInput,
+		run,
 		submit: (event: FormEvent) => {
 			event.preventDefault();
 			void conversation.submit();
