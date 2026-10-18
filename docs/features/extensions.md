@@ -40,6 +40,13 @@ struct still names each plugin.
   own would be.
 - `AfterTurn` sees the saved reply and the turn's error.
 
+Native plugins contribute these typed callbacks through their `hooks` field in
+`internal/app/plugins.go`; registration appends them after existing core hooks.
+Hooks are registered once, before serving, and keep the engine's error handling.
+Like tools, hooks that depend on optional configuration must check whether their
+plugin is enabled. Background dependency ordering does not reorder these hooks
+or automatically gate them on connection status.
+
 `chat.Run` takes an `Agent` (tools and hooks).
 
 ## Commands and routes
