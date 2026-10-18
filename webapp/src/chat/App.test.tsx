@@ -250,3 +250,28 @@ it('ends a streamed turn that reached the step limit with Continue, not an error
   expect(screen.queryByRole('alert')).toBeNull();
   expect(box.value).toBe('');
 });
+
+it('switches the conversation model from the header picker', async () => {
+  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  let run: Record<string, unknown> | undefined;
+  const fetchMock = vi.fn((url: string, options?: RequestInit) => {
+    if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
+    if (url.endsWith('/config')) return Promise.resolve(Response.json({ defaultModel: 'opencode/mimo-v2.6-flash-free', demo: false }));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }]));
+    if (url.endsWith('/models')) return Promise.resolve(Response.json([{ provider: 'deepseek', name: 'DeepSeek', models: [
+      { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', tools: true },
+      { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner', tools: true, reasoning: true },
+    ] }]));
+    if (url.endsWith('/commands/run')) { run = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ markdown: 'Model switched.' })); }
+    return Promise.resolve(Response.json({ messages: [], active: false, model: 'deepseek/deepseek-chat' }));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'deepseek/deepseek-chat' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Choose a model' });
+  expect(dialog).toBeDefined();
+  fireEvent.click(await screen.findByText('DeepSeek Reasoner'));
+  await waitFor(() => expect(run).toBeDefined());
+  expect(run).toMatchObject({ conversationId: 'one', text: '/model deepseek/deepseek-reasoner' });
+  expect(screen.queryByRole('dialog', { name: 'Choose a model' })).toBeNull();
+});

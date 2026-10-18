@@ -8,6 +8,7 @@ import { api, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent,
 import type { Action } from './contracts';
 
 import { Plugins } from './Plugins';
+import { ModelPicker } from './ModelPicker';
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -124,7 +125,6 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
   const [plugins, setPlugins] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
-  const [model, setModel] = useState<string>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -162,18 +162,27 @@ function Workspace({ connection, disconnect }: { connection: Connection; disconn
       <button className="plain" disabled={busy} onClick={() => setPlugins(true)}>Plugins & cloud services</button>
       <div className="sidebar-footer"><span className="status-dot" /> History · on this computer<button className="plain" onClick={disconnect} disabled={busy}>Disconnect</button></div>
     </aside>
-    <main className="chat-main"><header><div><p className="eyebrow">YOUR WORKSPACE</p><strong title="This conversation's model; /model NAME switches it">{model?.startsWith('demo/') ? 'Demo mode · no model calls' : model ?? 'Connecting…'}</strong></div><span className="badge" title={background ? "Continues after this window closes" : "Lifetime is controlled by the process that started the service"}>{background ? "Background service" : "Session service"}</span></header>
+    <main className="chat-main">
       {error && <div className="error" role="alert">{error}<button className="plain" onClick={() => void refreshList().catch(e => setError(errorText(e)))}>Refresh</button></div>}
-      {selected ? <Thread key={selected.id} connection={connection} id={selected.id} initial={selected.snapshot} onModel={setModel} onBusy={setBusy} onChanged={() => { void refreshList().catch(e => setError(errorText(e))); }} onAction={act} /> : <div className="loading" role="status">Opening workspace…</div>}
+      {selected ? <Thread key={selected.id} connection={connection} id={selected.id} initial={selected.snapshot} background={background} onBusy={setBusy} onChanged={() => { void refreshList().catch(e => setError(errorText(e))); }} onAction={act} /> : <div className="loading" role="status">Opening workspace…</div>}
     </main>
   </div>;
 }
 
-function Thread({ connection, id, initial, onModel, onBusy, onChanged, onAction }: { connection: Connection; id: string; initial: Snapshot; onModel: (model: string) => void; onBusy: (busy: boolean) => void; onChanged: () => void; onAction: (action: Action) => void }) {
-  const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, proceed, decide, cancel, commandResult, dismissCommand } = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
+function Thread({ connection, id, initial, background, onBusy, onChanged, onAction }: { connection: Connection; id: string; initial: Snapshot; background: boolean; onBusy: (busy: boolean) => void; onChanged: () => void; onAction: (action: Action) => void }) {
+  const { model, input, setInput, remoteBusy, approvalBusy, failure, messages, streaming, busy, error, submit, run, proceed, decide, cancel, commandResult, dismissCommand } = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
   const completion = useCompletion({ connection, id, input, setInput });
-  useEffect(() => { onModel(model); }, [model, onModel]);
+  const [choosing, setChoosing] = useState(false);
+  const [defaultModel, setDefaultModel] = useState<string>();
+  useEffect(() => {
+    let live = true;
+    api<{ defaultModel?: string }>(connection, '/config').then(config => { if (live) setDefaultModel(config.defaultModel); }).catch(() => { /* the header stays usable without the default model */ });
+    return () => { live = false; };
+  }, [connection]);
+  const modelLabel = model?.startsWith('demo/') ? 'Demo mode · no model calls' : model ?? 'Connecting…';
   return <>
+    <header><div><p className="eyebrow">YOUR WORKSPACE</p><button className="model-button" aria-haspopup="dialog" aria-expanded={choosing} title="This conversation's model; choose another without typing /model" onClick={() => setChoosing(true)}>{modelLabel}</button></div><span className="badge" title={background ? "Continues after this window closes" : "Lifetime is controlled by the process that started the service"}>{background ? "Background service" : "Session service"}</span></header>
+    {choosing && <ModelPicker connection={connection} current={model} defaultModel={defaultModel} onClose={() => setChoosing(false)} onPick={choice => { setChoosing(false); run(choice ? `/model ${choice}` : '/model default'); }} />}
     <ChatConversation className="conversation"><ConversationContent className="conversation-content">
       {messages.length === 0 && <ConversationEmptyState title="What’s on your mind?" description="Ask a question, explore an idea, or save something to remember." />}
       {messages.map(message => <Message key={message.id} from={message.role}>
