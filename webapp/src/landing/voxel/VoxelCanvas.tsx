@@ -1,0 +1,62 @@
+import { useEffect, useRef } from 'react';
+import type { Voxel } from './model';
+import { paint, type Frame } from './project';
+import { createVoxelRenderer, type VoxelRenderer } from './gpu';
+
+type Props = {
+	scene: (time: number) => Voxel[];
+	frame: (width: number, height: number) => Frame;
+	pixel?: number; // CSS pixels per rendered pixel
+	gpu?: boolean; // WebGPU when available, Canvas 2D otherwise
+	still?: number; // the time shown when motion is reduced
+	className?: string;
+	label?: string;
+};
+
+function canvas2d(canvas: HTMLCanvasElement): VoxelRenderer | undefined {
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return undefined;
+	return {
+		resize(width, height) { canvas.width = width; canvas.height = height; },
+		draw(voxels, frame) { ctx.clearRect(0, 0, canvas.width, canvas.height); paint(ctx, voxels, frame); },
+		destroy() {},
+	};
+}
+
+// A voxel scene drawn small and scaled up, so every voxel is crisp pixels.
+export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, className, label }: Props) {
+	const ref = useRef<HTMLCanvasElement>(null);
+	useEffect(() => {
+		const element = ref.current;
+		if (!element) return;
+		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		let renderer: VoxelRenderer | undefined, raf = 0, visible = true, gone = false;
+		const started = performance.now();
+		const draw = () => {
+			if (!renderer) return;
+			const time = reduced ? still : (performance.now() - started) / 1000;
+			renderer.draw(scene(time), frame(element.width, element.height));
+		};
+		const loop = () => { draw(); if (!reduced && visible && !gone) raf = requestAnimationFrame(loop); };
+		const resize = () => {
+			renderer?.resize(Math.ceil(element.clientWidth / pixel), Math.ceil(element.clientHeight / pixel));
+			draw();
+		};
+		const observer = new ResizeObserver(resize);
+		const seen = new IntersectionObserver(([entry]) => {
+			const was = visible; visible = entry.isIntersecting;
+			if (visible && !was && !reduced && !gone) raf = requestAnimationFrame(loop);
+		});
+		(gpu ? createVoxelRenderer(element).catch(() => undefined) : Promise.resolve(undefined)).then(found => {
+			if (gone) { found?.destroy(); return; }
+			renderer = found ?? canvas2d(element);
+			element.dataset.renderer = found ? 'webgpu' : 'canvas';
+			observer.observe(element);
+			seen.observe(element);
+			resize();
+			raf = requestAnimationFrame(loop);
+		});
+		return () => { gone = true; cancelAnimationFrame(raf); observer.disconnect(); seen.disconnect(); renderer?.destroy(); };
+	}, [scene, frame, pixel, gpu, still]);
+	return <canvas ref={ref} className={className} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} />;
+}

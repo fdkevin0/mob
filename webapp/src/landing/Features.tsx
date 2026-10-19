@@ -1,110 +1,120 @@
-import type { CSSProperties, ReactNode } from 'react';
-import { icons, type IconName } from './pixels';
-import { Calf } from './Logo';
+import { calf, calves, colors, move, turn, type Pose, type RGB, type Voxel } from './voxel/model';
+import { add, arc, block, type Facing, type Vec } from './voxel/story';
+import { VoxelCanvas } from './voxel/VoxelCanvas';
 
-// Small looping scenes, one per feature, so the page shows rather than tells.
+// One small voxel scene per feature, in the same world as the hero.
 
-function Pixels({ name, x, y, size = 3, className }: { name: IconName; x: number; y: number; size?: number; className?: string }) {
-	return (
-		<g className={className} transform={`translate(${x} ${y})`}>
-			{icons[name].flatMap((row, iy) => [...row].map((c, ix) => c === '#' ? <rect key={`${ix}.${iy}`} x={ix * size} y={iy * size} width={size - 0.6} height={size - 0.6} /> : null))}
-		</g>
-	);
+const tile = (x: number, z: number) => ((Math.floor(x / 2) + Math.floor(z / 2)) % 2 === 0 ? colors.floorA : colors.floorB);
+
+function floor(half = 6): Voxel[] {
+	const v: Voxel[] = [];
+	for (let x = -half; x < half; x++) for (let z = -half; z < half; z++) v.push([x, -1, z, ...tile(x, z), 0, 1]);
+	return v;
 }
 
-const vars = (values: Record<string, string | number>) => values as CSSProperties;
+const steps = (t: number, rate: number) => Math.floor(t * rate);
+const cow = (style: (typeof calves)[keyof typeof calves], pose: Pose, facing: Facing, at: Vec, t: number, hop = 0) =>
+	move(turn(calf(style, pose, steps(t, 6)), facing), at[0], at[1] + hop, at[2]);
+const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, color: RGB, glow = 0): Voxel[] => {
+	const v: Voxel[] = [];
+	for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) v.push([x, y, z, ...color, glow, 1]);
+	return v;
+};
+const sign = (rows: string[], at: Vec, color: RGB, scale = 0.6): Voxel[] =>
+	rows.flatMap((row, iy) => [...row].flatMap((c, ix) => c === '#' ? [[at[0] + ix * scale, at[1] - iy * scale, at[2], ...color, 1, scale] as Voxel] : []));
 
-function Home() {
-	return (
-		<svg viewBox="0 0 200 120">
-			<rect className="fx-boundary" x="30" y="14" width="140" height="92" />
-			<Pixels name="memory" x={89} y={49} className="fx-lime" />
-			<g className="fx-orbit">
-				{[0, 1, 2, 3].map(i => <rect key={i} className="fx-dot" x={-2} y={-32} width="4" height="4" transform={`rotate(${i * 90})`} />)}
-			</g>
-			<rect className="fx-escape" x="98" y="58" width="4" height="4" />
-		</svg>
-	);
+const base = floor();
+const wall = colors.desk;
+
+// Runs at home: a calf at its own desk, in its own room.
+function home(t: number): Voxel[] {
+	const room = [...box(-6, -6, 0, 6, -6, 5, wall), ...box(-5, 5, 0, 6, -6, -6, wall), ...box(-6, -6, 3, 4, -1, 1, colors.cyan, 0.3)];
+	const deskTop = box(2, 3, 4, 4, -2, 2, colors.deskTop);
+	const legs = [...box(2, 3, 0, 3, -2, -2, colors.desk), ...box(2, 3, 0, 3, 2, 2, colors.desk)];
+	const lit = steps(t, 4);
+	const screen = box(4, 4, 5, 8, -1, 1, colors.ink).map((v, i) => ((i + lit) % 3 === 0 ? [...v.slice(0, 3), ...colors.lime, 0.9, 1] as Voxel : v));
+	return [...base, ...room, ...deskTop, ...legs, ...screen, ...cow(calves.lime, 'type', 1, [-1, 0, 0], t)];
 }
 
-function Channels() {
-	const sources: IconName[] = ['browser', 'terminal', 'send', 'message'];
-	return (
-		<svg viewBox="0 0 200 120">
-			{sources.map((name, i) => {
-				const y = 10 + i * 27;
-				return (
-					<g key={name}>
-						<Pixels name={name} x={22} y={y} size={2.6} className="fx-muted" />
-						<line className="fx-wire" x1="44" y1={y + 9} x2="142" y2="60" />
-						<rect className="fx-packet" x="42" y={y + 7} width="4" height="4" style={vars({ '--dx': '100px', '--dy': `${51 - y}px`, animationDelay: `${i * 0.45}s` })} />
-					</g>
-				);
-			})}
-			<g transform="translate(144 44)"><Calf size={36} /></g>
-		</svg>
-	);
+// Every channel: four sources lob blocks at one calf.
+function channels(t: number): Voxel[] {
+	const sources: [Vec, RGB][] = [[[-5, 0, -5], colors.cyan], [[5, 0, -5], colors.amber], [[-5, 0, 3], colors.white], [[3, 0, -5], colors.violet]];
+	const out = [...base];
+	const hands: Vec = [0, 11.6, 0.5];
+	sources.forEach(([at, color], i) => {
+		out.push(...box(at[0], at[0] + 1, 0, 2, at[2], at[2] + 1, color, 0.2));
+		const p = ((t + i * 0.55) % 2.2) / 1.4;
+		if (p < 1) out.push(block(arc(add(at, [0.5, 3.5, 0.5]), hands, p, 4), color, 1.2, 0.8));
+	});
+	return [...out, ...cow(calves.blue, steps(t, 3) % 2 ? 'catch' : 'hold', 0, [0, 0, 0], t)];
 }
 
-function Approval() {
-	return (
-		<svg viewBox="0 0 200 120">
-			<line className="fx-wire" x1="20" y1="60" x2="180" y2="60" />
-			<rect className="fx-gate" x="97" y="34" width="6" height="52" />
-			<rect className="fx-request" x="20" y="56" width="8" height="8" />
-			<Pixels name="shield" x={89} y={8} size={3} className="fx-gate-icon" />
-		</svg>
-	);
+// Asks first: holds the block, asks, gets the nod, throws.
+function approval(t: number): Voxel[] {
+	const p = t % 4;
+	const out = [...base, ...box(4, 5, 0, 1, -1, 0, colors.desk), ...box(4, 5, 2, 2, -1, 0, p > 2.4 ? colors.lime : colors.deskTop)];
+	const at: Vec = [-3, 0, 0];
+	if (p < 1.8) {
+		out.push(...cow(calves.brown, 'hold', 1, at, t), block([at[0] + 3.6, 6.4, 0.5], colors.lime));
+		if (steps(t, 3) % 2) out.push(...sign(['###', '..#', '.##', '...', '.#.'], [at[0] - 1, 15, 1], colors.amber, 0.5));
+	} else if (p < 2.4) {
+		out.push(...cow(calves.brown, 'hold', 1, at, t), block([at[0] + 3.6, 6.4, 0.5], colors.lime));
+		out.push(...sign(['....#', '...#.', '#.#..', '.#...'], [at[0] - 1.4, 15, 1], colors.lime, 0.5));
+	} else {
+		out.push(...cow(calves.brown, p < 2.7 ? 'throw' : 'idle', 1, at, t));
+		if (p < 3.4) out.push(block(arc([at[0] + 3.6, 6.4, 0.5], [4.5, 3.6, -0.5], (p - 2.4) / 1, 3), colors.lime, 1.6, 0.9));
+	}
+	return out;
 }
 
-function Sandbox() {
-	const balls = [[0, 0, 1.7, 2.3], [1, 0.4, 2.1, 1.6], [0.5, 1, 1.4, 2.7], [0.2, 0.7, 2.6, 1.9], [0.8, 0.2, 1.9, 2.2]];
-	return (
-		<svg viewBox="0 0 200 120">
-			<rect className="fx-box" x="50" y="18" width="100" height="84" />
-			{balls.map(([dx, dy, tx, ty], i) => (
-				<g key={i} className="fx-bounce-x" style={vars({ animationDuration: `${tx}s`, animationDelay: `-${dx * tx}s` })}>
-					<rect className={i % 2 ? 'fx-ball amber' : 'fx-ball'} x="54" y="22" width="6" height="6" style={vars({ animationDuration: `${ty}s`, animationDelay: `-${dy * ty}s` })} />
-				</g>
-			))}
-		</svg>
-	);
+// Sandboxed: a calf in a pen, juggling.
+function sandbox(t: number): Voxel[] {
+	const fence: Voxel[] = [];
+	for (let i = -5; i <= 5; i++) for (const [x, z] of [[i, -5], [i, 5], [-5, i], [5, i]] as [number, number][]) {
+		const post = (i + 5) % 2 === 0;
+		fence.push([x, 0, z, ...colors.desk, 0, 1], [x, 2, z, ...colors.desk, 0, 1]);
+		if (post) fence.push([x, 1, z, ...colors.desk, 0, 1], [x, 3, z, ...colors.deskTop, 0, 1]);
+	}
+	const p = (t % 1.2) / 1.2;
+	const y = 11.6 + Math.round(Math.sin(p * Math.PI) * 6) / 2;
+	return [...base, ...fence, ...cow(calves.lilac, p < 0.25 || p > 0.75 ? 'catch' : 'idle', 0, [0, 0, 0], t), block([0, y, 0.5], colors.amber, 1.4, 0.9)];
 }
 
-function Memory() {
-	const rows = [70, 46, 82, 58, 34];
-	return (
-		<svg viewBox="0 0 200 120">
-			{rows.map((width, i) => (
-				<rect key={i} className="fx-fact" x="40" y={18 + i * 18} width={width * 1.4} height="9" style={vars({ animationDelay: `${i * 0.5}s` })} />
-			))}
-		</svg>
-	);
+// Remembers: a calf builds a memory tower, a layer at a time.
+function memory(t: number): Voxel[] {
+	const layers = Math.floor(t % 7);
+	const tower: Voxel[] = [];
+	for (let y = 0; y < Math.min(layers, 6); y++) tower.push(...box(2, 3, y, y, -2, -1, colors.violet, y === layers - 1 ? 0.8 : 0.1));
+	const p = t % 1;
+	const out = [...base, ...tower, ...cow(calves.boss, p < 0.3 ? 'throw' : 'idle', 1, [-4, 0, 0], t)];
+	if (layers < 6 && p > 0.2) out.push(block(arc([-0.4, 9, 0.5], [3, layers + 1.5, -1], (p - 0.2) / 0.8, 3), colors.violet, 1.4, 0.9));
+	return out;
 }
 
-function Plugins() {
-	const slots = [[40, 24], [138, 24], [40, 78], [138, 78]];
-	return (
-		<svg viewBox="0 0 200 120">
-			<rect className="fx-hub" x="82" y="42" width="36" height="36" />
-			{slots.map(([x, y], i) => (
-				<g key={i}>
-					<line className="fx-wire" x1={x + 11} y1={y + 9} x2="100" y2="60" />
-					<rect className="fx-socket" x={x} y={y} width="22" height="18" />
-					<rect className="fx-module" x={x + 3} y={y + 3} width="16" height="12" style={vars({ animationDelay: `${i * 0.6}s`, '--from': `${(x < 100 ? -1 : 1) * 24}px` })} />
-				</g>
-			))}
-		</svg>
-	);
+// Plugs in: blocks slot into a board of sockets.
+function plugins(t: number): Voxel[] {
+	const board = box(-6, -6, 0, 9, -4, 3, wall);
+	const slots: Vec[] = [[-5, 7, -2.5], [-5, 7, 1.5], [-5, 3, -2.5], [-5, 3, 1.5]];
+	const done = Math.floor((t % 6) / 1.2);
+	const out = [...base, ...board];
+	slots.forEach((s, i) => out.push(block(s, i < done ? [colors.cyan, colors.lime, colors.amber, colors.violet][i] : colors.ink, 2, i < done ? 0.8 : 0)));
+	const p = (t % 1.2) / 1.2;
+	if (done < 4) out.push(block(arc([1.4, 9, 0.5], slots[done], p, 2), [colors.cyan, colors.lime, colors.amber, colors.violet][done], 1.6, 0.9));
+	return [...out, ...cow(calves.blue, p < 0.25 ? 'throw' : 'idle', 3, [3, 0, 0], t)];
 }
 
-const features: { title: string; hint: string; scene: ReactNode }[] = [
-	{ title: 'Runs at home', hint: 'Your machine, your keys.', scene: <Home /> },
-	{ title: 'Every channel', hint: 'Web, terminal, Telegram, email.', scene: <Channels /> },
-	{ title: 'Asks first', hint: 'Effects wait for you.', scene: <Approval /> },
-	{ title: 'Sandboxed', hint: 'Tools run in a container.', scene: <Sandbox /> },
-	{ title: 'Remembers', hint: 'Keeps what matters.', scene: <Memory /> },
-	{ title: 'Plugs in', hint: 'MCP servers and skills.', scene: <Plugins /> },
+const frame = (width: number, height: number) => {
+	const unit = Math.min(width / 19, height / 17);
+	return { unit, x: width / 2, y: height * 0.76 };
+};
+
+const features = [
+	{ title: 'Runs at home', hint: 'Your machine, your keys.', scene: home },
+	{ title: 'Every channel', hint: 'Web, terminal, Telegram, email.', scene: channels },
+	{ title: 'Asks first', hint: 'Effects wait for your nod.', scene: approval },
+	{ title: 'Sandboxed', hint: 'Tools stay in the pen.', scene: sandbox },
+	{ title: 'Remembers', hint: 'Keeps what matters.', scene: memory },
+	{ title: 'Plugs in', hint: 'MCP servers and skills.', scene: plugins },
 ];
 
 export function Features() {
@@ -112,7 +122,7 @@ export function Features() {
 		<div className="feature-grid">
 			{features.map(feature => (
 				<article key={feature.title} className="feature">
-					<div className="feature-scene" aria-hidden="true">{feature.scene}</div>
+					<VoxelCanvas className="feature-scene" scene={feature.scene} frame={frame} pixel={3} still={1.5} />
 					<h3>{feature.title}</h3>
 					<p>{feature.hint}</p>
 				</article>

@@ -8,9 +8,10 @@ The site at https://mob.fdkevin.cloud is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has three parts,
 served by the Worker in `worker/`:
 
-- `/` is the landing page. Behind the title, WebGPU draws agents passing
-  data to each other in an isometric 3D view (Canvas 2D where WebGPU is
-  missing); small looping scenes show the features. Both are idealised, not a
+- `/` is the landing page. Under the title, WebGPU draws isometric voxel
+  calves, one per agent, catching, working on and throwing blocks of work,
+  with the boss calf waking a slacker with a whip (Canvas 2D where WebGPU is
+  missing). Small voxel scenes show the features. Both are idealised, not a
   picture of what Mob does today.
 - Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
   Turnstile check has to pass before the GitHub flow starts. Accounts and

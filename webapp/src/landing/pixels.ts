@@ -119,19 +119,3 @@ export const icons = {
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof icons;
-
-// The Mob calf: h horn, # hide, o eye, m muzzle, n nostril, s patch.
-export const calf = [
-	'.hh........hh.',
-	'..hh......hh..',
-	'...##ss####...',
-	'##.#sss####.##',
-	'.#.#o####o#.#.',
-	'...########...',
-	'..##mmmmmm##..',
-	'..#mnmmmmnm#..',
-	'..#mmmmmmmm#..',
-	'...#mmmmmm#...',
-	'....######....',
-];
-

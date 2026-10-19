@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AgentField } from './AgentField';
 import { authClient, keepOffer, loadSite, openApp, pendingOffer, type Site } from './auth';
 import { Features } from './Features';
 import { Logo } from './Logo';
 import { PixelIcon } from './PixelIcon';
 import { SignIn } from './SignIn';
+import { VoxelCanvas } from './voxel/VoxelCanvas';
+import { heroFrame, heroVoxels } from './voxel/story';
 
 export function Landing() {
 	const session = authClient.useSession();
@@ -13,6 +14,7 @@ export function Landing() {
 	const [dialog, setDialog] = useState<{ reason?: string }>();
 	const [menu, setMenu] = useState(false);
 	const user = session.data?.user;
+	const pixel = useState(() => (window.matchMedia('(max-width: 720px)').matches ? 2 : 3))[0];
 
 	useEffect(() => {
 		const linked = keepOffer();
@@ -60,7 +62,7 @@ export function Landing() {
 
 			<main>
 				<section className="hero">
-					<AgentField className="hero-field" />
+					<VoxelCanvas className="hero-field" scene={heroVoxels} frame={heroFrame} gpu pixel={pixel} still={5} label="Voxel calves passing blocks of work: one catches a request, throws tasks to the others, wakes a sleeping one with a whip and sends the answer back" />
 					<div className="hero-copy">
 						<h1>Agents <em>for you</em>.</h1>
 						<p className="hero-sub">Local first · every channel · open source</p>

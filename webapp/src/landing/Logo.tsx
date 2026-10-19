@@ -1,13 +1,14 @@
-import { calf } from './pixels';
+import { calf, calves } from './voxel/model';
+import { toSVG } from './voxel/project';
 
-const fills: Record<string, string> = { h: '#f4f6ef', '#': '#c8f560', s: '#1c2412', o: '#07080a', m: '#ffc4b4', n: '#07080a' };
+// The Mob calf: the head of the lime voxel calf, drawn once as SVG. Frame 1
+// keeps its eyes open.
+const head = toSVG(calf(calves.lime, 'idle', 1).filter(v => v[1] >= 7));
 
-// The Mob calf, drawn from its pixel map.
 export function Calf({ size = 28, className }: { size?: number; className?: string }) {
-	const width = calf[0].length;
 	return (
-		<svg className={className} width={size} height={(size / width) * calf.length} viewBox={`0 0 ${width} ${calf.length}`} shapeRendering="crispEdges" aria-hidden="true">
-			{calf.flatMap((row, y) => [...row].map((c, x) => fills[c] ? <rect key={`${x}.${y}`} x={x} y={y} width={1.02} height={1.02} fill={fills[c]} /> : null))}
+		<svg className={className} width={size} height={(size / head.width) * head.height} viewBox={head.viewBox} shapeRendering="crispEdges" aria-hidden="true">
+			{head.polys.map((p, i) => <path key={i} d={p.d} fill={p.fill} />)}
 		</svg>
 	);
 }
