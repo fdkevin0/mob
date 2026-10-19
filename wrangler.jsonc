@@ -4,8 +4,8 @@
 // Builds deploys it from this repository with build command
 // `bun install --frozen-lockfile && bun run build:web` and deploy command
 // `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
-// Secrets: BETTER_AUTH_SECRET, TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY,
-// GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.
+// Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY and GITHUB_CLIENT_SECRET.
+// The Turnstile site key and GitHub client ID are public, so they are vars.
 {
 	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
 	"name": "mob",
@@ -25,6 +25,10 @@
 			"migrations_dir": "worker/migrations"
 		}
 	],
+	"vars": {
+		"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
+		"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
+	},
 	"routes": [{ "pattern": "mob.fdkevin.cloud", "custom_domain": true }],
 	"observability": {
 		"logs": {

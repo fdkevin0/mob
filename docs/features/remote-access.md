@@ -57,10 +57,12 @@ Deployment:
   deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
-- Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`,
-  `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. The GitHub OAuth app's
+- Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY` and
+  `GITHUB_CLIENT_SECRET`. The public `TURNSTILE_SITE_KEY` and
+  `GITHUB_CLIENT_ID` are vars in `wrangler.jsonc`. The GitHub OAuth app's
   callback URL is `https://mob.fdkevin.cloud/api/auth/callback/github`.
-- Locally, put the secrets in `.dev.vars` (Turnstile's test keys work), run
+- Locally, put the secrets in `.dev.vars`, which overrides the vars too
+  (Turnstile's test keys work), run
   `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
   `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799` (the flag
   keeps the request host local instead of the production domain; port 8787 is
