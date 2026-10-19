@@ -21,6 +21,7 @@
 		{
 			"binding": "DB",
 			"database_name": "mob-auth",
+			"database_id": "4de3925b-83b6-4df5-87df-d0e2d764226d",
 			"migrations_dir": "worker/migrations"
 		}
 	],
