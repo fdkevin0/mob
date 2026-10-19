@@ -120,11 +120,18 @@ export const icons = {
 
 export type IconName = keyof typeof icons;
 
-// MOB in a 5-row pixel font, for the wordmark.
-export const wordmark = [
-	'#...#..###..####.',
-	'##.##.#...#.#...#',
-	'#.#.#.#...#.####.',
-	'#...#.#...#.#...#',
-	'#...#..###..####.',
+// The Mob calf: h horn, # hide, o eye, m muzzle, n nostril, s patch.
+export const calf = [
+	'.hh........hh.',
+	'..hh......hh..',
+	'...##ss####...',
+	'##.#sss####.##',
+	'.#.#o####o#.#.',
+	'...########...',
+	'..##mmmmmm##..',
+	'..#mnmmmmnm#..',
+	'..#mmmmmmmm#..',
+	'...#mmmmmm#...',
+	'....######....',
 ];
+
