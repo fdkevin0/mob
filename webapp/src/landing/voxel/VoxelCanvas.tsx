@@ -9,6 +9,7 @@ type Props = {
 	pixel?: number; // CSS pixels per rendered pixel
 	gpu?: boolean; // WebGPU when available, Canvas 2D otherwise
 	still?: number; // the time shown when motion is reduced
+	fps?: number; // at most this many frames a second
 	className?: string;
 	label?: string;
 };
@@ -24,7 +25,7 @@ function canvas2d(canvas: HTMLCanvasElement): VoxelRenderer | undefined {
 }
 
 // A voxel scene drawn small and scaled up, so every voxel is crisp pixels.
-export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, className, label }: Props) {
+export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, fps = 60, className, label }: Props) {
 	const ref = useRef<HTMLCanvasElement>(null);
 	useEffect(() => {
 		const element = ref.current;
@@ -37,7 +38,11 @@ export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, c
 			const time = reduced ? still : (performance.now() - started) / 1000;
 			renderer.draw(scene(time), frame(element.width, element.height));
 		};
-		const loop = () => { draw(); if (!reduced && visible && !gone) raf = requestAnimationFrame(loop); };
+		let last = 0;
+		const loop = (now: number) => {
+			if (now - last >= 1000 / fps - 2) { last = now; draw(); }
+			if (!reduced && visible && !gone) raf = requestAnimationFrame(loop);
+		};
 		const resize = () => {
 			renderer?.resize(Math.ceil(element.clientWidth / pixel), Math.ceil(element.clientHeight / pixel));
 			draw();
@@ -57,6 +62,6 @@ export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, c
 			raf = requestAnimationFrame(loop);
 		});
 		return () => { gone = true; cancelAnimationFrame(raf); observer.disconnect(); seen.disconnect(); renderer?.destroy(); };
-	}, [scene, frame, pixel, gpu, still]);
+	}, [scene, frame, pixel, gpu, still, fps]);
 	return <canvas ref={ref} className={className} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} />;
 }

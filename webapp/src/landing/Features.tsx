@@ -1,5 +1,5 @@
 import { calf, calves, colors, move, turn, type Pose, type RGB, type Voxel } from './voxel/model';
-import { add, arc, block, type Facing, type Vec } from './voxel/story';
+import { add, arc, block, type Facing, type Vec } from './voxel/motion';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
 
 // One small voxel scene per feature, in the same world as the hero.

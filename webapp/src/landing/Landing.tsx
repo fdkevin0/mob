@@ -5,7 +5,7 @@ import { Logo } from './Logo';
 import { PixelIcon } from './PixelIcon';
 import { SignIn } from './SignIn';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
-import { heroFrame, heroVoxels } from './voxel/story';
+import { officeFrame, officeVoxels } from './voxel/office';
 
 export function Landing() {
 	const session = authClient.useSession();
@@ -14,7 +14,6 @@ export function Landing() {
 	const [dialog, setDialog] = useState<{ reason?: string }>();
 	const [menu, setMenu] = useState(false);
 	const user = session.data?.user;
-	const pixel = useState(() => (window.matchMedia('(max-width: 720px)').matches ? 2 : 3))[0];
 
 	useEffect(() => {
 		const linked = keepOffer();
@@ -62,7 +61,7 @@ export function Landing() {
 
 			<main>
 				<section className="hero">
-					<VoxelCanvas className="hero-field" scene={heroVoxels} frame={heroFrame} gpu pixel={pixel} still={5} label="Voxel calves passing blocks of work: one catches a request, throws tasks to the others, wakes a sleeping one with a whip and sends the answer back" />
+					<VoxelCanvas className="hero-field" scene={officeVoxels} frame={officeFrame} gpu pixel={2} fps={20} still={24} label="An office of small voxel calves working at their desks, high-fiving, fetching milk tea and napping" />
 					<div className="hero-copy">
 						<h1>Agents <em>for you</em>.</h1>
 						<p className="hero-sub">Local first · every channel · open source</p>

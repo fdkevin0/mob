@@ -35,6 +35,7 @@ export type CalfStyle = {
 	belly?: RGB;
 	seed: number;
 	shades?: boolean; // the boss wears sunglasses
+	muzzle?: RGB;
 };
 
 export const calves = {
@@ -45,7 +46,7 @@ export const calves = {
 	lilac: { body: hex('#b9a8ff'), spots: hex('#f4f0ff'), seed: 2 },
 } satisfies Record<string, CalfStyle>;
 
-export type Pose = 'idle' | 'catch' | 'hold' | 'throw' | 'type' | 'whip-up' | 'whip-crack' | 'startle' | 'lie' | 'stretch';
+export type Pose = 'idle' | 'catch' | 'hold' | 'throw' | 'type' | 'whip-up' | 'whip-crack' | 'startle' | 'lie' | 'stretch' | 'walk' | 'carry' | 'drink' | 'high-five';
 
 // Patches that look like hide markings rather than noise.
 const spotted = (x: number, y: number, z: number, seed: number) =>
@@ -70,6 +71,16 @@ function arm(put: Put, side: number, pose: Pose, frame: number, color: RGB) {
 			cells = right ? [[x, 7, 0], [x, 8, 1], [x, 9, 2]] : [[x, 6, 0], [x, 5, 0], [x, 4, 0]]; break;
 		case 'whip-up':
 			cells = right ? [[x, 7, 0], [x, 8, 0], [x, 9, -1]] : [[x, 6, 0], [x, 5, 0], [x, 4, 0]]; break;
+		case 'walk': {
+			const swing = (frame % 2 ? 1 : -1) * side;
+			cells = [[x, 6, 0], [x, 5, swing], [x, 4, swing]]; break;
+		}
+		case 'carry': // walking with something held out in front
+			cells = [[x, 6, 0], [x, 6, 1], [x, 6, 2]]; break;
+		case 'drink':
+			cells = right ? [[x, 7, 0], [x, 8, 1], [x, 8, 2]] : [[x, 6, 0], [x, 5, 0], [x, 4, 0]]; break;
+		case 'high-five':
+			cells = right ? [[x, 7, 0], [x, 8, 0], [x, 9, 0], [x, 10, 0]] : [[x, 6, 0], [x, 5, 0], [x, 4, 0]]; break;
 		case 'whip-crack':
 			cells = right ? [[x, 6, 1], [x, 6, 2], [x, 6, 3]] : [[x, 6, 0], [x, 5, 0], [x, 4, 0]]; break;
 		default:
@@ -89,7 +100,11 @@ export function calf(style: CalfStyle, pose: Pose, frame = 0): Voxel[] {
 		return style.body;
 	};
 	// Legs and hooves.
-	for (const x of [-1, 1]) { put(x, 0, 0, colors.hoof); put(x, 1, 0, style.body); put(x, 2, 0, hide(x, 2, 0)); }
+	const stride = pose === 'walk' || pose === 'carry' ? (frame % 2 ? 1 : -1) : 0;
+	for (const x of [-1, 1]) {
+		const step = stride * x;
+		put(x, 0, step, colors.hoof); put(x, 1, step, style.body); put(x, 2, 0, hide(x, 2, 0));
+	}
 	// Torso.
 	for (let x = -2; x <= 2; x++) for (let y = 3; y <= 6; y++) for (let z = -1; z <= 1; z++) put(x, y, z, hide(x, y, z));
 	// Tail with a tuft.
@@ -105,7 +120,7 @@ export function calf(style: CalfStyle, pose: Pose, frame = 0): Voxel[] {
 	}
 	if (style.shades) { put(-2, 9, 1, colors.ink); put(2, 9, 1, colors.ink); }
 	// Muzzle with nostrils.
-	for (let x = -1; x <= 1; x++) for (const y of [7, 8]) put(x, y, 3, y === 8 && x !== 0 ? colors.nostril : colors.muzzle);
+	for (let x = -1; x <= 1; x++) for (const y of [7, 8]) put(x, y, 3, y === 8 && x !== 0 ? colors.nostril : style.muzzle ?? colors.muzzle);
 	// Ears and horns.
 	const ear = pose === 'idle' && frame % 7 === 3 ? 10 : 9;
 	put(-3, ear, 0, style.body); put(3, ear, 0, style.body);
@@ -122,6 +137,29 @@ function whip(put: Put, pose: Pose) {
 		return;
 	}
 	for (let i = 1; i <= 7; i++) put(3, 6 - (i > 4 ? 1 : 0), 3 + i, i === 7 ? colors.amber : leather, i === 7 ? 1 : 0);
+}
+
+// One calf template, many hides: a seeded skin with a coat colour, a marking
+// (patches, a face blaze or a pale belly) and now and then sunglasses.
+const coats = ['#f1f0ea', '#2b2826', '#d08a4e', '#a8683d', '#8d929a', '#d9c39b', '#5ab4f0', '#b9a8ff', '#9bd86a', '#f2a7b8', '#6b4a35'].map(hex);
+const shade = (c: RGB, k: number): RGB => [c[0] * k, c[1] * k, c[2] * k];
+const light = (c: RGB) => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11 > 0.55;
+
+export function skin(seed: number): CalfStyle {
+	let a = (seed * 2654435761) >>> 0;
+	const next = () => { a ^= a << 13; a ^= a >>> 17; a ^= a << 5; return (a >>> 0) / 4294967296; };
+	const body = coats[Math.floor(next() * coats.length)];
+	const mark = light(body) ? (next() < 0.5 ? hex('#2b2826') : shade(body, 0.62)) : (next() < 0.6 ? hex('#f1ece2') : shade(body, 1.35).map(v => Math.min(1, v)) as RGB);
+	const kind = next();
+	return {
+		body,
+		spots: kind < 0.45 ? mark : undefined,
+		blaze: kind >= 0.45 && kind < 0.65 ? hex('#f1ece2') : undefined,
+		belly: kind >= 0.65 && kind < 0.85 ? (light(body) ? shade(body, 0.8) : hex('#f1ece2')) : undefined,
+		seed: Math.floor(next() * 20),
+		shades: next() < 0.08,
+		muzzle: light(body) ? undefined : hex('#d9a49a'),
+	};
 }
 
 // Quarter turns about y: 0 faces +z, 1 faces +x, 2 faces -z, 3 faces -x.
@@ -159,6 +197,15 @@ export function snore(x: number, y: number, z: number, scale = 0.5): Voxel[] {
 		if (c === '#') voxels.push([x + ix * scale, y - iy * scale, z, ...colors.white, 0.4, scale]);
 	}));
 	return voxels;
+}
+
+// A cup of milk tea with a straw, standing on its base at (x, y, z).
+export function tea(x: number, y: number, z: number): Voxel[] {
+	return [
+		[x, y, z, ...hex('#e8dccb'), 0, 0.9],
+		[x, y + 0.9, z, ...hex('#c99e72'), 0, 0.9],
+		[x + 0.2, y + 1.7, z + 0.2, ...hex('#ff8fa3'), 0.3, 0.5],
+	];
 }
 
 // An exclamation mark for a startled calf.

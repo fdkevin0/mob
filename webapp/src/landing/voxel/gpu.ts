@@ -15,7 +15,7 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
 fn project(p: vec3f) -> vec4f {
 	let sx = u.frame.y + (p.x - p.z) * 0.70710678 * u.frame.x;
 	let sy = u.frame.z - (2.0 * p.y - p.x - p.z) * 0.40824829 * u.frame.x;
-	let depth = 0.5 - (p.x + p.y + p.z) / 400.0;
+	let depth = 0.5 - (p.x + p.y + p.z) / 1200.0;
 	return vec4f(sx / u.size.x * 2.0 - 1.0, 1.0 - sy / u.size.y * 2.0, depth, 1.0);
 }
 
