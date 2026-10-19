@@ -1,14 +1,11 @@
-import { calf, calves } from './voxel/model';
-import { toSVG } from './voxel/project';
+import { calfColors, calfHead } from './calfHead';
 
-// The Mob calf: the head of the lime voxel calf, drawn once as SVG. Frame 1
-// keeps its eyes open.
-const head = toSVG(calf(calves.lime, 'idle', 1).filter(v => v[1] >= 7));
-
+// The Mob calf, head on.
 export function Calf({ size = 28, className }: { size?: number; className?: string }) {
+	const width = calfHead[0].length;
 	return (
-		<svg className={className} width={size} height={(size / head.width) * head.height} viewBox={head.viewBox} shapeRendering="crispEdges" aria-hidden="true">
-			{head.polys.map((p, i) => <path key={i} d={p.d} fill={p.fill} />)}
+		<svg className={className} width={size} height={(size / width) * calfHead.length} viewBox={`0 0 ${width} ${calfHead.length}`} shapeRendering="crispEdges" aria-hidden="true">
+			{calfHead.flatMap((row, y) => [...row].map((c, x) => calfColors[c] ? <rect key={`${x}.${y}`} x={x} y={y} width={1.02} height={1.02} fill={calfColors[c]} /> : null))}
 		</svg>
 	);
 }

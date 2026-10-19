@@ -131,19 +131,29 @@ export function calf(style: CalfStyle, pose: Pose, frame = 0): Voxel[] {
 
 // The boss's whip, from the right hoof.
 function whip(put: Put, pose: Pose) {
-	const leather = hex('#8a5a32');
+	const cord = hex('#f0b45c');
 	if (pose === 'whip-up') {
-		for (let i = 1; i <= 5; i++) put(3, 9 + Math.min(i, 3), -1 - i, leather);
+		for (let i = 1; i <= 6; i++) put(3, 9 + Math.min(i, 4), -1 - i, cord, 0.4);
 		return;
 	}
-	for (let i = 1; i <= 7; i++) put(3, 6 - (i > 4 ? 1 : 0), 3 + i, i === 7 ? colors.amber : leather, i === 7 ? 1 : 0);
+	// The crack: a long bright cord ending in a burst of sparks.
+	for (let i = 1; i <= 8; i++) put(3, 6 - (i > 4 ? 1 : 0) - (i > 6 ? 1 : 0), 3 + i, cord, 0.4);
+	voxelsFlash(put, 3, 4, 12);
 }
 
-// One calf template, many hides: a seeded skin with a coat colour, a marking
-// (patches, a face blaze or a pale belly) and now and then sunglasses.
+function voxelsFlash(put: Put, x: number, y: number, z: number) {
+	put(x, y, z, colors.white, 1);
+	for (const [dx, dy, dz] of [[0, 1.5, 0], [0, -1.5, 0], [1.5, 0, 0], [-1.5, 0, 0], [0, 0, 1.5], [1, 1, 1], [-1, 1, -1]]) put(x + dx, y + dy, z + dz, colors.amber, 1);
+}
+
+// One calf template, many hides: a seeded skin with a coat colour and a
+// marking (patches, a face blaze or a pale belly). Gold and sunglasses are
+// kept for the leader.
 const coats = ['#f1f0ea', '#2b2826', '#d08a4e', '#a8683d', '#8d929a', '#d9c39b', '#5ab4f0', '#b9a8ff', '#9bd86a', '#f2a7b8', '#6b4a35'].map(hex);
 const shade = (c: RGB, k: number): RGB => [c[0] * k, c[1] * k, c[2] * k];
 const light = (c: RGB) => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11 > 0.55;
+
+export const leader: CalfStyle = { body: hex('#f2c33a'), belly: hex('#ffe08a'), seed: 1, shades: true, muzzle: hex('#f6c9a6') };
 
 export function skin(seed: number): CalfStyle {
 	let a = (seed * 2654435761) >>> 0;
@@ -157,7 +167,6 @@ export function skin(seed: number): CalfStyle {
 		blaze: kind >= 0.45 && kind < 0.65 ? hex('#f1ece2') : undefined,
 		belly: kind >= 0.65 && kind < 0.85 ? (light(body) ? shade(body, 0.8) : hex('#f1ece2')) : undefined,
 		seed: Math.floor(next() * 20),
-		shades: next() < 0.08,
 		muzzle: light(body) ? undefined : hex('#d9a49a'),
 	};
 }

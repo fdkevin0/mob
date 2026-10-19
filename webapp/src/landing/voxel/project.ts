@@ -82,3 +82,4 @@ export function toSVG(voxels: Voxel[]) {
 		polys: polys.map(p => ({ d: `M${p.points.map(q => `${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L')}Z`, fill: p.fill })),
 	};
 }
+
