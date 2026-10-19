@@ -17,3 +17,7 @@ webapp/dist/*
 !webapp/dist/.gitkeep
 *.test
 webapp/dist-public/
+
+# Local Worker secrets and state
+.dev.vars
+.wrangler/

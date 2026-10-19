@@ -1,16 +1,29 @@
-// The public web UI at https://mob.fdkevin.cloud: static assets only, no Worker
-// code and no data. The page talks to the Mob a `mob open --web` link points it
-// at. Cloudflare Workers Builds deploys it from this repository with build
-// command `bun install --frozen-lockfile && bun run build:web` and deploy
-// command `npx wrangler deploy`.
+// The public site at https://mob.fdkevin.cloud: the landing page, GitHub sign-in
+// (Better Auth with Turnstile, accounts in D1) and the web UI behind it, which
+// talks only to the Mob a `mob open --web` link points it at. Cloudflare Workers
+// Builds deploys it from this repository with build command
+// `bun install --frozen-lockfile && bun run build:web` and deploy command
+// `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
+// Secrets: BETTER_AUTH_SECRET, TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY,
+// GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.
 {
 	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
 	"name": "mob",
+	"main": "worker/index.ts",
 	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
 	"assets": {
 		"directory": "./webapp/dist-public",
-		"not_found_handling": "single-page-application"
+		"binding": "ASSETS",
+		"run_worker_first": ["/*", "!/assets/*"]
 	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "mob-auth",
+			"migrations_dir": "worker/migrations"
+		}
+	],
 	"routes": [{ "pattern": "mob.fdkevin.cloud", "custom_domain": true }],
 	"observability": {
 		"logs": {
