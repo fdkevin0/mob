@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -233,8 +234,11 @@ func readText(dir, name string) (string, error) {
 		return "", fmt.Errorf("%s is %d bytes, over the %d a skill file may have", name, info.Size(), maxText)
 	}
 	var b bytes.Buffer
-	if _, err := b.ReadFrom(f); err != nil {
+	if _, err := b.ReadFrom(io.LimitReader(f, maxText+1)); err != nil {
 		return "", err
+	}
+	if b.Len() > maxText {
+		return "", fmt.Errorf("%s exceeds %d bytes", name, maxText)
 	}
 	if !utf8.Valid(b.Bytes()) {
 		return "", fmt.Errorf("%s is not text", name)

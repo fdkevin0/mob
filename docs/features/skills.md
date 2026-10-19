@@ -43,7 +43,9 @@ from each directory.
   `/workspace/.mob/skills/<name>` in the conversation's workspace, replacing an
   earlier copy, and the model runs its scripts there with the `sandbox` tool.
   Links and hidden entries are not copied, and a skill over 512 files or 16 MiB
-  is not copied at all. With the sandbox off the model is told the scripts
+  is not copied at all. Reads and copies enforce byte limits while reading,
+  including when files grow; copying cannot follow a path outside the source
+  skill or destination workspace. With the sandbox off the model is told the scripts
   cannot run. Scripts never run on the host.
 - A loaded skill is a tool output like any other: when it is cleared to fit the
   context window the model is told to load it again.

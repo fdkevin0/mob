@@ -135,12 +135,16 @@ func (l *Library) copyToWorkspace(dir, name, conversationID string) (string, err
 	if err := root.RemoveAll(target); err != nil {
 		return "", err
 	}
+	source, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", err
+	}
+	defer source.Close()
 	count, size := 0, int64(0)
-	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(source.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, _ := filepath.Rel(dir, p)
 		if rel != "." && strings.HasPrefix(d.Name(), ".") {
 			if d.IsDir() {
 				return filepath.SkipDir
@@ -158,15 +162,17 @@ func (l *Library) copyToWorkspace(dir, name, conversationID string) (string, err
 		if err != nil {
 			return err
 		}
-		count, size = count+1, size+info.Size()
-		if count > maxFiles || size > maxBytes {
+		count++
+		if count > maxFiles || info.Size() > maxBytes-size {
 			return fmt.Errorf("it has over %d files or %d MiB", maxFiles, maxBytes>>20)
 		}
 		mode := os.FileMode(0600)
 		if info.Mode()&0111 != 0 {
 			mode = 0700
 		}
-		return copyFile(root, p, dest, mode)
+		n, err := copyFile(source, root, rel, dest, mode, maxBytes-size)
+		size += n
+		return err
 	})
 	if err != nil {
 		_ = root.RemoveAll(target)
@@ -175,21 +181,32 @@ func (l *Library) copyToWorkspace(dir, name, conversationID string) (string, err
 	return path.Join(sandbox.Workdir, target), nil
 }
 
-func copyFile(root *os.Root, source, dest string, mode os.FileMode) error {
-	in, err := os.Open(source)
+func copyFile(source, root *os.Root, name, dest string, mode os.FileMode, limit int64) (int64, error) {
+	in, err := source.Open(name)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return 0, err
+	}
+	if !info.Mode().IsRegular() {
+		return 0, fmt.Errorf("%s is not a file", name)
+	}
 	out, err := root.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if _, err := io.Copy(out, in); err != nil {
+	n, err := io.Copy(out, io.LimitReader(in, limit+1))
+	if err == nil && n > limit {
+		err = fmt.Errorf("skill exceeds %d MiB", maxBytes>>20)
+	}
+	if err != nil {
 		out.Close()
-		return err
+		return n, err
 	}
-	return out.Close()
+	return n, out.Close()
 }
 
 // resolve follows a linked skill directory, so walking it walks its files.

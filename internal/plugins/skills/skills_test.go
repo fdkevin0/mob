@@ -2,6 +2,7 @@ package skills
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,5 +161,81 @@ func TestCommandDescribes(t *testing.T) {
 	got := l.describe()
 	if !strings.Contains(got, "| pdf | Fill forms. |") || !strings.Contains(got, "does not start with --- frontmatter") {
 		t.Fatal(got)
+	}
+}
+
+func TestCopyFileConfinesSourceAndBoundsReads(t *testing.T) {
+	dir, workspace, outside := t.TempDir(), t.TempDir(), t.TempDir()
+	write(t, filepath.Join(dir, "script"), "123456", 0600)
+	write(t, filepath.Join(outside, "secret"), "secret", 0600)
+	source, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	target, err := os.OpenRoot(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	if n, err := copyFile(source, target, "script", "bounded", 0600, 3); err == nil || n != 4 {
+		t.Fatalf("bounded copy = %d, %v", n, err)
+	}
+	// Replace an already discovered file before copying it.
+	if err := os.Remove(filepath.Join(dir, "script")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(dir, "script")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyFile(source, target, "script", "leak", 0600, maxBytes); err == nil {
+		t.Fatal("source link escape accepted")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "leak")); !os.IsNotExist(err) {
+		t.Fatal("source escape created an output")
+	}
+}
+
+func TestCopyLimitsCleanUpAndWorkspaceLinksStayInside(t *testing.T) {
+	for _, kind := range []string{"bytes", "files", "workspace-link"} {
+		t.Run(kind, func(t *testing.T) {
+			dir, workspace := t.TempDir(), t.TempDir()
+			write(t, filepath.Join(dir, "SKILL.md"), "instructions", 0600)
+			switch kind {
+			case "bytes":
+				f, err := os.Create(filepath.Join(dir, "large"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := f.Truncate(maxBytes); err != nil {
+					t.Fatal(err)
+				}
+				f.Close()
+			case "files":
+				for i := range maxFiles {
+					write(t, filepath.Join(dir, fmt.Sprint(i)), "", 0600)
+				}
+			case "workspace-link":
+				outside := t.TempDir()
+				write(t, filepath.Join(outside, "skills", "notes", "keep"), "keep", 0600)
+				if err := os.Symlink(outside, filepath.Join(workspace, ".mob")); err != nil {
+					t.Fatal(err)
+				}
+				defer func() {
+					if data, err := os.ReadFile(filepath.Join(outside, "skills", "notes", "keep")); err != nil || string(data) != "keep" {
+						t.Fatalf("outside file changed: %q, %v", data, err)
+					}
+				}()
+			}
+			l := &Library{Workspace: func(string) (string, error) { return workspace, nil }}
+			if _, err := l.copyToWorkspace(dir, "notes", "abc123"); err == nil {
+				t.Fatal("unsafe or oversized copy succeeded")
+			}
+			if kind != "workspace-link" {
+				if _, err := os.Stat(filepath.Join(workspace, ".mob", "skills", "notes")); !os.IsNotExist(err) {
+					t.Fatal("partial copy remains")
+				}
+			}
+		})
 	}
 }
