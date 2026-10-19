@@ -22,6 +22,7 @@
   "include": [
     "src/chat",
     "src/components",
+    "src/landing",
     "src/test-setup.ts",
     "src/vite-env.d.ts"
   ]

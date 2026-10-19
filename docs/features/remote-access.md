@@ -4,19 +4,43 @@ Mob runs on the user's machine and serves its clients over loopback.
 
 ## Public web UI
 
-The web UI is also deployed to Cloudflare Workers at https://mob.fdkevin.cloud,
-so web changes reach users when they merge, without a release.
+The site at https://mob.fdkevin.cloud is deployed to Cloudflare Workers, so web
+changes reach users when they merge, without a release. It has three parts,
+served by the Worker in `worker/`:
+
+- `/` is the landing page. Behind the title, a faint isometric voxel office
+  plays out. Each load lays out a new square open-plan floor of shared desks
+  and seats calves on about 70% of them; every calf comes from one template
+  with a generated skin. They work, walk the lanes, high-five, hand each other
+  blocks of work, fetch milk tea or coffee and nap on the sofa, until the gold
+  leader calf comes over and cracks its whip. `?office=<seed>` pins a layout.
+  It is drawn with WebGPU (Canvas 2D where WebGPU is missing). Small voxel
+  scenes show the features. Both are idealised, not a picture of what Mob
+  does today.
+- Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
+  Turnstile check has to pass before the GitHub flow starts. Accounts and
+  sessions live in the D1 database `mob-auth`; the site keeps nothing else.
+- `/app` is the web UI. The Worker sends visitors without a session back to
+  `/?signin=app`.
+
+Pairing with Mob on your computer works as before:
 
 - `mob open --web` asks the running service for a one-time pairing code and
   opens `web_url` with `#offer=` and the base64url JSON
   `{"v":1,"url":"http://127.0.0.1:8787","code":"…"}`. The fragment never reaches
-  the site. The page exchanges the code at `url` for the access token and keeps
-  the address and token in local storage. The code, not the token, travels in
-  the link because it expires after 5 minutes and works once.
-- The page accepts only `http://127.0.0.1` and `http://localhost` addresses, and
-  its content security policy lets it connect nowhere else, so a crafted link
-  cannot point it at another server. The site holds no data and runs no Worker
-  code.
+  the site. The landing page holds it in session storage while you sign in;
+  GitHub returns to the fixed `/?signin=done`, so the code never reaches
+  Better Auth or GitHub. The landing page then removes the code from storage
+  and hands it to `/app` once, which exchanges the code at `url` for the access token and keeps the
+  address and token in local storage. The code, not the token, travels in the
+  link because it expires after 5 minutes and works once.
+- The web UI accepts only `http://127.0.0.1` and `http://localhost` addresses,
+  and the content security policy the Worker sets on `/app` lets it connect
+  nowhere else, not even to its own site, so a crafted link cannot point it at
+  another server. The landing page may call its own site (sign-in) and
+  Turnstile. It shares an origin and the sign-in with `/app`, so the
+  Turnstile script, loaded only when the sign-in dialog opens, runs where the
+  token is stored.
 - `web_url` (`MOB_WEB_URL`) must be https, or http on a loopback host for
   development. Use `--web-url=` or `web_url: ""` to turn this off; an empty
   environment variable is ignored. The service lets that origin call the API
@@ -25,10 +49,22 @@ so web changes reach users when they merge, without a release.
   deploys.
 - Chrome and Firefox let an https page reach `http://127.0.0.1`; newer Chrome
   asks first. Safari refuses, so use `mob open` there.
-- `bun run build:web` builds `webapp/dist-public` (Vite `--mode public`).
-  Cloudflare Workers Builds deploys it from `wrangler.jsonc` with build command
+
+Deployment:
+
+- `bun run build:web` builds `webapp/dist-public` (Vite `--mode public`):
+  `landing.html` and the web UI's `index.html`. Cloudflare Workers Builds
+  deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
-  `npx wrangler deploy`.
+  `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
+- Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`,
+  `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. The GitHub OAuth app's
+  callback URL is `https://mob.fdkevin.cloud/api/auth/callback/github`.
+- Locally, put the secrets in `.dev.vars` (Turnstile's test keys work), run
+  `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
+  `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799` (the flag
+  keeps the request host local instead of the production domain; port 8787 is
+  Mob's own). The GitHub OAuth app then needs the local callback URL.
 
 ## Gateway
 
