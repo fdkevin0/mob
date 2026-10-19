@@ -12,6 +12,8 @@ before it has an effect, and the owner can decide from any client or channel.
   Cloudflare plugin offers `cloudflare`. Each is defined in its own package and
   offered only while its plugin is enabled.
 - [MCP servers](mcp.md) add `mcp__<server>__<tool>` tools.
+- While any [skill](skills.md) is installed, the `skill` tool loads one; it
+  reads without approval.
 - An `OwnerOnly` tool is offered only to the owner's turns, and only the owner
   can approve its calls: another allowed WeChat user cannot read or send the
   owner's mail. Plugin and MCP tools are owner-only.

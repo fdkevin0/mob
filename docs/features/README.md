@@ -17,6 +17,7 @@ keep architecture decision records.
 | [Plugins](plugins.md) | plugin settings and secrets, the email mailbox, Cloudflare |
 | [MCP servers](mcp.md) | external tools over the Model Context Protocol |
 | [DeepSeek Harness plugins](deepseek-harness.md) | DSH tool compatibility, the optional runtime, setup and limitations |
+| [Skills](skills.md) | Agent Skills the model loads by name, and running their scripts in the sandbox |
 | [Extensions](extensions.md) | how plugins add tools, hooks, commands, routes, configuration and background runs |
 | [Releases and upgrades](releases.md) | nightly and stable channels, database migration windows |
 | [Remote access](remote-access.md) | the experimental gateway and edge nodes |

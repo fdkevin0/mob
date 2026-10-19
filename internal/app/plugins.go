@@ -14,6 +14,7 @@ import (
 	"github.com/fdkevin0/mob/internal/plugins/cloudflare"
 	"github.com/fdkevin0/mob/internal/plugins/email"
 	"github.com/fdkevin0/mob/internal/plugins/mcp"
+	"github.com/fdkevin0/mob/internal/plugins/skills"
 	"github.com/fdkevin0/mob/internal/plugins/telegram"
 	"github.com/fdkevin0/mob/internal/plugins/wechatilink"
 )
@@ -57,6 +58,7 @@ func (s *Server) plugins() []plugin {
 		{name: "cloudflare", commands: cloudflare.Commands(cloud), tools: cloudflare.Tools(cloud), routes: cloudflare.Routes(cloud)},
 		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
 		{name: "mcp", commands: mcp.Commands(s.MCP), source: s.MCP.Tools, background: &mcpRun},
+		{name: "skills", commands: skills.Commands(s.Skills), source: s.Skills.Tools},
 	}
 }
 
