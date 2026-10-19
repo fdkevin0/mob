@@ -13,6 +13,7 @@ export function Landing() {
 	const [siteError, setSiteError] = useState('');
 	const [dialog, setDialog] = useState<{ reason?: string }>();
 	const [menu, setMenu] = useState(false);
+	const [signedIn, setSignedIn] = useState(false);
 	const user = session.data?.user;
 
 	useEffect(() => {
@@ -22,12 +23,13 @@ export function Landing() {
 		if (signin) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
 		if (linked) setDialog({ reason: 'Sign in with GitHub to connect this browser to Mob on your computer.' });
 		else if (signin === 'app') setDialog({});
+		else if (signin === 'done') setSignedIn(true);
 		else if (signin === 'failed') setDialog({ reason: 'GitHub sign-in did not finish. Try again.' });
 		loadSite().then(setSite).catch(e => setSiteError(`Sign-in is unavailable right now. ${e instanceof Error ? e.message : ''}`.trim()));
 	}, []);
 
-	// Someone already signed in goes straight on to a waiting link.
-	useEffect(() => { if (user && pendingOffer()) openApp(); }, [user]);
+	// Back from GitHub, or already signed in with a link waiting: on to the app.
+	useEffect(() => { if (user && (signedIn || pendingOffer())) openApp(); }, [user, signedIn]);
 	const close = useCallback(() => setDialog(undefined), []);
 
 	return (

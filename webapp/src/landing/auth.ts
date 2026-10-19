@@ -21,17 +21,19 @@ export function keepOffer() {
 	return true;
 }
 
-// Where to go once signed in, carrying a waiting link along.
-export function appURL() {
-	let hash = '';
-	try { hash = sessionStorage.getItem(offerKey) ?? ''; } catch { /* nothing kept */ }
-	return `/app${hash}`;
-}
+// GitHub sends the visitor back here, never to a URL holding the offer, so the
+// pairing code stays in this browser.
+export const signedInURL = '/?signin=done';
 
+// Takes the waiting link out of storage and goes on to the app with it, so a
+// link is used once.
 export function openApp() {
-	const url = appURL();
-	try { sessionStorage.removeItem(offerKey); } catch { /* nothing kept */ }
-	window.location.assign(url);
+	let hash = '';
+	try {
+		hash = sessionStorage.getItem(offerKey) ?? '';
+		sessionStorage.removeItem(offerKey);
+	} catch { /* nothing kept */ }
+	window.location.assign(`/app${hash}`);
 }
 
 export function pendingOffer() {

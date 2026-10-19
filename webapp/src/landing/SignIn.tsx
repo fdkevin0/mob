@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { appURL, authClient, type Site } from './auth';
+import { authClient, signedInURL, type Site } from './auth';
 import { Turnstile, type TurnstileHandle } from './Turnstile';
 import { PixelIcon } from './PixelIcon';
 
@@ -37,15 +37,20 @@ export function SignIn({ site, siteError, reason, onClose }: {
 	async function github() {
 		if (!token) { setError('Finish the human check first.'); return; }
 		setBusy(true); setError('');
-		const result = await authClient.signIn.social(
-			{ provider: 'github', callbackURL: appURL(), errorCallbackURL: '/?signin=failed' },
-			{ headers: { 'x-captcha-response': token } },
-		);
-		if (result.error) {
-			setError(result.error.message || 'GitHub sign-in did not start. Try again.');
-			turnstile.current?.reset();
-			setBusy(false);
+		let message: string | undefined;
+		try {
+			const result = await authClient.signIn.social(
+				{ provider: 'github', callbackURL: signedInURL, errorCallbackURL: '/?signin=failed' },
+				{ headers: { 'x-captcha-response': token } },
+			);
+			if (result.error) message = result.error.message || 'GitHub sign-in did not start. Try again.';
+		} catch {
+			message = 'Could not reach the sign-in service. Check your connection and try again.';
 		}
+		if (message === undefined) return;
+		setError(message);
+		turnstile.current?.reset();
+		setBusy(false);
 	}
 
 	const ready = site?.ready && site.turnstileSiteKey;

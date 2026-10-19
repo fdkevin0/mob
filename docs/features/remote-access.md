@@ -28,15 +28,19 @@ Pairing with Mob on your computer works as before:
 - `mob open --web` asks the running service for a one-time pairing code and
   opens `web_url` with `#offer=` and the base64url JSON
   `{"v":1,"url":"http://127.0.0.1:8787","code":"…"}`. The fragment never reaches
-  the site. The landing page holds it while you sign in, then hands it to
-  `/app`, which exchanges the code at `url` for the access token and keeps the
+  the site. The landing page holds it in session storage while you sign in;
+  GitHub returns to the fixed `/?signin=done`, so the code never reaches
+  Better Auth or GitHub. The landing page then removes the code from storage
+  and hands it to `/app` once, which exchanges the code at `url` for the access token and keeps the
   address and token in local storage. The code, not the token, travels in the
   link because it expires after 5 minutes and works once.
 - The web UI accepts only `http://127.0.0.1` and `http://localhost` addresses,
   and the content security policy the Worker sets on `/app` lets it connect
   nowhere else, not even to its own site, so a crafted link cannot point it at
   another server. The landing page may call its own site (sign-in) and
-  Turnstile, but it never sees the token.
+  Turnstile. It shares an origin and the sign-in with `/app`, so the
+  Turnstile script, loaded only when the sign-in dialog opens, runs where the
+  token is stored.
 - `web_url` (`MOB_WEB_URL`) must be https, or http on a loopback host for
   development. Use `--web-url=` or `web_url: ""` to turn this off; an empty
   environment variable is ignored. The service lets that origin call the API
