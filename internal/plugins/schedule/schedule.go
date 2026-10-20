@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
@@ -41,7 +42,8 @@ type Service struct {
 	// Now is the clock; nil uses time.Now.
 	Now func() time.Time
 	// wake makes the loop look for due schedules at once.
-	wake chan struct{}
+	wake     chan struct{}
+	wakeOnce sync.Once
 }
 
 func (s *Service) now() time.Time {
@@ -51,19 +53,21 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
+// wakeup is the channel that makes the loop look at once.
+func (s *Service) wakeup() chan struct{} {
+	s.wakeOnce.Do(func() { s.wake = make(chan struct{}, 1) })
+	return s.wake
+}
+
 func (s *Service) poke() {
-	if s.wake == nil {
-		return
-	}
 	select {
-	case s.wake <- struct{}{}:
+	case s.wakeup() <- struct{}{}:
 	default:
 	}
 }
 
 // Extension runs due schedules while Mob runs.
 func (s *Service) Extension() extension.Extension {
-	s.wake = make(chan struct{}, 1)
 	return extension.Extension{Name: "schedules", Start: func() (extension.Serve, error) {
 		return func(ctx context.Context, status func(string)) {
 			status("Running")
@@ -75,7 +79,7 @@ func (s *Service) Extension() extension.Extension {
 				case <-ctx.Done():
 					return
 				case <-timer.C:
-				case <-s.wake:
+				case <-s.wakeup():
 				}
 			}
 		}, nil
