@@ -4,19 +4,19 @@ import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { cloud, newKey } from './remote';
+import { hostGuideURL, hosts } from './hosts';
 
 type Runner = { id: string; session: string | null };
 const storageKey = (id: string) => `mob-runner-key:${id}`;
-// The Render Blueprint is render.yaml at the root of this repository.
-export const renderDeployURL = 'https://render.com/deploy?repo=https://github.com/fdkevin0/mob';
-const renderGuideURL = 'https://github.com/fdkevin0/mob/blob/main/docs/features/remote-access.md#runner-on-render';
 
-/** Runners lists the account's runners and pairs new ones; deploy pairs one that Render runs instead of the user's computer. */
+/** Runners lists the account's runners and pairs new ones; deploy pairs one that a cloud host runs instead of the user's computer. */
 export function Runners({ connect, deploy }: { connect: (connection: Connection) => void; deploy?: boolean }) {
 	const [runners, setRunners] = useState<Runner[]>([]);
 	const [pairing, setPairing] = useState<{ id: string; json: string; expiresAt?: number }>();
 	const [error, setError] = useState('');
 	const [busy, setBusy] = useState(false);
+	const [hostID, setHostID] = useState(hosts[0].id);
+	const host = hosts.find((h) => h.id === hostID) ?? hosts[0];
 	async function refresh() {
 		setRunners(await cloud<Runner[]>(''));
 	}
@@ -88,17 +88,34 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 	}
 	return (
 		<section aria-label="Remote runners">
-			<h2>{deploy ? 'Deploy to Render' : 'Your runners'}</h2>
+			<h2>{deploy ? 'Deploy to the cloud' : 'Your runners'}</h2>
 			{deploy ? (
-				<p>
-					Run Mob in your own Render account on a free web service. Messages and tool results are encrypted between this browser and the
-					runner. A free instance has no disk, so conversations and added providers reset whenever Render restarts it; to keep them, upgrade
-					it to a paid instance with a disk (about $7.25 a month, billed by Render;{' '}
-					<a href={renderGuideURL} target="_blank" rel="noopener noreferrer">
-						how to upgrade
-					</a>
-					).
-				</p>
+				<>
+					<p>
+						Run Mob in your own account at a cloud host. Messages and tool results are encrypted between this browser and the runner;{' '}
+						<a href={hostGuideURL} target="_blank" rel="noopener noreferrer">
+							how it works
+						</a>
+						.
+					</p>
+					<div role="radiogroup" aria-label="Cloud host" className="host-choices">
+						{hosts.map((h) => (
+							<Button
+								key={h.id}
+								type="button"
+								role="radio"
+								aria-checked={h.id === host.id}
+								variant={h.id === host.id ? 'primary' : 'outline'}
+								disabled={!h.deployURL}
+								onClick={() => setHostID(h.id)}
+							>
+								{h.name}
+								{!h.deployURL && <small> Coming soon</small>}
+							</Button>
+						))}
+					</div>
+					<p>{host.summary}</p>
+				</>
 			) : (
 				<p>Control Mob on another computer. Messages and tool results are encrypted between this browser and your runner.</p>
 			)}
@@ -116,14 +133,14 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 				</div>
 			))}
 			<Button type="button" disabled={busy} onClick={() => void pair()}>
-				{deploy ? 'Create Render pairing' : 'Pair a runner'}
+				{deploy ? 'Create cloud pairing' : 'Pair a runner'}
 			</Button>
 			{pairing && (
 				<div>
 					{deploy ? (
 						<p>
-							Copy this private pairing JSON, then choose <strong>Deploy to Render</strong> and paste it as <code>MOB_RUNNER_PAIRING</code>. The
-							runner appears here once Render has built and started it; then choose <strong>Open runner</strong>.
+							Copy this private pairing JSON, then choose <strong>Deploy to {host.name}</strong> and paste it as <code>MOB_RUNNER_PAIRING</code>.
+							The runner appears here once {host.name} has built and started it; then choose <strong>Open runner</strong>.
 						</p>
 					) : (
 						<p>
@@ -139,10 +156,10 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 						Keep it private: it contains your encryption key{deploy && ' and the runner’s credential'}. This browser keeps the key locally;
 						clearing site data loses access.
 					</p>
-					{deploy && (
+					{deploy && host.deployURL && (
 						<Button asChild>
-							<a href={renderDeployURL} target="_blank" rel="noopener noreferrer">
-								Deploy to Render
+							<a href={host.deployURL} target="_blank" rel="noopener noreferrer">
+								Deploy to {host.name}
 							</a>
 						</Button>
 					)}{' '}

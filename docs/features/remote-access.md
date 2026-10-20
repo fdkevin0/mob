@@ -53,8 +53,9 @@ served by the Worker in `worker/`:
   **Connect a runner** dialog opens only when they do something that needs
   Mob, such as sending, starting a conversation or opening plugins. It offers
   **Your own runner** (paired runners, or the Mob address and access token of
-  Mob on this computer), **Deploy to Render**, a free runner in the user's
-  Render account (see [Runner on Render](#runner-on-render)), and **Cloud runner**, which is
+  Mob on this computer), **Deploy to the cloud**, a free runner in the user's
+  account at Render or another host (see
+  [Runners in the cloud](#runners-in-the-cloud)), and **Cloud runner**, which is
   disabled and marked coming soon. A typed message is kept and placed in the
   composer of the first conversation that opens after connecting; it is not
   sent automatically. A `mob open --web` link opens the dialog to show its
@@ -224,16 +225,33 @@ No additional cloud secrets are needed. Passkeys add D1 migration
 Worker/D1/Durable Object, Go service, runner and browser encryption code
 locally with fake account sessions and an offline demo model.
 
-## Runner on Render
+## Runners in the cloud
 
-**Deploy to Render** in the Connect a runner dialog runs Mob as a runner in the
-user's own Render account, free, for a Mob that stays on without their
-computer. It is the encrypted runner above with no terminal: the relay and the
-trust boundary are the same, and Mob still listens only on loopback inside its
-container.
+**Deploy to the cloud** in the Connect a runner dialog runs Mob as a runner in
+the user's own account at a cloud host, on its free tier, for a Mob that stays
+on without their computer. It is the encrypted runner above with no terminal:
+the relay and the trust boundary are the same, and Mob still listens only on
+loopback inside its container. Every host builds the same `Dockerfile` and
+reads the pairing JSON from `MOB_RUNNER_PAIRING`.
 
-1. **Create Render pairing** registers a runner and shows its pairing JSON:
-   the URL, runner ID, encryption key and the runner credential itself
+| Host | Free tier | Conversations | One-click |
+| --- | --- | --- | --- |
+| Render | Web service, 750 hours a month, no card; sleeps without inbound requests, which the runner prevents | Reset on every restart; a paid instance with a disk keeps them | `render.yaml` Blueprint |
+| Railway | $1 of usage a month, 0.5 GB RAM, 0.5 GB volume | Kept on the volume | Template, not published yet |
+| Northflank | Two always-on Sandbox services; card verified at sign-up | Depends on a volume; free volumes unconfirmed | Template, not published yet |
+
+Hosts checked on 2026-10-20 and left out: Koyeb (new accounts need a $29 plan
+since the Mistral acquisition), Fly.io (no free allowance), Hugging Face
+Spaces (Docker Spaces on free hardware need PRO since July 2026), ClawCloud
+Run (shutting down), Google Cloud Run (scales to zero and needs billing, so
+an always-on runner costs money). A host shows as **Coming soon** in the
+dialog until its one-click link is set in `webapp/src/chat/hosts.ts`.
+
+### Render
+
+1. Pick Render and choose **Create cloud pairing**. It registers a runner and
+   shows its pairing JSON: the URL, runner ID, encryption key and the runner
+   credential itself
    (`POST /api/runners` with `{"for":"deploy"}`). There is no one-time code,
    because a free instance loses its files on every restart and could not keep
    what it claimed. The cloud stores only the credential's hash.
@@ -277,6 +295,31 @@ for the disk, billed by Render):
 - There is no container runtime on Render, so the sandbox stays off.
 - The model provider sees conversations, as on a computer, and so does
   Render, which runs the runner and holds its files and the pairing JSON.
+
+### Railway
+
+`railway.json` builds the `Dockerfile`, uses `/` as the health check and
+restarts the runner when it fails. Railway sets `PORT`, which the image
+answers. Railway does not sleep a service unless its Serverless setting is
+on, and even then the runner's outbound relay connection keeps it awake. The template, created once from
+the Railway workspace's **Templates → New Template**, adds:
+
+- the GitHub repository `fdkevin0/mob` as the service source;
+- the variable `MOB_RUNNER_PAIRING`, left empty for the user to fill;
+- a volume mounted at `/data`.
+
+Its share link (`railway.com/deploy/…`) becomes Railway's `deployURL`. An
+idle runner uses little CPU and memory, but Railway bills usage above the
+monthly $1 credit, so check the usage page after a day.
+
+### Northflank
+
+A template made in Northflank's template editor (it can be synced to this
+repository) with a combined service that builds `fdkevin0/mob` from the
+`Dockerfile`, no public port, a secret argument `MOB_RUNNER_PAIRING` passed to
+the runtime environment, and, if the Sandbox allows it, a volume at `/data`.
+Its share link (`app.northflank.com/s/account/templates/new?data=…`) becomes
+Northflank's `deployURL`.
 
 ## Gateway
 ## Gateway

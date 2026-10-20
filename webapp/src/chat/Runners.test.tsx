@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { renderDeployURL, Runners } from './Runners';
+import { Runners } from './Runners';
+import { hosts } from './hosts';
 
 const id = '11111111-1111-4111-8111-111111111111';
 afterEach(() => {
@@ -67,12 +68,14 @@ it('gives a Render runner its credential at once instead of a one-time code', as
 		}),
 	);
 	render(<Runners connect={vi.fn()} deploy />);
-	fireEvent.click(screen.getByRole('button', { name: 'Create Render pairing' }));
+	fireEvent.click(screen.getByRole('button', { name: 'Create cloud pairing' }));
 	const field = (await screen.findByLabelText(/Private pairing JSON/)) as HTMLTextAreaElement;
 	const pair = JSON.parse(field.value);
 	expect(JSON.parse(body)).toEqual({ for: 'deploy' });
 	expect(pair).toMatchObject({ id, url: location.origin, token: 'runner-token' });
 	expect(pair.code).toBeUndefined();
 	expect(body).not.toContain(pair.key);
-	expect(screen.getByRole('link', { name: 'Deploy to Render' }).getAttribute('href')).toBe(renderDeployURL);
+	expect(screen.getByRole('link', { name: 'Deploy to Render' }).getAttribute('href')).toBe(hosts[0].deployURL);
+	// A host whose one-click template is not published yet cannot be picked.
+	for (const host of hosts.filter((h) => !h.deployURL)) expect((screen.getByRole('radio', { name: new RegExp(host.name) }) as HTMLButtonElement).disabled).toBe(true);
 });
