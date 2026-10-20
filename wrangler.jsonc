@@ -12,6 +12,7 @@
 {
 	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
 	"name": "mob",
+	"account_id": "98010e731e09a77b673ba51074dfbe1c",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-10-01",
 	"compatibility_flags": ["nodejs_compat"],
