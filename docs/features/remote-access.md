@@ -33,8 +33,14 @@ served by the Worker in `worker/`:
   with GitHub first. The relying party ID is the site's hostname, so passkeys
   made on `mob.fdkevin.cloud` do not work on preview hostnames.
 - `/account` shows the signed-in user, the connected GitHub account and the
-  account's passkeys, which can be added (with an optional name), renamed and
-  removed. Visitors without a session go to `/?signin=account` and come back
+  account's passkeys, which can be added, renamed and removed. The GitHub row
+  shows the current username: the page asks GitHub once per visit with the
+  stored OAuth token (Better Auth `account-info`), so a renamed account shows
+  its new name, and it only says Connected when GitHub does not answer.
+  Browsers do not reveal device names, so a new passkey is named after its
+  provider from the authenticator's AAGUID (such as iCloud Keychain, Google
+  Password Manager or Windows Hello) and is otherwise called Passkey; Apple
+  often reports an anonymous AAGUID. It can be renamed. Visitors without a session go to `/?signin=account` and come back
   to `/account` after signing in. Adding a passkey needs a session less than a
   day old; with an older session the page asks the user to sign in with
   GitHub again. The landing page's account menu and the `/app` sidebar link to

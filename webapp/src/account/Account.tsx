@@ -4,7 +4,6 @@ import { Logo } from '../components/brand/Logo';
 import { PixelIcon } from '../components/brand/PixelIcon';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
 
 type Passkey = { id: string; name?: string | null; createdAt?: Date | string | null; backedUp: boolean; deviceType: string };
 type Linked = { id: string; providerId: string; createdAt: Date | string };
@@ -63,11 +62,15 @@ function Header() {
 
 function SignInMethods() {
 	const [accounts, setAccounts] = useState<Linked[]>();
+	const [login, setLogin] = useState<string>();
 	const [error, setError] = useState('');
 	useEffect(() => {
 		authClient.listAccounts().then(result => {
-			if (result.error) setError(result.error.message || 'Could not load sign-in methods.');
-			else setAccounts(result.data as Linked[]);
+			if (result.error) { setError(result.error.message || 'Could not load sign-in methods.'); return; }
+			const linked = result.data as Linked[];
+			setAccounts(linked);
+			const github = linked.find(account => account.providerId === 'github');
+			if (github) void githubLogin(github.id).then(setLogin);
 		}).catch(e => setError(errorText(e)));
 	}, []);
 	const github = accounts?.find(account => account.providerId === 'github');
@@ -78,6 +81,7 @@ function SignInMethods() {
 			<ul className="account-list">
 				<li>
 					<span className="account-item-name">GitHub</span>
+					{login ? <a className="account-link" href={`https://github.com/${login}`} rel="noreferrer">@{login}</a> : null}
 					<span className="account-muted">{accounts === undefined && !error ? 'Loading…' : github ? `Connected ${day(github.createdAt)}` : 'Not connected'}</span>
 				</li>
 			</ul>
@@ -86,21 +90,33 @@ function SignInMethods() {
 	);
 }
 
+// githubLogin asks GitHub, with the stored token, for the current username, so a
+// renamed account shows its new name. Without an answer the row only says Connected.
+async function githubLogin(accountId: string) {
+	try {
+		const result = await authClient.accountInfo({ query: { accountId } });
+		const login = (result.data?.data as { login?: unknown } | undefined)?.login;
+		return typeof login === 'string' && /^[A-Za-z0-9-]+$/.test(login) ? login : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function Passkeys() {
 	const list = authClient.useListPasskeys();
 	const passkeys = (list.data ?? []) as Passkey[];
-	const [name, setName] = useState('');
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
 	const [stale, setStale] = useState(false);
 	const [notice, setNotice] = useState('');
 
-	async function add(event: FormEvent) {
-		event.preventDefault();
+	// The server names the passkey after its provider when the AAGUID is known;
+	// it can be renamed afterwards.
+	async function add() {
 		setBusy(true); setError(''); setNotice(''); setStale(false);
 		try {
-			const result = await authClient.passkey.addPasskey({ name: name.trim() || undefined });
-			if (!result.error) { setName(''); setNotice('Passkey added. Use it from Sign in on the Mob home page.'); return; }
+			const result = await authClient.passkey.addPasskey();
+			if (!result.error) { setNotice('Passkey added. Use it from Sign in on the Mob home page.'); return; }
 			const code = errorCode(result.error);
 			if (code === 'SESSION_NOT_FRESH') { setStale(true); return; }
 			setError(code === 'ERROR_CEREMONY_ABORTED' ? 'Adding the passkey was cancelled.'
@@ -124,13 +140,9 @@ function Passkeys() {
 				</ul>
 			)}
 			{supported() ? (
-				<form className="account-add" onSubmit={add}>
-					<Label htmlFor="passkey-name">Name</Label>
-					<div className="account-add-row">
-						<Input id="passkey-name" value={name} maxLength={60} placeholder="Such as Work laptop" onChange={e => setName(e.target.value)} disabled={busy} />
-						<Button disabled={busy}><PixelIcon name="key" size={12} />{busy ? 'Waiting for your device…' : 'Add a passkey'}</Button>
-					</div>
-				</form>
+				<div className="account-add">
+					<Button type="button" onClick={() => void add()} disabled={busy}><PixelIcon name="key" size={12} />{busy ? 'Waiting for your device…' : 'Add a passkey'}</Button>
+				</div>
 			) : <p className="form-error">This browser does not support passkeys.</p>}
 			{stale ? (
 				<div className="form-error" role="alert">

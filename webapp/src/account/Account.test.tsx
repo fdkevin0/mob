@@ -5,6 +5,7 @@ const auth = vi.hoisted(() => ({
 	session: { isPending: false, data: { user: { name: 'Ada', email: 'ada@example.test', image: null } }, error: null } as unknown,
 	passkeys: { isPending: false, data: [] as unknown[], error: null } as unknown,
 	listAccounts: vi.fn(),
+	accountInfo: vi.fn(),
 	addPasskey: vi.fn(),
 	updatePasskey: vi.fn(),
 	deletePasskey: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('../landing/auth', () => ({
 		useSession: () => auth.session,
 		useListPasskeys: () => auth.passkeys,
 		listAccounts: auth.listAccounts,
+		accountInfo: auth.accountInfo,
 		passkey: { addPasskey: auth.addPasskey, updatePasskey: auth.updatePasskey, deletePasskey: auth.deletePasskey },
 		signOut: auth.signOut,
 	},
@@ -28,25 +30,37 @@ beforeEach(() => {
 	Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: function PublicKeyCredential() {} });
 	auth.listAccounts.mockResolvedValue({ data: [{ id: 'a', providerId: 'github', createdAt: '2026-10-01T00:00:00Z' }], error: null });
 	auth.signOut.mockResolvedValue({});
+	auth.accountInfo.mockResolvedValue({ data: { user: {}, data: { login: 'ada-l' } }, error: null });
 	assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
 });
 afterEach(() => {
 	vi.restoreAllMocks();
-	for (const mock of [auth.listAccounts, auth.addPasskey, auth.updatePasskey, auth.deletePasskey, auth.signOut]) mock.mockReset();
+	for (const mock of [auth.listAccounts, auth.accountInfo, auth.addPasskey, auth.updatePasskey, auth.deletePasskey, auth.signOut]) mock.mockReset();
 	auth.passkeys = { isPending: false, data: [], error: null };
 	auth.session = { isPending: false, data: { user: { name: 'Ada', email: 'ada@example.test', image: null } }, error: null };
 });
 
-it('shows the GitHub account and adds a named passkey', async () => {
+it('shows the GitHub username and adds a passkey the server names', async () => {
 	auth.addPasskey.mockResolvedValue({ data: { id: 'p1' }, error: null });
 	render(<Account />);
 	expect(screen.getByText('ada@example.test')).toBeTruthy();
 	expect(await screen.findByText(/^Connected/)).toBeTruthy();
+	const login = await screen.findByRole('link', { name: '@ada-l' });
+	expect(login.getAttribute('href')).toBe('https://github.com/ada-l');
+	expect(auth.accountInfo).toHaveBeenCalledWith({ query: { accountId: 'a' } });
 	expect(screen.getByText('No passkeys yet.')).toBeTruthy();
-	fireEvent.change(screen.getByLabelText('Name'), { target: { value: ' Work laptop ' } });
 	fireEvent.click(screen.getByRole('button', { name: /Add a passkey/ }));
 	await screen.findByRole('status');
-	expect(auth.addPasskey).toHaveBeenCalledWith({ name: 'Work laptop' });
+	expect(auth.addPasskey).toHaveBeenCalledWith();
+});
+
+it('still shows GitHub as connected when GitHub does not answer', async () => {
+	auth.accountInfo.mockResolvedValue({ data: null, error: { message: 'Failed to get user info', status: 401 } });
+	render(<Account />);
+	expect(await screen.findByText(/^Connected/)).toBeTruthy();
+	await waitFor(() => expect(auth.accountInfo).toHaveBeenCalled());
+	expect(screen.queryByRole('link', { name: /^@/ })).toBeNull();
+	expect(screen.queryByRole('alert')).toBeNull();
 });
 
 it('asks for a fresh GitHub sign-in when the session is too old to add a passkey', async () => {

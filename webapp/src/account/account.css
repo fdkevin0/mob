@@ -18,7 +18,7 @@
 .account-list li > form { flex: 1; }
 .account-item-name { font-weight: 500; font-size: 14px; }
 .account-item-actions { display: flex; gap: 4px; margin-left: auto; }
-.account-add { display: flex; flex-direction: column; gap: 8px; }
+.account-add { display: flex; }
 .account-add-row { display: flex; gap: 8px; align-items: center; }
 .account-add-row .ui-input { flex: 1; }
 .form-error { margin: 0; padding: 10px 12px; border-left: 2px solid var(--amber); background: #ffb6480d; color: #ffd393; font-size: 13px; line-height: 1.45; }
@@ -31,3 +31,5 @@
 	.account-add-row { flex-direction: column; align-items: stretch; }
 	.account-item-actions { margin-left: -8px; width: 100%; }
 }
+.account-link { font-family: var(--mono); font-size: 13px; color: var(--lime); }
+.account-link:hover { text-decoration: underline; }

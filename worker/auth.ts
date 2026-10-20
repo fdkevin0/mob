@@ -1,7 +1,7 @@
 import type { RunnerRelay } from './relay';
 import { betterAuth } from 'better-auth';
 import { captcha } from 'better-auth/plugins/captcha';
-import { passkey } from '@better-auth/passkey';
+import { getAuthenticatorName, passkey } from '@better-auth/passkey';
 
 export interface Env {
 	ASSETS: Fetcher;
@@ -45,7 +45,15 @@ export function createAuth(env: Env, origin: string) {
 			rpName: 'Mob',
 			// Registration needs a fresh signed-in session, so a passkey always
 			// joins an account that already signed in with GitHub.
-			registration: { requireSession: true },
+			registration: {
+				requireSession: true,
+				// The browser never reveals a device name; the authenticator model
+				// (AAGUID) names the provider, such as iCloud Keychain or Windows Hello.
+				afterVerification: ({ verification }) => {
+					const name = getAuthenticatorName(verification.registrationInfo?.aaguid);
+					return name ? { name } : undefined;
+				},
+			},
 		})],
 	});
 }
