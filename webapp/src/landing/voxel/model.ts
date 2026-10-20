@@ -18,10 +18,14 @@ export const colors = {
 	violet: hex('#a894ff'),
 	white: hex('#f2f4ee'),
 	ink: hex('#141518'),
-	horn: hex('#f6ead0'),
 	hoof: hex('#3a2f2a'),
-	muzzle: hex('#ffb8ae'),
-	nostril: hex('#d9786f'),
+	muzzle: hex('#f7d2ad'),
+	muzzleShade: hex('#e4b086'),
+	nostril: hex('#c8835f'),
+	chin: hex('#f4dfc4'),
+	brow: hex('#3b2214'),
+	eye: hex('#f6efe4'),
+	ear: hex('#f6b39a'),
 	desk: hex('#5b4a3d'),
 	deskTop: hex('#7a6553'),
 	floorA: hex('#1a1d21'),
@@ -111,20 +115,36 @@ export function calf(style: CalfStyle, pose: Pose, frame = 0): Voxel[] {
 	put(0, 5, -2, style.body); put(0, 4, -2, style.body); put(0, 3, -2, colors.ink);
 	arm(put, -1, pose, frame, style.body);
 	arm(put, 1, pose, frame, style.body);
-	// Head.
+	// Head, after the 牛来的 calf: heavy flat brows, small staring eyes, a big
+	// pale muzzle and pointed ears that stick out, pink inside.
+	const w = 2; // half the head's width
+	const top = 11;
+	const eyeX = 1;
 	const blink = pose === 'idle' && frame % 9 === 0;
-	for (let x = -2; x <= 2; x++) for (let y = 7; y <= 10; y++) for (let z = -1; z <= 2; z++) {
-		const eye = z === 2 && y === 9 && Math.abs(x) === 1 && !blink;
-		const shades = style.shades && z === 2 && y === 9;
-		put(x, y, z, shades ? colors.ink : eye ? colors.ink : hide(x, y, z));
+	for (let x = -w; x <= w; x++) for (let y = 7; y <= top; y++) for (let z = -1; z <= 2; z++) {
+		const face = z === 2;
+		const brow = face && y === top - 1 && Math.abs(x) >= 1 && Math.abs(x) <= eyeX + 1;
+		const eye = face && y === top - 2 && Math.abs(x) === eyeX && !blink;
+		const shades = style.shades && face && y === top - 2;
+		put(x, y, z, shades ? colors.ink : brow ? colors.brow : eye ? colors.eye : hide(x, y, z));
 	}
-	if (style.shades) { put(-2, 9, 1, colors.ink); put(2, 9, 1, colors.ink); }
-	// Muzzle with nostrils.
-	for (let x = -1; x <= 1; x++) for (const y of [7, 8]) put(x, y, 3, y === 8 && x !== 0 ? colors.nostril : style.muzzle ?? colors.muzzle);
-	// Ears and horns.
-	const ear = pose === 'idle' && frame % 7 === 3 ? 10 : 9;
-	put(-3, ear, 0, style.body); put(3, ear, 0, style.body);
-	put(-2, 11, 1, colors.horn); put(2, 11, 1, colors.horn);
+	if (!style.shades && !blink) for (const s of [-1, 1]) voxels.push([s * eyeX, top - 2.15, 2.3, ...colors.ink, 0, 0.5]);
+	if (style.shades) { put(-w, top - 2, 1, colors.ink); put(w, top - 2, 1, colors.ink); }
+	// The muzzle sticks out across the whole face, nostrils at its top corners,
+	// with a pale chin underneath.
+	const muzzle = style.muzzle ?? colors.muzzle;
+	const rows = [7, 8];
+	for (let x = -w; x <= w; x++) for (const y of rows) {
+		put(x, y, 3, y === rows[rows.length - 1] && Math.abs(x) === w - 1 ? colors.nostril : Math.abs(x) === w ? colors.muzzleShade : muzzle);
+	}
+	for (let x = -1; x <= 1; x++) put(x, 6, 2, colors.chin);
+	put(0, 6, 3, colors.chin);
+	// Ears.
+	const ear = top - 1 - (pose === 'idle' && frame % 7 === 3 ? 1 : 0);
+	for (const s of [-1, 1]) {
+		put(s * (w + 1), ear, 0, colors.ear); put(s * (w + 1), ear, -1, style.body);
+		put(s * (w + 2), ear + 1, 0, style.body);
+	}
 	if (pose === 'whip-up' || pose === 'whip-crack') whip(put, pose);
 	return voxels;
 }
@@ -167,7 +187,6 @@ export function skin(seed: number): CalfStyle {
 		blaze: kind >= 0.45 && kind < 0.65 ? hex('#f1ece2') : undefined,
 		belly: kind >= 0.65 && kind < 0.85 ? (light(body) ? shade(body, 0.8) : hex('#f1ece2')) : undefined,
 		seed: Math.floor(next() * 20),
-		muzzle: light(body) ? undefined : hex('#d9a49a'),
 	};
 }
 
