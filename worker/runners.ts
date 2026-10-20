@@ -57,7 +57,8 @@ export async function accountRunners(request: Request, env: Env, userID: string)
 		}
 		if (request.method === 'POST') {
 			await env.DB.prepare('DELETE FROM runner WHERE token_hash IS NULL AND expires_at <= ?').bind(Date.now()).run();
-			// A runner deployed to a cloud host claims its code only after the host builds it, which takes longer than pasting it in a terminal.
+			// A runner deployed to a cloud host may lose its disk on any restart, so it gets its
+			// credential at once instead of a one-time code it could only claim once.
 			let deploy = false;
 			try {
 				deploy = JSON.parse((await limitedText(request, 256)) || '{}').for === 'deploy';
@@ -66,14 +67,15 @@ export async function accountRunners(request: Request, env: Env, userID: string)
 			}
 			const id = crypto.randomUUID(),
 				code = secret(),
-				expiresAt = Date.now() + (deploy ? 1_800_000 : 300_000);
+				expiresAt = Date.now() + 300_000;
 			// Bound registrations per account, including pending pairings.
 			const result = await env.DB.prepare(
-				'INSERT INTO runner (id,user_id,code_hash,expires_at,created_at) SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM runner WHERE user_id = ?) < 20',
+				'INSERT INTO runner (id,user_id,code_hash,token_hash,expires_at,created_at) SELECT ?,?,?,?,?,? WHERE (SELECT count(*) FROM runner WHERE user_id = ?) < 20',
 			)
-				.bind(id, userID, await hash(code), expiresAt, Date.now(), userID)
+				.bind(id, userID, deploy ? null : await hash(code), deploy ? await hash(code) : null, expiresAt, Date.now(), userID)
 				.run();
-			return result.meta.changes ? json({ id, code, expiresAt }, 201) : json({ error: 'Runner limit reached (20)' }, 409);
+			if (!result.meta.changes) return json({ error: 'Runner limit reached (20)' }, 409);
+			return json(deploy ? { id, token: code } : { id, code, expiresAt }, 201);
 		}
 	}
 	const match = /^\/api\/runners\/([a-f0-9-]+)(\/relay)?$/.exec(url.pathname);

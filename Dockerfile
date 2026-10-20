@@ -23,9 +23,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /mob ./cmd/mob
 FROM debian:trixie-slim
 COPY --from=go /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=go /mob /usr/local/bin/mob
-# Configuration, providers.json, the database and runner.json all follow HOME,
-# which is the persistent disk. Render mounts disks owned by root, so Mob runs
-# as root inside its own container.
+# Configuration, providers.json and the database follow HOME. Mount a disk at
+# /data to keep them; Render mounts disks owned by root, so Mob runs as root
+# inside its own container.
 ENV HOME=/data
 WORKDIR /data
-CMD ["mob", "runner", "--serve"]
+# Render gives web services PORT and their public RENDER_EXTERNAL_URL. Requesting
+# that URL from inside keeps a free instance from sleeping: the runner's relay
+# connection is outbound, which Render does not count as traffic.
+CMD ["sh", "-c", "exec mob runner --serve --health-addr=:${PORT:-10000} ${RENDER_EXTERNAL_URL:+--keep-awake=$RENDER_EXTERNAL_URL}"]

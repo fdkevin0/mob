@@ -8,10 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/fdkevin0/mob/internal/local"
@@ -22,29 +22,43 @@ import (
 
 func runnerCommand(config *local.Config) *cobra.Command {
 	var serve bool
+	var healthAddr, keepAwake string
 	command := &cobra.Command{Use: "runner", Short: "Connect this Mob to the web with end-to-end encryption", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		path := filepath.Join(config.Dir, "runner.json")
-		// A runner deployed without a terminal, such as on Render, is paired from the environment.
-		// The code works once, so a saved pairing is reused until the variable names another runner.
-		if env := os.Getenv("MOB_RUNNER_PAIRING"); env != "" && !pairedAs(path, env) {
-			if err := pair(cmd.Context(), config.Dir, strings.NewReader(env)); err != nil {
+		var credentials runner.Credentials
+		if env := os.Getenv("MOB_RUNNER_PAIRING"); env != "" {
+			var err error
+			if credentials, err = deployed(env); err != nil {
 				return fmt.Errorf("MOB_RUNNER_PAIRING: %w", err)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Paired from MOB_RUNNER_PAIRING")
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("pair this browser first with mob runner pair: %w", err)
-		}
-		var credentials runner.Credentials
-		if err := json.Unmarshal(raw, &credentials); err != nil {
-			return err
+		} else {
+			raw, err := os.ReadFile(filepath.Join(config.Dir, "runner.json"))
+			if err != nil {
+				return fmt.Errorf("pair this browser first with mob runner pair: %w", err)
+			}
+			if err := json.Unmarshal(raw, &credentials); err != nil {
+				return err
+			}
 		}
 		ctx := cmd.Context()
+		if healthAddr != "" {
+			// Hosts such as Render want a web service to answer on a port. It says only that the process runs;
+			// Mob itself stays on loopback.
+			listener, err := net.Listen("tcp", healthAddr)
+			if err != nil {
+				return err
+			}
+			health := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprintln(w, "ok") })}
+			go health.Serve(listener)
+			defer health.Close()
+		}
+		if keepAwake != "" {
+			go stayAwake(ctx, keepAwake)
+		}
 		// done closes when the Mob this process serves stops; it stays nil otherwise.
 		var done <-chan struct{}
 		var connection local.Connection
 		if !serve {
+			var err error
 			if connection, err = local.Credentials(*config); err != nil {
 				return err
 			}
@@ -71,7 +85,7 @@ func runnerCommand(config *local.Config) *cobra.Command {
 				}
 			}()
 		}
-		err = runner.Run(ctx, credentials, runner.LocalHandler(connection.URL, connection.Token), func(message string) { fmt.Fprintln(cmd.OutOrStdout(), message) })
+		err := runner.Run(ctx, credentials, runner.LocalHandler(connection.URL, connection.Token), func(message string) { fmt.Fprintln(cmd.OutOrStdout(), message) })
 		select {
 		case <-done:
 			return errors.New("Mob stopped")
@@ -80,6 +94,8 @@ func runnerCommand(config *local.Config) *cobra.Command {
 		}
 	}}
 	command.Flags().BoolVar(&serve, "serve", false, "Run Mob in this process too, for a machine that only runs the runner")
+	command.Flags().StringVar(&healthAddr, "health-addr", "", "Answer health checks on this address, such as :10000; it serves nothing else")
+	command.Flags().StringVar(&keepAwake, "keep-awake", "", "Request this URL every 10 minutes, so a host that sleeps without inbound requests keeps the runner on")
 	command.AddCommand(&cobra.Command{Use: "pair", Short: "Read the web pairing JSON from stdin and save this runner's credentials", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(cmd.ErrOrStderr(), "Paste the pairing JSON from your signed-in web browser, then press Enter:")
 		if err := pair(cmd.Context(), config.Dir, cmd.InOrStdin()); err != nil {
@@ -98,12 +114,43 @@ type pairing struct {
 	Key  string `json:"key"`
 }
 
-// pairedAs reports whether the saved credentials belong to the runner the pairing JSON names.
-func pairedAs(path, raw string) bool {
-	var want pairing
-	var have runner.Credentials
-	saved, err := os.ReadFile(path)
-	return err == nil && json.Unmarshal([]byte(raw), &want) == nil && json.Unmarshal(saved, &have) == nil && want.ID != "" && want.ID == have.ID
+// deployed reads the credentials of a runner deployed without a terminal, such as on Render.
+// Its disk may not survive a restart, so the variable holds the credential itself, not a one-time code.
+func deployed(raw string) (runner.Credentials, error) {
+	var credentials runner.Credentials
+	if err := json.Unmarshal([]byte(raw), &credentials); err != nil {
+		return credentials, errors.New("invalid pairing JSON")
+	}
+	origin, err := runner.Origin(credentials.URL)
+	if err != nil {
+		return credentials, err
+	}
+	key, err := base64.StdEncoding.DecodeString(credentials.Key)
+	if err != nil || len(key) != 32 || len(credentials.ID) != 36 || len(credentials.Token) != 72 {
+		return credentials, errors.New("invalid runner credentials; create a new Render pairing in the browser")
+	}
+	credentials.URL = origin
+	return credentials, nil
+}
+
+// stayAwake requests url until ctx ends. The request reaches the host from outside, which the
+// runner's own outbound relay connection does not.
+func stayAwake(ctx context.Context, url string) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil); err == nil {
+				if resp, err := client.Do(req); err == nil {
+					resp.Body.Close()
+				}
+			}
+		}
+	}
 }
 
 // pair claims the pairing JSON's one-time code and saves the runner's credentials in dir.

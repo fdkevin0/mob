@@ -54,14 +54,14 @@ it('does not send requests to a runner whose key is missing', async () => {
 	expect(connect).not.toHaveBeenCalled();
 });
 
-it('pairs a Render runner with a longer-lived code and links to the Blueprint', async () => {
+it('gives a Render runner its credential at once instead of a one-time code', async () => {
 	let body = '';
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async (_url: string, init?: RequestInit) => {
 			if (init?.method === 'POST') {
 				body = String(init.body);
-				return Response.json({ id, code: 'one-time-code', expiresAt: Date.now() + 1800000 });
+				return Response.json({ id, token: 'runner-token' });
 			}
 			return Response.json([]);
 		}),
@@ -69,7 +69,10 @@ it('pairs a Render runner with a longer-lived code and links to the Blueprint', 
 	render(<Runners connect={vi.fn()} deploy />);
 	fireEvent.click(screen.getByRole('button', { name: 'Create Render pairing' }));
 	const field = (await screen.findByLabelText(/Private pairing JSON/)) as HTMLTextAreaElement;
+	const pair = JSON.parse(field.value);
 	expect(JSON.parse(body)).toEqual({ for: 'deploy' });
-	expect(body).not.toContain(JSON.parse(field.value).key);
+	expect(pair).toMatchObject({ id, url: location.origin, token: 'runner-token' });
+	expect(pair.code).toBeUndefined();
+	expect(body).not.toContain(pair.key);
 	expect(screen.getByRole('link', { name: 'Deploy to Render' }).getAttribute('href')).toBe(renderDeployURL);
 });

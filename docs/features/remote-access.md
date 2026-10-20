@@ -53,8 +53,8 @@ served by the Worker in `worker/`:
   **Connect a runner** dialog opens only when they do something that needs
   Mob, such as sending, starting a conversation or opening plugins. It offers
   **Your own runner** (paired runners, or the Mob address and access token of
-  Mob on this computer), **Deploy to Render** (see
-  [Runner on Render](#runner-on-render)) and **Cloud runner**, which is
+  Mob on this computer), **Deploy to Render**, a free runner in the user's
+  Render account (see [Runner on Render](#runner-on-render)), and **Cloud runner**, which is
   disabled and marked coming soon. A typed message is kept and placed in the
   composer of the first conversation that opens after connecting; it is not
   sent automatically. A `mob open --web` link opens the dialog to show its
@@ -227,41 +227,56 @@ locally with fake account sessions and an offline demo model.
 ## Runner on Render
 
 **Deploy to Render** in the Connect a runner dialog runs Mob as a runner in the
-user's own Render account, for a Mob that stays on without their computer. It
-is the encrypted runner above with no terminal: the relay and the trust
-boundary are the same, and Mob still listens only on loopback inside its
+user's own Render account, free, for a Mob that stays on without their
+computer. It is the encrypted runner above with no terminal: the relay and the
+trust boundary are the same, and Mob still listens only on loopback inside its
 container.
 
-1. **Create Render pairing** makes a pairing whose one-time code lasts 30
-   minutes instead of 5, long enough for Render to build the image before the
-   runner claims it (`POST /api/runners` with `{"for":"deploy"}`).
+1. **Create Render pairing** registers a runner and shows its pairing JSON:
+   the URL, runner ID, encryption key and the runner credential itself
+   (`POST /api/runners` with `{"for":"deploy"}`). There is no one-time code,
+   because a free instance loses its files on every restart and could not keep
+   what it claimed. The cloud stores only the credential's hash.
 2. **Deploy to Render** opens `render.com/deploy` for this repository. Render
    reads the Blueprint `render.yaml` and asks for `MOB_RUNNER_PAIRING`; paste
    the pairing JSON there.
 3. Render builds `Dockerfile` and starts `mob runner --serve`. When the runner
    shows online in the dialog, choose **Open runner**.
 
-The Blueprint is one background worker (plan `0.5c-512mb`) with a 1 GB disk at
-`/data`: about $7 a month for the worker and $0.25 for the disk, billed to the
-user by Render. Render has no free workers, and free web services lose their
-files and sleep without inbound traffic, so a free deployment would lose its
-conversations. `HOME` is the disk, so configuration, `providers.json`, the
-database and `runner.json` survive restarts and deploys. Deploys are manual
-(`autoDeployTrigger: off`), so a merge to `main` never interrupts a turn; use
-**Manual Deploy** in Render to update.
+The Blueprint is one free web service. Render may restart a free instance at
+any time and its files do not survive that, so **conversations, memory and
+added providers reset on every restart or deploy**; the runner reconnects by
+itself from `MOB_RUNNER_PAIRING`. A free instance also sleeps after 15 minutes
+without inbound requests. The runner's relay connection is outbound and does
+not count, so the image passes `--keep-awake` with Render's
+`RENDER_EXTERNAL_URL`: the runner requests its own public address every 10
+minutes. One always-on instance uses about 744 of the workspace's 750 free
+hours a month. Deploys are manual (`autoDeployTrigger: off`), so a merge to
+`main` never interrupts a turn; use **Manual Deploy** in Render to update.
+
+To keep conversations, upgrade the same service (about $7 a month plus $0.25
+for the disk, billed by Render):
+
+1. On the Blueprint's **Settings** page in Render, set **Auto Sync** to No, so
+   a later change to `render.yaml` does not switch the plan back to free.
+2. On the service, change the instance type to Starter and add a 1 GB disk
+   mounted at `/data`. `HOME` is `/data`, so configuration, `providers.json`
+   and the database then survive restarts.
 
 - `mob runner --serve` starts Mob in the same process and exits when either
-  stops, so the host restarts both together. It also works on any machine.
-- With `MOB_RUNNER_PAIRING` set, `mob runner` claims it before connecting,
-  unless `runner.json` already holds that runner. The variable holds the
-  encryption key, so it belongs in the host's secret settings. To pair again,
-  create a new Render pairing, replace the variable and restart.
+  stops, so the host restarts both together. `--health-addr` answers every
+  request with `ok` for the host's health check and serves nothing else.
+- With `MOB_RUNNER_PAIRING` set, `mob runner` uses those credentials instead
+  of `runner.json`. The variable holds the encryption key and the credential,
+  so it belongs in the host's secret settings. To pair again, revoke the
+  runner, create a new Render pairing, replace the variable and restart.
 - With no `providers.json`, the runner uses the default free model. Add
   providers from Render's **Shell** with `mob provider add … --key-stdin`;
-  keys are not read from the environment.
+  keys are not read from the environment, and on a free instance they are
+  gone after the next restart.
 - There is no container runtime on Render, so the sandbox stays off.
 - The model provider sees conversations, as on a computer, and so does
-  Render, which runs the runner and holds its disk and the pairing key.
+  Render, which runs the runner and holds its files and the pairing JSON.
 
 ## Gateway
 ## Gateway
