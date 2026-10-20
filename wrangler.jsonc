@@ -6,6 +6,7 @@
 // `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
 // Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY and GITHUB_CLIENT_SECRET.
 // The Turnstile site key and GitHub client ID are public, so they are vars.
+// PR builds run `npx wrangler preview`; their auth data uses a separate D1.
 {
 	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
 	"name": "mob",
@@ -28,6 +29,19 @@
 	"vars": {
 		"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
+	},
+	"previews": {
+		"vars": {
+			"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
+			"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
+		},
+		"d1_databases": [
+			{
+				"binding": "DB",
+				"database_name": "mob-auth-preview",
+				"database_id": "9ecd0ba5-6341-421c-88ce-16ff15b9047b"
+			}
+		]
 	},
 	"routes": [{ "pattern": "mob.fdkevin.cloud", "custom_domain": true }],
 	"observability": {

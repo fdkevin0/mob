@@ -1,0 +1,12 @@
+// Migration target for previews.d1_databases in wrangler.jsonc.
+{
+	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "mob-auth-preview",
+			"database_id": "9ecd0ba5-6341-421c-88ce-16ff15b9047b",
+			"migrations_dir": "worker/migrations"
+		}
+	]
+}

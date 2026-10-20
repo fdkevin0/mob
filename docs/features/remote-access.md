@@ -68,6 +68,16 @@ Deployment:
   deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
+- PR builds use `npx wrangler preview`. Wrangler requires the explicit
+  `previews` block in `wrangler.jsonc`: public variables and the `DB` binding
+  do not inherit their production values. Previews share the separate
+  `mob-auth-preview` database. Before deploying a Preview after a schema change,
+  run `npx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc`.
+  Keep that file's database ID aligned with `previews.d1_databases`.
+  Set the three auth secrets in Cloudflare's Previews Base configuration;
+  production secrets are not inherited. Preview URLs are public unless access
+  controls are configured. GitHub OAuth callbacks and Turnstile hostnames must
+  also allow the preview hostname to exercise sign-in there.
 - Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY` and
   `GITHUB_CLIENT_SECRET`. The public `TURNSTILE_SITE_KEY` and
   `GITHUB_CLIENT_ID` are vars in `wrangler.jsonc`. The GitHub OAuth app's
