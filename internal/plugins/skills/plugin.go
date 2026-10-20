@@ -20,6 +20,24 @@ import (
 // copies is where loaded skills are copied in a sandbox workspace.
 const copies = ".mob/skills"
 
+// listed is how many skills the system prompt names; beyond it, the model
+// finds them with tool_search.
+const listed = 20
+
+// Entries are the skills found now, for tool_search to find; none while the
+// system prompt names them all.
+func (l *Library) Entries() []chat.Entry {
+	list, _ := l.Scan()
+	if len(list) <= listed {
+		return nil
+	}
+	entries := make([]chat.Entry, len(list))
+	for i, s := range list {
+		entries[i] = chat.Entry{Kind: "skill", Name: s.Name, Description: s.Description, Use: fmt.Sprintf("Call the skill tool with name %q.", s.Name), OwnerOnly: true}
+	}
+	return entries
+}
+
 // Tools is the skill tool, listing the skills found now; none while there
 // are none.
 func (l *Library) Tools() []chat.Tool {
@@ -29,12 +47,22 @@ func (l *Library) Tools() []chat.Tool {
 	}
 	names := make([]string, len(list))
 	var catalog strings.Builder
-	catalog.WriteString("Skills are task instructions the owner installed. When a task matches a skill's description, call the skill tool with its name before starting and follow what it returns. <available_skills>")
+	catalog.WriteString("Skills are task instructions the owner installed. When a task matches a skill's description, call the skill tool with its name before starting and follow what it returns.")
+	if len(list) > listed {
+		// Many skills are found with tool_search instead of filling the prompt.
+		fmt.Fprintf(&catalog, " %d skills are installed; find the ones a task needs with tool_search.", len(list))
+	} else {
+		catalog.WriteString(" <available_skills>")
+	}
 	for i, s := range list {
 		names[i] = s.Name
-		fmt.Fprintf(&catalog, "<skill><name>%s</name><description>%s</description></skill>", s.Name, html.EscapeString(s.Description))
+		if len(list) <= listed {
+			fmt.Fprintf(&catalog, "<skill><name>%s</name><description>%s</description></skill>", s.Name, html.EscapeString(s.Description))
+		}
 	}
-	catalog.WriteString("</available_skills>")
+	if len(list) <= listed {
+		catalog.WriteString("</available_skills>")
+	}
 	return []chat.Tool{{
 		Tool: llm.Tool{
 			Name:        "skill",

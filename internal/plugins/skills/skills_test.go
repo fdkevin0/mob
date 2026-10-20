@@ -123,6 +123,30 @@ func TestToolOffersCatalogAndLoads(t *testing.T) {
 	}
 }
 
+func TestManySkillsAreFoundBySearch(t *testing.T) {
+	root := t.TempDir()
+	for i := range listed {
+		name := fmt.Sprintf("skill-%02d", i)
+		write(t, filepath.Join(root, name, "SKILL.md"), "---\nname: "+name+"\ndescription: Does task "+name+".\n---\nbody", 0600)
+	}
+	l := &Library{Roots: []string{root}}
+	if l.Entries() != nil {
+		t.Fatal("skills the prompt names are entries too")
+	}
+	write(t, filepath.Join(root, "last", "SKILL.md"), "---\nname: last\ndescription: The last one.\n---\nbody", 0600)
+	tool := l.Tools()[0]
+	if strings.Contains(tool.Prompt, "<available_skills>") || !strings.Contains(tool.Prompt, "21 skills are installed") {
+		t.Fatalf("prompt: %s", tool.Prompt)
+	}
+	if names := tool.Parameters["properties"].(map[string]any)["name"].(map[string]any)["enum"].([]string); len(names) != listed+1 {
+		t.Fatalf("enum: %v", names)
+	}
+	entries := l.Entries()
+	if len(entries) != listed+1 || entries[0].Kind != "skill" || entries[0].Name != "last" || !entries[0].OwnerOnly || entries[0].Use != `Call the skill tool with name "last".` {
+		t.Fatalf("entries: %+v", entries)
+	}
+}
+
 func TestLinksStayInside(t *testing.T) {
 	root, outside := t.TempDir(), t.TempDir()
 	write(t, filepath.Join(outside, "secret"), "secret", 0600)

@@ -37,6 +37,8 @@ type plugin struct {
 	hooks    chat.Hooks
 	// source lists tools that change while Mob runs.
 	source func() []chat.Tool
+	// entries lists what tool_search finds besides tools.
+	entries func() []chat.Entry
 	// background is set for a plugin that runs while it is enabled.
 	background *extension.Extension
 }
@@ -58,7 +60,7 @@ func (s *Server) plugins() []plugin {
 		{name: "cloudflare", commands: cloudflare.Commands(cloud), tools: cloudflare.Tools(cloud), routes: cloudflare.Routes(cloud)},
 		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
 		{name: "mcp", commands: mcp.Commands(s.MCP), source: s.MCP.Tools, background: &mcpRun},
-		{name: "skills", commands: skills.Commands(s.Skills), source: s.Skills.Tools},
+		{name: "skills", commands: skills.Commands(s.Skills), source: s.Skills.Tools, entries: s.Skills.Entries},
 	}
 }
 
@@ -72,6 +74,9 @@ func (s *Server) register(plugins ...plugin) {
 		s.Hooks.AfterTurn = append(s.Hooks.AfterTurn, p.hooks.AfterTurn...)
 		if p.source != nil {
 			s.Tools.RegisterSource(p.source)
+		}
+		if p.entries != nil {
+			s.Tools.RegisterEntries(p.entries)
 		}
 		if p.background != nil {
 			s.extensions.Register(*p.background)
