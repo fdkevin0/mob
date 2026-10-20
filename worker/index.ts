@@ -1,4 +1,6 @@
 import { configured, createAuth, type Env } from './auth';
+import { accountRunners, runnerTransport } from './runners';
+export { RunnerRelay } from './relay';
 
 // The landing page talks to this Worker (sign-in) and Turnstile.
 const landingPolicy = [
@@ -15,11 +17,10 @@ const landingPolicy = [
 	"frame-ancestors 'none'",
 ].join('; ');
 
-// The app reaches only Mob on this computer, not even this site, so the
-// access token it keeps cannot be sent anywhere else.
+// The app reaches loopback Mob or its own encrypted runner relay.
 const appPolicy = [
 	"default-src 'self'",
-	'connect-src http://127.0.0.1:* http://localhost:*',
+	"connect-src 'self' http://127.0.0.1:* http://localhost:*",
 	"img-src 'self' data: blob: https:",
 	"style-src 'self' 'unsafe-inline'",
 	"font-src 'self' data:",
@@ -34,6 +35,13 @@ export default {
 		const url = new URL(request.url);
 		const { pathname } = url;
 		if (pathname.startsWith('/api/auth/')) return createAuth(env, url.origin).handler(request);
+		if (pathname === '/api/runners' || pathname.startsWith('/api/runners/')) {
+			const transport = await runnerTransport(request, env);
+			if (transport) return transport;
+			const session = await createAuth(env, url.origin).api.getSession({ headers: request.headers });
+			if (!session) return new Response('Sign in again', { status: 401 });
+			return accountRunners(request, env, session.user.id);
+		}
 		if (pathname === '/api/site') {
 			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env) }, { headers: { 'Cache-Control': 'no-store' } });
 		}

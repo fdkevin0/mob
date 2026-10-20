@@ -1,0 +1,170 @@
+import { DurableObject } from 'cloudflare:workers';
+import { limitedText } from './runners';
+
+// Only routing metadata is visible here. The endpoints authenticate it as AES-GCM AAD.
+export type Envelope = { v: 1; session: string; id: string; seq: number; final: boolean; nonce: string; data: string };
+export function validEnvelope(value: unknown): value is Envelope {
+	if (!value || typeof value !== 'object') return false;
+	const e = value as Envelope;
+	return (
+		e.v === 1 &&
+		typeof e.session === 'string' &&
+		/^[a-f0-9]{64}$/.test(e.session) &&
+		typeof e.id === 'string' &&
+		/^[a-f0-9-]{36}$/.test(e.id) &&
+		Number.isSafeInteger(e.seq) &&
+		e.seq >= 0 &&
+		typeof e.final === 'boolean' &&
+		typeof e.nonce === 'string' &&
+		e.nonce.length === 16 &&
+		typeof e.data === 'string' &&
+		e.data.length >= 24 &&
+		e.data.length <= 2 * 1024 * 1024
+	);
+}
+type Pending = {
+	socket: WebSocket;
+	controller: ReadableStreamDefaultController<Uint8Array>;
+	timer: ReturnType<typeof setTimeout>;
+	cleanup: () => void;
+};
+
+export class RunnerRelay extends DurableObject {
+	private pending = new Map<string, Pending>();
+
+	session(): string | null {
+		const socket = this.ctx.getWebSockets('runner').find((socket) => socket.readyState === WebSocket.OPEN);
+		return socket?.deserializeAttachment()?.session ?? null;
+	}
+
+	async revoke() {
+		await this.ctx.storage.put('revoked', true);
+		for (const socket of this.ctx.getWebSockets()) {
+			socket.close(1008, 'Revoked');
+			this.disconnect(socket);
+		}
+	}
+
+	async fetch(request: Request): Promise<Response> {
+		if (await this.ctx.storage.get('revoked')) return new Response('Runner revoked', { status: 403 });
+		if (new URL(request.url).pathname === '/connect') {
+			if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 400 });
+			for (const old of this.ctx.getWebSockets()) {
+				old.close(1000, 'Replaced');
+				this.disconnect(old);
+			}
+			const pair = new WebSocketPair();
+			this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}'));
+			this.ctx.acceptWebSocket(pair[1], ['runner']);
+			return new Response(null, { status: 101, webSocket: pair[0] });
+		}
+		const socket = this.ctx.getWebSockets('runner').find((socket) => socket.readyState === WebSocket.OPEN);
+		if (!socket || !this.session()) return new Response('Runner offline', { status: 503 });
+		const raw = await limitedText(request, 2 * 1024 * 1024);
+		let envelope: unknown;
+		try {
+			envelope = JSON.parse(raw ?? '');
+		} catch {
+			return new Response('Invalid envelope', { status: 400 });
+		}
+		if (!validEnvelope(envelope) || envelope.seq !== 0 || !envelope.final || envelope.session !== this.session())
+			return new Response('Invalid or stale envelope', { status: 409 });
+		const id = envelope.id;
+		if (this.pending.has(id) || this.pending.size >= 32) return new Response('Runner busy', { status: 429 });
+		const finish = () => {
+			const pending = this.pending.get(id);
+			if (!pending) return;
+			clearTimeout(pending.timer);
+			request.signal.removeEventListener('abort', abort);
+			this.pending.delete(id);
+		};
+		const abort = () => {
+			this.pending.get(id)?.controller.error(new Error('Relay interrupted'));
+			finish();
+		};
+		const stream = new ReadableStream<Uint8Array>(
+			{
+				start: (controller) => {
+					this.pending.set(id, { socket, controller, timer: setTimeout(abort, 360_000), cleanup: finish });
+					request.signal.addEventListener('abort', abort, { once: true });
+					if (request.signal.aborted) {
+						abort();
+						return;
+					}
+					try {
+						socket.send(JSON.stringify(envelope));
+					} catch {
+						abort();
+					}
+				},
+				cancel: finish,
+			},
+			new ByteLengthQueuingStrategy({ highWaterMark: 2 * 1024 * 1024 }),
+		);
+		return new Response(stream, {
+			headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+		});
+	}
+
+	webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
+		if (typeof message !== 'string' || message.length > 3 * 1024 * 1024) {
+			socket.close(1009, 'Frame too large');
+			this.disconnect(socket);
+			return;
+		}
+		let frame;
+		try {
+			frame = JSON.parse(message);
+		} catch {
+			socket.close(1008, 'Invalid frame');
+			this.disconnect(socket);
+			return;
+		}
+		if (
+			frame.type === 'hello' &&
+			typeof frame.session === 'string' &&
+			/^[a-f0-9]{64}$/.test(frame.session) &&
+			!socket.deserializeAttachment()
+		) {
+			socket.serializeAttachment({ session: frame.session });
+			return;
+		}
+		if (!validEnvelope(frame)) {
+			socket.close(1008, 'Invalid envelope');
+			this.disconnect(socket);
+			return;
+		}
+		const pending = this.pending.get(frame.id);
+		if (!pending || pending.socket !== socket) return;
+		if ((pending.controller.desiredSize ?? 0) <= 0) {
+			pending.controller.error(new Error('Reader too slow; response incomplete'));
+			pending.cleanup();
+			return;
+		}
+		clearTimeout(pending.timer);
+		pending.timer = setTimeout(() => {
+			pending.controller.error(new Error('Runner timeout'));
+			pending.cleanup();
+		}, 360_000);
+		pending.controller.enqueue(new TextEncoder().encode(JSON.stringify(frame) + '\n'));
+		if (frame.final) {
+			pending.controller.close();
+			pending.cleanup();
+		}
+	}
+
+	private disconnect(socket: WebSocket) {
+		for (const pending of this.pending.values()) {
+			if (pending.socket === socket) {
+				pending.controller.error(new Error('Runner disconnected'));
+				pending.cleanup();
+			}
+		}
+	}
+	webSocketClose(socket: WebSocket) {
+		this.disconnect(socket);
+	}
+	webSocketError(socket: WebSocket) {
+		this.disconnect(socket);
+	}
+}

@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Workspace } from './Workspace';
+import { Runners } from './Runners';
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -39,7 +40,7 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
-      clearToken(rejected); setConnection(undefined); setError(`The access token was replaced. Run ${openCommand()} to sign in again.`);
+      clearToken(rejected); setConnection(undefined); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
     };
     window.addEventListener(unauthorizedEvent, signOut);
     return () => window.removeEventListener(unauthorizedEvent, signOut);
@@ -51,10 +52,11 @@ export function App() {
     try { await api(next, '/config'); saveConnection(next); setConnection(next); }
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
-  if (connection) return <Workspace connection={connection} disconnect={() => { clearToken(); setConnection(undefined); }} />;
+  if (connection) return <Workspace connection={connection} disconnect={() => { if (!connection.runner) clearToken(); setConnection(undefined); }} />;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.go?.main?.Desktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   return <main className="connect"><Logo /><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>
+    {isPublicWeb() && <Runners connect={setConnection} />}
     <form onSubmit={connect}>{isPublicWeb() && <><Label htmlFor="address">Mob address</Label><Input id="address" type="url" value={address} onChange={e => setAddress(e.target.value)} required /></>}<Label htmlFor="token">Local access token</Label><Input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
     {error && <p role="alert">{error}</p>}</main>;

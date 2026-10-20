@@ -26,6 +26,7 @@ change the single-Go-binary release.
 | `internal/channel` | the bridge messaging channels answer through |
 | `internal/plugins/*` | email, Cloudflare, Telegram, WeChat iLink and MCP, each with its own tools, commands, routes and background run |
 | `internal/container`, `internal/sandbox` | the platform container runtimes and the model's `sandbox` tool |
+| `internal/runner`, `worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `worker/runners.ts` |
 | `internal/gateway`, `internal/node` | the experimental relay and edge-node client |
 | `internal/tui` | the Bubble Tea terminal UI |
 | `internal/version` | release versions |

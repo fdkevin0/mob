@@ -108,7 +108,7 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 			</Button>
 			<div className="sidebar-footer">
 				<p>
-					<span className="status-dot" /> History on this computer
+					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'}
 				</p>
 				{isPublicWeb() && (
 					<Button variant="ghost" asChild>
@@ -128,7 +128,7 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 			<aside className="sidebar">
 				<div className="sidebar-brand">
 					<Logo />
-					<span>On this computer</span>
+					<span>{connection.runner ? 'Remote runner' : 'On this computer'}</span>
 				</div>
 				{links}
 			</aside>
@@ -143,7 +143,7 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 						</SheetTrigger>
 						<SheetContent>
 							<SheetTitle className="dialog-title">Conversations</SheetTitle>
-							<SheetDescription className="dialog-description">Your history stays on this computer.</SheetDescription>
+							<SheetDescription className="dialog-description">Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.</SheetDescription>
 							{links}
 						</SheetContent>
 					</Sheet>

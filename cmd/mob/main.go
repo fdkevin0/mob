@@ -129,6 +129,7 @@ func newRootCommand() *cobra.Command {
 	}
 
 	root.AddCommand(serveCommand,
+		runnerCommand(&config),
 		gatewayCommand,
 		&cobra.Command{Use: "start", Short: "Start an independent background service", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			if err := local.StartBackground(config); err != nil {
