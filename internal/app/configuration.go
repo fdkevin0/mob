@@ -18,6 +18,7 @@ func (s *Server) ReloadConfiguration(next configuration.Environment) error {
 	}
 	s.SetToolSteps(next.MaxToolSteps)
 	s.SetWebURL(next.WebURL)
+	s.MCP.ConfigureRegistry(next.MCPRegistry)
 	if s.MCP.Configure(next.MCPServers) {
 		if err := s.extensions.Reload("mcp"); err != nil {
 			return err

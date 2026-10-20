@@ -31,6 +31,8 @@ type Environment struct {
 	MaxToolSteps int
 	// MCPServers are the MCP servers whose tools the model may use.
 	MCPServers mcp.Servers
+	// MCPRegistry is where the model finds remote MCP servers to install.
+	MCPRegistry mcp.Registry
 	// WebURL is the public web UI mob open --web signs in to; empty turns it off.
 	WebURL string
 	Loader *Loader
@@ -52,9 +54,26 @@ type settings struct {
 	Demo     bool             `mapstructure:"demo"`
 	Sandbox  sandbox.Settings `mapstructure:"sandbox"`
 	// MaxToolSteps is max_tool_steps, 1 to MaxToolSteps.
-	MaxToolSteps int         `mapstructure:"max_tool_steps"`
-	MCPServers   mcp.Servers `mapstructure:"mcp_servers"`
-	WebURL       string      `mapstructure:"web_url"`
+	MaxToolSteps int              `mapstructure:"max_tool_steps"`
+	MCPServers   mcp.Servers      `mapstructure:"mcp_servers"`
+	MCPRegistry  registrySettings `mapstructure:"mcp_registry"`
+	WebURL       string           `mapstructure:"web_url"`
+}
+
+// registrySettings is mcp_registry, with namespaces separated by commas.
+type registrySettings struct {
+	URL        string `mapstructure:"url"`
+	Namespaces string `mapstructure:"namespaces"`
+}
+
+func (r registrySettings) registry() mcp.Registry {
+	registry := mcp.Registry{URL: r.URL}
+	for _, glob := range strings.Split(r.Namespaces, ",") {
+		if glob = strings.TrimSpace(glob); glob != "" {
+			registry.Namespaces = append(registry.Namespaces, glob)
+		}
+	}
+	return registry
 }
 
 // MaxToolSteps is the most max_tool_steps may allow; DefaultToolSteps is used
@@ -248,6 +267,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err := data.MCPServers.Validate(); err != nil {
 		return Environment{}, err
 	}
+	if err := data.MCPRegistry.registry().Validate(); err != nil {
+		return Environment{}, err
+	}
 	data.DataDir, err = filepath.Abs(data.DataDir)
 	if err != nil {
 		return fail("invalid data_dir")
@@ -256,7 +278,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Token: data.Token, Gateway: data.Gateway, Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, WebURL: data.WebURL, Loader: l}, nil
+	return Environment{Token: data.Token, Gateway: data.Gateway, Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, MCPRegistry: data.MCPRegistry.registry(), WebURL: data.WebURL, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

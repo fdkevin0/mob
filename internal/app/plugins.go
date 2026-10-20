@@ -59,7 +59,7 @@ func (s *Server) plugins() []plugin {
 		{name: "telegram", background: &telegramRun},
 		{name: "cloudflare", commands: cloudflare.Commands(cloud), tools: cloudflare.Tools(cloud), routes: cloudflare.Routes(cloud)},
 		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
-		{name: "mcp", commands: mcp.Commands(s.MCP), source: s.MCP.Tools, background: &mcpRun},
+		{name: "mcp", commands: mcp.Commands(s.MCP), tools: []chat.Tool{s.MCP.InstallTool()}, source: s.MCP.Tools, entries: s.MCP.Entries, background: &mcpRun},
 		{name: "skills", commands: skills.Commands(s.Skills), source: s.Skills.Tools, entries: s.Skills.Entries},
 	}
 }
