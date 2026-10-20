@@ -79,8 +79,16 @@ commands, approvals, delivery records and replies behave the same everywhere.
   approval is decided or found stale. A tap while that conversation's turn runs
   leaves the row in place. Approval buttons use the conversation saved with the
   approval, even after `/new`, `/open` or a restart, without changing the bot's
-  currently selected conversation. A conversation-scoped grant applies to that
+  currently selected conversation; so does `/approve ID` or `/deny ID` typed
+  with an approval's ID. A conversation-scoped grant applies to that
   original conversation.
+- Notices: while the bot polls, it sends the owner the notices Mob raises, such
+  as a [coding agent's task](coding-agents.md) that waits for a decision, is
+  done or failed, with approval buttons for what waits. A tap decides in the
+  task's conversation and the reply is how the agent went on, so the turns a
+  decision from the bot started send no notice of their own. Notices raised
+  while the bot is not polling are not sent later; the conversation keeps
+  them.
 - Buttons stand in for typing commands. A tap on any button is handled as the
   command its data holds, as if the owner had typed it; a command longer than
   Telegram's 64-byte limit rides on a short token kept in memory, and a tap on

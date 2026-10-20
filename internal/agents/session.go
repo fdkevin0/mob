@@ -159,7 +159,12 @@ func (s *session) newSession(ctx context.Context, methods []acp.AuthMethod) (acp
 			return created, nil
 		}
 	}
-	return created, fmt.Errorf("%s is not signed in: %s", s.preset.Title, s.preset.SignIn)
+	return created, s.signIn()
+}
+
+// signIn says the agent is not signed in and how to sign it in.
+func (s *session) signIn() error {
+	return fmt.Errorf("%s is not signed in: %s", s.preset.Title, s.preset.SignIn)
 }
 
 // ansi matches terminal colour codes, which agents write to standard error.
@@ -324,6 +329,10 @@ func (s *session) enqueue(text string) bool {
 // ended reports how a prompt ended.
 func (s *session) ended(e ending) error {
 	switch {
+	case authRequired(e.err):
+		// Claude Agent finds out it is not signed in only when it answers.
+		s.status(chat.TaskFailed)
+		return s.signIn()
 	case e.err != nil:
 		s.status(chat.TaskFailed)
 		return s.failed("answer", e.err)

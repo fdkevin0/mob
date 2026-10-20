@@ -55,7 +55,7 @@ func (f *fake) SetSessionConfigOption(context.Context, acp.SetSessionConfigOptio
 	return acp.SetSessionConfigOptionResponse{}, nil
 }
 
-var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}}}
+var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}, {Id: "acceptEdits", Name: "Accept edits"}}}
 
 func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSessionResponse, error) {
 	f.mu.Lock()
@@ -119,6 +119,11 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
+	case text == "limit":
+		f.say(ctx, id, acp.UpdateAgentMessageText("halfway"))
+		return acp.PromptResponse{StopReason: acp.StopReasonMaxTokens}, nil
+	case text == "login":
+		return acp.PromptResponse{}, acp.NewAuthRequired(nil)
 	case text == "wait":
 		<-ctx.Done()
 		return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
@@ -132,9 +137,18 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 type fakes struct {
 	mu     sync.Mutex
 	agents []*fake
+	// slow, when set, makes starting an agent wait until it is stopped.
+	slow bool
 }
 
-func (fs *fakes) connect(_ context.Context, _ Preset, _ string) (Conn, error) {
+func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) {
+	fs.mu.Lock()
+	slow := fs.slow
+	fs.mu.Unlock()
+	if slow {
+		<-ctx.Done()
+		return Conn{}, ctx.Err()
+	}
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
 	f := &fake{release: make(chan struct{})}
@@ -295,6 +309,22 @@ func TestTaskRunsInItsOwnWorktree(t *testing.T) {
 func fmtJSON(v any) string {
 	raw, _ := json.Marshal(v)
 	return string(raw)
+}
+
+func TestClaudeAgent(t *testing.T) {
+	h := newHarness(t)
+	task, err := h.svc.StartTask(context.Background(), h.repo, "claude", "", "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task = h.wait(task)
+	if task.Agent != "claude" || task.Status != chat.TaskFailed || h.fakes.last().mode != "acceptEdits" {
+		t.Fatalf("task = %+v, mode %q", task, h.fakes.last().mode)
+	}
+	history, _ := h.svc.Store.History(task.ConversationID)
+	if failure := fmtJSON(history[len(history)-1].Metadata["error"]); !strings.Contains(failure, "Claude Agent is not signed in") || !strings.Contains(failure, "/login") {
+		t.Fatalf("error = %s", failure)
+	}
 }
 
 func TestApprovalsReachTheAgent(t *testing.T) {
@@ -485,5 +515,87 @@ func TestInside(t *testing.T) {
 		if inside(worktree, path) != want {
 			t.Errorf("inside(%q) = %v", path, !want)
 		}
+	}
+}
+
+func TestNoticesTellTheOwner(t *testing.T) {
+	h := newHarness(t)
+	var mu sync.Mutex
+	var notices []chat.Notice
+	defer h.conv.Notices(func(n chat.Notice) { mu.Lock(); notices = append(notices, n); mu.Unlock() })()
+	took := func() []chat.Notice {
+		mu.Lock()
+		defer mu.Unlock()
+		list := notices
+		notices = nil
+		return list
+	}
+
+	task := h.start("run")
+	got := took()
+	if len(got) != 1 || got[0].ConversationID != task.ConversationID || len(got[0].Approvals) != 1 || !strings.HasPrefix(got[0].Text, "**Task waits for your decision:** codex · run") {
+		t.Fatalf("waiting notices = %+v", got)
+	}
+	// The app a decision came from already shows how the turn ended.
+	answer := chat.Answer{ID: got[0].Approvals[0].ID, Approved: true}
+	if err := h.conv.Execute(context.Background(), chat.ChatRequest{ID: task.ConversationID, Approval: &answer, Owner: true, Channel: "Telegram"}, func(chat.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(task)
+	got = took()
+	if len(got) != 1 || got[0].Channel != "Telegram" || !strings.Contains(got[0].Text, "**Task done:** codex · run\nBranch `"+task.Branch+"`\n\ndone allow") {
+		t.Fatalf("done notices = %+v", got)
+	}
+
+	failed, err := h.svc.StartTask(context.Background(), h.repo, "claude", "", "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.wait(failed)
+	if got = took(); len(got) != 1 || !strings.Contains(got[0].Text, "**Task failed:** claude · login\n\nClaude Agent is not signed in") {
+		t.Fatalf("failure notices = %+v", got)
+	}
+
+	limited, err := h.svc.StartTask(context.Background(), h.repo, "", "", "limit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limited = h.wait(limited); limited.Status != chat.TaskReview {
+		t.Fatalf("status = %q", limited.Status)
+	}
+	if got = took(); len(got) != 1 || !strings.Contains(got[0].Text, "**Task stopped early:** codex · limit\n\nCodex stopped at its limit (max_tokens); send a message to continue\n\nhalfway") {
+		t.Fatalf("limit notices = %+v", got)
+	}
+
+	stopped, err := h.svc.StartTask(context.Background(), h.repo, "", "", "wait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := h.svc.StopTask(stopped.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(stopped)
+	if got = took(); len(got) != 0 {
+		t.Fatalf("stopping a task told the owner: %+v", got)
+	}
+
+	// Nor does stopping one whose agent is still starting.
+	h.fakes.mu.Lock()
+	h.fakes.slow = true
+	h.fakes.mu.Unlock()
+	starting, err := h.svc.StartTask(context.Background(), h.repo, "", "", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := h.svc.StopTask(starting.ID); err != nil {
+		t.Fatal(err)
+	}
+	if starting = h.wait(starting); starting.Status != chat.TaskStopped {
+		t.Fatalf("status = %q", starting.Status)
+	}
+	if got = took(); len(got) != 0 {
+		t.Fatalf("stopping a starting task told the owner: %+v", got)
 	}
 }

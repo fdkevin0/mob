@@ -48,7 +48,9 @@ func (s *ConversationService) delegated(conversationID string) Delegate {
 type DelegateTurn struct {
 	ConversationID string
 	// Text is what the owner wrote; empty when the turn follows an approval.
-	Text     string
+	Text string
+	// Channel is the messaging app the turn answers in, if any.
+	Channel  string
 	store    *Store
 	message  *Message
 	send     func(Event) error
@@ -63,6 +65,20 @@ type segment struct {
 
 // MessageID is the reply being written.
 func (t *DelegateTurn) MessageID() string { return t.message.ID }
+
+// Wrote reports whether the reply shows anything yet.
+func (t *DelegateTurn) Wrote() bool { return len(t.message.Parts) > 0 }
+
+// Conclusion is the reply's last text, which usually sums up the turn.
+func (t *DelegateTurn) Conclusion() string {
+	for i := len(t.message.Parts) - 1; i >= 0; i-- {
+		if p := t.message.Parts[i]; p["type"] == "text" {
+			text, _ := p["text"].(string)
+			return text
+		}
+	}
+	return ""
+}
 
 func (t *DelegateTurn) step() error {
 	if t.stepped {
@@ -174,7 +190,7 @@ func (t *DelegateTurn) RequestApproval(id string, input any) (string, error) {
 
 // runDelegate is Run for a delegated conversation: the delegate writes the
 // reply, which is saved while it streams and once it ends.
-func runDelegate(ctx context.Context, store *Store, delegate Delegate, conversationID string, message Message, text string, emit func(Event) error) (runErr error) {
+func runDelegate(ctx context.Context, store *Store, delegate Delegate, input ChatRequest, message Message, emit func(Event) error) (runErr error) {
 	lastSave := time.Now()
 	send := func(e Event) error {
 		if err := ctx.Err(); err != nil {
@@ -188,7 +204,7 @@ func runDelegate(ctx context.Context, store *Store, delegate Delegate, conversat
 		}
 		return emit(e)
 	}
-	turn := &DelegateTurn{ConversationID: conversationID, Text: text, store: store, message: &message, send: send, segments: map[string]segment{}}
+	turn := &DelegateTurn{ConversationID: input.ID, Text: input.Text, Channel: input.Channel, store: store, message: &message, send: send, segments: map[string]segment{}}
 	defer func() {
 		status, failure := "complete", ""
 		if runErr != nil {

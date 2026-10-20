@@ -12,12 +12,14 @@ instructions. The agent writes the code. Agents speak the
 | Agent | Started with | Signing in |
 | --- | --- | --- |
 | `codex` (default) | `codex-acp` when installed, otherwise `npx -y @zed-industries/codex-acp@0.16.0` | the ChatGPT subscription `codex login` saved on that computer (`codex login --device-auth` where it has no browser), or `OPENAI_API_KEY` / `CODEX_API_KEY` in the service's environment |
+| `claude` (Claude Agent) | `claude-agent-acp` when installed, otherwise `npx -y @agentclientprotocol/claude-agent-acp@0.94.0` | the Claude subscription `claude` saved on that computer (run `claude` and `/login`), or `ANTHROPIC_API_KEY` in the service's environment |
 
 The agent runs on the computer Mob runs on, as the same user, with Mob's
 environment minus its `MOB_*` variables. Mob keeps no agent credentials: the
 agent uses its own sign-in. When it asks to sign in, Mob tries an
 environment-variable method whose variable is set, and otherwise fails the
-turn with how to sign in. Claude and Amp are planned next.
+turn with how to sign in. Claude Agent only finds out it is not signed in
+when it answers a prompt; that turn fails the same way. Amp is planned next.
 
 ## Projects and tasks
 
@@ -32,8 +34,8 @@ turn with how to sign in. Claude and Amp are planned next.
   merging and cleaning up are the owner's.
 - Each task is a conversation, titled `<agent>: <title>`, listed with the
   others. The agent's replies stream into it like a model's: text, reasoning,
-  and one line per tool call (`codex_execute`, `codex_edit`, `codex_read` and
-  so on, after the call's ACP kind) that opens to show its input and output.
+  and one line per tool call (`codex_execute`, `claude_edit`, `codex_read` and
+  so on, after the agent and the call's ACP kind) that opens to show its input and output.
   The owner can write to it directly; only the owner can.
 - Tasks are saved in the `tasks` table with their status: `running`,
   `waiting` (for the owner's approval), `review` (the agent finished what it
@@ -62,7 +64,9 @@ once there is a project or task; the others once there is a project or task.
 
 - Codex starts each session in its `auto` mode: it edits files and runs
   commands in the worktree without asking, and asks before using the network
-  or writing elsewhere. Mob also answers yes, without asking, to any edit,
+  or writing elsewhere. Claude Agent starts in its `acceptEdits` mode: it
+  edits files without asking and asks before running commands, so its
+  commands are approvals in the task. Mob also answers yes, without asking, to any edit,
   delete or move whose files are all inside the task's worktree once links
   are followed, so a link in the repository cannot lead an edit out of it.
 - Every other permission the agent asks for is an approval in the task's
@@ -80,6 +84,19 @@ once there is a project or task; the others once there is a project or task.
 - An approval left for an hour expires, and the agent is told it was
   cancelled.
 
+## Notices
+
+When a task's turn ends waiting for an approval, done or failed, Mob raises a
+`chat.Notice` (`ConversationService.Notify`): the task's agent and title, the
+agent's last words (up to 1200 characters), its branch when done, the error
+when failed or stopped early (such as at the agent's limit, with how to
+continue), and the approvals that wait. Stopping a task, even while its agent
+is starting, raises none and leaves it stopped.
+Messaging channels pass notices on; [Telegram](channels.md) sends them with
+approval buttons, so the owner can follow and decide tasks from the phone. A
+turn started from a channel, such as a decision tapped there, sends that
+channel no notice, since its reply already says how the turn ended.
+
 ## Lifetime
 
 - An agent process starts with the first turn that needs it and runs until the
@@ -92,7 +109,7 @@ once there is a project or task; the others once there is a project or task.
   more starts nothing; the call is marked failed and the reply says to send
   the task a message to continue.
 - When Mob starts an agent for a task that already has a session, it loads that
-  session (Codex supports this), so the agent remembers the work; the history
+  session (Codex and Claude Agent support this), so the agent remembers the work; the history
   the agent replays while loading is not shown again.
 - Delegated conversations reuse `ConversationService`: `SetDelegate` hands the
   turns of the conversations a `chat.Delegate` owns to it instead of the model

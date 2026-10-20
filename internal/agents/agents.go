@@ -40,6 +40,12 @@ var Presets = []Preset{{
 	Commands: [][]string{{"codex-acp"}, {"npx", "-y", "@zed-industries/codex-acp@0.16.0"}},
 	Mode:     "auto",
 	SignIn:   "run `codex login` on the computer Mob runs on (`codex login --device-auth` without a browser there), or set OPENAI_API_KEY or CODEX_API_KEY for the Mob service",
+}, {
+	Name:     "claude",
+	Title:    "Claude Agent",
+	Commands: [][]string{{"claude-agent-acp"}, {"npx", "-y", "@agentclientprotocol/claude-agent-acp@0.94.0"}},
+	Mode:     "acceptEdits",
+	SignIn:   "run `claude` and sign in with your Claude subscription (/login) on the computer Mob runs on, or set ANTHROPIC_API_KEY for the Mob service",
 }}
 
 // preset finds an agent by name; empty is the default.
