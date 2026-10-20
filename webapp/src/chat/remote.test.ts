@@ -76,3 +76,25 @@ it.each(['truncated', 'reordered', 'forged-final'])('rejects a %s stream', async
 		})(),
 	).rejects.toThrow();
 });
+
+it('fails a stream the runner marks as incomplete', async () => {
+	const key = newKey();
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url: string, init?: RequestInit) => {
+			if (!url.endsWith('/relay')) return Response.json({ session });
+			const e: Envelope = JSON.parse(String(init?.body));
+			const first = await seal(
+				key,
+				runner,
+				'response',
+				{ ...e, seq: 0, final: false },
+				{ status: 200, body: base64(new TextEncoder().encode('part')) },
+			);
+			const last = await seal(key, runner, 'response', { ...e, seq: 1, final: true }, { status: 0, body: '', error: 'unexpected EOF' });
+			return new Response(JSON.stringify(first) + '\n' + JSON.stringify(last) + '\n');
+		}),
+	);
+	const response = await encryptedFetch(runner, key)(`${location.origin}/api/runners/${runner}/api/chat`);
+	await expect(response.text()).rejects.toThrow('unexpected EOF');
+});

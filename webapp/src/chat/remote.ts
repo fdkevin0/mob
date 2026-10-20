@@ -55,7 +55,7 @@ export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
 	return response.json();
 }
 
-type Reply = { status: number; headers?: Record<string, string[]>; body: string };
+type Reply = { status: number; headers?: Record<string, string[]>; body: string; error?: string };
 export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 	return async (input, init) => {
 		const request = new Request(input, init);
@@ -111,6 +111,8 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 			const reply = (await open(rawKey, runner, 'response', e)) as Reply;
 			if (!reply || typeof reply.body !== 'string') throw new Error('Invalid encrypted response');
 			sequence++;
+			// The runner authenticates a failed local response as failed, never as complete.
+			if (reply.error) throw new Error(`Runner response failed (${reply.error}). Check saved history before repeating an action.`);
 			return { reply, final: e.final };
 		}
 		try {

@@ -95,11 +95,23 @@ func TestRunnerEncryptedStreamAndReplay(t *testing.T) {
 		if body.String() != "data: 你好\n\ndata: [DONE]\n\n" {
 			t.Errorf("body: %q", body.String())
 		}
-		// The same authenticated request must never execute twice.
+		// The same authenticated request must never execute twice, nor end the connection.
 		_ = websocket.JSON.Send(ws, e)
-		var reply Envelope
-		if err := websocket.JSON.Receive(ws, &reply); err == nil {
-			t.Error("replay received a response")
+		expired, _ := seal(key, testID, "request", Envelope{Version: 1, Session: hello.Session, ID: "22222222-2222-4222-8222-222222222222", Final: true}, request{Method: "GET", Path: "/api/config", Expires: time.Now().Add(-time.Second).UnixMilli()})
+		_ = websocket.JSON.Send(ws, expired)
+		for seq := uint64(0); ; seq++ {
+			var reply Envelope
+			if err := websocket.JSON.Receive(ws, &reply); err != nil {
+				finished <- err
+				return
+			}
+			var out response
+			if reply.ID != expired.ID || open(key, testID, "response", reply, &out) != nil || seq == 0 && out.Status != http.StatusRequestTimeout {
+				t.Errorf("expired request: %+v %+v", reply, out)
+			}
+			if reply.Final {
+				break
+			}
 		}
 		finished <- nil
 	}))
@@ -118,8 +130,8 @@ func TestRunnerEncryptedStreamAndReplay(t *testing.T) {
 		w.Write(data[7:])
 	})
 	err := connect(context.Background(), server.URL, Credentials{ID: testID, Token: "fake"}, key, handler, func(string) {})
-	if err == nil || !strings.Contains(err.Error(), "replayed") {
-		t.Fatalf("expected replay rejection: %v", err)
+	if err == nil {
+		t.Fatal("connection did not end with the server")
 	}
 	if err := <-finished; err != nil {
 		t.Fatal(err)
@@ -178,4 +190,123 @@ func TestDisconnectCancelsLocalRequests(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("request survived disconnect")
 	}
+}
+
+// exchange runs connect against a relay script and returns once script ends.
+func exchange(t *testing.T, handler http.Handler, script func(ws *websocket.Conn, session string, key func(Envelope) response)) {
+	t.Helper()
+	key, _ := aead(testKey)
+	server := httptest.NewServer(websocket.Handler(func(ws *websocket.Conn) {
+		defer ws.Close()
+		ws.SetDeadline(time.Now().Add(5 * time.Second))
+		var hello struct {
+			Session string `json:"session"`
+		}
+		if err := websocket.JSON.Receive(ws, &hello); err != nil {
+			t.Error(err)
+			return
+		}
+		script(ws, hello.Session, func(reply Envelope) response {
+			var out response
+			if err := open(key, testID, "response", reply, &out); err != nil {
+				t.Errorf("open: %v", err)
+			}
+			return out
+		})
+	}))
+	defer server.Close()
+	_ = connect(context.Background(), server.URL, Credentials{ID: testID}, key, handler, func(string) {})
+}
+
+func sendRequest(t *testing.T, ws *websocket.Conn, session, id, path string) {
+	t.Helper()
+	key, _ := aead(testKey)
+	e, _ := seal(key, testID, "request", Envelope{Version: 1, Session: session, ID: id, Final: true}, request{Method: "GET", Path: path, Expires: time.Now().Add(30 * time.Second).UnixMilli()})
+	if err := websocket.JSON.Send(ws, e); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCancelEndsOnlyThatRequest(t *testing.T) {
+	const slow, fast = "33333333-3333-4333-8333-333333333333", "44444444-4444-4444-8444-444444444444"
+	entered, cancelled := make(chan struct{}), make(chan struct{})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/slow" {
+			close(entered)
+			<-r.Context().Done()
+			close(cancelled)
+			return
+		}
+		w.Write([]byte("ok"))
+	})
+	exchange(t, handler, func(ws *websocket.Conn, session string, decrypt func(Envelope) response) {
+		sendRequest(t, ws, session, slow, "/api/slow")
+		<-entered
+		websocket.JSON.Send(ws, map[string]string{"type": "cancel", "id": slow})
+		select {
+		case <-cancelled:
+		case <-time.After(time.Second):
+			t.Error("cancel did not reach the local request")
+			return
+		}
+		// The connection keeps serving other requests.
+		sendRequest(t, ws, session, fast, "/api/fast")
+		for {
+			var reply Envelope
+			if err := websocket.JSON.Receive(ws, &reply); err != nil {
+				t.Error(err)
+				return
+			}
+			if reply.ID == fast && reply.Final {
+				return
+			}
+		}
+	})
+}
+
+func TestTruncatedLocalResponseFailsOnlyThatRequest(t *testing.T) {
+	const broken, fine = "55555555-5555-4555-8555-555555555555", "66666666-6666-4666-8666-666666666666"
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/broken" {
+			w.Header().Set("Content-Length", "100")
+			w.Write([]byte("partial"))
+			return
+		}
+		w.Write([]byte("ok"))
+	}))
+	defer local.Close()
+	exchange(t, LocalHandler(local.URL, "token"), func(ws *websocket.Conn, session string, decrypt func(Envelope) response) {
+		sendRequest(t, ws, session, broken, "/api/broken")
+		for {
+			var reply Envelope
+			if err := websocket.JSON.Receive(ws, &reply); err != nil {
+				t.Error(err)
+				return
+			}
+			if reply.Final {
+				if decrypt(reply).Error == "" {
+					t.Error("truncated response authenticated as complete")
+				}
+				break
+			}
+		}
+		sendRequest(t, ws, session, fine, "/api/fine")
+		var body strings.Builder
+		for {
+			var reply Envelope
+			if err := websocket.JSON.Receive(ws, &reply); err != nil {
+				t.Error("connection closed after a failed request:", err)
+				return
+			}
+			out := decrypt(reply)
+			raw, _ := base64.StdEncoding.DecodeString(out.Body)
+			body.Write(raw)
+			if reply.Final {
+				if out.Error != "" || body.String() != "ok" {
+					t.Errorf("second request: %q %q", body.String(), out.Error)
+				}
+				return
+			}
+		}
+	})
 }

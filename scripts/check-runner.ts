@@ -134,7 +134,8 @@ try {
 			}
 		});
 	});
-	const runner = spawn(binary, ['runner', '--addr=' + new URL(localURL).host], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+	const runnerArgs = ['runner', '--addr=' + new URL(localURL).host];
+	const runner = spawn(binary, runnerArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] });
 	children.push(runner);
 	async function currentSession() {
 		return ((await (await account(`/${pair.id}`)).json()) as { session: string | null }).session;
@@ -176,7 +177,12 @@ try {
 	const localToken = (await readFile(join(dir, 'token'), 'utf8')).trim();
 	for (const secret of [prompt, '/api/chat', key, localToken]) assert(!wire.join('').includes(secret));
 
-	// An authenticated replay disconnects the runner; it must not execute twice.
+	// An authenticated replay must not execute twice, nor disconnect the runner.
+	const count = async () => {
+		const list = await remote(apiURL + '/conversations');
+		return ((await list.json()) as unknown[]).length;
+	};
+	const before = await count();
 	const envelope = await seal(
 		key,
 		pair.id,
@@ -193,14 +199,26 @@ try {
 	const first = await account(`/${pair.id}/relay`, 'alice', { method: 'POST', body: JSON.stringify(envelope) });
 	assert.equal(first.status, 200);
 	await first.text();
-	const replay = await account(`/${pair.id}/relay`, 'alice', { method: 'POST', body: JSON.stringify(envelope) });
-	let incomplete = false;
+	let answered = false;
 	try {
+		const replay = await account(`/${pair.id}/relay`, 'alice', {
+			method: 'POST',
+			body: JSON.stringify(envelope),
+			signal: AbortSignal.timeout(1500),
+		});
 		await replay.text();
+		answered = replay.ok;
 	} catch {
-		incomplete = true;
+		// The runner never answers a replay; the relay request times out.
 	}
-	assert(replay.status !== 200 || incomplete, 'replay should fail the stream');
+	assert(!answered, 'replay should get no answer');
+	assert.equal(await count(), before + 1, 'replay executed');
+	assert.equal(await currentSession(), session, 'replay disconnected the runner');
+
+	// A restarted runner gets a fresh session, which old envelopes cannot use.
+	runner.kill();
+	await once(runner, 'exit');
+	children.push(spawn(binary, runnerArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] }));
 	await until(async () => {
 		const next = await currentSession();
 		return Boolean(next && next !== session);

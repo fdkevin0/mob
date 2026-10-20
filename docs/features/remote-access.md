@@ -124,18 +124,22 @@ paths, headers, bodies, HTTP statuses and response chunks are encrypted with
 AES-256-GCM using random 96-bit nonces. Authenticated associated data binds
 protocol version, runner ID, connection session, request ID, direction, chunk
 sequence and final-frame status. The runner creates a fresh random session on
-every connection, rejects expired/repeated requests, and caps concurrent
-requests. Browser clocks should be synchronized: requests expire after 45
-seconds and the runner rejects expiry times more than a minute in its future.
-The browser rejects reordered, modified or incomplete responses. Never
+every connection, ignores repeated requests, and caps concurrent requests.
+A request it refuses (expired, or the runner is busy) gets an encrypted error
+saying it did not run; the connection and other requests carry on. Browser
+clocks should be synchronized: requests expire after 45 seconds and the runner
+rejects expiry times more than a minute in its future. When a browser stops
+reading a response, the relay tells the runner to cancel that local request.
+A local response that breaks off ends with an authenticated failure, so the
+browser rejects it like a reordered, modified or incomplete response. Never
 blindly retry a failed action: check saved conversation history first.
 
 The cloud stores account and runner identifiers, hashes of pairing codes and
 runner credentials, and timestamps. It can observe connection/IP metadata,
 request timing and ciphertext sizes, but has no decryption keys or plaintext
 conversation/tool data. HTTP request bodies are limited to 1 MiB before
-encryption. A stalled relay fails after six minutes; individual local requests
-also have a six-minute lifetime. Disconnecting does not undo a completed tool
+encryption. A request that produces no output for six minutes fails, at the
+relay and at the runner; a longer turn keeps streaming while it produces output. Disconnecting does not undo a completed tool
 operation or stop an independently running conversation turn.
 
 Keys belong to the pairing browser. Clearing its site data loses its key;

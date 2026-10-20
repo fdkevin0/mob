@@ -74,6 +74,8 @@ type response struct {
 	Status  int         `json:"status"`
 	Headers http.Header `json:"headers,omitempty"`
 	Body    string      `json:"body"`
+	// Error is set only on a final frame whose body is incomplete.
+	Error string `json:"error,omitempty"`
 }
 
 func connect(ctx context.Context, origin string, credentials Credentials, key cipher.AEAD, handler http.Handler, status func(string)) error {
@@ -125,7 +127,18 @@ func connect(ctx context.Context, origin string, credentials Credentials, key ci
 		}
 	}()
 	seen := make(map[string]int64)
-	slots := make(chan struct{}, 32)
+	// More slots than the relay's 32 pending requests absorb the moment between
+	// the relay forgetting a request and its handler here returning.
+	slots := make(chan struct{}, 64)
+	var activeMu sync.Mutex
+	active := make(map[string]context.CancelFunc)
+	// A request that is authenticated but not run gets its own encrypted error,
+	// so one bad request never takes down the others sharing this connection.
+	reject := func(envelope Envelope, status int, message string) error {
+		rw := &encryptedWriter{key: key, runnerID: credentials.ID, envelope: envelope, send: send, headers: make(http.Header)}
+		http.Error(rw, message, status)
+		return rw.finish()
+	}
 	for {
 		_ = ws.SetReadDeadline(time.Now().Add(90 * time.Second))
 		var raw json.RawMessage
@@ -137,49 +150,85 @@ func connect(ctx context.Context, origin string, credentials Credentials, key ci
 			return err
 		}
 		if envelope.Version == 0 {
+			// Heartbeat replies, and cancellations for requests whose browser left.
+			var control struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+			}
+			if json.Unmarshal(raw, &control) == nil && control.Type == "cancel" {
+				activeMu.Lock()
+				if cancel, ok := active[control.ID]; ok {
+					cancel()
+				}
+				activeMu.Unlock()
+			}
 			continue
-		} // Heartbeat reply.
+		}
+		// Frames that do not authenticate cannot be answered; drop them.
 		if envelope.Session != session || envelope.Seq != 0 || !envelope.Final || len(envelope.ID) != 36 {
-			return errors.New("invalid request envelope")
+			continue
 		}
 		var req request
-		if err := open(key, credentials.ID, "request", envelope, &req); err != nil {
-			return err
+		if open(key, credentials.ID, "request", envelope, &req) != nil {
+			continue
 		}
 		now := time.Now().UnixMilli()
-		if req.Expires < now || req.Expires > now+60_000 {
-			return errors.New("expired request")
-		}
 		for id, expires := range seen {
 			if expires < now {
 				delete(seen, id)
 			}
 		}
 		if _, ok := seen[envelope.ID]; ok {
-			return errors.New("replayed request")
+			// Never answer a replay: the original's response is the only one.
+			continue
+		}
+		if req.Expires < now || req.Expires > now+60_000 {
+			if err := reject(envelope, http.StatusRequestTimeout, "request expired before it ran; check the browser clock"); err != nil {
+				return err
+			}
+			continue
 		}
 		if len(seen) >= 10_000 {
 			return errors.New("request rate limit")
 		}
+		// Recorded before any answer, so a request refused as busy cannot run later.
 		seen[envelope.ID] = req.Expires
 		select {
 		case slots <- struct{}{}:
 		default:
-			return errors.New("too many concurrent requests")
+			if err := reject(envelope, http.StatusServiceUnavailable, "runner busy; the request did not run"); err != nil {
+				return err
+			}
+			continue
 		}
+		requestCtx, cancel := context.WithCancel(ctx)
+		activeMu.Lock()
+		active[envelope.ID] = cancel
+		activeMu.Unlock()
 		go func() {
 			defer func() { <-slots }()
+			defer func() {
+				activeMu.Lock()
+				delete(active, envelope.ID)
+				activeMu.Unlock()
+				cancel()
+			}()
 			rw := &encryptedWriter{key: key, runnerID: credentials.ID, envelope: envelope, send: send, headers: make(http.Header)}
-			// Each request has a bounded lifetime even if a browser disappears without closing the runner.
-			requestCtx, done := context.WithTimeout(ctx, 6*time.Minute)
-			defer done()
+			// A request that produces nothing for six minutes ends, like the relay's idle limit,
+			// even if a browser disappears without a cancellation reaching the runner.
+			idle := time.AfterFunc(requestIdle, cancel)
+			defer idle.Stop()
+			rw.idle = idle
 			serve(requestCtx, handler, rw, req)
 			if rw.finish() != nil {
+				// Only a failed send lands here: the socket itself is broken.
 				_ = ws.Close()
 			}
 		}()
 	}
 }
+
+const requestIdle = 6 * time.Minute
 
 func serve(ctx context.Context, handler http.Handler, w http.ResponseWriter, req request) {
 	u, err := url.ParseRequestURI(req.Path)
@@ -217,8 +266,10 @@ type encryptedWriter struct {
 	envelope Envelope
 	send     func(any) error
 	headers  http.Header
+	idle     *time.Timer
 	status   int
 	sent     bool
+	failure  string
 	err      error
 }
 
@@ -239,6 +290,9 @@ func (w *encryptedWriter) emit(body string, final bool) error {
 	if !w.sent {
 		out.Status, out.Headers = w.status, w.headers
 	}
+	if final {
+		out.Error = w.failure
+	}
 	w.envelope.Final = final
 	sealed, err := seal(w.key, w.runnerID, "response", w.envelope, out)
 	if err == nil {
@@ -247,6 +301,9 @@ func (w *encryptedWriter) emit(body string, final bool) error {
 	w.err = err
 	w.envelope.Seq++
 	w.sent = true
+	if w.idle != nil {
+		w.idle.Reset(requestIdle)
+	}
 	return err
 }
 func (w *encryptedWriter) Write(p []byte) (int, error) {
@@ -265,6 +322,14 @@ func (w *encryptedWriter) Write(p []byte) (int, error) {
 func (w *encryptedWriter) Flush() {
 	if !w.sent {
 		_ = w.emit("", false)
+	}
+}
+
+// fail marks the response incomplete: the final frame still authenticates, but
+// carries the failure so the browser never takes a truncated body as complete.
+func (w *encryptedWriter) fail(err error) {
+	if w.failure == "" {
+		w.failure = err.Error()
 	}
 }
 func (w *encryptedWriter) finish() error { return w.emit("", true) }
@@ -298,7 +363,7 @@ func LocalHandler(origin, token string) http.Handler {
 		if _, err := io.Copy(w, resp.Body); err != nil {
 			// Never authenticate a truncated local response as a successful completion.
 			if ew, ok := w.(*encryptedWriter); ok {
-				ew.err = err
+				ew.fail(err)
 			}
 		}
 	})

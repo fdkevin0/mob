@@ -27,6 +27,7 @@ type Pending = {
 	controller: ReadableStreamDefaultController<Uint8Array>;
 	timer: ReturnType<typeof setTimeout>;
 	cleanup: () => void;
+	cancel: () => void;
 };
 
 export class RunnerRelay extends DurableObject {
@@ -78,14 +79,24 @@ export class RunnerRelay extends DurableObject {
 			request.signal.removeEventListener('abort', abort);
 			this.pending.delete(id);
 		};
+		// The runner holds a slot until its local request ends, so tell it when nobody reads the answer.
+		const cancelRunner = () => {
+			if (!this.pending.has(id)) return;
+			try {
+				socket.send(JSON.stringify({ type: 'cancel', id }));
+			} catch {
+				// A closed socket has already cancelled the runner's requests.
+			}
+		};
 		const abort = () => {
+			cancelRunner();
 			this.pending.get(id)?.controller.error(new Error('Relay interrupted'));
 			finish();
 		};
 		const stream = new ReadableStream<Uint8Array>(
 			{
 				start: (controller) => {
-					this.pending.set(id, { socket, controller, timer: setTimeout(abort, 360_000), cleanup: finish });
+					this.pending.set(id, { socket, controller, timer: setTimeout(abort, 360_000), cleanup: finish, cancel: cancelRunner });
 					request.signal.addEventListener('abort', abort, { once: true });
 					if (request.signal.aborted) {
 						abort();
@@ -97,7 +108,10 @@ export class RunnerRelay extends DurableObject {
 						abort();
 					}
 				},
-				cancel: finish,
+				cancel: () => {
+					cancelRunner();
+					finish();
+				},
 			},
 			new ByteLengthQueuingStrategy({ highWaterMark: 2 * 1024 * 1024 }),
 		);
@@ -137,12 +151,14 @@ export class RunnerRelay extends DurableObject {
 		const pending = this.pending.get(frame.id);
 		if (!pending || pending.socket !== socket) return;
 		if ((pending.controller.desiredSize ?? 0) <= 0) {
+			pending.cancel();
 			pending.controller.error(new Error('Reader too slow; response incomplete'));
 			pending.cleanup();
 			return;
 		}
 		clearTimeout(pending.timer);
 		pending.timer = setTimeout(() => {
+			pending.cancel();
 			pending.controller.error(new Error('Runner timeout'));
 			pending.cleanup();
 		}, 360_000);
