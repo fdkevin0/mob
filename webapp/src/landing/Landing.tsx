@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { authClient, keepOffer, loadSite, openApp, pendingOffer, type Site } from './auth';
-import { Features } from './Features';
 import { Logo } from '../components/brand/Logo';
 import { PixelIcon } from '../components/brand/PixelIcon';
 import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { SignIn } from './SignIn';
-import { VoxelCanvas } from './voxel/VoxelCanvas';
-import { officeFrame, officeVoxels } from './voxel/office';
+import { Story } from './Story';
+
+const installs = {
+	Download: { note: 'Archives for Linux, macOS and Windows. Every change to main is published as a nightly build.', lines: ['mob start', 'mob open --web'], href: 'https://github.com/fdkevin0/mob/releases', action: 'Download' },
+	Homebrew: { note: 'The tap is published with the first stable release.', lines: ['brew install fdkevin0/tap/mob', 'mob start'], href: 'https://github.com/fdkevin0/homebrew-tap', action: 'View the tap' },
+	Source: { note: 'Needs Go, Bun and just.', lines: ['git clone https://github.com/fdkevin0/mob && cd mob', 'just install && just build', './build/mob start'], href: 'https://github.com/fdkevin0/mob/blob/main/CONTRIBUTING.md', action: 'Read CONTRIBUTING' },
+};
+type Install = keyof typeof installs;
 
 export function Landing() {
 	const session = authClient.useSession();
@@ -16,6 +21,7 @@ export function Landing() {
 	const [siteError, setSiteError] = useState('');
 	const [dialog, setDialog] = useState<{ reason?: string }>();
 	const [signedIn, setSignedIn] = useState(false);
+	const [install, setInstall] = useState<Install>('Download');
 	const signInTrigger = useRef<HTMLButtonElement>(null);
 	const user = session.data?.user;
 	function showSignIn(event: MouseEvent<HTMLButtonElement>) {
@@ -41,9 +47,10 @@ export function Landing() {
 	return (
 		<Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(undefined); }}>
 		<div className="landing">
-			<header className="nav">
+			<header className="nav"><div className="nav-inner">
 				<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
 				<nav className="nav-links" aria-label="Sections">
+					<a href="#how">How it works</a>
 					<a href="#features">Features</a>
 					<a href="#start">Start</a>
 					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
@@ -66,44 +73,49 @@ export function Landing() {
 						<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><PixelIcon name="lock" size={12} /> Sign in</Button>
 					)}
 				</div>
-			</header>
+			</div></header>
 
 			<main>
-				<section className="hero">
-					<VoxelCanvas className="hero-field" scene={officeVoxels} frame={officeFrame} gpu pixel={2} fps={20} still={24} label="An office of small voxel calves working at their desks, high-fiving, fetching milk tea and napping" />
-					<div className="hero-copy">
+				<Story hero={(
+					<>
 						<h1>Agents <em>for you</em>.</h1>
-						<p className="hero-sub">Local first · every channel · open source</p>
+						<p className="hero-sub">A local-first assistant you can reach from every channel. Open source.</p>
 						<div className="cta">
 							{user
 								? <Button onClick={openApp}>Open Mob</Button>
 								: <Button aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}>Get started</Button>}
 							<Button variant="outline" asChild><a href="https://github.com/fdkevin0/mob" rel="noreferrer">View source</a></Button>
 						</div>
-					</div>
-				</section>
-
-				<section className="features" id="features" aria-label="Features">
-					<Features />
-				</section>
+						<a className="scroll-hint" href="#how">Scroll to watch them work <span aria-hidden="true">↓</span></a>
+					</>
+				)} />
 
 				<section className="start" id="start">
 					<h2>Start in a minute</h2>
-					<pre className="terminal" aria-label="Commands to start Mob"><code>
-						<span className="prompt">$</span> mob start{'\n'}
-						<span className="prompt">$</span> mob open --web{'\n'}
-						<span className="ok">✓</span> signed in<span className="cursor" />
-					</code></pre>
-					<div className="cta">
-						<Button asChild><a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Download</a></Button>
+					<div className="install">
+						<div className="install-tabs" role="tablist" aria-label="Ways to install">
+							{(Object.keys(installs) as Install[]).map(name => (
+								<button key={name} type="button" role="tab" aria-selected={install === name} onClick={() => setInstall(name)}>{name}</button>
+							))}
+						</div>
+						<pre className="terminal" role="tabpanel" aria-label={`Install from ${install}`}><code>
+							{installs[install].lines.map(line => <span key={line}><span className="prompt">$</span>{line}{'\n'}</span>)}
+							<span className="ok">✓</span>Mob is running<span className="cursor" />
+						</code></pre>
+						<p className="install-note">{installs[install].note}</p>
 					</div>
+					<Button asChild><a href={installs[install].href} rel="noreferrer">{installs[install].action}</a></Button>
 				</section>
 			</main>
 
 			<footer className="footer">
-				<Logo size={20} />
-				<span>MIT licensed</span>
-				<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
+				<div className="footer-brand"><Logo size={20} /><span>MIT licensed</span></div>
+				<nav aria-label="Project links">
+					<a href="https://github.com/fdkevin0/mob/tree/main/docs/features" rel="noreferrer">Docs</a>
+					<a href="https://github.com/fdkevin0/mob/blob/main/CHANGELOG.md" rel="noreferrer">Changelog</a>
+					<a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Releases</a>
+					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
+				</nav>
 			</footer>
 
 			{dialog ? <SignIn site={site} siteError={siteError} reason={dialog.reason} returnFocus={signInTrigger} /> : null}
