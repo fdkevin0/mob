@@ -6,16 +6,17 @@ import { project } from './project';
 // simulation. The floor is a 3 x 3 grid of cells, each holding a randomly
 // chosen group of shared desks (long benches either way round, or a small
 // pod of four) with no partitions. About seven in ten seats get a calf. Each
-// calf works, then wanders off to high-five a colleague, hand over a block
-// of work, fetch a milk tea or a coffee, pin a note on the whiteboard, try
-// something out in the glass booth, put its hand up for the leader's nod, or
-// nap on the sofa, walking along the lanes between the cells. Each page load
+// calf spends most of its time working at its desk (about four in five are
+// seated at any moment). Now and then it puts its hand up for the leader's
+// nod, or walks the lanes between the cells to high-five a colleague nearby,
+// hand over a block of work, fetch a milk tea or a coffee, pin a note on the
+// whiteboard, try something out in the glass booth or nap on the sofa. Each page load
 // lays out a new office. The landing page asks what a calf is doing to link
 // it to a feature, and plays a scripted task across the floor (`setStory`).
 
 const SIZE = 120; // the floor is SIZE x SIZE voxels
 const OCCUPANCY = 0.7; // calves per seat
-const SPEED = 8; // voxels per second
+const SPEED = 10; // voxels per second
 const TICK = 1 / 20;
 const LANES = [4, 35, 66, 97]; // walkways between cells, both ways round
 const DESK_TOP = 4;
@@ -281,7 +282,7 @@ class Office {
 			if (a.where.user === a) a.where.user = undefined;
 			a.whipped = false;
 			// An asker never left its desk: back to work, nod or no nod.
-			if (a.where === a.home) { a.asking = undefined; a.claimed = false; a.state = 'work'; a.until = t + 4 + this.rand() * 8; return; }
+			if (a.where === a.home) { a.asking = undefined; a.claimed = false; a.state = 'work'; a.until = t + 10 + this.rand() * 15; return; }
 			return this.go(a, a.home, 'home');
 		}
 		if (a.leader) return this.lead(a);
@@ -294,20 +295,25 @@ class Office {
 			this.go(a, slot, errand);
 			return true;
 		};
-		if (r < 0.34) {
-			const working = this.agents.filter(b => b !== a && !b.leader && b.state === 'work');
-			const b = working[Math.floor(this.rand() * working.length)];
+		// Mostly they stay at the desk; a few calves are up and about at a time,
+		// and work goes to colleagues nearby.
+		if (r < 0.1) {
+			const near = this.agents
+				.filter(b => b !== a && !b.leader && b.state === 'work')
+				.sort((p, q) => Math.hypot(p.at[0] - a.at[0], p.at[1] - a.at[1]) - Math.hypot(q.at[0] - a.at[0], q.at[1] - a.at[1]))
+				.slice(0, 6);
+			const b = near[Math.floor(this.rand() * near.length)];
 			if (b) {
-				const deliver = r < 0.17;
+				const deliver = r < 0.06;
 				a.target = b; a.carry = deliver ? 'block' : undefined;
 				return this.go(a, { x: b.home.out[0], z: b.home.out[1], facing: opposite(b.home.facing), out: b.home.out, lane: b.home.lane }, deliver ? 'deliver' : 'visit');
 			}
-		} else if (r < 0.46) { if (take(bar, 'tea')) return; }
-		else if (r < 0.58) { if (take(coffee, 'coffee')) return; }
-		else if (r < 0.65) { if (take(sofa, 'nap')) return; }
-		else if (r < 0.74) { if (take(board, 'memo')) return; }
-		else if (r < 0.82) { if (take(booth, 'sandbox')) return; }
-		else if (r < 0.9) {
+		} else if (r < 0.14) { if (take(bar, 'tea')) return; }
+		else if (r < 0.17) { if (take(coffee, 'coffee')) return; }
+		else if (r < 0.19) { if (take(sofa, 'nap')) return; }
+		else if (r < 0.23) { if (take(board, 'memo')) return; }
+		else if (r < 0.27) { if (take(booth, 'sandbox')) return; }
+		else if (r < 0.39) {
 			// Hand up at the desk until the leader comes over to nod it through.
 			a.state = 'busy'; a.asking = t; a.claimed = false; a.until = t + 16;
 			a.pose = 'catch'; a.poseFacing = a.home.facing; a.poseUntil = a.until;
@@ -315,7 +321,7 @@ class Office {
 		}
 		// Otherwise a stretch at the desk and back to work.
 		a.pose = 'stretch'; a.poseFacing = a.home.facing; a.poseUntil = t + 1.4;
-		a.until = t + 1.4 + 4 + this.rand() * 8;
+		a.until = t + 1.4 + 8 + this.rand() * 14;
 	}
 
 	// The leader walks over to anyone napping and cracks the whip; otherwise it
@@ -403,7 +409,7 @@ class Office {
 				if (b && b.state === 'nap') b.until = t + 0.35;
 				break;
 			case 'home':
-				a.state = 'work'; a.until = t + 4 + this.rand() * 9;
+				a.state = 'work'; a.until = t + 18 + this.rand() * 24;
 				if (a.carry === 'tea' || a.carry === 'coffee') { a.deskCup = a.carry; a.deskCupUntil = t + 9; }
 				a.carry = undefined; a.target = undefined;
 				break;
@@ -561,6 +567,13 @@ export function activity(a: Agent): Activity {
 		case 'sandbox': return 'sandbox';
 		default: return a.state === 'walk' ? 'back' : 'work';
 	}
+}
+
+// How many calves are doing what right now.
+export function census(): Partial<Record<Activity, number>> {
+	const counts: Partial<Record<Activity, number>> = {};
+	for (const a of office.agents) counts[activity(a)] = (counts[activity(a)] ?? 0) + 1;
+	return counts;
 }
 
 // Plays a step of the story (0 to 3), or stops it with undefined.

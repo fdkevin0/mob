@@ -11,7 +11,8 @@ served by the Worker in `worker/`:
 - `/` is the landing page, scrolled through in pages over one pinned isometric
   voxel office. Each load lays out a new square open-plan floor of shared
   desks and seats calves on about 70% of them; every calf comes from one
-  template with a generated skin. They work, walk the lanes, high-five, hand
+  template with a generated skin. Most sit working at their desks; a few at a
+  time walk the lanes to high-five, hand
   each other blocks of work, fetch milk tea or coffee, pin notes on the
   whiteboard, try things in the glass booth, put a hand up for the gold
   leader's nod and nap on the sofa, until the leader comes over and cracks its
