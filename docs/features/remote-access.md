@@ -68,11 +68,14 @@ Deployment:
   deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
-- PR builds use `npx wrangler preview`. Wrangler requires the explicit
+- PR builds use deploy command
+  `npx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc && npx wrangler preview`.
+  This automatically applies pending preview database migrations before deployment;
+  a migration failure stops deployment, and applied migrations are skipped.
+  Wrangler requires the explicit
   `previews` block in `wrangler.jsonc`: public variables and the `DB` binding
   do not inherit their production values. Previews share the separate
-  `mob-auth-preview` database. Before deploying a Preview after a schema change,
-  run `npx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc`.
+  `mob-auth-preview` database.
   Keep that file's database ID aligned with `previews.d1_databases`.
   Set the three auth secrets in Cloudflare's Previews Base configuration;
   production secrets are not inherited. Preview URLs are public unless access

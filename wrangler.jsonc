@@ -6,7 +6,8 @@
 // `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
 // Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY and GITHUB_CLIENT_SECRET.
 // The Turnstile site key and GitHub client ID are public, so they are vars.
-// PR builds run `npx wrangler preview`; their auth data uses a separate D1.
+// PR builds apply migrations with wrangler.preview-migrations.jsonc before
+// running `npx wrangler preview`; their auth data uses a separate D1.
 {
 	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
 	"name": "mob",
