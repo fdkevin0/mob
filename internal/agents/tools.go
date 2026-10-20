@@ -168,7 +168,7 @@ func (s *Service) start(ctx context.Context, call chat.ApprovedCall) (any, error
 	if err := json.Unmarshal(call.Input, &in); err != nil {
 		return nil, err
 	}
-	t, err := s.StartTask(ctx, in.Project, in.Agent, in.Title, in.Prompt)
+	t, err := s.StartTask(ctx, call.ConversationID, in.Project, in.Agent, in.Title, in.Prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -245,27 +245,14 @@ func (s *Service) Commands() []chat.Command {
 			if len(call.Fields) > 0 {
 				project = call.Fields[0]
 			}
-			list, err := s.Store.Tasks(project)
+			nodes, err := s.Tree(project)
 			if err != nil {
 				return chat.CommandResult{}, err
 			}
-			if len(list) == 0 {
+			if len(nodes) == 0 {
 				return chat.Reply("No tasks yet. Ask Mob to hand coding work in a project to a coding agent.")
 			}
-			used, err := s.used(list)
-			if err != nil {
-				return chat.CommandResult{}, err
-			}
-			var b strings.Builder
-			b.WriteString("| Task | Project | Agent | Status | Branch | Used |\n| --- | --- | --- | --- | --- | --- |\n")
-			for _, t := range list {
-				usage := "—"
-				if u, ok := used[t.ConversationID]; ok {
-					usage = u.Brief()
-				}
-				fmt.Fprintf(&b, "| %s | %s | %s | %s | `%s` | %s |\n", cell(t.Title), cell(t.Project), t.Agent, t.Status, t.Branch, usage)
-			}
-			return chat.Reply(b.String())
+			return chat.Reply(outline(nodes))
 		},
 	}}
 }

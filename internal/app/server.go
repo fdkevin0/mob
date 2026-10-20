@@ -144,6 +144,10 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/conversations/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"stopped": s.Stop(r.PathValue("id"))})
 	})
+	mux.HandleFunc("GET /api/tasks", func(w http.ResponseWriter, r *http.Request) {
+		data, err := s.Agents.Tree(r.URL.Query().Get("project"))
+		respond(w, data, err)
+	})
 	mux.HandleFunc("GET /api/commands", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, s.Commands.Specs(r.URL.Query().Get("client")))
 	})

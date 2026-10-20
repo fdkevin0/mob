@@ -39,7 +39,8 @@ when it answers a prompt; that turn fails the same way. Amp is planned next.
   The owner can write to it directly; only the owner can.
 - Tasks are saved in the `tasks` table with their status: `running`,
   `waiting` (for the owner's approval), `review` (the agent finished what it
-  was asked), `stopped` or `failed`, and the agent's latest plan.
+  was asked), `stopped` or `failed`, the agent's latest plan, and the
+  conversation that started the task (`parent_id`; empty when none did).
 
 ## Mob as project manager
 
@@ -58,7 +59,36 @@ Owner-only tools:
 
 `task_start` is offered while an agent's command (or `npx`) is installed, or
 once there is a project or task; the others once there is a project or task.
-`/tasks [PROJECT]` shows the same table in the web UI and TUI.
+`/tasks [PROJECT]` shows the tasks in any client as a list nested by who
+started whom, with each task's status, agent, title, project and branch.
+
+## Agent tree
+
+`GET /api/tasks[?project=NAME]` lists the tasks, each with the conversation
+that started it, its agent's display name, the model it runs, what it used
+(the conversation's [usage](#usage) summary), the decisions waiting in it, the kinds of tool its agent used (`read`, `edit`, `execute`,
+`fetch` and so on) and the task itself. A Mob conversation that started tasks
+is listed too, as agent `mob`: `waiting` while a decision waits in it (such
+as `task_start` itself), `running` while it answers, otherwise `idle`. The
+model is the one a running agent's session options select, otherwise the
+model that used the most of the conversation's tokens; `/tasks` adds what
+each one used.
+
+The web UI's **Agents** page draws this as a tree: Mob's conversation on top,
+the tasks it started fanned out in a row below it, and anything those tasks
+started hanging under them. Lines with arrows run from each agent to the ones
+it started, coloured by the started agent's status, with work flowing along
+the line while it runs or waits. Each card shows the runtime's logo (Codex,
+Claude Agent; Mob's calf for Mob), the model's logo and name, status (Running,
+Needs you, Done, Failed, Stopped), the tools it used, the task's title,
+project and branch, its cost and tokens (broken down by cache and model on
+hover), its plan's progress and how long it took. Clicking a card
+that started agents folds them away (it then shows how many are hidden) and
+clicking again unfolds them; its arrow button opens its conversation. The
+header counts the agents, filters to what runs, needs the owner or failed,
+and adds up what they all cost. The page reads the tree again every three seconds while it is shown.
+Logos come from LobeHub's MIT-licensed `@lobehub/icons-static-svg`, inlined
+into the page.
 
 ## Approvals
 

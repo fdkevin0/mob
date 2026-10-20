@@ -75,3 +75,47 @@ export const RenderLogo = () => (
 		<path d="M18.263.007c-3.121-.147-5.744 2.109-6.192 5.082-.018.138-.045.272-.067.405-.696 3.703-3.936 6.507-7.827 6.507-1.388 0-2.691-.356-3.825-.979a.2024.2024 0 0 0-.302.178V24H12v-8.999c0-1.656 1.338-3 2.987-3h2.988c3.382 0 6.103-2.817 5.97-6.244-.12-3.084-2.61-5.603-5.682-5.75" />
 	</svg>
 );
+export const TerminalIcon = () => (
+	<Icon size={12}>
+		<path d="m4 17 6-5-6-5M12 19h8" />
+	</Icon>
+);
+export const PencilIcon = () => (
+	<Icon size={12}>
+		<path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+	</Icon>
+);
+export const FileIcon = () => (
+	<Icon size={12}>
+		<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+		<path d="M14 2v6h6" />
+	</Icon>
+);
+export const SearchIcon = () => (
+	<Icon size={12}>
+		<circle cx="11" cy="11" r="7" />
+		<path d="m20 20-3.5-3.5" />
+	</Icon>
+);
+export const GlobeIcon = () => (
+	<Icon size={12}>
+		<circle cx="12" cy="12" r="9" />
+		<path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+	</Icon>
+);
+export const SparkIcon = () => (
+	<Icon size={12}>
+		<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" />
+	</Icon>
+);
+export const AlertIcon = () => (
+	<Icon size={12}>
+		<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+		<path d="M12 9v4M12 17h.01" />
+	</Icon>
+);
+export const OpenIcon = () => (
+	<Icon size={12}>
+		<path d="M7 17 17 7M8 7h9v9" />
+	</Icon>
+);

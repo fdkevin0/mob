@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/fdkevin0/mob/internal/agents"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
 	"github.com/fdkevin0/mob/internal/plugins/cloudflare"
@@ -39,6 +40,10 @@ var definitions = []definition{
 	{"DayUsage", chat.DayUsage{}},
 	{"TopConversation", chat.TopConversation{}},
 	{"UsageReport", chat.UsageReport{}},
+	{"UsageSummary", chat.UsageSummary{}},
+	{"PlanEntry", chat.PlanEntry{}},
+	{"Task", chat.Task{}},
+	{"AgentNode", agents.AgentNode{}},
 }
 
 func contract() string {

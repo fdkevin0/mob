@@ -67,6 +67,8 @@ INSERT INTO usage(conversation_id,message_id,model,input,output,reasoning,cache_
  SELECT m.conversation_id,m.id,m.model,COALESCE(m.usage->>'inputTokens',0),COALESCE(m.usage->>'outputTokens',0),COALESCE(m.usage->>'reasoningTokens',0),
  COALESCE(m.usage->>'cacheReadTokens',0),COALESCE(m.usage->>'cacheWriteTokens',0),COALESCE(m.usage->>'cost',0),0,COALESCE(c.updated_at,0)
  FROM messages m LEFT JOIN conversations c ON c.id=m.conversation_id WHERE m.usage<>'' ORDER BY m.seq;`},
+		// The conversation that started a task, for the tree of who started whom.
+		{"20261020", `ALTER TABLE tasks ADD COLUMN parent_id TEXT NOT NULL DEFAULT '';`},
 	},
 }
 
