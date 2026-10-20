@@ -1,6 +1,7 @@
 // The public site at https://mob.fdkevin.cloud: the landing page, GitHub sign-in
-// (Better Auth with Turnstile, accounts in D1) and the web UI behind it, which
-// connects to loopback Mob or an end-to-end encrypted runner relay. Cloudflare Workers
+// (Better Auth with Turnstile, accounts in D1), the web UI behind it, which
+// connects to loopback Mob or an end-to-end encrypted runner relay, and the
+// documentation at /docs (apps/docs). Cloudflare Workers
 // Builds deploys it from this repository with build command
 // `bun install --frozen-lockfile && bun run build:web` and deploy command
 // `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
@@ -17,7 +18,7 @@
 	"assets": {
 		"directory": "./webapp/dist-public",
 		"binding": "ASSETS",
-		"run_worker_first": ["/*", "!/assets/*"]
+		"run_worker_first": ["/*", "!/assets/*", "!/docs/_astro/*", "!/docs/pagefind/*"]
 	},
 	"durable_objects": { "bindings": [{ "name": "RUNNERS", "class_name": "RunnerRelay" }] },
 	"migrations": [{ "tag": "runner-v1", "new_sqlite_classes": ["RunnerRelay"] }],

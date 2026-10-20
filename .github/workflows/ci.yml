@@ -75,8 +75,13 @@ jobs:
           bun run test:client
           bun run test:webapp
           bun run test:tui
+          bun run test:docs
       - name: Build
         run: bun run build
+      # Workers Builds deploys this; building it here checks the documentation's
+      # links and policies on every pull request.
+      - name: Build public site
+        run: bun run build:web
 
   integration:
     name: Go ↔ AI SDK integration

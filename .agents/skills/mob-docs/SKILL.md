@@ -28,6 +28,10 @@ Paths below are relative to this skill. Read only what the task needs.
 
 ## Editing and organizing
 
+The repository's Markdown is also published at https://mob.fdkevin.cloud/docs.
+Write relative links between files as usual; a new page under `docs/` needs an
+entry in [apps/docs/pages.ts](../../../apps/docs/pages.ts).
+
 Keep indexes as navigation, with enough context to choose a page. Link to the
 owning explanation instead of copying its option lists or procedures. When moving
 or deleting a page, update its incoming links and any generator that owns it.

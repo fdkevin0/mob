@@ -43,11 +43,12 @@
   },
   "scripts": {
     "build": "vite build --config webapp/vite.config.ts",
-    "build:web": "vite build --config webapp/vite.config.ts --mode public",
+    "build:web": "vite build --config webapp/vite.config.ts --mode public && bun run --cwd apps/docs build",
     "test:webapp": "tsc -p webapp && vitest run --config webapp/vitest.config.ts",
     "test:client": "tsc -p packages/client && vitest run --config packages/client/vitest.config.ts",
     "tui:pilot": "bun run --cwd apps/tui start",
     "test:tui": "bun run --cwd apps/tui typecheck && bun run --cwd apps/tui test",
+    "test:docs": "bun run --cwd apps/docs sync && bun run --cwd apps/docs test",
     "test:dsh": "bun run --cwd apps/dsh typecheck && bun run --cwd apps/dsh test && go test ./internal/plugins/mcp -run TestDSHBridge",
     "dev": "vite --config webapp/vite.config.ts",
     "build:cli": "bun run build && go build -o build/mob ./cmd/mob",

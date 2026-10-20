@@ -1,0 +1,4 @@
+# Written by scripts/sync.ts from the repository's Markdown.
+src/content/docs/
+public/media/
+.astro/
