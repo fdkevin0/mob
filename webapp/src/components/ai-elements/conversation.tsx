@@ -5,6 +5,7 @@ import { cn } from "./utils";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
+import { Button } from "../ui/button";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
@@ -81,9 +82,10 @@ export const ConversationScrollButton = ({
 
   return (
     !isAtBottom && (
-      <button
+      <Button
+        variant="outline"
         className={cn(
-          "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted",
+          "conversation-scroll absolute bottom-4 left-[50%] translate-x-[-50%]",
           className
         )}
         onClick={handleScrollToBottom}
@@ -92,7 +94,7 @@ export const ConversationScrollButton = ({
         {...props}
       >
         <span aria-hidden="true">↓</span>
-      </button>
+      </Button>
     )
   );
 };

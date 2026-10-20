@@ -1,3 +1,4 @@
+import { Button } from '../../components/ui/button';
 
 import { api, type Connection } from '../api';
 import { Field, Toggle, Feedback, Result, Actions, usePlugin, requestId } from './shared';
@@ -9,5 +10,5 @@ if (!active) return null;
           <Field label="Bot Token" secret value={config.token} hint={config.hasToken ? 'Saved. Leave blank to keep it.' : 'Create a bot with @BotFather.'} onChange={v => setConfig( { ...config, token: v })} />
           <Field label="Allowed Telegram user ID" type="number" value={config.userId || ''} onChange={v => setConfig( { ...config, userId: Number(v) })} />
           <p role="status">{status || 'Disabled'}</p><p className="muted">An active webhook or another polling client must be stopped before this connection can receive messages. /new starts a new conversation.</p>
-        <div><button type="button" className="plain" disabled={config.enabled || !!secrets['token']} onClick={()=>clearSecret('token')}>{secrets['token'] ? "Will clear token on save" : "Clear saved token"}</button><small>Disable the plugin before clearing saved credentials, then save.</small></div><Actions busy={busy} unavailable={unavailable} test={test}/></fieldset></form><Result value={result}/></>;
+        <div><Button type="button" variant="ghost" disabled={config.enabled || !!secrets['token']} onClick={()=>clearSecret('token')}>{secrets['token'] ? "Will clear token on save" : "Clear saved token"}</Button><small>Disable the plugin before clearing saved credentials, then save.</small></div><Actions busy={busy} unavailable={unavailable} test={test}/></fieldset></form><Result value={result}/></>;
 }

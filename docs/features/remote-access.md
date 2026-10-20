@@ -23,6 +23,17 @@ served by the Worker in `worker/`:
 - `/app` is the web UI. The Worker sends visitors without a session back to
   `/?signin=app`.
 
+The landing page and workspace share the dark theme, Geist fonts, pixel logo
+and basic controls. The workspace uses the same theme in the local browser and
+Wails desktop app. On narrow screens, Conversations opens a side panel; choosing
+a conversation closes it. Model selection and sign-in dialogs contain keyboard
+focus and return it when closed. Plugin tabs support arrow-key navigation and
+keep unsaved configuration edits when switching tabs.
+
+The two pages have separate entries and network policies. Sharing presentation
+does not load the landing page's authentication client, Turnstile or voxel scenes
+into the workspace.
+
 Pairing with Mob on your computer works as before:
 
 - `mob open --web` asks the running service for a one-time pairing code and
@@ -57,6 +68,19 @@ Deployment:
   deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
+- PR builds use deploy command
+  `npx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc && npx wrangler preview`.
+  This automatically applies pending preview database migrations before deployment;
+  a migration failure stops deployment, and applied migrations are skipped.
+  Wrangler requires the explicit
+  `previews` block in `wrangler.jsonc`: public variables and the `DB` binding
+  do not inherit their production values. Previews share the separate
+  `mob-auth-preview` database.
+  Keep that file's database ID aligned with `previews.d1_databases`.
+  Set the three auth secrets in Cloudflare's Previews Base configuration;
+  production secrets are not inherited. Preview URLs are public unless access
+  controls are configured. GitHub OAuth callbacks and Turnstile hostnames must
+  also allow the preview hostname to exercise sign-in there.
 - Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY` and
   `GITHUB_CLIENT_SECRET`. The public `TURNSTILE_SITE_KEY` and
   `GITHUB_CLIENT_ID` are vars in `wrangler.jsonc`. The GitHub OAuth app's

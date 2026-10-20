@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export default defineConfig({
 	root: __dirname,
+	resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
 	plugins: [react()],
 	test: {
 		environment: 'happy-dom',

@@ -9,6 +9,7 @@ import path from 'node:path';
 export default defineConfig(({ mode }) => ({
 	root: path.resolve(__dirname),
 	base: '/',
+	resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
 	publicDir: false,
 	plugins: [react(), tailwindcss(), mode === 'public' ? null : {
 		name: 'go-embed-placeholder',

@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource/geist-mono/400.css';
+@import '@fontsource/silkscreen/400.css';
+@source '../../../node_modules/streamdown/dist';
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+	color-scheme: dark;
+	--bg: #07080a;
+	--panel: #0b0d0f;
+	--line: #1b1f23;
+	--line-strong: #2a3036;
+	--text: #eef1ea;
+	--muted: #1b1f23;
+	--muted-foreground: #8b9389;
+	--faint: #8b9389;
+	--lime: #c8f560;
+	--cyan: #62e0ea;
+	--amber: #ffb648;
+	--violet: #a894ff;
+	--white: #f4f6ef;
+	--sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--pixel: 'Silkscreen', var(--mono);
+	--background: var(--bg);
+	--foreground: var(--text);
+	--card: var(--panel);
+	--card-foreground: var(--text);
+	--popover: var(--panel);
+	--popover-foreground: var(--text);
+	--primary: var(--lime);
+	--primary-foreground: #0a0d05;
+	--secondary: #171c17;
+	--secondary-foreground: var(--text);
+	--accent: #c8f56012;
+	--accent-foreground: var(--lime);
+	--destructive: #ff9696;
+	--border: var(--line-strong);
+	--input: var(--line-strong);
+	--ring: var(--lime);
+	--radius: 0px;
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--font-sans: var(--sans);
+	--font-mono: var(--mono);
+	--radius-sm: var(--radius);
+	--radius-md: var(--radius);
+	--radius-lg: var(--radius);
+}

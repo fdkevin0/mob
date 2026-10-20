@@ -32,6 +32,8 @@ change the single-Go-binary release.
 | `cmd/contracts` | generates `packages/client/src/contracts.ts` from Go types; Web keeps a compatibility re-export |
 | `packages/client` | authenticated HTTP, AI SDK message state, commands, approvals, polling and stream recovery, shared by Web and the terminal pilot |
 | `webapp/src/chat` | the React UI; browser authentication/storage, DOM input/completion and presentation adapt the shared client |
+| `webapp/src/styles`, `webapp/src/components` | shared site theme, brand assets, source-owned shadcn/Radix controls and adapted AI Elements; no authentication or conversation state |
+| `webapp/src/landing` | the public landing page, GitHub sign-in and voxel scenes; a separate entry from the workspace |
 | `apps/tui` | the experimental OpenTUI React UI; terminal input, focus, layout and scrolling adapt the shared client |
 | `apps/dsh` | optional Bun process loading official DSH/Cordis tool plugins and exposing them to Mob over MCP |
 

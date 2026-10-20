@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, type Connection } from './api';
+import { DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 
 export type ModelInfo = {
 	id: string;
@@ -42,13 +45,11 @@ export function ModelPicker({
 	current,
 	defaultModel,
 	onPick,
-	onClose,
 }: {
 	connection: Connection;
 	current?: string;
 	defaultModel?: string;
 	onPick: (model?: string) => void;
-	onClose: () => void;
 }) {
 	const [groups, setGroups] = useState<ModelGroup[]>();
 	const [error, setError] = useState('');
@@ -66,13 +67,6 @@ export function ModelPicker({
 			live = false;
 		};
 	}, [connection]);
-	useEffect(() => {
-		const escape = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') onClose();
-		};
-		window.addEventListener('keydown', escape);
-		return () => window.removeEventListener('keydown', escape);
-	}, [onClose]);
 	const needle = query.trim().toLowerCase();
 	const visible = groups
 		?.map(group => ({
@@ -88,49 +82,43 @@ export function ModelPicker({
 		}))
 		.filter(group => group.models.length > 0);
 	return (
-		<div className="modal-backdrop" onClick={onClose}>
-			<section role="dialog" aria-modal="true" aria-label="Choose a model" className="model-picker" onClick={event => event.stopPropagation()}>
-				<header>
-					<h2>Choose a model</h2>
-					<button className="plain" onClick={onClose}>
-						Close
-					</button>
-				</header>
-				<input
-					className="model-search"
-					aria-label="Search models"
-					placeholder="Search providers and models…"
-					autoFocus
-					value={query}
-					onChange={event => setQuery(event.target.value)}
-				/>
-				{error && <p role="alert">{error}</p>}
-				{!groups && !error && <p className="muted" role="status">Loading models…</p>}
-				{groups && (
-					<button className="model-choice follow-default" aria-current={current ? undefined : 'true'} onClick={() => onPick(undefined)}>
-						<span>Follow the default{defaultModel ? ` (${defaultModel})` : ''}</span>
-						<span className="model-meta">New conversations and ones without their own model use it</span>
-					</button>
-				)}
-				{visible?.map(group => (
-					<section className="model-group" key={group.provider} aria-label={group.name || group.provider}>
-						<h3>{group.name || group.provider}</h3>
-						{group.error && <p className="muted">{group.error}</p>}
-						<ul>
-							{group.models.map(model => (
-								<li key={model.id}>
-									<button className="model-choice" aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
-										<span>{model.name || model.id}</span>
-										<span className="model-id">{model.id}</span>
-										<span className="model-meta">{capabilities(model)}</span>
-									</button>
-								</li>
-							))}
-						</ul>
-					</section>
-				))}
-				{visible && visible.length === 0 && <p className="muted">No models match “{query.trim()}”.</p>}
-			</section>
-		</div>
+		<DialogContent className="model-picker">
+			<DialogTitle className="dialog-title">Choose a model</DialogTitle>
+			<DialogDescription className="dialog-description">Switch the model for this conversation, or follow your default.</DialogDescription>
+			<Input
+				className="model-search"
+				aria-label="Search models"
+				placeholder="Search providers and models…"
+				autoFocus
+				value={query}
+				onChange={event => setQuery(event.target.value)}
+			/>
+			{error && <p role="alert">{error}</p>}
+			{!groups && !error && <p className="muted" role="status">Loading models…</p>}
+			{groups && (
+				<Button variant="ghost" className="model-choice follow-default" aria-current={current ? undefined : 'true'} onClick={() => onPick(undefined)}>
+					<span>Follow the default{defaultModel ? ` (${defaultModel})` : ''}</span>
+					<span className="model-meta">New conversations and ones without their own model use it</span>
+				</Button>
+			)}
+			{visible?.map(group => (
+				<section className="model-group" key={group.provider} aria-label={group.name || group.provider}>
+					<h3>{group.name || group.provider}</h3>
+					{group.error && <p className="muted">{group.error}</p>}
+					<ul>
+						{group.models.map(model => (
+							<li key={model.id}>
+								<Button variant="ghost" className="model-choice" aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
+									<span>{model.name || model.id}</span>
+									<span className="model-id">{model.id}</span>
+									<span className="model-meta">{capabilities(model)}</span>
+								</Button>
+							</li>
+						))}
+					</ul>
+				</section>
+			))}
+			{visible && visible.length === 0 && <p className="muted">No models match “{query.trim()}”.</p>}
+		</DialogContent>
 	);
 }

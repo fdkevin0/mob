@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type RefObject } from 'react';
 import { authClient, signedInURL, type Site } from './auth';
 import { Turnstile, type TurnstileHandle } from './Turnstile';
-import { PixelIcon } from './PixelIcon';
+import { PixelIcon } from '../components/brand/PixelIcon';
+import { DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
+import { Button } from '../components/ui/button';
 
 function GitHubMark() {
 	return (
@@ -12,24 +14,16 @@ function GitHubMark() {
 }
 
 // GitHub is the only way in. Turnstile has to pass before the GitHub flow starts.
-export function SignIn({ site, siteError, reason, onClose }: {
+export function SignIn({ site, siteError, reason, returnFocus }: {
 	site?: Site;
 	siteError?: string;
 	reason?: string;
-	onClose: () => void;
+	returnFocus?: RefObject<HTMLButtonElement | null>;
 }) {
 	const [token, setToken] = useState('');
 	const [error, setError] = useState('');
 	const [busy, setBusy] = useState(false);
 	const turnstile = useRef<TurnstileHandle>(null);
-	const close = useRef<HTMLButtonElement>(null);
-
-	useEffect(() => {
-		const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-		window.addEventListener('keydown', escape);
-		close.current?.focus();
-		return () => window.removeEventListener('keydown', escape);
-	}, [onClose]);
 
 	const onToken = useCallback((next: string) => setToken(next), []);
 	const onError = useCallback((message: string) => setError(message), []);
@@ -55,26 +49,25 @@ export function SignIn({ site, siteError, reason, onClose }: {
 
 	const ready = site?.ready && site.turnstileSiteKey;
 	return (
-		<div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-			<div className="dialog" role="dialog" aria-modal="true" aria-labelledby="sign-in-title">
-				<span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
-				<button className="dialog-close" onClick={onClose} aria-label="Close" ref={close}>×</button>
-				<PixelIcon name="lock" size={28} className="dialog-icon" />
-				<h2 id="sign-in-title">Sign in to Mob</h2>
-				<p className="dialog-lede">{reason ?? 'Use your GitHub account to open Mob on the web. Your conversations stay on your computer.'}</p>
-				{siteError ? <p className="form-error" role="alert">{siteError}</p> : null}
-				{site && !ready ? <p className="form-error" role="alert">Sign-in is not set up on this site yet.</p> : null}
-				{ready ? (
-					<div className="auth-form">
-						<Turnstile ref={turnstile} siteKey={site.turnstileSiteKey} action="github" onToken={onToken} onError={onError} />
-						{error ? <p className="form-error" role="alert">{error}</p> : null}
-						<button type="button" className="btn primary wide" onClick={github} disabled={busy || !token}>
-							<GitHubMark />{busy ? 'Opening GitHub…' : 'Continue with GitHub'}
-						</button>
-						<p className="fine-print">Mob asks GitHub only for your name, email and avatar.</p>
-					</div>
-				) : !site && !siteError ? <p className="dialog-lede">Loading…</p> : null}
-			</div>
-		</div>
+		<DialogContent className="sign-in-dialog" onCloseAutoFocus={event => {
+			if (returnFocus?.current) { event.preventDefault(); returnFocus.current.focus(); }
+		}}>
+			<span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
+			<PixelIcon name="lock" size={28} className="dialog-icon" />
+			<DialogTitle className="dialog-title">Sign in to Mob</DialogTitle>
+			<DialogDescription className="dialog-description">{reason ?? 'Use your GitHub account to open Mob on the web. Your conversations stay on your computer.'}</DialogDescription>
+			{siteError ? <p className="form-error" role="alert">{siteError}</p> : null}
+			{site && !ready ? <p className="form-error" role="alert">Sign-in is not set up on this site yet.</p> : null}
+			{ready ? (
+				<div className="auth-form">
+					<Turnstile ref={turnstile} siteKey={site.turnstileSiteKey} action="github" onToken={onToken} onError={onError} />
+					{error ? <p className="form-error" role="alert">{error}</p> : null}
+					<Button type="button" className="wide" onClick={github} disabled={busy || !token}>
+						<GitHubMark />{busy ? 'Opening GitHub…' : 'Continue with GitHub'}
+					</Button>
+					<p className="fine-print">Mob asks GitHub only for your name, email and avatar.</p>
+				</div>
+			) : !site && !siteError ? <p className="dialog-description">Loading…</p> : null}
+		</DialogContent>
 	);
 }

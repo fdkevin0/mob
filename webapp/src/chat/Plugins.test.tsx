@@ -65,11 +65,11 @@ it('tests Telegram and runs a Cloudflare operation using only saved configuratio
   }));
   render(<Plugins connection={connection} close={() => {}} />);
   await screen.findByLabelText('From address');
-  fireEvent.click(screen.getByText('Telegram', { selector: 'button' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Telegram' }), { button: 0, ctrlKey: false });
   expect(screen.getByLabelText(/Bot Token/).getAttribute('type')).toBe('password');
   fireEvent.click(screen.getByText('Test saved configuration'));
   await screen.findByText('Connection test passed.');
-  fireEvent.click(screen.getByText('Cloudflare', { selector: 'button' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Cloudflare' }), { button: 0, ctrlKey: false });
   fireEvent.click(screen.getByText('Run ai.models'));
   await waitFor(() => expect(screen.getByLabelText('Operation result').textContent).toContain('@cf/model'));
   expect(calls).toContain('http://localhost/api/plugins/telegram/test');
@@ -83,7 +83,7 @@ it('tests WeChat iLink plugin tab and configuration rendering', async () => {
   }));
   render(<Plugins connection={connection} close={() => {}} />);
   await screen.findByLabelText('From address');
-  fireEvent.click(screen.getByText('WeChat (iLink)', { selector: 'button' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'WeChat (iLink)' }), { button: 0, ctrlKey: false });
   expect(screen.getByLabelText(/iLink Base URL/)).toBeDefined();
   expect(screen.getByText('Get Login QR Code')).toBeDefined();
   fireEvent.click(screen.getByText('Test saved configuration'));
@@ -100,7 +100,7 @@ it('encodes the WeChat login link as a local QR image', async () => {
   }));
   render(<Plugins connection={connection} close={() => {}} />);
   await screen.findByLabelText('From address');
-  fireEvent.click(screen.getByText('WeChat (iLink)', { selector: 'button' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'WeChat (iLink)' }), { button: 0, ctrlKey: false });
   fireEvent.click(screen.getByText('Get Login QR Code'));
   const qr = await screen.findByRole('img', { name: 'WeChat Login QR Code' });
   expect(qr.tagName.toLowerCase()).toBe('svg');
@@ -124,7 +124,7 @@ it('asks the user to save confirmed WeChat credentials before claiming they are 
   }));
   render(<Plugins connection={connection} close={() => {}} />);
   await screen.findByLabelText('From address');
-  fireEvent.click(screen.getByText('WeChat (iLink)', { selector: 'button' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'WeChat (iLink)' }), { button: 0, ctrlKey: false });
   fireEvent.click(screen.getByText('Get Login QR Code'));
   await screen.findByRole('img', { name: 'WeChat Login QR Code' });
   await act(() => vi.advanceTimersByTimeAsync(3000));
@@ -143,10 +143,14 @@ it('preserves email edits across plugin navigation and displays durable delivery
   }));
   render(<Plugins connection={connection} close={() => {}} />);
   fireEvent.change(await screen.findByLabelText('From address'), { target: { value: 'unsaved@example.org' } });
-  fireEvent.click(screen.getByText('Telegram', { selector: 'button' }));
-  fireEvent.click(screen.getByText('Email plugin', { selector: 'button' }));
+  const emailTab = screen.getByRole('tab', { name: 'Email plugin' });
+  act(() => emailTab.focus());
+  fireEvent.keyDown(emailTab, { key: 'ArrowRight' });
+  await waitFor(() => expect(screen.getByRole('tab', { name: 'Telegram' }).getAttribute('aria-selected')).toBe('true'));
+  expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(screen.getByRole('tab', { name: 'Telegram' }).id);
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Email plugin' }), { button: 0, ctrlKey: false });
   expect((screen.getByLabelText('From address') as HTMLInputElement).value).toBe('unsaved@example.org');
-  fireEvent.click(screen.getByText('Deliveries', { selector: 'button' }));
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Deliveries' }), { button: 0, ctrlKey: false });
   await screen.findByText(/failed-or-unknown/);
   expect(screen.getByText('connection interrupted')).toBeDefined();
 });

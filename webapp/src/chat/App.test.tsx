@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 
@@ -267,11 +267,38 @@ it('switches the conversation model from the header picker', async () => {
   });
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
-  fireEvent.click(await screen.findByRole('button', { name: 'deepseek/deepseek-chat' }));
+  const trigger = await screen.findByRole('button', { name: 'deepseek/deepseek-chat' });
+  fireEvent.click(trigger);
   const dialog = await screen.findByRole('dialog', { name: 'Choose a model' });
-  expect(dialog).toBeDefined();
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Search models')));
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  fireEvent.click(trigger);
   fireEvent.click(await screen.findByText('DeepSeek Reasoner'));
   await waitFor(() => expect(run).toBeDefined());
   expect(run).toMatchObject({ conversationId: 'one', text: '/model deepseek/deepseek-reasoner' });
   expect(screen.queryByRole('dialog', { name: 'Choose a model' })).toBeNull();
+});
+
+it('opens the conversation sheet and closes it after selecting a conversation', async () => {
+  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.endsWith('/config')) return Response.json({});
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'First chat' }, { id: 'two', title: 'Second chat' }]);
+    return Response.json({ messages: [], active: false, model: 'demo/offline' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<App />);
+  await screen.findByRole('button', { name: 'Demo mode · no model calls' });
+  const trigger = screen.getByRole('button', { name: 'Conversations' });
+  fireEvent.click(trigger);
+  const sheet = await screen.findByRole('dialog', { name: 'Conversations' });
+  expect(sheet.contains(document.activeElement)).toBe(true);
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Second chat' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/two'))).toBe(true);
+  expect(screen.getByRole('button', { name: 'Second chat' }).getAttribute('aria-current')).toBe('page');
 });
