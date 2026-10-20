@@ -307,6 +307,17 @@ type Decision struct {
 // call and tells the model, with the user's reason when they gave one; an
 // approved call is left for Complete, so a retry never carries it out twice.
 func (s *Store) Decide(conversationID, approvalID string, approved bool, reason string) (Decision, error) {
+	return s.decide(conversationID, approvalID, approved, reason, true)
+}
+
+// Withdraw records a pending approval as denied without telling a model, as
+// when the owner wrote to a coding agent instead of deciding.
+func (s *Store) Withdraw(conversationID, approvalID string) error {
+	_, err := s.decide(conversationID, approvalID, false, "", false)
+	return err
+}
+
+func (s *Store) decide(conversationID, approvalID string, approved bool, reason string, tell bool) (Decision, error) {
 	d := Decision{ApprovalID: approvalID}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -344,7 +355,7 @@ func (s *Store) Decide(conversationID, approvalID string, approved bool, reason 
 	if _, err = tx.Exec("UPDATE approvals SET status=? WHERE id=?", status, approvalID); err != nil {
 		return d, err
 	}
-	if !approved {
+	if !approved && tell {
 		note := "The user denied the " + d.Tool + " request. Do not retry unless asked."
 		if reason != "" {
 			note = "The user denied the " + d.Tool + " request and said: " + reason

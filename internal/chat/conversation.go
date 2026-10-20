@@ -34,9 +34,11 @@ type ConversationService struct {
 	mu      sync.Mutex
 	sandbox Sandbox
 	steps   int
-	active  map[string]*Running
-	wg      sync.WaitGroup
-	closing bool
+	// delegate answers conversations an outside agent runs.
+	delegate Delegate
+	active   map[string]*Running
+	wg       sync.WaitGroup
+	closing  bool
 }
 
 type CommandError struct {
@@ -130,9 +132,13 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 	if err := s.Store.ExpireApprovals(input.ID); err != nil {
 		return err
 	}
+	delegate := s.delegated(input.ID)
+	if delegate != nil && !input.Owner {
+		return &CommandError{403, "only the owner of this Mob can work with its coding agents"}
+	}
 	command := input.Approval == nil && s.Commands.transcript(input.Text)
 	var model llm.Model
-	if !command {
+	if !command && delegate == nil {
 		ref, err := s.Model(input.ID)
 		if err != nil {
 			return err
@@ -184,6 +190,11 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 			return err
 		}
 		switch {
+		case delegate != nil:
+			// The agent goes on either way; this turn follows it.
+			if err = delegate.Decide(input.ID, decision, *input.Approval); err != nil {
+				return err
+			}
 		case input.Approval.Approved:
 			if err = s.remember(input.ID, decision, input.Approval.Remember); err != nil {
 				return err
@@ -196,12 +207,24 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 		}
 		// A denial with a reason lets the model answer it; the history has the reason.
 	}
-	message, err := s.Store.Begin(input.ID, input.RequestID, input.Text, model.Ref().String())
+	label := ""
+	if delegate != nil {
+		label = delegate.Label(input.ID)
+	} else {
+		label = model.Ref().String()
+	}
+	message, err := s.Store.Begin(input.ID, input.RequestID, input.Text, label)
 	if err != nil {
 		if s.Store.HasRequest(input.RequestID) {
 			return &CommandError{409, "request already accepted; refresh history"}
 		}
 		return err
+	}
+	if delegate != nil {
+		if err = runDelegate(ctx, s.Store, delegate, input.ID, message, input.Text, emit); err != nil {
+			return err
+		}
+		return emit(Event{Kind: TurnFinished, Reason: "stop"})
 	}
 	agent := s.agent(input.Owner)
 	if input.Channel != "" {
