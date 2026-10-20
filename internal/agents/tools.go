@@ -14,7 +14,7 @@ import (
 )
 
 // managerPrompt makes Mob's own model the owner's project manager.
-const managerPrompt = "You are also the owner's project manager. Hand coding work in a project (changes, fixes, investigations, reviews) to a coding agent with task_start instead of doing it yourself; each task works on its own branch. Use tasks to report progress and what waits for the owner's decision, task_message to pass on instructions, and task_stop to stop a task."
+const managerPrompt = "You are also the owner's project manager. Hand coding work in a project (changes, fixes, investigations, reviews) to a coding agent with task_start instead of doing it yourself; each task works on its own branch. Use tasks to report progress and what waits for the owner's decision, task_message to pass on instructions, and task_stop to stop a task. Before telling the owner a task is done, check its work: task_diff shows what it changed, and task_check runs the tests or build in its worktree."
 
 // replyLimit bounds the latest reply tasks shows for each task, in runes.
 const replyLimit = 600
@@ -37,7 +37,7 @@ func (s *Service) Tools() []chat.Tool {
 	for i, p := range Presets {
 		agents[i] = p.Name
 	}
-	return []chat.Tool{{
+	return append([]chat.Tool{{
 		Tool: llm.Tool{Name: "task_start", Description: "Ask the owner to approve handing coding work to a coding agent. The agent works in a new git worktree and branch of the project; the turn stops until the owner approves.", Parameters: object(map[string]any{
 			"project": text("A project's name, or the absolute path of a git repository on this computer"),
 			"prompt":  text("What the agent should do, with everything it needs to know"),
@@ -88,7 +88,7 @@ func (s *Service) Tools() []chat.Tool {
 			}
 			return map[string]any{"stopped": true}, nil
 		},
-	}}
+	}}, s.reviewTools()...)
 }
 
 // offered reports whether task_start is offered: once there are projects or

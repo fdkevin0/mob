@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/llm"
 )
 
 // fake is an ACP agent that acts on the words of each prompt.
@@ -741,5 +743,96 @@ func TestTreeShowsWhoStartedWhom(t *testing.T) {
 	text := outline(nodes)
 	if !strings.Contains(text, "- **Idle** · Mob · New conversation\n  - **Done** · Codex · Greet · ") {
 		t.Fatalf("outline =\n%s", text)
+	}
+}
+
+func TestReviewingATask(t *testing.T) {
+	h := newHarness(t)
+	task := h.start("hello")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	write := func(path, text string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The agent commits one file and leaves another changed and one new;
+	// meanwhile the project moves on.
+	write(filepath.Join(task.Worktree, "a.go"), "package a\n")
+	write(filepath.Join(task.Worktree, "b.go"), "package b\n")
+	git(task.Worktree, "add", ".")
+	git(task.Worktree, "commit", "-q", "-m", "add a and b")
+	write(filepath.Join(task.Worktree, "b.go"), "package b\n\nvar B = 1\n")
+	write(filepath.Join(task.Worktree, "new.txt"), "new\n")
+	write(filepath.Join(h.repo, "main.go"), "package main\n")
+	git(h.repo, "add", ".")
+	git(h.repo, "commit", "-q", "-m", "main moves on")
+
+	out, err := h.svc.diff(context.Background(), task.ID, false, "b.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.(map[string]any)
+	commits, changed := got["commits"].([]string), strings.Join(got["changed"].([]string), ";")
+	if len(commits) != 1 || !strings.HasSuffix(commits[0], "add a and b") || !strings.Contains(changed, "a.go") || !strings.Contains(changed, "3\t0\tb.go") || strings.Contains(changed, "main.go") {
+		t.Fatalf("diff = %s", fmtJSON(got))
+	}
+	if untracked := got["untracked"].([]string); len(untracked) != 1 || untracked[0] != "new.txt" {
+		t.Fatalf("untracked = %v", untracked)
+	}
+	if patch := got["patch"].(string); !strings.Contains(patch, "+var B = 1") || strings.Contains(patch, "a.go") {
+		t.Fatalf("patch = %q", patch)
+	}
+	if _, err := h.svc.diff(context.Background(), "nope", false, ""); err == nil {
+		t.Fatal("diff of an unknown task")
+	}
+
+	// task_check asks first, then runs in the worktree it was approved for.
+	var check chat.Tool
+	for _, tool := range h.svc.Tools() {
+		if tool.Name == "task_check" {
+			check = tool
+		}
+	}
+	if _, err := check.Run(context.Background(), chat.ToolCall{Input: map[string]any{"task": task.ID, "command": " "}}); err == nil {
+		t.Fatal("empty command accepted")
+	}
+	if runtime.GOOS != "windows" {
+		input, _ := json.Marshal(map[string]string{"task": task.ID, "project": task.Project, "worktree": task.Worktree, "command": "ls new.txt; echo failing >&2; exit 3"})
+		out, err := check.Approved(context.Background(), chat.ApprovedCall{Input: input})
+		result := out.(map[string]any)
+		if err != nil || result["exitCode"] != 3 || !strings.Contains(result["output"].(string), "new.txt") || !strings.Contains(result["output"].(string), "failing") {
+			t.Fatalf("check = %v, %v", result, err)
+		}
+		if check.Scope(input) != task.Project+" ls new.txt; echo failing >&2; exit 3" {
+			t.Fatalf("scope = %q", check.Scope(input))
+		}
+	}
+
+	// The owner's turns see the task; other callers' do not.
+	for _, owner := range []bool{true, false} {
+		turn := &chat.Turn{Owner: owner, Request: &llm.Request{}}
+		if err := h.svc.snapshot(context.Background(), turn); err != nil {
+			t.Fatal(err)
+		}
+		if seen := strings.Contains(turn.Request.System, "review: hello (task "+task.ID); seen != owner {
+			t.Fatalf("owner %v: system = %q", owner, turn.Request.System)
+		}
+	}
+}
+
+func TestLimitedKeepsTheEnd(t *testing.T) {
+	l := &limited{max: 4}
+	l.Write([]byte("abc"))
+	l.Write([]byte("defg"))
+	if got := l.String(); got != "… 3 bytes cut\ndefg" {
+		t.Fatalf("%q", got)
 	}
 }
