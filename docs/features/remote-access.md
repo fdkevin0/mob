@@ -11,7 +11,8 @@ served by the Worker in `worker/`:
 - `/` is the landing page, scrolled through in pages over one pinned isometric
   voxel office. Each load lays out a new square open-plan floor of shared
   desks and seats calves on about 70% of them; every calf comes from one
-  template with a generated skin. Most sit working at their desks; a few at a
+  template (the 牛来的 face of the logo: flat brows, a staring look, a big pale
+  muzzle and pointed ears) with a generated skin. Most sit working at their desks; a few at a
   time walk the lanes to high-five, hand
   each other blocks of work, fetch milk tea or coffee, pin notes on the
   whiteboard, try things in the glass booth, put a hand up for the gold
