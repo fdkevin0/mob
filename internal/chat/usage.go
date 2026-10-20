@@ -178,3 +178,109 @@ func (s UsageSummary) Markdown() string {
 	b.WriteString(". Input counts cached tokens; output counts reasoning.")
 	return b.String()
 }
+
+// UsageReport is what every conversation used since a time: in all, by
+// model, by day and by conversation.
+type UsageReport struct {
+	// Since is the report's start in Unix milliseconds; 0 covers everything.
+	Since int64 `json:"since"`
+	UsageSummary
+	// Conversations counts the conversations that used any.
+	Conversations int `json:"conversations"`
+	// Days are the local calendar days that used any, oldest first.
+	Days []DayUsage `json:"days"`
+	// Top are the conversations that used the most tokens, most first.
+	Top []TopConversation `json:"top"`
+}
+
+// DayUsage is what one local calendar day (YYYY-MM-DD) used.
+type DayUsage struct {
+	Date string `json:"date"`
+	Usage
+}
+
+// TopConversation is what one conversation used, with the coding agent
+// that answers it when it is a task.
+type TopConversation struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Agent string `json:"agent,omitempty"`
+	Usage
+	Turns int `json:"turns"`
+}
+
+// usageColumns sum a group of usage rows, in Usage's order after Total.
+const usageColumns = "SUM(input),SUM(output),SUM(reasoning),SUM(cache_read),SUM(cache_write),SUM(cost),SUM(duration_ms),SUM(input+output>0)"
+
+func scanUsage(u *Usage, dest ...any) []any {
+	return append(dest, &u.Input, &u.Output, &u.Reasoning, &u.CacheRead, &u.CacheWrite, &u.Cost, &u.Duration, &u.Requests)
+}
+
+// Report sums the usage recorded since since, or all of it when since is
+// zero, keeping the top conversations that used the most.
+func (s *Store) Report(since time.Time, top int) (UsageReport, error) {
+	report := UsageReport{Days: []DayUsage{}, Top: []TopConversation{}}
+	from := int64(0)
+	if !since.IsZero() {
+		from = since.UnixMilli()
+		report.Since = from
+	}
+	report.Models = []ModelUsage{}
+	err := s.db.QueryRow("SELECT COUNT(DISTINCT message_id),COUNT(DISTINCT conversation_id) FROM usage WHERE created_at>=?", from).Scan(&report.Turns, &report.Conversations)
+	if err != nil {
+		return report, err
+	}
+	err = s.each("SELECT model,"+usageColumns+" FROM usage WHERE created_at>=? GROUP BY model", []any{from}, func(scan func(...any) error) error {
+		var m ModelUsage
+		if err := scan(scanUsage(&m.Usage, &m.Model)...); err != nil {
+			return err
+		}
+		m.Total = m.Input + m.Output
+		report.Usage = report.Usage.add(m.Usage)
+		report.Models = append(report.Models, m)
+		return nil
+	})
+	if err != nil {
+		return report, err
+	}
+	slices.SortStableFunc(report.Models, func(a, b ModelUsage) int { return b.Total - a.Total })
+	err = s.each("SELECT date(created_at/1000,'unixepoch','localtime') AS day,"+usageColumns+" FROM usage WHERE created_at>=? GROUP BY day ORDER BY day", []any{from}, func(scan func(...any) error) error {
+		var d DayUsage
+		if err := scan(scanUsage(&d.Usage, &d.Date)...); err != nil {
+			return err
+		}
+		d.Total = d.Input + d.Output
+		report.Days = append(report.Days, d)
+		return nil
+	})
+	if err != nil {
+		return report, err
+	}
+	err = s.each(`SELECT u.conversation_id,COALESCE(c.title,''),COALESCE(t.agent,''),`+usageColumns+`,COUNT(DISTINCT u.message_id) FROM usage u
+ LEFT JOIN conversations c ON c.id=u.conversation_id LEFT JOIN tasks t ON t.conversation_id=u.conversation_id
+ WHERE u.created_at>=? GROUP BY u.conversation_id ORDER BY SUM(u.input+u.output) DESC LIMIT ?`, []any{from, top}, func(scan func(...any) error) error {
+		var c TopConversation
+		if err := scan(append(scanUsage(&c.Usage, &c.ID, &c.Title, &c.Agent), &c.Turns)...); err != nil {
+			return err
+		}
+		c.Total = c.Input + c.Output
+		report.Top = append(report.Top, c)
+		return nil
+	})
+	return report, err
+}
+
+// each runs query and calls row for each row it returns.
+func (s *Store) each(query string, args []any, row func(scan func(...any) error) error) error {
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := row(rows.Scan); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}

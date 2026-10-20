@@ -56,14 +56,16 @@ ALTER TABLE conversations ADD COLUMN summary_through TEXT NOT NULL DEFAULT '';`}
 		// conversations; others stay with the conversation that saved them.
 		{"20261020", `ALTER TABLE memories ADD COLUMN owner INTEGER NOT NULL DEFAULT 0;`},
 		// What each model request, or each turn of a coding agent, used, for
-		// usage statistics; replies saved before it count as one request each.
+		// usage statistics; replies saved before it count as one request each,
+		// made when their conversation was last updated.
 		{"20261020", `CREATE TABLE IF NOT EXISTS usage(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, message_id TEXT NOT NULL,
  model TEXT NOT NULL, input INTEGER NOT NULL, output INTEGER NOT NULL, reasoning INTEGER NOT NULL, cache_read INTEGER NOT NULL,
  cache_write INTEGER NOT NULL, cost REAL NOT NULL, duration_ms INTEGER NOT NULL, created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS usage_conversation ON usage(conversation_id, model);
 INSERT INTO usage(conversation_id,message_id,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at)
- SELECT conversation_id,id,model,COALESCE(usage->>'inputTokens',0),COALESCE(usage->>'outputTokens',0),COALESCE(usage->>'reasoningTokens',0),
- COALESCE(usage->>'cacheReadTokens',0),COALESCE(usage->>'cacheWriteTokens',0),COALESCE(usage->>'cost',0),0,0 FROM messages WHERE usage<>'' ORDER BY seq;`},
+ SELECT m.conversation_id,m.id,m.model,COALESCE(m.usage->>'inputTokens',0),COALESCE(m.usage->>'outputTokens',0),COALESCE(m.usage->>'reasoningTokens',0),
+ COALESCE(m.usage->>'cacheReadTokens',0),COALESCE(m.usage->>'cacheWriteTokens',0),COALESCE(m.usage->>'cost',0),0,COALESCE(c.updated_at,0)
+ FROM messages m LEFT JOIN conversations c ON c.id=m.conversation_id WHERE m.usage<>'' ORDER BY m.seq;`},
 	},
 }
 

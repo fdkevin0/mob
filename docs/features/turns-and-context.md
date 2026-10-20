@@ -208,6 +208,15 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   then the total, the share of input read from the cache, the number of
   replies and how long the models worked. Cost is the provider's list price;
   a subscription is not charged it.
+- The web workspace's **Token usage** page (`GET /api/usage?days=7|30|0`,
+  `Store.Report`) shows the last 7 days, 30 days or all time: total tokens,
+  the share of input read from the cache, cost and model time; a bar of where
+  the tokens went (fresh input, cache reads, cache writes, output); tokens per
+  local day stacked the same way, with each day's numbers on hover; tokens,
+  cache share, output, requests and cost by model; and the 20 conversations
+  and tasks that used the most, each opening its conversation. Replies
+  counted from before the table existed are dated to their conversation's
+  last update.
 - `Store.ConversationUsage(ids...)` returns the same summaries
   (`chat.UsageSummary`) for other features. The code is in
   `internal/chat/usage.go`.

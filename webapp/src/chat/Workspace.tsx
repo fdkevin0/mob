@@ -5,6 +5,7 @@ import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Plugins } from './Plugins';
+import { Usage } from './Usage';
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
 
@@ -22,6 +23,7 @@ export function Workspace({
 	clearDraft?: () => void;
 }) {
 	const [plugins, setPlugins] = useState(false);
+	const [usage, setUsage] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
@@ -118,6 +120,16 @@ export function Workspace({
 			>
 				Plugins & cloud services
 			</Button>
+			<Button
+				variant="ghost"
+				className="sidebar-plugins"
+				onClick={() => {
+					setNavigation(false);
+					setUsage(true);
+				}}
+			>
+				Token usage
+			</Button>
 			<div className="sidebar-footer">
 				<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
 					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'} ·{' '}
@@ -141,6 +153,19 @@ export function Workspace({
 	);
 
 	if (plugins) return <Plugins connection={connection} close={() => setPlugins(false)} />;
+	if (usage)
+		return (
+			<Usage
+				connection={connection}
+				close={() => setUsage(false)}
+				open={(id) => {
+					setUsage(false);
+					void refreshList()
+						.then(() => open(id))
+						.catch((e) => setError(errorText(e)));
+				}}
+			/>
+		);
 	return (
 		<div className="workspace">
 			<aside className="sidebar">

@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type Server struct {
@@ -129,6 +130,16 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"messages": messages, "active": s.Active(r.PathValue("id")), "model": model})
+	})
+	mux.HandleFunc("GET /api/usage", func(w http.ResponseWriter, r *http.Request) {
+		// days limits the report to the last whole days, today included; 0 or none covers everything.
+		var since time.Time
+		if days, err := strconv.Atoi(r.URL.Query().Get("days")); err == nil && days > 0 {
+			now := time.Now()
+			since = time.Date(now.Year(), now.Month(), now.Day()-days+1, 0, 0, 0, 0, now.Location())
+		}
+		data, err := s.Store.Report(since, 20)
+		respond(w, data, err)
 	})
 	mux.HandleFunc("POST /api/conversations/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"stopped": s.Stop(r.PathValue("id"))})
