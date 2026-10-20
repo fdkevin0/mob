@@ -79,12 +79,13 @@ func Send(transport http.RoundTripper, req *http.Request) (*http.Response, error
 	delay := RetryDelay
 	for attempt := 0; ; attempt++ {
 		resp, err := send(transport, req)
-		wait, again := retry(resp, err, delay)
+		var wait time.Duration
+		var again bool
+		resp, wait, again, err = retry(resp, err, delay)
 		if !again || attempt >= Retries || req.Context().Err() != nil {
 			return resp, err
 		}
 		if resp != nil {
-			io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 			resp.Body.Close()
 		}
 		timer := time.NewTimer(wait)
@@ -106,27 +107,31 @@ func Send(transport http.RoundTripper, req *http.Request) (*http.Response, error
 }
 
 // retry reports whether a request that ended with resp or err may succeed if
-// sent again, and how long to wait first.
-func retry(resp *http.Response, err error, delay time.Duration) (time.Duration, bool) {
+// sent again, and how long to wait first. It reads the start of a retryable
+// error's body, which the returned response still carries; a body that stalls
+// ends the request with ErrStalled instead, as it already waited StallTimeout.
+func retry(resp *http.Response, err error, delay time.Duration) (*http.Response, time.Duration, bool, error) {
 	if err != nil {
 		// A stalled request already waited StallTimeout; a cancelled one was meant.
-		return delay, !errors.Is(err, ErrStalled) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		return resp, delay, !errors.Is(err, ErrStalled) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded), err
 	}
 	if !slices.Contains(retryable, resp.StatusCode) {
-		return 0, false
+		return resp, 0, false, nil
 	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		resp.Body.Close()
+		return nil, 0, false, err
+	}
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(raw), resp.Body), resp.Body}
 	// An exhausted quota stays exhausted.
-	if resp.StatusCode == http.StatusTooManyRequests {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		resp.Body = struct {
-			io.Reader
-			io.Closer
-		}{io.MultiReader(bytes.NewReader(raw), resp.Body), resp.Body}
-		if bytes.Contains(raw, []byte("insufficient_quota")) {
-			return 0, false
-		}
+	if resp.StatusCode == http.StatusTooManyRequests && bytes.Contains(raw, []byte("insufficient_quota")) {
+		return resp, 0, false, nil
 	}
-	return min(after(resp.Header.Get("Retry-After"), delay), MaxRetryDelay), true
+	return resp, min(after(resp.Header.Get("Retry-After"), delay), MaxRetryDelay), true, nil
 }
 
 // after is how long a Retry-After header asks to wait, in seconds or until a

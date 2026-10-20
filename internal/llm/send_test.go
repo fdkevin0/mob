@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -119,5 +120,31 @@ func TestRetryAfter(t *testing.T) {
 	}
 	if d := after(time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat), time.Second); d != 0 {
 		t.Fatal(d)
+	}
+}
+
+func TestSendDoesNotRetryAStalledErrorBody(t *testing.T) {
+	defer func(d, r time.Duration) { StallTimeout, RetryDelay = d, r }(StallTimeout, RetryDelay)
+	StallTimeout, RetryDelay = 150*time.Millisecond, time.Millisecond
+	release := make(chan struct{})
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		status := http.StatusServiceUnavailable
+		if r.URL.Path == "/limited" {
+			status = http.StatusTooManyRequests
+		}
+		w.WriteHeader(status)
+		http.NewResponseController(w).Flush()
+		<-release
+	}))
+	defer upstream.Close()
+	defer close(release)
+	for _, path := range []string{"/limited", "/down"} {
+		calls.Store(0)
+		req, _ := http.NewRequest("POST", upstream.URL+path, strings.NewReader("prompt"))
+		if resp, err := Send(nil, req); !errors.Is(err, ErrStalled) || resp != nil || calls.Load() != 1 {
+			t.Fatalf("%s: %v %v after %d requests", path, resp, err, calls.Load())
+		}
 	}
 }
