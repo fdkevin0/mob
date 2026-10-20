@@ -546,3 +546,45 @@
 .status-dot.offline {
 	background: var(--muted-foreground);
 }
+.runner-choices {
+	display: grid;
+	gap: 12px;
+}
+.runner-choice {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	width: 100%;
+	height: auto;
+	padding: 16px;
+	text-align: left;
+	white-space: normal;
+}
+.runner-choice strong {
+	font-size: 15px;
+	font-weight: 550;
+}
+.runner-choice small {
+	margin-left: 8px;
+	font-family: var(--mono);
+	font-size: 10px;
+	border: 1px solid var(--line-strong);
+	padding: 2px 6px;
+	color: var(--muted-foreground);
+}
+.runner-choice span {
+	color: var(--muted-foreground);
+	font-size: 13px;
+	line-height: 1.6;
+	font-family: var(--sans, inherit);
+}
+.runner-choice:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.choice-back {
+	padding: 0;
+	min-height: 28px;
+	margin-bottom: 4px;
+}

@@ -19,6 +19,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   // The public web opens the workspace without a runner; prompting shows how to connect one, and draft keeps what was typed meanwhile.
   const [prompting, setPrompting] = useState(false);
+  // The dialog first offers a choice of runner; own shows how to connect the user's own one.
+  const [own, setOwn] = useState(false);
   const [draft, setDraft] = useState('');
   useEffect(() => {
     const desktop = window.go?.main?.Desktop;
@@ -29,7 +31,7 @@ export function App() {
     const saved = savedToken();
     let url = serviceURL();
     // A sign-in link shows its progress and any failure in the connect dialog.
-    if (/[#&](offer|pair)=/.test(window.location.hash)) setPrompting(true);
+    if (/[#&](offer|pair)=/.test(window.location.hash)) { setPrompting(true); setOwn(true); }
     const restore = async () => {
       const link = signInLink();
       if (link) { url = link.url; return claimPairing(link); }
@@ -47,7 +49,7 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
-      clearToken(rejected); setConnection(undefined); setPrompting(true); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
+      clearToken(rejected); setConnection(undefined); setPrompting(true); setOwn(true); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
     };
     window.addEventListener(unauthorizedEvent, signOut);
     return () => window.removeEventListener(unauthorizedEvent, signOut);
@@ -69,11 +71,14 @@ export function App() {
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
     {error && <p role="alert">{error}</p>}</>;
   if (isPublicWeb()) return <>
-    <Lobby draft={draft} setDraft={setDraft} connect={() => setPrompting(true)} />
+    <Lobby draft={draft} setDraft={setDraft} connect={() => { setOwn(false); setPrompting(true); }} />
     <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
-      <DialogDescription className="dialog-description">Mob runs on your own computer. Connect to it to send messages; your conversations stay there.</DialogDescription>
-      {panel}</DialogContent></Dialog></>;
+      <DialogDescription className="dialog-description">Mob needs a runner to send messages. Choose where it runs.</DialogDescription>
+      {own || error ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setOwn(false); setError(''); }}>← Other runners</Button>{panel}</> : <div className="runner-choices">
+        <Button type="button" variant="outline" className="runner-choice" onClick={() => setOwn(true)}><strong>Your own runner</strong><span>Mob on this computer, or on another computer you pair. Conversations stay there.</span></Button>
+        <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>
+      </div>}</DialogContent></Dialog></>;
   return <main className="connect"><Logo /><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>{panel}</main>;
 }
 

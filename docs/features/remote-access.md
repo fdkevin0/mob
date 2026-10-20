@@ -23,9 +23,11 @@ served by the Worker in `worker/`:
 - `/app` is the web UI. The Worker sends visitors without a session back to
   `/?signin=app`. Signed-in visitors enter the workspace even when no runner or
   local Mob is connected yet: they can look around and type a message, and the
-  **Connect a runner** dialog (runners, Mob address and access token) opens only
-  when they do something that needs Mob, such as sending, starting a
-  conversation or opening plugins. A typed message is kept and placed in the
+  **Connect a runner** dialog opens only when they do something that needs
+  Mob, such as sending, starting a conversation or opening plugins. It offers
+  **Your own runner** (paired runners, or the Mob address and access token of
+  Mob on this computer) and **Cloud runner**, which is disabled and marked
+  coming soon. A typed message is kept and placed in the
   composer of the first conversation that opens after connecting; it is not
   sent automatically. A `mob open --web` link opens the dialog to show its
   progress, and a replaced token reopens it with the reason.

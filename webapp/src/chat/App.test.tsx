@@ -198,6 +198,7 @@ it('sends a typed token from the public web only to Mob on this computer', async
   try {
     render(<App />);
     fireEvent.click((await screen.findAllByRole('button', { name: 'Connect a runner' }))[0]);
+    fireEvent.click(await screen.findByRole('button', { name: /Your own runner/ }));
     const address = await screen.findByLabelText('Mob address') as HTMLInputElement;
     expect(address.value).toBe('http://127.0.0.1:8787');
     fireEvent.change(address, { target: { value: 'https://mob.example' } });
@@ -225,6 +226,9 @@ it('opens the public web workspace without a runner and asks for one only when s
     fireEvent.change(box, { target: { value: 'hello 草稿' } });
     fireEvent.submit(box.closest('form')!);
     const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
+    expect((within(dialog).getByRole('button', { name: /Cloud runner/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(dialog).queryByLabelText('Local access token')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Your own runner/ }));
     fireEvent.change(within(dialog).getByLabelText('Local access token'), { target: { value: 'secret' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Open workspace' }));
     await screen.findByRole('button', { name: /disconnect/i });
