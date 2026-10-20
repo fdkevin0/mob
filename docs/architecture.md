@@ -25,7 +25,7 @@ change the single-Go-binary release.
 | `internal/extension` | the lifecycle of plugins that run in the background, and plugin routes |
 | `internal/channel` | the bridge messaging channels answer through |
 | `internal/agents` | coding agent tasks over ACP: projects, worktrees, the agent processes and Mob's project-manager tools |
-| `internal/plugins/*` | email, Cloudflare, Telegram, WeChat iLink and MCP, each with its own tools, commands, routes and background run |
+| `internal/plugins/*` | email, Cloudflare, Telegram, WeChat iLink, MCP, skills and schedules, each with its own tools, commands, routes and background run |
 | `internal/container`, `internal/sandbox` | the platform container runtimes and the model's `sandbox` tool |
 | `internal/runner`, `worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `worker/runners.ts` |
 | `internal/gateway`, `internal/node` | the experimental relay and edge-node client |

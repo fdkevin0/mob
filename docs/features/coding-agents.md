@@ -56,6 +56,18 @@ Owner-only tools:
 - `task_message` passes instructions to a task's agent. While the agent is
   at work they are added to its conversation and sent once its current
   prompt ends. `task_stop` stops its turn and ends the agent.
+- `task_diff` shows what a task changed since its branch began: its commits
+  (up to 30), each changed file with lines added and removed (committed and
+  not), untracked files, and on request the patch, whole or for one file, up
+  to 24000 bytes. The branch began where it meets the project's `HEAD`, so
+  the project moving on does not show up as the task's change. It reads
+  without approval.
+- `task_check` runs a shell command, such as the tests or the build, in a
+  task's worktree on the computer Mob runs on (`sh -c`, `cmd /C` on Windows),
+  with Mob's environment minus its `MOB_*` variables, and returns the exit
+  code and the last 32 KiB of its output. Every command asks for approval;
+  Always allow covers the same command in the same project. A command still
+  running after ten minutes is ended.
 
 `task_start` is offered while an agent's command (or `npx`) is installed, or
 once there is a project or task; the others once there is a project or task.
@@ -90,6 +102,33 @@ and adds up what they all cost. The page reads the tree again every three second
 Logos come from LobeHub's MIT-licensed `@lobehub/icons-static-svg`, inlined
 into the page.
 
+The owner's turns also read a snapshot of the tasks in their instructions, so
+the model knows what is going on without calling `tasks` first: up to 15
+tasks that are running, waiting, or ended (in review or failed) in the last
+seven days, each with its status, title, ID, agent, project and branch.
+Stopped tasks and other callers' turns get none. The snapshot changes when a
+task does, which misses the prompt cache once.
+
+## Reviewing finished work
+
+A task started by an approved `task_start` remembers the conversation that
+approved it (`tasks.origin`). When the task's turn ends in review with
+something written, Mob's model reviews the work in that conversation before
+the owner hears about it: a turn starts there with a note, saved as the
+turn's message, saying it is an automatic update and asking the model to
+check the work with `task_diff` and `task_check`, then tell the owner whether
+it looks ready to merge, what is missing, and what they need to decide. It
+may send the agent more work with `task_message` only when the task is
+clearly not done.
+
+When that turn ends, the owner gets one notice, "Task reviewed", with the
+model's conclusion and any approval it waits for (such as a `task_check`
+command), instead of the agent's own words. At most three reviews start on
+their own for one task while Mob runs. A task started otherwise, such as with
+`StartTask` from code, one past its three reviews, or one whose conversation
+is busy, gets the agent's words in a "Task done" notice as before. Failed
+tasks are not reviewed.
+
 ## Approvals
 
 - Codex starts each session in its `auto` mode: it edits files and runs
@@ -116,7 +155,8 @@ into the page.
 
 ## Notices
 
-When a task's turn ends waiting for an approval, done or failed, Mob raises a
+When a task's turn ends waiting for an approval, done (unless Mob reviews it,
+above) or failed, Mob raises a
 `chat.Notice` (`ConversationService.Notify`): the task's agent and title, the
 agent's last words (up to 1200 characters), its branch and what it used when
 done, the error

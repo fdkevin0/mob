@@ -12,7 +12,10 @@ before it has an effect, and the owner can decide from any client or channel.
   Cloudflare plugin offers `cloudflare`. Each is defined in its own package and
   offered only while its plugin is enabled.
 - [Coding agents](coding-agents.md) add `task_start` (asks for approval),
-  `tasks`, `task_message` and `task_stop`.
+  `tasks`, `task_message`, `task_stop`, `task_diff` and `task_check` (asks
+  for approval).
+- [Schedules](schedules.md) add `schedule` (asks for approval), `schedules`
+  and `schedule_cancel`.
 - [MCP servers](mcp.md) add `mcp__<server>__<tool>` tools, and `tool_install`
   installs a remote server from the catalog.
 - While any [skill](skills.md) is installed, the `skill` tool loads one; it
@@ -70,8 +73,9 @@ owner's turns.
 
 - Reading runs at once. Sending mail, Workers AI (`ai.run`, and
   `vectorize.query`, which embeds with Workers AI), D1 queries that may write,
-  `remember`, every MCP call and installing an MCP server with `tool_install`
-  wait for approval. A single D1 `SELECT`
+  `remember`, every MCP call, installing an MCP server with `tool_install`,
+  starting a coding task, running a `task_check` command and scheduling a
+  prompt wait for approval. A single D1 `SELECT`
   statement runs without approval; SQL the check cannot be sure of still asks.
 - The approval names what the call acts on (the sender and SMTP account, or the
   Cloudflare account and model, index or database), and an approved call runs

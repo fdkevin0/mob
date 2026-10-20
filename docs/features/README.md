@@ -18,6 +18,7 @@ keep architecture decision records.
 | [MCP servers](mcp.md) | external tools over the Model Context Protocol |
 | [DeepSeek Harness plugins](deepseek-harness.md) | DSH tool compatibility, the optional runtime, setup and limitations |
 | [Coding agents](coding-agents.md) | projects and tasks handed to Codex and other ACP agents, with Mob as project manager |
+| [Schedules](schedules.md) | prompts the model runs on its own later, once or repeatedly |
 | [Skills](skills.md) | Agent Skills the model loads by name, and running their scripts in the sandbox |
 | [Extensions](extensions.md) | how plugins add tools, hooks, commands, routes, configuration and background runs |
 | [Releases and upgrades](releases.md) | nightly and stable channels, database migration windows |
