@@ -4,7 +4,7 @@ Mob runs on the user's machine and serves its clients over loopback.
 
 ## Public web UI
 
-The site at https://mob.fdkevin.cloud is deployed to Cloudflare Workers, so web
+The site at https://usemob.app is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has five parts,
 served by the Worker in `worker/`:
 
@@ -31,7 +31,7 @@ served by the Worker in `worker/`:
   Turnstile (a passkey cannot be guessed or used to sign up) and opens `/app`.
   A passkey that is not bound to any account is refused with a hint to sign in
   with GitHub first. The relying party ID is the site's hostname, so passkeys
-  made on `mob.fdkevin.cloud` do not work on preview hostnames.
+  made on `usemob.app` do not work on preview hostnames or the previous domain.
 - `/account` shows the signed-in user, the connected GitHub account and the
   account's passkeys, which can be added, renamed and removed. The GitHub row
   shows the current username: the page asks GitHub once per visit with the
@@ -121,6 +121,9 @@ Deployment:
   deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
+  The custom domain route serves production at `usemob.app` and, with
+  `previews_enabled: true`, previews at `<preview-name>.usemob.app`.
+  Deploy production once to apply the domain configuration before creating previews.
 - PR builds use deploy command
   `npx wrangler d1 migrations apply DB --remote --config wrangler.preview-migrations.jsonc && npx wrangler preview`.
   This automatically applies pending preview database migrations before deployment;
@@ -137,7 +140,7 @@ Deployment:
 - Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY` and
   `GITHUB_CLIENT_SECRET`. The public `TURNSTILE_SITE_KEY` and
   `GITHUB_CLIENT_ID` are vars in `wrangler.jsonc`. The GitHub OAuth app's
-  callback URL is `https://mob.fdkevin.cloud/api/auth/callback/github`.
+  callback URL is `https://usemob.app/api/auth/callback/github`.
 - Locally, put the secrets in `.dev.vars`, which overrides the vars too
   (Turnstile's test keys work), run
   `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
