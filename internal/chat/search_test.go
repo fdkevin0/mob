@@ -152,6 +152,52 @@ func TestDeferredToolNotLoadedIsRefused(t *testing.T) {
 	}
 }
 
+func TestRepeatedSearchDeclaresToolsAndPromptsOnce(t *testing.T) {
+	s, id, m := turnFixture(t)
+	issue := deferredTool("create_issue", "Create an issue.", func(context.Context, ToolCall) (any, error) { return "created", nil })
+	issue.Prompt = "Name the repository when creating issues."
+	model := &stepping{steps: [][]llm.ToolCall{
+		{{ID: "s1", Name: searchName, Arguments: `{"query":"create_issue"}`}, {ID: "s2", Name: searchName, Arguments: `{"query":"create_issue"}`}},
+		{{ID: "c1", Name: issue.Name, Arguments: `{}`}, {ID: "s3", Name: searchName, Arguments: `{"query":"create_issue"}`}},
+	}}
+	if err := Run(context.Background(), s, model, Agent{Tools: []Tool{issue}}, id, m, "", func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	for step, req := range model.requests {
+		want := []string{searchName}
+		count := 0
+		if step > 0 {
+			want, count = append(want, issue.Name), 1
+		}
+		if !slices.Equal(declared(req), want) || strings.Count(req.System, issue.Prompt) != count {
+			t.Fatalf("step %d: declarations %v, prompt %q", step, declared(req), req.System)
+		}
+	}
+}
+
+func TestLoadedToolsCountTowardTheContextLimit(t *testing.T) {
+	for _, large := range []string{"definition", "prompt"} {
+		t.Run(large, func(t *testing.T) {
+			s, id, m := turnFixture(t)
+			issue := deferredTool("create_issue", "Create an issue.", nil)
+			if large == "definition" {
+				issue.Parameters = map[string]any{"type": "object", "description": strings.Repeat("x", 9000)}
+			} else {
+				issue.Prompt = strings.Repeat("x", 9000)
+			}
+			requests := 0
+			model := recordingModel{info: llm.Info{ID: "narrow", Context: 2000, Output: 100, Tools: true}, stream: func(_ context.Context, _ llm.Request, _ func(string, string) error) (llm.Result, error) {
+				requests++
+				return llm.Result{Calls: []llm.ToolCall{{ID: "s1", Name: searchName, Arguments: `{"query":"create_issue"}`}}}, nil
+			}}
+			err := Run(context.Background(), s, model, Agent{Tools: []Tool{issue}}, id, m, "", func(Event) error { return nil })
+			if err == nil || !strings.Contains(err.Error(), "has filled narrow's context") || requests != 1 {
+				t.Fatalf("oversized tools reached the next model request: %d requests, %v", requests, err)
+			}
+		})
+	}
+}
+
 func TestToolSearchFindsEntries(t *testing.T) {
 	s, id, m := turnFixture(t)
 	agent := Agent{Tools: DefaultTools(), Entries: []Entry{{Kind: "skill", Name: "pdf", Description: "Extract text and tables from PDF files.", Use: `Call skill with name "pdf".`}}}
