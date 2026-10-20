@@ -495,7 +495,18 @@ const deskTop = (a: Agent): Vec => add([a.home.x, 0, a.home.z], rotate([0, 6, 4]
 const OUTSIDE: Vec = [-16, 22, 44];
 
 const dimmed = (v: Voxel[], k: number): Voxel[] => v.map(p => [p[0], p[1], p[2], p[3] * k, p[4] * k, p[5] * k, p[6] * k, p[7]]);
-let fixedDim: Voxel[] | undefined;
+// The dimmed floor, cached at a handful of levels so a fade costs nothing.
+const fixedDim = new Map<number, Voxel[]>();
+const floorAt = (k: number) => {
+	const level = Math.round(k * 20) / 20;
+	if (level >= 1) return office.fixed;
+	let v = fixedDim.get(level);
+	if (!v) fixedDim.set(level, v = dimmed(office.fixed, level));
+	return v;
+};
+// How far the story's spotlight and the feature highlight have faded in,
+// from 0 to 1; the page sets these as it scrolls, so nothing snaps.
+let fade = { story: 1, highlight: 1 };
 
 function marker([x, , z]: Vec, t: number): Voxel[] {
 	const bob = Math.floor(t * 3) % 2 ? 0.5 : 0;
@@ -538,8 +549,8 @@ export function officeVoxels(time: number): Voxel[] {
 	const v: Voxel[] = [];
 	const extra: Voxel[] = [];
 	const focus = story ? playStory(story, t, extra) : undefined;
-	if (focus) v.push(...(fixedDim ??= dimmed(office.fixed, 0.35)), ...dimmed(glass(inBooth), 0.35));
-	else v.push(...office.fixed, ...glass(inBooth));
+	const floor = focus ? 1 - 0.65 * fade.story : 1;
+	v.push(...floorAt(floor), ...(floor < 1 ? dimmed(glass(inBooth), floor) : glass(inBooth)));
 	for (const n of office.notes) v.push([n.x, n.y, -0.2, ...NOTE_COLORS[n.color], 0.4, 0.9]);
 	// Steam curling up from the coffee machine.
 	for (let k = 0; k < 3; k++) {
@@ -549,8 +560,9 @@ export function officeVoxels(time: number): Voxel[] {
 	for (const a of office.agents) {
 		const lit = focus ? focus.includes(a) : !highlight || highlight.includes(activity(a));
 		const own = [...deskVoxels(a, t), ...calfVoxels(a, t)];
-		v.push(...(lit ? own : dimmed(own, focus ? 0.28 : 0.5)));
-		if ((focus || highlight) && lit) v.push(...marker([a.at[0], 0, a.at[1]], t));
+		const k = focus ? 1 - 0.72 * fade.story : 1 - 0.5 * fade.highlight;
+		v.push(...(lit || k >= 1 ? own : dimmed(own, k)));
+		if ((focus ? fade.story : highlight ? fade.highlight : 0) > 0.5 && lit) v.push(...marker([a.at[0], 0, a.at[1]], t));
 	}
 	return [...v, ...extra];
 }
@@ -586,6 +598,11 @@ export function setStory(step: number | undefined) {
 		.sort((a, b) => Math.hypot(a.at[0] - boss.at[0], a.at[1] - boss.at[1]) - Math.hypot(b.at[0] - boss.at[0], b.at[1] - boss.at[1]))
 		.slice(0, 3);
 	story = { step, since: office.time, crew };
+}
+
+// Sets how far the spotlight (story) and the highlight have faded in.
+export function setFade(story: number, highlight: number) {
+	fade = { story, highlight };
 }
 
 // Marks the calves doing any of these, or none.

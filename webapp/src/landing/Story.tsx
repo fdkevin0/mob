@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type React
 import { PixelIcon } from '../components/brand/PixelIcon';
 import type { IconName } from '../components/brand/pixels';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
-import { calfAt, officeFrame, officeVoxels, setHighlight, setStory, type Activity } from './voxel/office';
+import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
 
 // The top of the landing page is one pinned stage over the calves' office,
 // scrolled through in pages: the title, a task played out step by step, then
@@ -94,7 +94,11 @@ export function Story({ hero }: { hero: ReactNode }) {
 			const out = ramp(p, 0, 0.8);
 			const aside = ramp(p, FEATURES - 0.8, FEATURES);
 			if (title.current) { title.current.style.transform = `translateY(${-out * 45}vh)`; title.current.style.opacity = String(1 - ramp(p, 0.1, 0.65)); }
-			if (flow.current) flow.current.style.opacity = String(ramp(p, 0.5, WORKFLOW) * (1 - ramp(p, WORKFLOW + 4 * STEP - 0.2, FEATURES - 0.6)));
+			// The spotlight fades in with the conversation and out before the
+			// office moves aside, so the office never jumps in brightness.
+			const spot = ramp(p, 0.45, WORKFLOW) * (1 - ramp(p, WORKFLOW + 4 * STEP - 0.2, FEATURES - 0.6));
+			setFade(spot, ramp(p, FEATURES - 0.8, FEATURES));
+			if (flow.current) flow.current.style.opacity = String(spot);
 			if (list.current) list.current.style.opacity = String(ramp(p, FEATURES - 0.5, FEATURES));
 			if (field.current) {
 				field.current.style.transform = narrow
@@ -103,8 +107,8 @@ export function Story({ hero }: { hero: ReactNode }) {
 				field.current.style.opacity = String(0.4 + ramp(p, 0.4, WORKFLOW) * 0.25 + aside * 0.33);
 				field.current.dataset.live = aside >= 1 ? 'true' : 'false';
 			}
-			const s = p >= 0.6 && p < FEATURES - 0.6 ? clamp(Math.floor((p - WORKFLOW + STEP / 2) / STEP), 0, 3) : -1;
-			const f = p >= FEATURES - 0.4 ? clamp(Math.floor((p - FEATURES + FEATURE / 2) / FEATURE), 0, 5) : -1;
+			const s = p > 0.45 && p < FEATURES - 0.6 ? clamp(Math.floor((p - WORKFLOW + STEP / 2) / STEP), 0, 3) : -1;
+			const f = p >= FEATURES - 0.8 ? clamp(Math.floor((p - FEATURES + FEATURE / 2) / FEATURE), 0, 5) : -1;
 			setStep(s);
 			setFeature(f);
 		};
@@ -117,7 +121,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 
 	useEffect(() => { setStory(step < 0 ? undefined : step); }, [step]);
 	useEffect(() => { setHighlight(feature < 0 ? undefined : features[feature].doing); }, [feature]);
-	useEffect(() => () => { setStory(undefined); setHighlight(undefined); }, []);
+	useEffect(() => () => { setStory(undefined); setHighlight(undefined); setFade(1, 1); }, []);
 
 	const goTo = useCallback((i: number) => {
 		const top = story.current?.offsetTop ?? 0;
