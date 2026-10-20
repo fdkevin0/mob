@@ -55,7 +55,7 @@ func (s *Service) Tools() []chat.Tool {
 			return in.Project + " " + in.Agent
 		},
 	}, {
-		Tool:      llm.Tool{Name: "tasks", Description: "List coding agent tasks with their status (running, waiting for the owner's approval, review, stopped, failed), branch, plan and latest reply, and the saved projects.", Parameters: object(map[string]any{"project": text("Only this project's tasks")})},
+		Tool:      llm.Tool{Name: "tasks", Description: "List coding agent tasks with their status (running, waiting for the owner's approval, review, stopped, failed), branch, plan, latest reply and the tokens, cache and cost their agent used by model, and the saved projects.", Parameters: object(map[string]any{"project": text("Only this project's tasks")})},
 		OwnerOnly: true,
 		Available: s.busy,
 		Run: func(_ context.Context, call chat.ToolCall) (any, error) {
@@ -185,6 +185,10 @@ func (s *Service) overview(project string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	used, err := s.used(list)
+	if err != nil {
+		return nil, err
+	}
 	tasks := make([]map[string]any, len(list))
 	for i, t := range list {
 		reply, _ := s.Store.LastReply(t.ConversationID)
@@ -197,6 +201,9 @@ func (s *Service) overview(project string) (any, error) {
 		}
 		if len(t.Plan) > 0 {
 			entry["plan"] = t.Plan
+		}
+		if u, ok := used[t.ConversationID]; ok {
+			entry["usage"] = u
 		}
 		tasks[i] = entry
 	}
@@ -245,10 +252,18 @@ func (s *Service) Commands() []chat.Command {
 			if len(list) == 0 {
 				return chat.Reply("No tasks yet. Ask Mob to hand coding work in a project to a coding agent.")
 			}
+			used, err := s.used(list)
+			if err != nil {
+				return chat.CommandResult{}, err
+			}
 			var b strings.Builder
-			b.WriteString("| Task | Project | Agent | Status | Branch |\n| --- | --- | --- | --- | --- |\n")
+			b.WriteString("| Task | Project | Agent | Status | Branch | Used |\n| --- | --- | --- | --- | --- | --- |\n")
 			for _, t := range list {
-				fmt.Fprintf(&b, "| %s | %s | %s | %s | `%s` |\n", cell(t.Title), cell(t.Project), t.Agent, t.Status, t.Branch)
+				usage := "—"
+				if u, ok := used[t.ConversationID]; ok {
+					usage = u.Brief()
+				}
+				fmt.Fprintf(&b, "| %s | %s | %s | %s | `%s` | %s |\n", cell(t.Title), cell(t.Project), t.Agent, t.Status, t.Branch, usage)
 			}
 			return chat.Reply(b.String())
 		},
@@ -269,6 +284,15 @@ func (s *Service) describeProjects() (chat.CommandResult, error) {
 		fmt.Fprintf(&b, "| %s | `%s` |\n", cell(p.Name), p.Path)
 	}
 	return chat.Reply(b.String())
+}
+
+// used is what the tasks' agents used, by conversation.
+func (s *Service) used(list []chat.Task) (map[string]chat.UsageSummary, error) {
+	ids := make([]string, len(list))
+	for i, t := range list {
+		ids[i] = t.ConversationID
+	}
+	return s.Store.ConversationUsage(ids...)
 }
 
 // cell keeps text from breaking a Markdown table row.

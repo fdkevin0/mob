@@ -109,6 +109,11 @@ func (s *Service) notify(id string, turn *chat.DelegateTurn, failure error) {
 		n.Text = "**Task waits for your decision:** " + title
 	case t.Status == chat.TaskReview && turn.Wrote():
 		n.Text = "**Task done:** " + title + "\nBranch `" + t.Branch + "`"
+		if used, err := s.Store.ConversationUsage(t.ConversationID); err == nil {
+			if u, ok := used[t.ConversationID]; ok {
+				n.Text += " · " + u.Brief()
+			}
+		}
 	default:
 		return
 	}

@@ -56,6 +56,11 @@ type session struct {
 	// calls are the tool calls the agent made, to show their results in a
 	// later turn than the one that started them.
 	calls map[acp.ToolCallId]call
+	// model is the model the session's options select; cost is the cost the
+	// agent last reported for its run, unpriced what of it no prompt's end
+	// recorded yet.
+	model          string
+	cost, unpriced float64
 }
 
 type call struct {
@@ -74,6 +79,11 @@ type item struct {
 type ending struct {
 	reason acp.StopReason
 	err    error
+	// usage and meta are what the response said; began is when the prompt
+	// was sent.
+	usage *acp.Usage
+	meta  map[string]any
+	began time.Time
 }
 
 // permission is a request waiting for the owner's answer.
@@ -115,7 +125,7 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		loaded, err := s.conn.LoadSession(ctx, acp.LoadSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: []acp.McpServer{}})
 		s.loading.Store(false)
 		if err == nil {
-			s.id, modes = acp.SessionId(t.Session), loaded.Modes
+			s.id, modes, s.model = acp.SessionId(t.Session), loaded.Modes, modelOption(loaded.ConfigOptions)
 		}
 	}
 	if s.id == "" {
@@ -123,7 +133,7 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		if err != nil {
 			return nil, err
 		}
-		s.id, modes = created.SessionId, created.Modes
+		s.id, modes, s.model = created.SessionId, created.Modes, modelOption(created.ConfigOptions)
 		if err := svc.Store.SetTaskSession(t.ID, string(s.id)); err != nil {
 			return nil, err
 		}
@@ -222,8 +232,9 @@ func (s *session) prompt(text string) {
 func (s *session) send(text string) {
 	s.prompting = true
 	go func() {
+		began := time.Now()
 		response, err := s.conn.Prompt(context.Background(), acp.PromptRequest{SessionId: s.id, Prompt: []acp.ContentBlock{acp.TextBlock(text)}})
-		s.deliver(item{end: &ending{response.StopReason, err}})
+		s.deliver(item{end: &ending{response.StopReason, err, response.Usage, response.Meta, began}})
 	}()
 }
 
@@ -300,6 +311,10 @@ func (s *session) reply(ctx context.Context, turn *chat.DelegateTurn) error {
 				return nil
 			}
 		default:
+			// What the prompt used counts even when it failed.
+			if err := s.used(turn, *x.end); err != nil {
+				slog.Warn("record what a coding agent used", "task", s.task.ID, "error", err)
+			}
 			if s.next() {
 				continue
 			}
@@ -651,6 +666,14 @@ func (s *session) show(turn *chat.DelegateTurn, u acp.SessionUpdate) error {
 			}
 		}
 		return s.finish(turn, tc.ToolCallId, tc.Status, tc.Content, tc.RawOutput)
+	case u.UsageUpdate != nil:
+		s.costed(u.UsageUpdate)
+	case u.ConfigOptionUpdate != nil:
+		if model := modelOption(u.ConfigOptionUpdate.ConfigOptions); model != "" {
+			s.mu.Lock()
+			s.model = model
+			s.mu.Unlock()
+		}
 	case u.Plan != nil:
 		plan := make([]chat.PlanEntry, len(u.Plan.Entries))
 		for i, e := range u.Plan.Entries {

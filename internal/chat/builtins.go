@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var (
@@ -31,6 +32,7 @@ func (s *ConversationService) builtins() []Command {
 		{CommandSpec: CommandSpec{"revoke", "/revoke ID|all", "Forget a remembered approval", everyClient, false}, OwnerOnly: true, Args: []Argument{s.grantIDs}, Run: s.revokeGrant},
 		{CommandSpec: CommandSpec{"memories", "/memories", "List saved facts", everyClient, false}, OwnerOnly: true, Run: s.listFacts},
 		{CommandSpec: CommandSpec{"forget", "/forget ID|all", "Forget a saved fact", everyClient, false}, OwnerOnly: true, Args: []Argument{s.factIDs}, Run: s.forgetFact},
+		{CommandSpec: CommandSpec{"usage", "/usage", "Show the tokens, cache and cost this conversation used, by model", everyClient, false}, Run: s.usage},
 		{CommandSpec: CommandSpec{"stop", "/stop", "Stop the reply in progress", []string{ClientTelegram}, false}, Run: s.stop},
 		{CommandSpec: CommandSpec{"help", "/help", "Show commands", messaging, false}, Run: s.help},
 	}
@@ -259,4 +261,22 @@ func (s *ConversationService) factIDs(context.Context, CommandCall, []string) []
 
 func (s *ConversationService) help(_ context.Context, call CommandCall) (CommandResult, error) {
 	return CommandResult{Markdown: s.Commands.Help(call.Client)}, nil
+}
+
+// usage shows what the conversation's replies used, and how long its task
+// has run when a coding agent answers it.
+func (s *ConversationService) usage(_ context.Context, call CommandCall) (CommandResult, error) {
+	summaries, err := s.Store.ConversationUsage(call.ConversationID)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	summary, ok := summaries[call.ConversationID]
+	if !ok {
+		return CommandResult{Markdown: "This conversation has not used any tokens yet, or its agent does not report them."}, nil
+	}
+	text := summary.Markdown()
+	if t, ok, err := s.Store.Task(call.ConversationID); err == nil && ok && t.ConversationID == call.ConversationID {
+		text += fmt.Sprintf("\n\nThe task's latest update came %s after it started.", (time.Duration(t.UpdatedAt-t.CreatedAt) * time.Millisecond).Round(time.Second))
+	}
+	return CommandResult{Markdown: text}, nil
 }

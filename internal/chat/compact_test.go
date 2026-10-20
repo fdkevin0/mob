@@ -89,6 +89,11 @@ func TestHistoryIsSummarizedNotOmitted(t *testing.T) {
 			t.Fatalf("summarizing was not charged to its turn: %+v", h.Usage)
 		}
 	}
+	// What summarizing used is counted in the conversation's usage.
+	used, _ := s.ConversationUsage(id)
+	if u := used[id]; u.Requests != 1 || u.Input != 100*len(model.summaries) || u.Turns != 1 || u.Models[0].Model != "test/summarizing" {
+		t.Fatalf("usage %+v", u)
+	}
 }
 
 // A window too small for everything to summarize at once gets it in parts,
