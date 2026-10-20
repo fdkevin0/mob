@@ -850,3 +850,32 @@
 	min-height: 28px;
 	margin-bottom: 4px;
 }
+.host-choices {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.host-choices small {
+	margin-left: 6px;
+	font-size: 10px;
+	color: var(--muted-foreground);
+}
+.host-deploy,
+.host-choices .btn {
+	gap: 8px;
+}
+.pairing-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.runner-choice small.host-mark {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+.host-mark svg {
+	width: 11px;
+	height: 11px;
+}

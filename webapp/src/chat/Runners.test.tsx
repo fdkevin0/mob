@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Runners } from './Runners';
+import { hosts } from './hosts';
 
 const id = '11111111-1111-4111-8111-111111111111';
 afterEach(() => {
@@ -52,4 +53,27 @@ it('does not send requests to a runner whose key is missing', async () => {
 	fireEvent.click(await screen.findByRole('button', { name: 'Open runner' }));
 	expect(screen.getByRole('alert').textContent).toContain('no key');
 	expect(connect).not.toHaveBeenCalled();
+});
+
+it('gives a Render runner its credential at once instead of a one-time code', async () => {
+	let body = '';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (_url: string, init?: RequestInit) => {
+			if (init?.method === 'POST') {
+				body = String(init.body);
+				return Response.json({ id, token: 'runner-token' });
+			}
+			return Response.json([]);
+		}),
+	);
+	render(<Runners connect={vi.fn()} deploy />);
+	fireEvent.click(screen.getByRole('button', { name: 'Create cloud pairing' }));
+	const field = (await screen.findByLabelText(/Private pairing JSON/)) as HTMLTextAreaElement;
+	const pair = JSON.parse(field.value);
+	expect(JSON.parse(body)).toEqual({ for: 'deploy' });
+	expect(pair).toMatchObject({ id, url: location.origin, token: 'runner-token' });
+	expect(pair.code).toBeUndefined();
+	expect(body).not.toContain(pair.key);
+	expect(screen.getByRole('link', { name: 'Deploy to Render' }).getAttribute('href')).toBe(hosts[0].deployURL);
 });

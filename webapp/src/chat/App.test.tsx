@@ -229,6 +229,7 @@ it('opens the public web workspace without a runner and asks for one only when s
     fireEvent.submit(box.closest('form')!);
     const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
     expect((within(dialog).getByRole('button', { name: /Cloud runner/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByRole('button', { name: /Deploy to the cloud/ }) as HTMLButtonElement).disabled).toBe(false);
     expect(within(dialog).queryByLabelText('Local access token')).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: /Your own runner/ }));
     fireEvent.change(within(dialog).getByLabelText('Local access token'), { target: { value: 'secret' } });

@@ -1,0 +1,17 @@
+# Render Blueprint for "Deploy to Render" in the web app's Connect a runner dialog.
+# docs/features/remote-access.md describes the deployment, and how to upgrade it
+# to a paid instance with a disk so conversations survive restarts.
+services:
+  - type: web
+    name: mob-runner
+    runtime: docker
+    # Free web services have no disk: conversations reset when Render restarts it.
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    # Updates are a manual deploy, so a merge to main never restarts a running turn.
+    autoDeployTrigger: "off"
+    envVars:
+      # The private pairing JSON from Connect a runner → Deploy to Render.
+      - key: MOB_RUNNER_PAIRING
+        sync: false

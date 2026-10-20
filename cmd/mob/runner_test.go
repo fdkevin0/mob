@@ -62,3 +62,30 @@ func TestRunnerPairKeepsEncryptionKeyLocal(t *testing.T) {
 		t.Fatalf("credentials permissions: %v", info.Mode())
 	}
 }
+
+func TestRunnerReadsDeployedCredentialsFromEnvironment(t *testing.T) {
+	const id = "22222222-2222-4222-8222-222222222222"
+	const key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	run := func(env string) error {
+		t.Setenv("MOB_RUNNER_PAIRING", env)
+		config := local.Config{Dir: t.TempDir(), Addr: "127.0.0.1:1"}
+		command := runnerCommand(&config)
+		command.SetOut(io.Discard)
+		command.SetArgs(nil)
+		return command.Execute()
+	}
+	// A host without a lasting disk restarts with no runner.json; the variable alone is enough.
+	good, _ := json.Marshal(map[string]string{"url": "https://mob.example", "id": id, "token": strings.Repeat("t", 72), "key": key})
+	if err := run(string(good)); err == nil || strings.Contains(err.Error(), "MOB_RUNNER_PAIRING") {
+		t.Fatalf("want a missing service after reading the credentials, got %v", err)
+	}
+	for _, bad := range []map[string]string{
+		{"url": "http://mob.example", "id": id, "token": strings.Repeat("t", 72), "key": key},
+		{"url": "https://mob.example", "id": id, "code": strings.Repeat("c", 72), "key": key},
+	} {
+		raw, _ := json.Marshal(bad)
+		if err := run(string(raw)); err == nil || !strings.Contains(err.Error(), "MOB_RUNNER_PAIRING") {
+			t.Fatalf("accepted %s: %v", raw, err)
+		}
+	}
+}
