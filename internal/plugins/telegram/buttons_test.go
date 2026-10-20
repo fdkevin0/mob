@@ -238,7 +238,7 @@ func TestApprovalTapUsesOriginalConversationAfterNavigation(t *testing.T) {
 			if err := store.Setting(conversationKey("1", config), &selected); err != nil || selected != current {
 				t.Fatalf("selected conversation changed: %q, %v", selected, err)
 			}
-			facts, err := store.Memories(original)
+			facts, err := store.Memories(original, false)
 			if err != nil || approve && len(facts) != 1 || !approve && len(facts) != 0 {
 				t.Fatalf("facts=%v, error=%v", facts, err)
 			}

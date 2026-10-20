@@ -27,8 +27,9 @@ commands, approvals, delivery records and replies behave the same everywhere.
 - A plugin keeps its transport and decides who is writing. There is no channel
   registry: a channel registers like any plugin, with an extension for its
   background run (see [Extensions](extensions.md)).
-- `/help`, `/new`, `/approve`, `/deny`, `/grants` and `/revoke` are offered to
-  every channel; owner-only commands refuse other senders.
+- `/help`, `/new`, `/approve`, `/deny`, `/grants`, `/revoke`, `/memories` and
+  `/forget` are offered to every channel; owner-only commands refuse other
+  senders.
 
 ## Replies are the turn's conclusion
 

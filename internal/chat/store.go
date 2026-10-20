@@ -504,27 +504,62 @@ func (s *Store) ExpireApprovals(conversationID string) error {
 	return tx.Commit()
 }
 
-// SaveFact keeps a fact for the conversation; id makes saving it again a no-op.
-func (s *Store) SaveFact(id, conversationID, fact string) error {
-	_, err := s.db.Exec("INSERT OR IGNORE INTO memories VALUES(?,?,?)", id, conversationID, fact)
+// SaveFact keeps a fact for the conversation, and for every conversation of
+// the owner's when the owner approved it; id makes saving it again a no-op.
+func (s *Store) SaveFact(id, conversationID, fact string, owner bool) error {
+	_, err := s.db.Exec("INSERT OR IGNORE INTO memories(id,conversation_id,fact,owner) VALUES(?,?,?,?)", id, conversationID, fact, owner)
 	return err
 }
 
-func (s *Store) Memories(id string) ([]string, error) {
-	rows, err := s.db.Query("SELECT fact FROM memories WHERE conversation_id=? ORDER BY rowid", id)
+// Memories are the facts a turn in conversation id reads: its own, and in
+// the owner's turns every fact the owner approved.
+func (s *Store) Memories(id string, owner bool) ([]string, error) {
+	facts, err := s.facts("WHERE conversation_id=? OR (? AND owner)", id, owner)
+	result := []string{}
+	for _, f := range facts {
+		result = append(result, f.Text)
+	}
+	return result, err
+}
+
+// Fact is one saved fact. Owner facts are read in all the owner's turns.
+type Fact struct {
+	ID, ConversationID, Text string
+	Owner                    bool
+}
+
+// Facts are every saved fact, oldest first.
+func (s *Store) Facts() ([]Fact, error) { return s.facts("") }
+
+func (s *Store) facts(where string, args ...any) ([]Fact, error) {
+	rows, err := s.db.Query("SELECT id,conversation_id,fact,owner FROM memories "+where+" ORDER BY rowid", args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	result := []string{}
+	var list []Fact
 	for rows.Next() {
-		var fact string
-		if err = rows.Scan(&fact); err != nil {
+		var f Fact
+		if err = rows.Scan(&f.ID, &f.ConversationID, &f.Text, &f.Owner); err != nil {
 			return nil, err
 		}
-		result = append(result, fact)
+		list = append(list, f)
 	}
-	return result, rows.Err()
+	return list, rows.Err()
+}
+
+// Forget deletes the fact with id, or every fact when id is "all", and
+// reports how many it deleted.
+func (s *Store) Forget(id string) (int64, error) {
+	query, args := "DELETE FROM memories WHERE id=?", []any{id}
+	if id == "all" {
+		query, args = "DELETE FROM memories", nil
+	}
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 func Text(m Message) string {

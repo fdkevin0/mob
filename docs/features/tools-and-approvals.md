@@ -5,7 +5,7 @@ before it has an effect, and the owner can decide from any client or channel.
 
 ## Built-in and plugin tools
 
-- Built in: `datetime`, `remember` (saves a fact after approval), when the
+- Built in: `datetime`, `remember` (saves a fact after approval, below), when the
   [sandbox](sandbox.md) is enabled, `sandbox`, and, while there are tools to
   load, `tool_search` (below).
 - The email plugin offers `email_inbox`, `email_read` and `email_send`; the
@@ -22,6 +22,19 @@ before it has an effect, and the owner can decide from any client or channel.
   owner's mail. Plugin and MCP tools are owner-only.
 - Mail text and Cloudflare results sent to the model are bounded, and the model
   is told they are untrusted data.
+
+## Saved facts
+
+- `remember` saves one fact (up to 2000 bytes) once it is approved. A fact the
+  owner approved is read in every one of the owner's turns, in any
+  conversation, client or channel; one another caller approved is read only
+  in the conversation that saved it. Other callers' turns never read the
+  owner's facts from elsewhere.
+- Facts go into the system prompt as data, not instructions. `/memories`
+  lists them with where each is read, and `/forget ID|all` deletes them; both
+  are owner-only.
+- Facts saved before 2026-10-20 stay with their conversation: Mob cannot tell
+  who approved them. Ask the model to remember one again to share it.
 
 ## Exposure and tool_search
 

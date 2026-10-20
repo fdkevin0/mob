@@ -88,6 +88,13 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   show the limit, and any message continues. A model request fails
   with "model stopped responding" when its response does not start, or stops
   arriving, for two minutes; a reply that keeps arriving is never cut off.
+- **Retries.** A model request that fails before its response begins, from a
+  dropped connection or with HTTP 408, 429, 500, 502, 503, 504 or 529
+  (overloaded), is sent again up to three times, waiting one, two, then four
+  seconds, or as long as the provider's `Retry-After` asks, at most a minute.
+  A 429 for an exhausted quota (`insufficient_quota`), a stalled request and
+  a response already streaming are not retried, so a retry never repeats text
+  the turn has shown. The code is in `internal/llm/send.go`.
 - **Tool arguments** may be up to 1 MiB.
 
 ## Counting the context
@@ -129,6 +136,20 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   messages keep every output; clearing changes only what the model reads.
 - Clearing changes the prompt's prefix, so the provider's prompt cache misses
   once after each clearing. The code is in `internal/chat/prune.go`.
+
+## Prompt caching
+
+- OpenAI-compatible providers cache a repeated prompt prefix on their own. The
+  Anthropic driver marks the end of the tool definitions, the end of the
+  system prompt and the last block of the latest message with
+  `cache_control` (`ephemeral`, five minutes), so each step of a turn, and the
+  next turn sent within five minutes, reads the prefix the previous request
+  wrote. Compatible vendors that cache on their own ignore the marks.
+- The system prompt and tool definitions come before the messages, so
+  anything that changes them misses the cache once: a tool `tool_search`
+  loads, a new summary, a newly saved fact, clearing an old tool output.
+  Prompts shorter than the model's minimum (about 1024 tokens) are not cached.
+- Cache reads and writes are reported in usage and priced from the catalog.
 
 ## Large tool output
 

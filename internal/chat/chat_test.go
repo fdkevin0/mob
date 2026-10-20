@@ -56,7 +56,7 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if approval == "" {
 		t.Fatal("missing approval event")
 	}
-	if facts, _ := s.Memories(c.ID); len(facts) != 0 {
+	if facts, _ := s.Memories(c.ID, false); len(facts) != 0 {
 		t.Fatal("executed without approval")
 	}
 	if _, err = s.Decide(NewID(), approval, true, ""); !errors.Is(err, ErrStaleApproval) {
@@ -69,13 +69,13 @@ func TestPersistenceApprovalAndRecovery(t *testing.T) {
 	if _, err = s.Decide(c.ID, approval, true, ""); !errors.Is(err, ErrStaleApproval) {
 		t.Fatalf("repeated approval: %v", err)
 	}
-	if facts, _ := s.Memories(c.ID); len(facts) != 0 {
+	if facts, _ := s.Memories(c.ID, false); len(facts) != 0 {
 		t.Fatal("deciding carried out the call")
 	}
 	if note, err := NewConversation(s, nil).carryOut(context.Background(), c.ID, decision, true); err != nil || !strings.Contains(note, `approved remember and it ran. Result: {"saved":true}`) {
 		t.Fatalf("carry out: %q %v", note, err)
 	}
-	facts, err := s.Memories(c.ID)
+	facts, err := s.Memories(c.ID, false)
 	if err != nil || len(facts) != 1 || facts[0] != "喜欢中文" {
 		t.Fatalf("facts %v, %v", facts, err)
 	}
@@ -145,7 +145,7 @@ func TestDenialAndExpiry(t *testing.T) {
 			}
 		}
 	}
-	facts, err := s.Memories(c.ID)
+	facts, err := s.Memories(c.ID, false)
 	if err != nil || len(facts) != 0 {
 		t.Fatalf("denied/expired wrote facts: %v %v", facts, err)
 	}
@@ -250,5 +250,55 @@ func TestSandboxRunsWithoutApproval(t *testing.T) {
 		if k == ApprovalRequested {
 			t.Fatal("sandbox asked for approval")
 		}
+	}
+}
+
+func TestOwnerFactsAreReadInEveryOwnerConversation(t *testing.T) {
+	s, err := OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var ids []string
+	for range 3 {
+		c, err := s.Create()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, c.ID)
+	}
+	owned, other, elsewhere := ids[0], ids[1], ids[2]
+	if err := s.SaveFact("a", owned, "prefers Go", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveFact("b", other, "a guest's fact", false); err != nil {
+		t.Fatal(err)
+	}
+	service := NewConversation(s, nil)
+	read := func(id string, owner bool) string {
+		turn := &Turn{ConversationID: id, Owner: owner, Request: &llm.Request{}}
+		if err := service.recall(context.Background(), turn); err != nil {
+			t.Fatal(err)
+		}
+		return turn.Request.System
+	}
+	if got := read(elsewhere, true); !strings.Contains(got, "prefers Go") || strings.Contains(got, "guest") {
+		t.Fatalf("owner turn elsewhere read %q", got)
+	}
+	if got := read(elsewhere, false); got != "" {
+		t.Fatalf("another caller's turn read %q", got)
+	}
+	if got := read(other, false); !strings.Contains(got, "guest") || strings.Contains(got, "prefers Go") {
+		t.Fatalf("guest conversation read %q", got)
+	}
+	listed, err := service.listFacts(context.Background(), CommandCall{})
+	if err != nil || !strings.Contains(listed.Markdown, "all your conversations") || !strings.Contains(listed.Markdown, "`/forget b`") {
+		t.Fatalf("listed %q %v", listed.Markdown, err)
+	}
+	if n, err := s.Forget("a"); n != 1 || err != nil {
+		t.Fatalf("forget: %d %v", n, err)
+	}
+	if got := read(elsewhere, true); got != "" {
+		t.Fatalf("forgotten fact read: %q", got)
 	}
 }
