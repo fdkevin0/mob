@@ -49,6 +49,9 @@ existing service.
 
 ## Documentation
 
+The documentation is at https://mob.fdkevin.cloud/docs; the pages below are its
+sources.
+
 - [Model providers](docs/features/providers.md)
 - [Configuration and running the service](docs/features/configuration.md)
 - [Tools and approvals](docs/features/tools-and-approvals.md)

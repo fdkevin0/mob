@@ -34,6 +34,7 @@ test-go:
 
 test-web:
     bun run test:webapp
+    bun run test:docs
 
 test-integration:
     bun run test:integration

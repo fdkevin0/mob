@@ -11,7 +11,7 @@ import { Story } from './Story';
 const installs = {
 	Download: { note: 'Archives for Linux, macOS and Windows. Every change to main is published as a nightly build.', lines: ['mob start', 'mob open --web'], href: 'https://github.com/fdkevin0/mob/releases', action: 'Download' },
 	Homebrew: { note: 'The tap is published with the first stable release.', lines: ['brew install fdkevin0/tap/mob', 'mob start'], href: 'https://github.com/fdkevin0/homebrew-tap', action: 'View the tap' },
-	Source: { note: 'Needs Go, Bun and just.', lines: ['git clone https://github.com/fdkevin0/mob && cd mob', 'just install && just build', './build/mob start'], href: 'https://github.com/fdkevin0/mob/blob/main/CONTRIBUTING.md', action: 'Read CONTRIBUTING' },
+	Source: { note: 'Needs Go, Bun and just.', lines: ['git clone https://github.com/fdkevin0/mob && cd mob', 'just install && just build', './build/mob start'], href: '/docs/contributing/', action: 'Contributing guide' },
 };
 type Install = keyof typeof installs;
 
@@ -54,6 +54,7 @@ export function Landing() {
 					<a href="#how">How it works</a>
 					<a href="#features">Features</a>
 					<a href="#start">Start</a>
+					<a href="/docs/">Docs</a>
 					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
 				</nav>
 				<div className="nav-account">
@@ -113,7 +114,7 @@ export function Landing() {
 			<footer className="footer">
 				<div className="footer-brand"><Logo size={20} /><span>MIT licensed</span></div>
 				<nav aria-label="Project links">
-					<a href="https://github.com/fdkevin0/mob/tree/main/docs/features" rel="noreferrer">Docs</a>
+					<a href="/docs/">Docs</a>
 					<a href="https://github.com/fdkevin0/mob/blob/main/CHANGELOG.md" rel="noreferrer">Changelog</a>
 					<a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Releases</a>
 					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>

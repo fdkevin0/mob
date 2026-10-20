@@ -74,6 +74,20 @@ Edit the source and regenerate the affected artifact. Go tests reject stale outp
 | `packages/client/src/contracts.ts` (`webapp/src/chat/contracts.ts` re-exports it) | Go contracts in `cmd/contracts` | `bun run generate:contracts` |
 | `docs/environment-variables.md` | `internal/configuration/options.go` | `go run ./cmd/configdocs` |
 
+### Documentation site
+
+`apps/docs` builds the site at https://mob.fdkevin.cloud/docs with Starlight. It
+copies `README.md`, `CONTRIBUTING.md` and `docs/` in at build time, so write the
+Markdown as usual; links between those files become site links and links to
+other repository files point at GitHub. A new page under `docs/` needs an
+entry in `apps/docs/pages.ts`, which sets the sidebar; the build fails without
+one, and on broken links.
+
+```bash
+bun run --cwd apps/docs dev       # live preview at http://localhost:4321/docs/
+bun run build:web                 # landing page, web UI and documentation
+```
+
 For documentation writing or organization, the repository skill
 [mob-docs](.agents/skills/mob-docs/SKILL.md) points to the relevant sources.
 

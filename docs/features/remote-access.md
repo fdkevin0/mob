@@ -5,7 +5,7 @@ Mob runs on the user's machine and serves its clients over loopback.
 ## Public web UI
 
 The site at https://mob.fdkevin.cloud is deployed to Cloudflare Workers, so web
-changes reach users when they merge, without a release. It has three parts,
+changes reach users when they merge, without a release. It has five parts,
 served by the Worker in `worker/`:
 
 - `/` is the landing page, scrolled through in pages over one pinned isometric
@@ -58,6 +58,11 @@ served by the Worker in `worker/`:
   sent automatically. A `mob open --web` link opens the dialog to show its
   progress, and a replaced token reopens it with the reason.
 
+- `/docs` is the documentation, built with Starlight from `apps/docs`. Its
+  pages are this repository's Markdown (`README.md`, `CONTRIBUTING.md` and
+  `docs/`), copied in at build time, so they change when those files merge.
+  It needs no sign-in and has local search.
+
 The landing page and workspace share the dark theme, Geist fonts and pixel
 logo. The workspace uses calmer, rounded controls in the local browser, Wails
 desktop app and `/app`: one rounded message box holds the text, the model
@@ -68,6 +73,13 @@ conversation, Always allow and Deny (which then asks for an optional reason). On
 a conversation closes it. Model selection and sign-in dialogs contain keyboard
 focus and return it when closed. Plugin tabs support arrow-key navigation and
 keep unsaved configuration edits when switching tabs.
+
+The documentation shares the origin, so it runs only scripts its build emitted:
+each page carries a policy `<meta>` with hashes of its scripts and styles, and
+the Worker adds a header policy that allows only the site itself (plus
+WebAssembly for search) and no framing. It loads no third-party scripts,
+fonts or embeds; anything that needs them would move the documentation to a
+separate origin.
 
 The two pages have separate entries and network policies. Sharing presentation
 does not load the landing page's authentication client, Turnstile or voxel scenes
@@ -103,7 +115,9 @@ Pairing with Mob on your computer works as before:
 Deployment:
 
 - `bun run build:web` builds `webapp/dist-public` (Vite `--mode public`):
-  `landing.html` and the web UI's `index.html`. Cloudflare Workers Builds
+  `landing.html` and the web UI's `index.html`, then the documentation into
+  `webapp/dist-public/docs`. Hashed documentation assets (`/docs/_astro/`,
+  `/docs/pagefind/`) are served without running the Worker. Cloudflare Workers Builds
   deploys `wrangler.jsonc` with build command
   `bun install --frozen-lockfile && bun run build:web` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
