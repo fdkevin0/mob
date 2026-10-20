@@ -32,6 +32,8 @@ The config selector chooses the file before loading it and cannot appear inside 
 | `sandbox.memory` | `--sandbox-memory` | `MOB_SANDBOX_MEMORY` | `""` | Memory limit with unit, at least 64m; empty uses runtime default |
 | `sandbox.isolation` | `--sandbox-isolation` | `MOB_SANDBOX_ISOLATION` | `""` | gvisor requires containerd; empty uses runtime default |
 | `mcp_servers` | `--mcp-servers` | `MOB_MCP_SERVERS` | `{}` | MCP server map; JSON object in flags/environment, native map in files; sensitive: prefer a protected file or environment over argv |
+| `mcp_registry.url` | `--mcp-registry-url` | `MOB_MCP_REGISTRY_URL` | `https://registry.modelcontextprotocol.io` | MCP registry the model searches for remote servers to install |
+| `mcp_registry.namespaces` | `--mcp-registry-namespaces` | `MOB_MCP_REGISTRY_NAMESPACES` | `""` | Comma-separated registry name globs, such as com.cloudflare.mcp/*, the model may install from; empty offers only Mob's own list |
 
 This reference covers runtime configuration. Provider keys and plugin settings
 use their own stores; command actions such as open --print are not settings.

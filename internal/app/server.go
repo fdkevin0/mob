@@ -52,7 +52,7 @@ type Server struct {
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
 	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
-	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }, Settings: store}
+	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }, Settings: store, Changed: func() error { return s.extensions.Reload("mcp") }}
 	s.Skills = &skills.Library{Workspace: func(conversationID string) (string, error) {
 		if box := s.box.Load(); box != nil {
 			return box.Workspace(conversationID)

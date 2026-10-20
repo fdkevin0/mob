@@ -57,16 +57,19 @@ SDK:
 - Mob finds the server's authorization server, registers itself there by
   dynamic client registration, and asks for an authorization code with PKCE.
 - The server's status, shown by `/mcp`, becomes `sign in to connect: <link>`.
-  Open the link in a browser on the computer Mob runs on: the authorization
-  server sends the browser back to a loopback address that Mob listens on only
-  while it waits, for at most 10 minutes.
+  The authorization server sends the browser back to a loopback address that
+  Mob listens on only while it waits, for at most 10 minutes. In a browser on
+  the computer Mob runs on, that finishes the sign-in.
+- In a browser elsewhere, such as a phone, the loopback address does not open.
+  Copy the address the browser shows and send `/signin ADDRESS` from any client
+  or channel the owner uses: Mob matches it to the waiting sign-in by its
+  address, takes the code from it, and the SDK checks its state as it would
+  the browser's. `/mcp` and an install's result say this beside the link.
 - Mob keeps the client and token in its database and refreshes the token, so
   a restart does not sign in again. A sign-in belongs to the server's name and
   URL; changing the URL signs in again. Approvals do not record which account
   signed in.
-- `oauth` cannot be combined with an `Authorization` header. Signing in from
-  a phone, through a channel, is not supported yet: the loopback address is on
-  Mob's computer.
+- `oauth` cannot be combined with an `Authorization` header.
 
 ## Behaviour
 
@@ -85,6 +88,49 @@ SDK:
 - `/mcp` shows each server's status and tools, marking those that are direct or
   hidden.
 
+## Installing from the catalog
+
+The model can find remote servers that are not set up yet and ask the owner to
+install them. Only remote servers are offered: nothing the model picks runs on
+this machine.
+
+- The catalog is Mob's own list, which holds Cloudflare's API, documentation,
+  Browser Rendering and Radar servers, and, when `mcp_registry.namespaces` is
+  set, the servers of an [MCP registry](https://registry.modelcontextprotocol.io)
+  whose names match one of its comma-separated globs:
+
+  ```yaml
+  mcp_registry:
+    url: https://registry.modelcontextprotocol.io   # the default
+    namespaces: "com.cloudflare.mcp/*, io.github.example/*"
+  ```
+
+  Without namespaces Mob asks no registry. With them, it reads the latest
+  version of each matching server in the background, at most once a day or
+  when the setting changes, and keeps what it found in the `mcp_catalog`
+  setting. A failed read keeps the last list and is not retried for an hour.
+  Only active servers are listed,
+  one entry for each Streamable HTTP endpoint served over https. The registry
+  checks only who owns a name, so keep the namespaces to publishers you trust.
+- Servers that are configured or installed already are left out. `tool_search`
+  finds the rest, as entries of kind `MCP server`, in the owner's turns.
+- `tool_install` takes a listed URL and asks the owner to approve installing it,
+  and checks again on approval that the catalog still lists it.
+  The approval shows the name the server's tools will carry, the registry name,
+  version, URL, repository and where the listing came from. A server whose
+  listing requires a header is not installed: its entry tells the model that
+  the owner adds it to `config.yaml`.
+- An approved server is kept in the `mcp_installed` setting, never in
+  `config.yaml`, and joins the configured servers with `oauth: true` under a name
+  made from its URL (`cloudflare-docs` for `docs.mcp.cloudflare.com`). When
+  `config.yaml` later lists the same name or URL, the configured server is used
+  instead. Mob reconnects, and the call returns within a few seconds with the
+  server's tools or the sign-in link for the owner; an install that is kept but
+  fails to reconnect says so.
+- `/mcp` marks installed servers and names installs `config.yaml` shadows.
+  `/mcp remove NAME` forgets an installed server and its sign-in; a shadowed
+  install's name keeps the configured server's sign-in.
+
 ## Trust
 
 - Every MCP call asks for [approval](tools-and-approvals.md). The approval shows
@@ -100,6 +146,8 @@ SDK:
 - A server started by Mob runs as the user, outside the sandbox, and can read
   what the user can, `providers.json` included. Configuring a server is
   trusting it, as installing a program is.
+- Installing from the catalog adds only URL servers, after the owner approves,
+  and their calls ask for approval like any other.
 
 ## Not supported
 

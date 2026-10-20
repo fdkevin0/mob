@@ -35,11 +35,28 @@ type Hub struct {
 	// Settings keeps the OAuth sign-ins; without it they last until Mob stops.
 	Settings Settings
 
-	// grantsMu serializes saving sign-ins.
-	grantsMu sync.Mutex
-	mu       sync.Mutex
-	servers  Servers
-	states   map[string]*state
+	// Changed reconnects after an install or removal changed the servers.
+	Changed func() error
+
+	// grantsMu serializes saving sign-ins, installMu installs.
+	grantsMu  sync.Mutex
+	installMu sync.Mutex
+	mu        sync.Mutex
+	// servers are config's and the installed ones Mob connects to.
+	servers Servers
+	config  Servers
+	states  map[string]*state
+	// registry is where the catalog looks; refreshing is set while it is
+	// asked.
+	registry   Registry
+	refreshing bool
+	// cached is what the registry last listed; tried is the registry last
+	// asked, at triedAt.
+	cached  *catalog
+	tried   Registry
+	triedAt time.Time
+	// signIns wait for their results by redirect address.
+	signIns map[string]waiting
 }
 
 // state is one server as Mob last saw it.
@@ -53,16 +70,7 @@ type state struct {
 	status string
 }
 
-// Configure replaces the configured servers and reports whether they changed.
-func (h *Hub) Configure(servers Servers) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if reflect.DeepEqual(h.servers, servers) {
-		return false
-	}
-	h.servers = servers
-	return true
-}
+func equalServers(a, b Servers) bool { return reflect.DeepEqual(a, b) }
 
 // configured is the current servers.
 func (h *Hub) configured() Servers {

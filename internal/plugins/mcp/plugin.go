@@ -20,21 +20,47 @@ func Extension(h *Hub) extension.Extension {
 	}}
 }
 
-// Commands show the servers and their tools.
+// Commands show the servers and their tools, and finish sign-ins pasted
+// from another device.
 func Commands(h *Hub) []chat.Command {
 	return []chat.Command{{
-		CommandSpec: chat.CommandSpec{Name: "mcp", Usage: "/mcp", Summary: "Show MCP servers and their tools", Clients: chat.Interactive},
+		CommandSpec: chat.CommandSpec{Name: "mcp", Usage: "/mcp [remove NAME]", Summary: "Show MCP servers and their tools, or remove an installed one", Clients: chat.Interactive},
 		OwnerOnly:   true,
-		Run:         func(context.Context, chat.CommandCall) (chat.CommandResult, error) { return chat.Reply(h.describe()) },
+		Run: func(_ context.Context, call chat.CommandCall) (chat.CommandResult, error) {
+			switch {
+			case len(call.Fields) == 0:
+				return chat.Reply(h.describe())
+			case len(call.Fields) == 2 && call.Fields[0] == "remove":
+				if err := h.Remove(call.Fields[1]); err != nil {
+					return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: err.Error()}
+				}
+				return chat.Reply("Removed " + call.Fields[1] + " and its sign-in.")
+			}
+			return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: "usage: /mcp [remove NAME]"}
+		},
+	}, {
+		CommandSpec: chat.CommandSpec{Name: "signin", Usage: "/signin ADDRESS", Summary: "Finish signing in to an MCP server with the address the browser was sent to", Clients: []string{chat.ClientWeb, chat.ClientTUI, chat.ClientTelegram, chat.ClientWeChat, chat.ClientEmail}},
+		OwnerOnly:   true,
+		Run: func(_ context.Context, call chat.CommandCall) (chat.CommandResult, error) {
+			if len(call.Fields) != 1 {
+				return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: "usage: /signin ADDRESS"}
+			}
+			server, err := h.FinishSignIn(call.Fields[0])
+			if err != nil {
+				return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: err.Error()}
+			}
+			return chat.Reply("Signed in to " + server + "; connecting. /mcp shows its tools.")
+		},
 	}}
 }
 
 // describe is a table of the servers and the tools they offer.
 func (h *Hub) describe() string {
+	shadowed := h.Shadowed()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.servers) == 0 {
-		return "No MCP servers are configured. Add them under `mcp_servers` in config.yaml."
+		return "No MCP servers are configured. Add them under `mcp_servers` in config.yaml, or let the model install one with tool_install."
 	}
 	var b strings.Builder
 	b.WriteString("| Server | Status | Tools |\n| --- | --- | --- |\n")
@@ -53,7 +79,17 @@ func (h *Hub) describe() string {
 				tools = append(tools, tool)
 			}
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s |\n", chat.Cell(name), chat.Cell(status), strings.Join(tools, " "))
+		label := name
+		if _, configured := h.config[name]; !configured {
+			label += " (installed)"
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", chat.Cell(label), chat.Cell(status), strings.Join(tools, " "))
+	}
+	if len(shadowed) > 0 {
+		fmt.Fprintf(&b, "\nconfig.yaml has the name or URL of installed %s, so the configured server is used; `/mcp remove NAME` forgets the install.\n", strings.Join(shadowed, ", "))
+	}
+	if strings.Contains(b.String(), "sign in to connect: ") {
+		b.WriteString("\n" + SignInHint)
 	}
 	b.WriteString("\nThe model loads a server's tools with tool_search when a task needs them, unless `exposure` says otherwise. Each call waits for your approval; **Always allow** stops asking for that tool on that server.")
 	return b.String()

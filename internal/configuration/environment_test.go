@@ -187,6 +187,16 @@ func TestMCPServers(t *testing.T) {
 	if _, err := write("mcp_servers:\n  x:\n    command: x\n    unknown: 1\n").Read(); err == nil {
 		t.Fatal("unknown server field accepted")
 	}
+	got, err = write("mcp_registry:\n  namespaces: \"com.cloudflare.mcp/*, io.github.example/*,\"\n").Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (mcp.Registry{URL: mcp.DefaultRegistry, Namespaces: []string{"com.cloudflare.mcp/*", "io.github.example/*"}}); !reflect.DeepEqual(got.MCPRegistry, want) {
+		t.Fatalf("registry: %+v", got.MCPRegistry)
+	}
+	if _, err := write("mcp_registry:\n  url: http://registry.example\n  namespaces: a/*\n").Read(); err == nil {
+		t.Fatal("a plain HTTP registry was accepted")
+	}
 }
 
 func TestWebOrigin(t *testing.T) {

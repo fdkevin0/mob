@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
+	"github.com/fdkevin0/mob/internal/plugins/mcp"
 	"github.com/fdkevin0/mob/internal/sandbox"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -46,6 +47,8 @@ func options() []option {
 		{"sandbox.memory", "", "Memory limit with unit, at least 64m; empty uses runtime default", "", false},
 		{"sandbox.isolation", "", "gvisor requires containerd; empty uses runtime default", "", false},
 		{"mcp_servers", "{}", "MCP server map; JSON object in flags/environment, native map in files", "", true},
+		{"mcp_registry.url", mcp.DefaultRegistry, "MCP registry the model searches for remote servers to install", "", false},
+		{"mcp_registry.namespaces", "", "Comma-separated registry name globs, such as com.cloudflare.mcp/*, the model may install from; empty offers only Mob's own list", "", false},
 	}
 }
 

@@ -258,14 +258,14 @@ func TestPluginToolsFollowTheirPlugins(t *testing.T) {
 		}
 		return names
 	}
-	if got := strings.Join(available(), " "); got != "datetime remember" {
+	if got := strings.Join(available(), " "); got != "datetime remember tool_install" {
 		t.Fatalf("with plugins off: %s", got)
 	}
 	var c configuration.Plugins
 	c.Email.Enabled = true
 	c.Cloudflare.Enabled = true
 	store.SaveSetting("plugins", c)
-	if got := strings.Join(available(), " "); got != "datetime remember email_inbox email_read email_send cloudflare" {
+	if got := strings.Join(available(), " "); got != "datetime remember email_inbox email_read email_send cloudflare tool_install" {
 		t.Fatalf("with plugins on: %s", got)
 	}
 }

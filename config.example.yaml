@@ -54,6 +54,10 @@ demo: false
 #     url: https://mcp.cloudflare.com/mcp
 #     oauth: true           # /mcp shows a sign-in link when needed
 
+# Remote servers the model may find and ask to install, besides Mob's own list.
+# mcp_registry:
+#   namespaces: "com.cloudflare.mcp/*"
+
 # Full flag/env/default reference: docs/environment-variables.md (generated).
 # Optional fixed local token; otherwise Mob manages the token file. Keep this
 # config owner-only (chmod 600) when token fields are present.

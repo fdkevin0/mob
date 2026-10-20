@@ -18,12 +18,19 @@ func (s *Server) ReloadConfiguration(next configuration.Environment) error {
 	}
 	s.SetToolSteps(next.MaxToolSteps)
 	s.SetWebURL(next.WebURL)
-	if s.MCP.Configure(next.MCPServers) {
+	if s.ConfigureMCP(next) {
 		if err := s.extensions.Reload("mcp"); err != nil {
 			return err
 		}
 	}
 	return s.ApplySandbox(next.Sandbox, next.Dir)
+}
+
+// ConfigureMCP gives the MCP hub its servers and catalog registry, and
+// reports whether the servers changed.
+func (s *Server) ConfigureMCP(next configuration.Environment) bool {
+	s.MCP.ConfigureRegistry(next.MCPRegistry)
+	return s.MCP.Configure(next.MCPServers)
 }
 
 // ApplySandbox gives later turns the sandbox settings describe; a disabled
