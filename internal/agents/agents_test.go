@@ -55,7 +55,7 @@ func (f *fake) SetSessionConfigOption(context.Context, acp.SetSessionConfigOptio
 	return acp.SetSessionConfigOptionResponse{}, nil
 }
 
-var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}}}
+var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}, {Id: "acceptEdits", Name: "Accept edits"}}}
 
 func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSessionResponse, error) {
 	f.mu.Lock()
@@ -119,6 +119,8 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
+	case text == "login":
+		return acp.PromptResponse{}, acp.NewAuthRequired(nil)
 	case text == "wait":
 		<-ctx.Done()
 		return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
@@ -295,6 +297,22 @@ func TestTaskRunsInItsOwnWorktree(t *testing.T) {
 func fmtJSON(v any) string {
 	raw, _ := json.Marshal(v)
 	return string(raw)
+}
+
+func TestClaudeAgent(t *testing.T) {
+	h := newHarness(t)
+	task, err := h.svc.StartTask(context.Background(), h.repo, "claude", "", "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task = h.wait(task)
+	if task.Agent != "claude" || task.Status != chat.TaskFailed || h.fakes.last().mode != "acceptEdits" {
+		t.Fatalf("task = %+v, mode %q", task, h.fakes.last().mode)
+	}
+	history, _ := h.svc.Store.History(task.ConversationID)
+	if failure := fmtJSON(history[len(history)-1].Metadata["error"]); !strings.Contains(failure, "Claude Agent is not signed in") || !strings.Contains(failure, "/login") {
+		t.Fatalf("error = %s", failure)
+	}
 }
 
 func TestApprovalsReachTheAgent(t *testing.T) {
