@@ -17,6 +17,19 @@ const landingPolicy = [
 	"frame-ancestors 'none'",
 ].join('; ');
 
+// The account page talks only to this Worker's auth API.
+const accountPolicy = [
+	"default-src 'self'",
+	"connect-src 'self'",
+	"img-src 'self' data: https:",
+	"style-src 'self' 'unsafe-inline'",
+	"font-src 'self' data:",
+	"object-src 'none'",
+	"base-uri 'none'",
+	"form-action 'none'",
+	"frame-ancestors 'none'",
+].join('; ');
+
 // The app reaches loopback Mob or its own encrypted runner relay.
 const appPolicy = [
 	"default-src 'self'",
@@ -52,6 +65,11 @@ export default {
 			// landing page carries it into the app after sign-in.
 			if (!session) return Response.redirect(`${url.origin}/?signin=app`, 302);
 			return page(env, request, '/', appPolicy, 'private, no-store');
+		}
+		if (pathname === '/account' || pathname === '/account/') {
+			const session = await createAuth(env, url.origin).api.getSession({ headers: request.headers });
+			if (!session) return Response.redirect(`${url.origin}/?signin=account`, 302);
+			return page(env, request, '/account', accountPolicy, 'private, no-store');
 		}
 		if (pathname.startsWith('/assets/')) return env.ASSETS.fetch(request);
 		return Response.redirect(`${url.origin}/`, 302);

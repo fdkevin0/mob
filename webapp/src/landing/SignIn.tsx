@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type RefObject } from 'react';
-import { authClient, signedInURL, type Site } from './auth';
+import { authClient, errorCode, openApp, signedInURL, type Site } from './auth';
 import { Turnstile, type TurnstileHandle } from './Turnstile';
 import { PixelIcon } from '../components/brand/PixelIcon';
 import { DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
@@ -13,7 +13,10 @@ function GitHubMark() {
 	);
 }
 
-// GitHub is the only way in. Turnstile has to pass before the GitHub flow starts.
+const passkeys = () => typeof window !== 'undefined' && 'PublicKeyCredential' in window;
+
+// GitHub creates the account, and Turnstile has to pass before its flow starts.
+// A passkey bound on the account page signs in to that same account.
 export function SignIn({ site, siteError, reason, returnFocus }: {
 	site?: Site;
 	siteError?: string;
@@ -22,7 +25,7 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 }) {
 	const [token, setToken] = useState('');
 	const [error, setError] = useState('');
-	const [busy, setBusy] = useState(false);
+	const [busy, setBusy] = useState<'github' | 'passkey'>();
 	const turnstile = useRef<TurnstileHandle>(null);
 
 	const onToken = useCallback((next: string) => setToken(next), []);
@@ -30,7 +33,7 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 
 	async function github() {
 		if (!token) { setError('Finish the human check first.'); return; }
-		setBusy(true); setError('');
+		setBusy('github'); setError('');
 		let message: string | undefined;
 		try {
 			const result = await authClient.signIn.social(
@@ -44,7 +47,26 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 		if (message === undefined) return;
 		setError(message);
 		turnstile.current?.reset();
-		setBusy(false);
+		setBusy(undefined);
+	}
+
+	async function passkey() {
+		setBusy('passkey'); setError('');
+		let message: string;
+		try {
+			const result = await authClient.signIn.passkey();
+			if (!result.error) { openApp(); return; }
+			const code = errorCode(result.error);
+			message = code === 'PASSKEY_NOT_FOUND'
+				? 'This passkey is not added to a Mob account. Continue with GitHub, then add it on your account page.'
+				: code === 'AUTH_CANCELLED' || code?.startsWith('ERROR_')
+					? 'Passkey sign-in was cancelled.'
+					: result.error.message || 'That passkey did not sign in. Try again, or continue with GitHub.';
+		} catch {
+			message = 'Could not reach the sign-in service. Check your connection and try again.';
+		}
+		setError(message);
+		setBusy(undefined);
 	}
 
 	const ready = site?.ready && site.turnstileSiteKey;
@@ -62,10 +84,15 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 				<div className="auth-form">
 					<Turnstile ref={turnstile} siteKey={site.turnstileSiteKey} action="github" onToken={onToken} onError={onError} />
 					{error ? <p className="form-error" role="alert">{error}</p> : null}
-					<Button type="button" className="wide" onClick={github} disabled={busy || !token}>
-						<GitHubMark />{busy ? 'Opening GitHub…' : 'Continue with GitHub'}
+					<Button type="button" className="wide" onClick={github} disabled={!!busy || !token}>
+						<GitHubMark />{busy === 'github' ? 'Opening GitHub…' : 'Continue with GitHub'}
 					</Button>
-					<p className="fine-print">Mob asks GitHub only for your name, email and avatar.</p>
+					{passkeys() ? (
+						<Button type="button" variant="outline" className="wide" onClick={passkey} disabled={!!busy}>
+							<PixelIcon name="key" size={12} />{busy === 'passkey' ? 'Waiting for your passkey…' : 'Sign in with a passkey'}
+						</Button>
+					) : null}
+					<p className="fine-print">Mob asks GitHub only for your name, email and avatar. Add a passkey from your account page after signing in with GitHub.</p>
 				</div>
 			) : !site && !siteError ? <p className="dialog-description">Loading…</p> : null}
 		</DialogContent>

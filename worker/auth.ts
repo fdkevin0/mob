@@ -1,6 +1,7 @@
 import type { RunnerRelay } from './relay';
 import { betterAuth } from 'better-auth';
 import { captcha } from 'better-auth/plugins/captcha';
+import { passkey } from '@better-auth/passkey';
 
 export interface Env {
 	ASSETS: Fetcher;
@@ -26,7 +27,8 @@ export function createAuth(env: Env, origin: string) {
 		secret: env.BETTER_AUTH_SECRET,
 		trustedOrigins: [origin],
 		database: env.DB,
-		// GitHub is the only way in: no passwords to keep.
+		// GitHub is the only way to create an account: no passwords to keep.
+		// Passkeys are added afterwards from the account page.
 		socialProviders: {
 			github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET },
 		},
@@ -39,6 +41,11 @@ export function createAuth(env: Env, origin: string) {
 			endpoints: ['/sign-in/social'],
 			// Turnstile's test keys report another hostname, so local runs skip the check.
 			allowedHostnames: isLocal(origin) ? undefined : [new URL(origin).hostname],
+		}), passkey({
+			rpName: 'Mob',
+			// Registration needs a fresh signed-in session, so a passkey always
+			// joins an account that already signed in with GitHub.
+			registration: { requireSession: true },
 		})],
 	});
 }

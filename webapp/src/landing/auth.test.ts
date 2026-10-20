@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { keepOffer, openApp, pendingOffer } from './auth';
+import { keepOffer, openApp, pendingOffer, returnAfterSignIn } from './auth';
 
 afterEach(() => { sessionStorage.clear(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/'); });
 
@@ -23,6 +23,26 @@ it('uses a waiting link once when the app opens', () => {
   openApp();
   expect(assign).toHaveBeenLastCalledWith('/app#offer=abc');
   expect(pendingOffer()).toBe(false);
+  openApp();
+  expect(assign).toHaveBeenLastCalledWith('/app');
+});
+
+it('returns to the account page after sign-in, unless a link is waiting', () => {
+  const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
+  returnAfterSignIn('/account');
+  openApp();
+  expect(assign).toHaveBeenLastCalledWith('/account');
+  openApp();
+  expect(assign).toHaveBeenLastCalledWith('/app');
+  returnAfterSignIn('/account');
+  sessionStorage.setItem('mob.pendingOffer', '#offer=abc');
+  openApp();
+  expect(assign).toHaveBeenLastCalledWith('/app#offer=abc');
+});
+
+it('only returns to known pages', () => {
+  const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
+  returnAfterSignIn('https://evil.test');
   openApp();
   expect(assign).toHaveBeenLastCalledWith('/app');
 });

@@ -5,6 +5,7 @@ vi.mock('./auth', () => ({
 	authClient: { useSession: () => ({ isPending: false, data: null }) },
 	keepOffer: () => false,
 	pendingOffer: () => false,
+	returnAfterSignIn: vi.fn(),
 	loadSite: async () => ({ ready: false, turnstileSiteKey: '' }),
 	openApp: vi.fn(),
 }));

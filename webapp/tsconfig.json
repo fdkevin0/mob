@@ -25,6 +25,7 @@
     }
   },
   "include": [
+    "src/account",
     "src/chat",
     "src/components",
     "src/landing",
