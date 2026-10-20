@@ -288,10 +288,11 @@ for the disk, billed by Render):
   of `runner.json`. The variable holds the encryption key and the credential,
   so it belongs in the host's secret settings. To pair again, revoke the
   runner, create a new Render pairing, replace the variable and restart.
-- With no `providers.json`, the runner uses the default free model. Add
-  providers from Render's **Shell** with `mob provider add … --key-stdin`;
-  keys are not read from the environment, and on a free instance they are
-  gone after the next restart.
+- With no `providers.json`, the runner uses the default free model, and on a
+  free instance that is the only provider for now: Render's free services
+  have no Shell or SSH access, and keys are not read from the environment.
+  On a paid instance with a disk, add providers from Render's **Shell** with
+  `mob provider add … --key-stdin`; they are kept on the disk.
 - There is no container runtime on Render, so the sandbox stays off.
 - The model provider sees conversations, as on a computer, and so does
   Render, which runs the runner and holds its files and the pairing JSON.
