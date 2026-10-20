@@ -265,7 +265,7 @@ func (s *ConversationService) carryOut(ctx context.Context, conversationID strin
 	case tools[i].OwnerOnly && !owner:
 		err = errors.New("only the owner of this Mob can approve " + d.Tool)
 	default:
-		output, err = tools[i].Approved(ctx, ApprovedCall{ConversationID: conversationID, ApprovalID: d.ApprovalID, Input: d.Input, Store: s.Store})
+		output, err = tools[i].Approved(ctx, ApprovedCall{ConversationID: conversationID, ApprovalID: d.ApprovalID, Input: d.Input, Store: s.Store, Owner: owner})
 	}
 	file := ""
 	if err == nil {
@@ -326,9 +326,10 @@ func (s *ConversationService) saver() Saver {
 	return saver
 }
 
-// recall gives the model the conversation's saved facts.
+// recall gives the model the conversation's saved facts, and in the owner's
+// turns those the owner approved anywhere.
 func (s *ConversationService) recall(_ context.Context, turn *Turn) error {
-	memories, err := s.Store.Memories(turn.ConversationID)
+	memories, err := s.Store.Memories(turn.ConversationID, turn.Owner)
 	if err != nil || len(memories) == 0 {
 		return err
 	}

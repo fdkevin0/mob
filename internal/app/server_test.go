@@ -216,7 +216,7 @@ func TestCommandRoutes(t *testing.T) {
 	for _, spec := range specs {
 		names = append(names, spec.Name)
 	}
-	if got := strings.Join(names, " "); got != "model models compact new list open approve deny grants revoke plugins test deliveries clear-secret mail email cloud mcp signin skills projects tasks" {
+	if got := strings.Join(names, " "); got != "model models compact new list open approve deny grants revoke memories forget plugins test deliveries clear-secret mail email cloud mcp signin skills projects tasks" {
 		t.Fatalf("web commands: %s", got)
 	}
 	var suggestions []chat.Suggestion

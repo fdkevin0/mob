@@ -57,7 +57,9 @@ const DefaultSteps = 20
 // Turn is one run of the model loop as hooks see it.
 type Turn struct {
 	ConversationID string
-	Model          llm.Info
+	// Owner is set for the owner's turns.
+	Owner bool
+	Model llm.Info
 	// Request is the model request being built; BeforeTurn hooks may add to
 	// its System before history is fitted to the context window.
 	Request *llm.Request
@@ -78,7 +80,7 @@ type Hooks struct {
 // Run owns the model loop and message persistence; transports serialize its events.
 func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conversationID string, message Message, note string, emit func(Event) error) (runErr error) {
 	info := model.Info()
-	turn := &Turn{ConversationID: conversationID, Model: info, Request: &llm.Request{System: systemPrompt}}
+	turn := &Turn{ConversationID: conversationID, Owner: agent.Owner, Model: info, Request: &llm.Request{System: systemPrompt}}
 	if agent.Prompt != "" {
 		turn.Request.System += "\n" + agent.Prompt
 	}
@@ -486,7 +488,7 @@ func runTool(ctx context.Context, agent Agent, offered map[string]Tool, call Too
 	output, err := tool.Run(ctx, call)
 	var g granted
 	if errors.As(err, &g) {
-		return tool.Approved(ctx, ApprovedCall{ConversationID: call.ConversationID, ApprovalID: NewID(), Input: g.input, Store: call.Store})
+		return tool.Approved(ctx, ApprovedCall{ConversationID: call.ConversationID, ApprovalID: NewID(), Input: g.input, Store: call.Store, Owner: agent.Owner})
 	}
 	return output, err
 }

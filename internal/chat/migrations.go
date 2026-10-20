@@ -52,6 +52,9 @@ ALTER TABLE conversations ADD COLUMN summary_through TEXT NOT NULL DEFAULT '';`}
 		{"20261020", `CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, conversation_id TEXT UNIQUE NOT NULL REFERENCES conversations(id),
  project TEXT NOT NULL, agent TEXT NOT NULL, title TEXT NOT NULL, worktree TEXT NOT NULL, branch TEXT NOT NULL,
  session TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);`},
+		// Facts the owner approved are read in every one of the owner's
+		// conversations; others stay with the conversation that saved them.
+		{"20261020", `ALTER TABLE memories ADD COLUMN owner INTEGER NOT NULL DEFAULT 0;`},
 	},
 }
 

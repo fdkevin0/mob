@@ -49,7 +49,7 @@ INSERT INTO deliveries(id,state) VALUES('tg:old','processing')`); err != nil {
 		if err != nil || len(history) != 1 || Text(history[0]) != "keep-history" || history[0].Metadata["status"] != "interrupted" {
 			t.Fatalf("message recovery: %v", err)
 		}
-		facts, err := s.Memories("conversation")
+		facts, err := s.Memories("conversation", false)
 		if err != nil || len(facts) != 1 || facts[0] != "keep-fact" {
 			t.Fatal("memory lost")
 		}

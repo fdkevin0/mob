@@ -58,6 +58,8 @@ type ApprovedCall struct {
 	// Input is what Run passed to RequestApproval.
 	Input json.RawMessage
 	Store *Store
+	// Owner is set when the owner approved the call.
+	Owner bool
 }
 
 // ToolCall is one invocation of a tool within a turn.
@@ -187,7 +189,7 @@ func DefaultTools() []Tool {
 			Run:  datetime,
 		},
 		{
-			Tool:     llm.Tool{Name: "remember", Description: "Request permission to save one durable fact locally for this conversation. Stops the turn until the user approves.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}},
+			Tool:     llm.Tool{Name: "remember", Description: "Request permission to save one durable fact about the user locally. Facts the owner approves are recalled in all of their conversations. Stops the turn until the user approves.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"fact": map[string]any{"type": "string"}}, "required": []string{"fact"}, "additionalProperties": false}},
 			Run:      remember,
 			Approved: saveFact,
 		},
@@ -222,7 +224,7 @@ func saveFact(_ context.Context, call ApprovedCall) (any, error) {
 	if err := json.Unmarshal(call.Input, &input); err != nil {
 		return nil, err
 	}
-	if err := call.Store.SaveFact(call.ApprovalID, call.ConversationID, input.Fact); err != nil {
+	if err := call.Store.SaveFact(call.ApprovalID, call.ConversationID, input.Fact, call.Owner); err != nil {
 		return nil, err
 	}
 	return map[string]any{"saved": true}, nil

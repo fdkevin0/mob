@@ -29,6 +29,8 @@ func (s *ConversationService) builtins() []Command {
 		{CommandSpec: CommandSpec{"deny", "/deny [ID] [reason]", "Deny a pending tool request, optionally saying why", everyClient, false}, Args: []Argument{s.approvals}, Run: s.decide(false)},
 		{CommandSpec: CommandSpec{"grants", "/grants", "List remembered approvals", everyClient, false}, OwnerOnly: true, Run: s.listGrants},
 		{CommandSpec: CommandSpec{"revoke", "/revoke ID|all", "Forget a remembered approval", everyClient, false}, OwnerOnly: true, Args: []Argument{s.grantIDs}, Run: s.revokeGrant},
+		{CommandSpec: CommandSpec{"memories", "/memories", "List saved facts", everyClient, false}, OwnerOnly: true, Run: s.listFacts},
+		{CommandSpec: CommandSpec{"forget", "/forget ID|all", "Forget a saved fact", everyClient, false}, OwnerOnly: true, Args: []Argument{s.factIDs}, Run: s.forgetFact},
 		{CommandSpec: CommandSpec{"stop", "/stop", "Stop the reply in progress", []string{ClientTelegram}, false}, Run: s.stop},
 		{CommandSpec: CommandSpec{"help", "/help", "Show commands", messaging, false}, Run: s.help},
 	}
@@ -205,6 +207,52 @@ func (s *ConversationService) grantIDs(context.Context, CommandCall, []string) [
 	list := []Suggestion{{Value: "all", Label: "all", Detail: "every remembered approval"}}
 	for _, g := range grants {
 		list = append(list, Suggestion{Value: g.ID, Label: g.Tool, Detail: g.Scope})
+	}
+	return list
+}
+
+// listFacts shows the facts remember saved, where each is read, and how to
+// forget it.
+func (s *ConversationService) listFacts(context.Context, CommandCall) (CommandResult, error) {
+	facts, err := s.Store.Facts()
+	if err != nil {
+		return CommandResult{}, err
+	}
+	if len(facts) == 0 {
+		return CommandResult{Markdown: "No facts are saved. Ask the model to remember one."}, nil
+	}
+	var b strings.Builder
+	b.WriteString("| Fact | Read in | Forget |\n| --- | --- | --- |\n")
+	for _, f := range facts {
+		where := "conversation `" + f.ConversationID + "`"
+		if f.Owner {
+			where = "all your conversations"
+		}
+		fmt.Fprintf(&b, "| %s | %s | `/forget %s` |\n", Cell(f.Text), where, f.ID)
+	}
+	b.WriteString("\n`/forget all` forgets every one.")
+	return CommandResult{Markdown: b.String()}, nil
+}
+
+func (s *ConversationService) forgetFact(_ context.Context, call CommandCall) (CommandResult, error) {
+	if len(call.Fields) != 1 {
+		return CommandResult{Markdown: "Use `/forget ID` or `/forget all`; `/memories` lists them."}, nil
+	}
+	n, err := s.Store.Forget(call.Fields[0])
+	if err != nil {
+		return CommandResult{}, err
+	}
+	if n == 0 {
+		return CommandResult{Markdown: "No saved fact has ID `" + Cell(call.Fields[0]) + "`."}, nil
+	}
+	return CommandResult{Markdown: fmt.Sprintf("Forgot %d fact(s).", n)}, nil
+}
+
+func (s *ConversationService) factIDs(context.Context, CommandCall, []string) []Suggestion {
+	facts, _ := s.Store.Facts()
+	list := []Suggestion{{Value: "all", Label: "all", Detail: "every saved fact"}}
+	for _, f := range facts {
+		list = append(list, Suggestion{Value: f.ID, Label: f.Text})
 	}
 	return list
 }
