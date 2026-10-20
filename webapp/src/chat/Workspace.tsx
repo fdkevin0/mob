@@ -6,10 +6,21 @@ import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Plugins } from './Plugins';
 import { Thread } from './Thread';
+import { PlusIcon } from './icons';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export function Workspace({ connection, disconnect }: { connection: Connection; disconnect: () => void }) {
+export function Workspace({
+	connection,
+	disconnect,
+	draft,
+	clearDraft,
+}: {
+	connection: Connection;
+	disconnect: () => void;
+	draft?: string;
+	clearDraft?: () => void;
+}) {
 	const [plugins, setPlugins] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -65,7 +76,8 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 				if (!live) return;
 				setConversations(list);
 				setBackground(runtime.background);
-				if (list.length) await open(list[0].id);
+				// A draft typed before connecting starts a new conversation, as the lobby showed.
+				if (list.length && !draft) await open(list[0].id);
 				else await create();
 			} catch (e) {
 				if (live) setError(errorText(e));
@@ -79,7 +91,7 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 	const links = (
 		<>
 			<Button variant="outline" className="new-chat" disabled={busy || switching} onClick={() => void create()}>
-				＋ New conversation
+				<PlusIcon /> New conversation
 			</Button>
 			<nav aria-label="Conversations">
 				{conversations.map((c) => (
@@ -107,8 +119,9 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 				Plugins & cloud services
 			</Button>
 			<div className="sidebar-footer">
-				<p>
-					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'}
+				<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
+					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'} ·{' '}
+					{background ? 'keeps running' : 'stops with its process'}
 				</p>
 				{isPublicWeb() && (
 					<Button variant="ghost" asChild>
@@ -143,7 +156,9 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 						</SheetTrigger>
 						<SheetContent>
 							<SheetTitle className="dialog-title">Conversations</SheetTitle>
-							<SheetDescription className="dialog-description">Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.</SheetDescription>
+							<SheetDescription className="dialog-description">
+								Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.
+							</SheetDescription>
 							{links}
 						</SheetContent>
 					</Sheet>
@@ -162,12 +177,14 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 						connection={connection}
 						id={selected.id}
 						initial={selected.snapshot}
-						background={background}
+						title={conversations.find((c) => c.id === selected.id)?.title}
 						onBusy={setBusy}
 						onChanged={() => {
 							void refreshList().catch((e) => setError(errorText(e)));
 						}}
 						onAction={act}
+						draft={draft}
+						clearDraft={clearDraft}
 					/>
 				) : (
 					<div className="loading" role="status">

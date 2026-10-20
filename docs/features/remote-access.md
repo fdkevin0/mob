@@ -27,11 +27,24 @@ served by the Worker in `worker/`:
   Turnstile check has to pass before the GitHub flow starts. Accounts and
   sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.
 - `/app` is the web UI. The Worker sends visitors without a session back to
-  `/?signin=app`.
+  `/?signin=app`. Signed-in visitors enter the workspace even when no runner or
+  local Mob is connected yet: they can look around and type a message, and the
+  **Connect a runner** dialog opens only when they do something that needs
+  Mob, such as sending, starting a conversation or opening plugins. It offers
+  **Your own runner** (paired runners, or the Mob address and access token of
+  Mob on this computer) and **Cloud runner**, which is disabled and marked
+  coming soon. A typed message is kept and placed in the
+  composer of the first conversation that opens after connecting; it is not
+  sent automatically. A `mob open --web` link opens the dialog to show its
+  progress, and a replaced token reopens it with the reason.
 
-The landing page and workspace share the dark theme, Geist fonts, pixel logo
-and basic controls. The workspace uses the same theme in the local browser and
-Wails desktop app. On narrow screens, Conversations opens a side panel; choosing
+The landing page and workspace share the dark theme, Geist fonts and pixel
+logo. The workspace uses calmer, rounded controls in the local browser, Wails
+desktop app and `/app`: one rounded message box holds the text, the model
+picker and a round send (or stop) button; replies have no role labels; each
+tool call is one line with its status that opens to show input and output,
+and a pending approval opens as a card with Approve, Allow in this
+conversation, Always allow and Deny (which then asks for an optional reason). On narrow screens, Conversations opens a side panel; choosing
 a conversation closes it. Model selection and sign-in dialogs contain keyboard
 focus and return it when closed. Plugin tabs support arrow-key navigation and
 keep unsaved configuration edits when switching tabs.
