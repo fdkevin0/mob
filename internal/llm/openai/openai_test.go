@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 )
@@ -65,6 +66,8 @@ func TestVendorErrorMessage(t *testing.T) {
 // A refusal for a prompt longer than the window is told apart from others,
 // however the vendor words it.
 func TestContextOverflowIsRecognized(t *testing.T) {
+	defer func(d time.Duration) { llm.RetryDelay = d }(llm.RetryDelay)
+	llm.RetryDelay = time.Millisecond
 	for _, c := range []struct {
 		status   int
 		body     string
