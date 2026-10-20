@@ -237,15 +237,15 @@ reads the pairing JSON from `MOB_RUNNER_PAIRING`.
 | Host | Free tier | Conversations | One-click |
 | --- | --- | --- | --- |
 | Render | Web service, 750 hours a month, no card; sleeps without inbound requests, which the runner prevents | Reset on every restart; a paid instance with a disk keeps them | `render.yaml` Blueprint |
-| Railway | $1 of usage a month, 0.5 GB RAM, 0.5 GB volume | Kept on the volume | Template, not published yet |
-| Northflank | Two always-on Sandbox services; card verified at sign-up | Depends on a volume; free volumes unconfirmed | Template, not published yet |
 
 Hosts checked on 2026-10-20 and left out: Koyeb (new accounts need a $29 plan
 since the Mistral acquisition), Fly.io (no free allowance), Hugging Face
 Spaces (Docker Spaces on free hardware need PRO since July 2026), ClawCloud
 Run (shutting down), Google Cloud Run (scales to zero and needs billing, so
-an always-on runner costs money). A host shows as **Coming soon** in the
-dialog until its one-click link is set in `webapp/src/chat/hosts.ts`.
+an always-on runner costs money). Railway and Northflank are candidates
+(see [Candidate hosts](#candidate-hosts)). The dialog lists the hosts in
+`webapp/src/chat/hosts.ts`; it shows a host picker once there is more than
+one.
 
 ### Render
 
@@ -297,30 +297,28 @@ for the disk, billed by Render):
 - The model provider sees conversations, as on a computer, and so does
   Render, which runs the runner and holds its files and the pairing JSON.
 
-### Railway
+### Candidate hosts
 
-`railway.json` builds the `Dockerfile`, uses `/` as the health check and
-restarts the runner when it fails. Railway sets `PORT`, which the image
-answers. Railway does not sleep a service unless its Serverless setting is
-on, and even then the runner's outbound relay connection keeps it awake. The template, created once from
-the Railway workspace's **Templates → New Template**, adds:
+Both have a free tier that suits a runner, but their one-click links come
+from a template made in the maintainer's own account, so they are not in the
+dialog yet.
 
-- the GitHub repository `fdkevin0/mob` as the service source;
-- the variable `MOB_RUNNER_PAIRING`, left empty for the user to fill;
-- a volume mounted at `/data`.
-
-Its share link (`railway.com/deploy/…`) becomes Railway's `deployURL`. An
-idle runner uses little CPU and memory, but Railway bills usage above the
-monthly $1 credit, so check the usage page after a day.
-
-### Northflank
-
-A template made in Northflank's template editor (it can be synced to this
-repository) with a combined service that builds `fdkevin0/mob` from the
-`Dockerfile`, no public port, a secret argument `MOB_RUNNER_PAIRING` passed to
-the runtime environment, and, if the Sandbox allows it, a volume at `/data`.
-Its share link (`app.northflank.com/s/account/templates/new?data=…`) becomes
-Northflank's `deployURL`.
+- **Railway**: $1 of usage a month, 0.5 GB RAM and a 0.5 GB volume, so
+  conversations would be kept. A template is made once in the dashboard
+  (GitHub source `fdkevin0/mob`, an empty `MOB_RUNNER_PAIRING`, a volume at
+  `/data`); there is no documented API for creating or editing templates.
+  After that, code updates need no work here: a `railway.json` would carry
+  the build and health-check settings, and Railway tells users who deployed
+  a GitHub-based template when its root branch changes, and they choose when
+  to apply it. Changing the template's variables or volume stays manual.
+- **Northflank**: two always-on Sandbox services; it verifies a card at
+  sign-up, and free volumes are unconfirmed. Its template is JSON
+  (`apiVersion`, a `Workflow` of `Project`, `CombinedService` and
+  `SecretGroup` nodes, arguments for `MOB_RUNNER_PAIRING`) that can sync
+  both ways with a file in this repository, so the template's
+  configuration would be reviewed and updated through pull requests. Linking
+  that sync and copying the share link are a one-time step in the
+  maintainer's account.
 
 ## Gateway
 ## Gateway

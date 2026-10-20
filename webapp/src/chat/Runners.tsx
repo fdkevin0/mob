@@ -98,22 +98,24 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 						</a>
 						.
 					</p>
-					<div role="radiogroup" aria-label="Cloud host" className="host-choices">
-						{hosts.map((h) => (
-							<Button
-								key={h.id}
-								type="button"
-								role="radio"
-								aria-checked={h.id === host.id}
-								variant={h.id === host.id ? 'primary' : 'outline'}
-								disabled={!h.deployURL}
-								onClick={() => setHostID(h.id)}
-							>
-								{h.name}
-								{!h.deployURL && <small> Coming soon</small>}
-							</Button>
-						))}
-					</div>
+					{hosts.length > 1 && (
+						<div role="radiogroup" aria-label="Cloud host" className="host-choices">
+							{hosts.map((h) => (
+								<Button
+									key={h.id}
+									type="button"
+									role="radio"
+									aria-checked={h.id === host.id}
+									variant={h.id === host.id ? 'primary' : 'outline'}
+									disabled={!h.deployURL}
+									onClick={() => setHostID(h.id)}
+								>
+									{h.name}
+									{!h.deployURL && <small> Coming soon</small>}
+								</Button>
+							))}
+						</div>
+					)}
 					<p>{host.summary}</p>
 				</>
 			) : (
@@ -139,8 +141,9 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 				<div>
 					{deploy ? (
 						<p>
-							Copy this private pairing JSON, then choose <strong>Deploy to {host.name}</strong> and paste it as <code>MOB_RUNNER_PAIRING</code>.
-							The runner appears here once {host.name} has built and started it; then choose <strong>Open runner</strong>.
+							Copy this private pairing JSON, then choose <strong>Deploy to {host.name}</strong> and paste it as{' '}
+							<code>MOB_RUNNER_PAIRING</code>. The runner appears here once {host.name} has built and started it; then choose{' '}
+							<strong>Open runner</strong>.
 						</p>
 					) : (
 						<p>

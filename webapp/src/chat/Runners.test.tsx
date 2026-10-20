@@ -76,6 +76,4 @@ it('gives a Render runner its credential at once instead of a one-time code', as
 	expect(pair.code).toBeUndefined();
 	expect(body).not.toContain(pair.key);
 	expect(screen.getByRole('link', { name: 'Deploy to Render' }).getAttribute('href')).toBe(hosts[0].deployURL);
-	// A host whose one-click template is not published yet cannot be picked.
-	for (const host of hosts.filter((h) => !h.deployURL)) expect((screen.getByRole('radio', { name: new RegExp(host.name) }) as HTMLButtonElement).disabled).toBe(true);
 });
