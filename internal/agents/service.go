@@ -64,11 +64,48 @@ func (s *Service) Reply(ctx context.Context, turn *chat.DelegateTurn) error {
 		return turn.Stream("text", "The agent stopped before this was decided; send the task a message to continue.")
 	}
 	session, err := s.session(ctx, t)
-	if err != nil {
+	if err == nil {
+		err = session.reply(ctx, turn)
+	} else {
 		_ = s.Store.SetTaskStatus(t.ID, chat.TaskFailed)
-		return err
 	}
-	return session.reply(ctx, turn)
+	s.notify(t.ID, turn, err)
+	return err
+}
+
+// noticeLimit bounds the agent's words a notice repeats, in runes.
+const noticeLimit = 1200
+
+// notify tells the owner, in the messaging apps they use, that task id's turn
+// ended waiting for a decision, done or failed.
+func (s *Service) notify(id string, turn *chat.DelegateTurn, failure error) {
+	t, ok, err := s.Store.Task(id)
+	if err != nil || !ok {
+		return
+	}
+	n := chat.Notice{ConversationID: t.ConversationID, Channel: turn.Channel}
+	title := fmt.Sprintf("%s · %s", t.Agent, t.Title)
+	said := strings.TrimSpace(turn.Conclusion())
+	if r := []rune(said); len(r) > noticeLimit {
+		said = "…" + string(r[len(r)-noticeLimit:])
+	}
+	switch {
+	case t.Status == chat.TaskFailed && failure != nil:
+		n.Text = "**Task failed:** " + title + "\n\n" + failure.Error()
+	case t.Status == chat.TaskWaiting:
+		if n.Approvals = s.Conversations.Pending(t.ConversationID); len(n.Approvals) == 0 {
+			return
+		}
+		n.Text = "**Task waits for your decision:** " + title
+	case t.Status == chat.TaskReview && turn.Wrote():
+		n.Text = "**Task done:** " + title + "\nBranch `" + t.Branch + "`"
+	default:
+		return
+	}
+	if said != "" && t.Status != chat.TaskFailed {
+		n.Text += "\n\n" + said
+	}
+	s.Conversations.Notify(n)
 }
 
 func (s *Service) Decide(conversationID string, d chat.Decision, a chat.Answer) error {

@@ -101,6 +101,14 @@ func (s *Service) Loop(ctx context.Context, c Config, status func(string)) {
 	previous := make(chan struct{})
 	close(previous)
 	botID := strings.SplitN(c.Token, ":", 2)[0]
+	// Notices reach the owner while Mob polls; a reply to a message sent
+	// here already says what its notice would. Cancelled before replies
+	// are waited for, so none is added after.
+	defer s.Conversation.Notices(func(n chat.Notice) {
+		if n.Channel != s.bridge().Name {
+			replies.Go(func() { _ = s.announce(ctx, c, n) })
+		}
+	})()
 	offsetKey := "telegram-offset:" + botID
 	var offset int64
 	published := false
@@ -341,7 +349,9 @@ func (s *Service) finish(ctx context.Context, c Config, botID string, u Update, 
 		shown := make(chan struct{})
 		go func() { defer close(shown); s.placeholder(placeholding, c, u.Message.Chat.ID, draft) }()
 		defer func() { cancel(); <-shown }()
-		if fields := strings.Fields(m.Text); u.Message.Tap && len(fields) >= 2 && (fields[0] == "/approve" || fields[0] == "/deny") && len(fields[1]) == 32 {
+		// An approval's ID names its conversation, which may not be the
+		// one the owner writes to here, such as a coding agent's task.
+		if fields := strings.Fields(m.Text); len(fields) >= 2 && (fields[0] == "/approve" || fields[0] == "/deny") && len(fields[1]) == 32 {
 			m.ConversationID, err = s.Store.ApprovalConversation(fields[1])
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return channel.Reply{Text: "Cannot load the approval's conversation."}, err
@@ -421,6 +431,19 @@ func (s *Service) reply(ctx context.Context, c Config, botID, requestID, text st
 	r, err := s.bridge().Answer(ctx, m)
 	r, _ = s.present(ctx, c, botID, m.Text, r)
 	return r, err
+}
+
+// announce sends the owner notice n, with buttons for the approvals it
+// says wait.
+func (s *Service) announce(ctx context.Context, c Config, n chat.Notice) error {
+	text := n.Text
+	for _, a := range n.Approvals {
+		text += "\n\n**Approval needed**\n" + fence(chat.DescribeApproval(a.Tool, a.Input)) + "\nID: `" + a.ID + "`"
+	}
+	if len(n.Approvals) > 0 {
+		text += "\n\nTap a button to decide, or reply /deny ID with a reason."
+	}
+	return c.Send(ctx, c.UserID, text, buttons(n.Approvals)...)
 }
 
 // decideHint tells the owner how to answer, given how many requests are pending.

@@ -84,6 +84,17 @@ once there is a project or task; the others once there is a project or task.
 - An approval left for an hour expires, and the agent is told it was
   cancelled.
 
+## Notices
+
+When a task's turn ends waiting for an approval, done or failed, Mob raises a
+`chat.Notice` (`ConversationService.Notify`): the task's agent and title, the
+agent's last words (up to 1200 characters), its branch when done, the error
+when failed, and the approvals that wait. Stopping a task raises none.
+Messaging channels pass notices on; [Telegram](channels.md) sends them with
+approval buttons, so the owner can follow and decide tasks from the phone. A
+turn started from a channel, such as a decision tapped there, sends that
+channel no notice, since its reply already says how the turn ended.
+
 ## Lifetime
 
 - An agent process starts with the first turn that needs it and runs until the

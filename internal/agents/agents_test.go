@@ -505,3 +505,55 @@ func TestInside(t *testing.T) {
 		}
 	}
 }
+
+func TestNoticesTellTheOwner(t *testing.T) {
+	h := newHarness(t)
+	var mu sync.Mutex
+	var notices []chat.Notice
+	defer h.conv.Notices(func(n chat.Notice) { mu.Lock(); notices = append(notices, n); mu.Unlock() })()
+	took := func() []chat.Notice {
+		mu.Lock()
+		defer mu.Unlock()
+		list := notices
+		notices = nil
+		return list
+	}
+
+	task := h.start("run")
+	got := took()
+	if len(got) != 1 || got[0].ConversationID != task.ConversationID || len(got[0].Approvals) != 1 || !strings.HasPrefix(got[0].Text, "**Task waits for your decision:** codex · run") {
+		t.Fatalf("waiting notices = %+v", got)
+	}
+	// The app a decision came from already shows how the turn ended.
+	answer := chat.Answer{ID: got[0].Approvals[0].ID, Approved: true}
+	if err := h.conv.Execute(context.Background(), chat.ChatRequest{ID: task.ConversationID, Approval: &answer, Owner: true, Channel: "Telegram"}, func(chat.Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(task)
+	got = took()
+	if len(got) != 1 || got[0].Channel != "Telegram" || !strings.Contains(got[0].Text, "**Task done:** codex · run\nBranch `"+task.Branch+"`\n\ndone allow") {
+		t.Fatalf("done notices = %+v", got)
+	}
+
+	failed, err := h.svc.StartTask(context.Background(), h.repo, "claude", "", "login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.wait(failed)
+	if got = took(); len(got) != 1 || !strings.Contains(got[0].Text, "**Task failed:** claude · login\n\nClaude Agent is not signed in") {
+		t.Fatalf("failure notices = %+v", got)
+	}
+
+	stopped, err := h.svc.StartTask(context.Background(), h.repo, "", "", "wait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := h.svc.StopTask(stopped.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(stopped)
+	if got = took(); len(got) != 0 {
+		t.Fatalf("stopping a task told the owner: %+v", got)
+	}
+}

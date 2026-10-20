@@ -249,3 +249,62 @@ func TestApprovalTapUsesOriginalConversationAfterNavigation(t *testing.T) {
 		})
 	}
 }
+
+func TestTypedDenialWithIDUsesTheApprovalsConversation(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	conversation := chat.NewConversation(store, provider.Offline())
+	defer conversation.Close()
+	service := &Service{Store: store, Conversation: conversation}
+	config := Config{UserID: 7, Token: "1:x", Transport: roundTrip(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
+	})}
+	ctx := context.Background()
+	requested, err := service.reply(ctx, config, "1", chat.NewID(), "/remember tea")
+	if err != nil || len(requested.Approvals) != 1 {
+		t.Fatalf("approval request: %+v, %v", requested, err)
+	}
+	var original string
+	if err := store.Setting(conversationKey("1", config), &original); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.reply(ctx, config, "1", chat.NewID(), "/new"); err != nil {
+		t.Fatal(err)
+	}
+	var typed Update
+	if err := json.Unmarshal([]byte(fmt.Sprintf(`{"update_id":2,"message":{"message_id":5,"text":"/deny %s too long","from":{"id":7},"chat":{"id":7,"type":"private"}}}`, requested.Approvals[0].ID)), &typed); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Message(ctx, config, "1", typed); err != nil {
+		t.Fatal(err)
+	}
+	if pending := conversation.Pending(original); len(pending) != 0 {
+		t.Fatalf("pending = %v", pending)
+	}
+}
+
+func TestAnnounceSendsANoticeWithButtons(t *testing.T) {
+	var sent []map[string]any
+	c := Config{Token: "1:x", UserID: 7, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		sent = append(sent, body)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":true}`))}, nil
+	})}
+	id := chat.NewID()
+	s := &Service{}
+	if err := s.announce(context.Background(), c, chat.Notice{Text: "**Task waits for your decision:** codex · tests", Approvals: []chat.PendingApproval{{ID: id, Tool: "codex_execute", Input: map[string]any{"title": "npm test"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent) != 1 || sent[0]["chat_id"] != float64(7) {
+		t.Fatalf("sent = %v", sent)
+	}
+	text, _ := sent[0]["text"].(string)
+	rows, _ := json.Marshal(sent[0]["reply_markup"])
+	if !strings.Contains(text, "<b>Task waits for your decision:</b> codex · tests") || !strings.Contains(text, "/deny ID") || !strings.Contains(string(rows), `"/approve `+id+`"`) {
+		t.Fatalf("text = %s, buttons = %s", text, rows)
+	}
+}

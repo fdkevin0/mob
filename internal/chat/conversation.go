@@ -36,6 +36,7 @@ type ConversationService struct {
 	steps   int
 	// delegate answers conversations an outside agent runs.
 	delegate Delegate
+	notices  notices
 	active   map[string]*Running
 	wg       sync.WaitGroup
 	closing  bool
@@ -221,7 +222,7 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 		return err
 	}
 	if delegate != nil {
-		if err = runDelegate(ctx, s.Store, delegate, input.ID, message, input.Text, emit); err != nil {
+		if err = runDelegate(ctx, s.Store, delegate, input, message, emit); err != nil {
 			return err
 		}
 		return emit(Event{Kind: TurnFinished, Reason: "stop"})
