@@ -44,7 +44,23 @@
 				"database_name": "mob-auth-preview",
 				"database_id": "9ecd0ba5-6341-421c-88ce-16ff15b9047b"
 			}
-		]
+		],
+		"observability": {
+			"logs": {
+				"enabled": true,
+				"head_sampling_rate": 1,
+				"invocation_logs": true,
+				"persist": true
+			},
+			"traces": {
+				"enabled": true,
+				"head_sampling_rate": 1,
+				"persist": true
+			},
+			"issues": {
+				"enabled": true
+			}
+		}
 	},
 	"routes": [{ "pattern": "mob.fdkevin.cloud", "custom_domain": true }],
 	"observability": {
