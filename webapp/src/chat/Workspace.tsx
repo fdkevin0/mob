@@ -123,6 +123,7 @@ export function Workspace({
 			<Button
 				variant="ghost"
 				className="sidebar-plugins"
+				disabled={busy}
 				onClick={() => {
 					setNavigation(false);
 					setUsage(true);

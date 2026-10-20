@@ -340,3 +340,28 @@ it('opens the conversation sheet and closes it after selecting a conversation', 
   expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/two'))).toBe(true);
   expect(screen.getByRole('button', { name: 'Second chat' }).getAttribute('aria-current')).toBe('page');
 });
+
+it('keeps Token usage closed while a submitted command is dispatched, so the command still reaches chat', async () => {
+  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  let answer: (r: Response) => void = () => {};
+  let chat: Record<string, unknown> | undefined;
+  vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+    if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
+    if (url.endsWith('/config')) return Promise.resolve(Response.json({ defaultModel: 'demo/echo', demo: false }));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }]));
+    if (url.endsWith('/commands/run')) return new Promise<Response>((resolve) => { answer = resolve; });
+    if (url.endsWith('/chat')) { chat = JSON.parse(String(options?.body)); return Promise.resolve(new Response('', { status: 500 })); }
+    return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
+  }));
+  render(<App />);
+  const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+  const usage = screen.getAllByRole('button', { name: 'Token usage' })[0] as HTMLButtonElement;
+  expect(usage.disabled).toBe(false);
+  fireEvent.change(box, { target: { value: '/compact' } });
+  fireEvent.submit(box.closest('form')!);
+  await waitFor(() => expect(usage.disabled).toBe(true));
+  fireEvent.click(usage);
+  expect(screen.queryByRole('heading', { name: 'Usage' })).toBeNull();
+  answer(Response.json({ handled: false }));
+  await waitFor(() => expect(chat).toBeDefined());
+});

@@ -62,11 +62,7 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 		}
 	}
 	if usage != nil {
-		ref, e := s.Model(input.ID)
-		if e == nil {
-			e = used.record(s.Store, input.ID, message.ID, ref)
-		}
-		if e != nil {
+		if e := used.record(s.Store, input.ID, message.ID); e != nil {
 			return errors.Join(err, e)
 		}
 		if e := emit(Event{Kind: UsageReported, Usage: *usage}); e != nil {

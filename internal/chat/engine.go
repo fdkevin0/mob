@@ -220,7 +220,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		text, requests, err := summarize(ctx, model, summary.Text, until(history, older), length)
 		if usage := requests.total(); usage != nil {
 			message.Usage = add(message.Usage, *usage)
-			if e := requests.record(store, conversationID, message.ID, model.Ref().String()); e != nil {
+			if e := requests.record(store, conversationID, message.ID); e != nil {
 				return e
 			}
 			if e := send(Event{Kind: UsageReported, Usage: *usage}); e != nil {

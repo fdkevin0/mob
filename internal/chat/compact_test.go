@@ -379,3 +379,32 @@ func TestStoppedCompactKeepsItsCost(t *testing.T) {
 		t.Fatalf("a stopped /compact stored a summary: %+v", summary)
 	}
 }
+
+// switching changes the default model while writing a summary.
+type switching struct {
+	*summarizing
+	models *models
+}
+
+func (m switching) Stream(ctx context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	if strings.HasPrefix(req.System, compactPrompt) {
+		m.models.def = "beta/two"
+	}
+	return m.summarizing.Stream(ctx, req, emit)
+}
+
+// /compact's requests count for the model that wrote the summary, even when
+// the default changes while it does.
+func TestCompactCountsTheModelThatSummarized(t *testing.T) {
+	s, id, _ := longHistory(t, 3)
+	defaults := &models{def: "test/summarizing"}
+	model := switching{&summarizing{info: llm.Info{ID: "summarizing", Context: 100000, Output: 4000}}, defaults}
+	service := NewConversation(s, only{defaults, model})
+	if err := service.Execute(context.Background(), ChatRequest{ID: id, Text: "/compact", RequestID: NewID(), Owner: true}, func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	used, _ := s.ConversationUsage(id)
+	if u := used[id]; len(model.summaries) != 1 || len(u.Models) != 1 || u.Models[0].Model != "test/summarizing" || u.Input != 100 {
+		t.Fatalf("the summary was counted as %+v", u)
+	}
+}

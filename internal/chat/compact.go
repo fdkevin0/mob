@@ -22,10 +22,12 @@ const (
 	transcriptOutput = 2000
 )
 
-// requests are what each model request used and how long it took.
+// requests are what each model request used, which model ran it and how
+// long it took.
 type requests []request
 
 type request struct {
+	model string
 	usage llm.Usage
 	took  time.Duration
 }
@@ -40,9 +42,9 @@ func (r requests) total() *llm.Usage {
 }
 
 // record adds each request to the reply messageID's usage.
-func (r requests) record(store *Store, conversationID, messageID, model string) error {
+func (r requests) record(store *Store, conversationID, messageID string) error {
 	for _, q := range r {
-		if err := store.RecordUsage(conversationID, messageID, model, q.usage, q.took); err != nil {
+		if err := store.RecordUsage(conversationID, messageID, q.model, q.usage, q.took); err != nil {
 			return err
 		}
 	}
@@ -76,7 +78,7 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 		began := time.Now()
 		result, err := model.Stream(ctx, llm.Request{System: system, Messages: []llm.Message{{Role: "user", Text: text}}, MaxTokens: maxTokens}, func(string, string) error { return nil })
 		if result.Usage != nil {
-			usage = append(usage, request{result.Usage.Priced(info.Cost), time.Since(began)})
+			usage = append(usage, request{model.Ref().String(), result.Usage.Priced(info.Cost), time.Since(began)})
 		}
 		if err != nil {
 			return err
