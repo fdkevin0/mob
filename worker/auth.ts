@@ -1,8 +1,10 @@
+import type { RunnerRelay } from './relay';
 import { betterAuth } from 'better-auth';
 import { captcha } from 'better-auth/plugins/captcha';
 
 export interface Env {
 	ASSETS: Fetcher;
+	RUNNERS: DurableObjectNamespace<RunnerRelay>;
 	DB: D1Database;
 	BETTER_AUTH_SECRET: string;
 	TURNSTILE_SITE_KEY: string;

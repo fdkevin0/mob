@@ -19,7 +19,7 @@ served by the Worker in `worker/`:
   does today.
 - Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
   Turnstile check has to pass before the GitHub flow starts. Accounts and
-  sessions live in the D1 database `mob-auth`; the site keeps nothing else.
+  sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.
 - `/app` is the web UI. The Worker sends visitors without a session back to
   `/?signin=app`.
 
@@ -45,10 +45,10 @@ Pairing with Mob on your computer works as before:
   and hands it to `/app` once, which exchanges the code at `url` for the access token and keeps the
   address and token in local storage. The code, not the token, travels in the
   link because it expires after 5 minutes and works once.
-- The web UI accepts only `http://127.0.0.1` and `http://localhost` addresses,
-  and the content security policy the Worker sets on `/app` lets it connect
-  nowhere else, not even to its own site, so a crafted link cannot point it at
-  another server. The landing page may call its own site (sign-in) and
+- Local pairing links accept only `http://127.0.0.1` and `http://localhost`
+  addresses. The `/app` content security policy permits those loopback hosts
+  and the site itself for encrypted runner access; crafted local links cannot
+  point at another server. The landing page may call its own site (sign-in) and
   Turnstile. It shares an origin and the sign-in with `/app`, so the
   Turnstile script, loaded only when the sign-in dialog opens, runs where the
   token is stored.
@@ -91,6 +91,78 @@ Deployment:
   `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799` (the flag
   keeps the request host local instead of the production domain; port 8787 is
   Mob's own). The GitHub OAuth app then needs the local callback URL.
+
+## Encrypted remote runners
+
+A runner lets a signed-in GitHub account control Mob on another computer,
+without opening an inbound port on that computer. The web app lists only the
+account's runners. Conversations, tools and approvals use the existing local
+Mob API; the relay cannot call it without an authenticated encrypted request.
+
+1. Sign in at `/app` and choose **Pair a runner**.
+2. On the computer running Mob, run `mob runner pair`. Paste the private JSON
+   shown in the browser into stdin and press Enter. Do not put it in shell
+   arguments, tickets or messages: it contains the encryption key.
+3. Run `mob start` (or keep `mob serve` running), then `mob runner`. Keep the
+   runner process running. It actively connects to the site over WebSocket
+   and reconnects after a disconnect. No gateway flags are needed.
+4. When the runner appears online, choose **Open runner** in that browser.
+   Use **Revoke access** to invalidate its cloud credential and disconnect it.
+   Stopping `mob runner` also stops remote access, without stopping local Mob.
+
+The pairing code expires after five minutes and can be claimed once. The
+browser generates a random 256-bit encryption key and retains it locally;
+only the one-time pairing code is sent to the cloud. The CLI receives the key
+through the pasted JSON, and stores it with the separate runner credential in
+`runner.json` in Mob's data directory, with mode `0600`. Its local API token
+never leaves the computer. A local token rotation requires restarting
+`mob runner` to read the new token. Remote clients cannot mint local pairing
+codes, rotate the local token or stop the local service.
+
+Each runner has a Durable Object that forwards opaque envelopes. API methods,
+paths, headers, bodies, HTTP statuses and response chunks are encrypted with
+AES-256-GCM using random 96-bit nonces. Authenticated associated data binds
+protocol version, runner ID, connection session, request ID, direction, chunk
+sequence and final-frame status. The runner creates a fresh random session on
+every connection, ignores repeated requests, and caps concurrent requests.
+A request it refuses (expired, or the runner is busy) gets an encrypted error
+saying it did not run; the connection and other requests carry on. Browser
+clocks should be synchronized: requests expire after 45 seconds and the runner
+rejects expiry times more than a minute in its future. When a browser stops
+reading a response, the relay tells the runner to cancel that local request.
+A local response that breaks off ends with an authenticated failure, so the
+browser rejects it like a reordered, modified or incomplete response. Never
+blindly retry a failed action: check saved conversation history first.
+
+The cloud stores account and runner identifiers, hashes of pairing codes and
+runner credentials, and timestamps. It can observe connection/IP metadata,
+request timing and ciphertext sizes, but has no decryption keys or plaintext
+conversation/tool data. HTTP request bodies are limited to 1 MiB before
+encryption. A request that produces no output for six minutes fails, at the
+relay and at the runner; a longer turn keeps streaming while it produces output. Disconnecting does not undo a completed tool
+operation or stop an independently running conversation turn.
+
+Keys belong to the pairing browser. Clearing its site data loses its key;
+other browsers must create a new pairing. There is no cloud key recovery,
+key synchronization, or forward secrecy after an endpoint key is compromised.
+Revoke obsolete runner registrations; an account may have up to 20 pending
+or paired runners.
+
+**Trust boundary:** this protects content from the relay and database under
+the shipped protocol. The browser still trusts JavaScript served by the site,
+including future deployments and same-origin scripts. A malicious deployment
+could steal its key before encryption. Protecting against a developer who
+changes that JavaScript requires an independently distributed and verified
+client; this web version cannot promise that protection. The local model
+provider and locally configured tools still receive the data required to do
+their work.
+
+The Worker deployment adds the `RUNNERS` Durable Object binding and its SQLite
+class migration, plus D1 migration `0002_runners.sql`. Apply the D1 migration
+before deploying this Worker; the existing Workers Builds command does so.
+No additional cloud secrets are needed. `bun run test:runner` runs the real
+Worker/D1/Durable Object, Go service, runner and browser encryption code
+locally with fake account sessions and an offline demo model.
 
 ## Gateway
 

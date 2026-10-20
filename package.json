@@ -54,6 +54,7 @@
     "build:desktop": "go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0 build",
     "test:go": "go test ./...",
     "test:integration": "bun scripts/check-chat.ts",
+    "test:runner": "tsc -p worker && bun scripts/check-runner.ts",
     "generate:contracts": "go run ./cmd/contracts > packages/client/src/contracts.ts"
   },
   "packageManager": "bun@1.4.3"

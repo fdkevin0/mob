@@ -1,7 +1,9 @@
-import { MobClient, type Connection } from '@mob/client';
+import { MobClient, type Connection as LocalConnection } from '@mob/client';
+import { encryptedFetch } from './remote';
+export type Connection = LocalConnection & { runner?: { id: string; key: string } };
 
 export { timeoutFor } from '@mob/client';
-export type { Connection, Conversation, ChatMessage, Snapshot } from '@mob/client';
+export type { Conversation, ChatMessage, Snapshot } from '@mob/client';
 export type { Config } from './contracts';
 
 declare global {
@@ -14,7 +16,7 @@ export function defaultURL() {
 	return import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin;
 }
 
-// Public Web has no API of its own; it connects using a mob open --web offer.
+// Public Web offers loopback pairing and an account-scoped encrypted runner relay.
 export function isPublicWeb() {
 	return import.meta.env.MODE === 'public';
 }
@@ -44,6 +46,7 @@ export function isLocalMob(url: string) {
 export const unauthorizedEvent = 'mob:unauthorized';
 export function webClient(connection: Connection) {
 	return new MobClient(connection, {
+		fetch: connection.runner ? encryptedFetch(connection.runner.id, connection.runner.key) : undefined,
 		onUnauthorized: (token) => window.dispatchEvent(new CustomEvent<string>(unauthorizedEvent, { detail: token })),
 	});
 }

@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+// Local pairing tests keep runner discovery isolated; Runners.test.tsx covers that flow.
+vi.mock('./Runners', () => ({ Runners: () => null }));
 import { App } from './App';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.go; localStorage.clear(); sessionStorage.clear(); });
