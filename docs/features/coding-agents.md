@@ -50,10 +50,12 @@ Owner-only tools:
   than do it itself.
 - `tasks` lists the projects and tasks with status, branch, plan and the end of
   each task's latest reply.
-- `task_message` passes instructions to a task's agent; `task_stop` stops its
-  turn and ends the agent.
+- `task_message` passes instructions to a task's agent. While the agent is
+  at work they are added to its conversation and sent once its current
+  prompt ends. `task_stop` stops its turn and ends the agent.
 
-`task_start` is always offered; the others once there is a project or task.
+`task_start` is offered while an agent's command (or `npx`) is installed, or
+once there is a project or task; the others once there is a project or task.
 `/tasks [PROJECT]` shows the same table in the web UI and TUI.
 
 ## Approvals
@@ -61,7 +63,8 @@ Owner-only tools:
 - Codex starts each session in its `auto` mode: it edits files and runs
   commands in the worktree without asking, and asks before using the network
   or writing elsewhere. Mob also answers yes, without asking, to any edit,
-  delete or move whose files are all inside the task's worktree.
+  delete or move whose files are all inside the task's worktree once links
+  are followed, so a link in the repository cannot lead an edit out of it.
 - Every other permission the agent asks for is an approval in the task's
   conversation, decided like any other: Approve, Allow in this conversation,
   Always allow, or Deny with an optional reason, from any client. Allow and
@@ -69,8 +72,9 @@ Owner-only tools:
   and the agent is answered with its own "always" option.
 - Unlike a model's tool call, the agent keeps waiting while an approval is
   pending. The turn that asked ends, and the decision starts a turn that
-  follows the agent on; the approved call shows how it ended there. A denial's
-  reason is sent to the agent as its next message.
+  follows the agent on; the approved call shows how it ended there. A denial with
+  a reason cancels the agent's current prompt and sends the reason as its
+  next one, so it does not work around the denial without knowing why.
 - Writing to the task instead of deciding denies what waits and sends the
   message after the agent has dealt with the denial.
 - An approval left for an hour expires, and the agent is told it was
@@ -79,8 +83,14 @@ Owner-only tools:
 ## Lifetime
 
 - An agent process starts with the first turn that needs it and runs until the
-  task is stopped or Mob stops. Stopping a turn cancels the agent's prompt; an
-  agent that does not end it within ten seconds is ended.
+  task is stopped or Mob stops; it runs in a process group of its own (a
+  process tree on Windows), so what `npx` starts ends with it. Stopping a turn
+  cancels the agent's prompt; an agent that does not end it within ten
+  seconds is ended.
+- When Mob starts, tasks still marked running or waiting are marked stopped:
+  their agents ended with Mob. Deciding an approval no agent waits for any
+  more starts nothing; the call is marked failed and the reply says to send
+  the task a message to continue.
 - When Mob starts an agent for a task that already has a session, it loads that
   session (Codex supports this), so the agent remembers the work; the history
   the agent replays while loading is not shown again.

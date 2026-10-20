@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +28,8 @@ type fake struct {
 	prompts []string
 	mode    string
 	loaded  string
+	// release lets a "hold" prompt end.
+	release chan struct{}
 }
 
 func (f *fake) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
@@ -113,6 +116,9 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 		}
 		f.say(ctx, id, acp.UpdateToolCall("call1", acp.WithUpdateStatus(acp.ToolCallStatusCompleted), acp.WithUpdateContent([]acp.ToolCallContent{acp.ToolContent(acp.TextBlock("ok"))})))
 		f.say(ctx, id, acp.UpdateAgentMessageText("done "+string(answer.Outcome.Selected.OptionId)))
+	case text == "hold":
+		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
+		<-f.release
 	case text == "wait":
 		<-ctx.Done()
 		return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
@@ -131,8 +137,9 @@ type fakes struct {
 func (fs *fakes) connect(_ context.Context, _ Preset, _ string) (Conn, error) {
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
-	f := &fake{}
+	f := &fake{release: make(chan struct{})}
 	f.conn = acp.NewAgentSideConnection(f, fromAgent, toAgent)
+	f.conn.SetLogger(slog.New(slog.DiscardHandler))
 	fs.mu.Lock()
 	fs.agents = append(fs.agents, f)
 	fs.mu.Unlock()
@@ -313,7 +320,7 @@ func TestApprovalsReachTheAgent(t *testing.T) {
 	// A denial's reason goes to the agent once it has dealt with the denial.
 	task = h.say(task, "run")
 	task = h.decide(task, chat.Answer{Approved: false, Reason: "use make"})
-	if got := h.reply(task); got != "skippedgot use make" {
+	if got := h.reply(task); !strings.HasSuffix(got, "got use make") {
 		t.Fatalf("reply = %q", got)
 	}
 
@@ -412,10 +419,70 @@ func TestStartTaskTool(t *testing.T) {
 	}
 }
 
+func TestMessageWhileWorking(t *testing.T) {
+	h := newHarness(t)
+	task, err := h.svc.StartTask(context.Background(), h.repo, "", "", "hold")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.Message(task.ID, "also this"); err != nil {
+		t.Fatal(err)
+	}
+	close(h.fakes.last().release)
+	task = h.wait(task)
+	history, _ := h.svc.Store.History(task.ConversationID)
+	var said bool
+	reply := ""
+	for _, m := range history {
+		said = said || m.Role == "user" && chat.Text(m) == "also this"
+		if m.Role == "assistant" {
+			reply = chat.Text(m)
+		}
+	}
+	if !said || task.Status != chat.TaskReview || reply != "holding got also this" {
+		t.Fatalf("said %v, status %q, reply %q", said, task.Status, reply)
+	}
+}
+
+func TestDecidingAfterARestart(t *testing.T) {
+	h := newHarness(t)
+	task := h.start("run")
+	// Mob stops: the agent ends with it, and starting again marks the task.
+	h.svc.drop(task.ID, h.svc.running(task.ID))
+	if err := h.svc.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	task = h.decide(task, chat.Answer{Approved: true})
+	if task.Status != chat.TaskStopped || len(h.fakes.agents) != 1 || !strings.Contains(h.reply(task), "stopped before") {
+		t.Fatalf("status %q, agents %d, reply %q", task.Status, len(h.fakes.agents), h.reply(task))
+	}
+	history, _ := h.svc.Store.History(task.ConversationID)
+	for _, m := range history {
+		for _, p := range m.Parts {
+			if p["type"] == "tool-codex_execute" && p["state"] != "output-error" {
+				t.Fatalf("approved call left %v", p["state"])
+			}
+		}
+	}
+}
+
 func TestInside(t *testing.T) {
 	dir := string(os.PathSeparator) + filepath.Join("w", "t")
 	for path, want := range map[string]bool{filepath.Join(dir, "a.go"): true, dir: true, "b/c.go": true, filepath.Join(dir, "..", "x"): false, filepath.Join(dir+"x", "a"): false} {
 		if inside(dir, path) != want {
+			t.Errorf("inside(%q) = %v", path, !want)
+		}
+	}
+	// Links are followed, even to files that do not exist yet.
+	worktree, outside := t.TempDir(), t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(worktree, "link")); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "missing"), filepath.Join(worktree, "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]bool{filepath.Join(worktree, "new", "a.go"): true, filepath.Join(worktree, "link", "authorized_keys"): false, filepath.Join(worktree, "link"): false, filepath.Join(worktree, "dangling"): false} {
+		if inside(worktree, path) != want {
 			t.Errorf("inside(%q) = %v", path, !want)
 		}
 	}

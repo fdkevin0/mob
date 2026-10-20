@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/llm"
@@ -44,6 +46,7 @@ func (s *Service) Tools() []chat.Tool {
 		}, "project", "prompt")},
 		Prompt:    managerPrompt,
 		OwnerOnly: true,
+		Available: s.offered,
 		Run:       s.askStart,
 		Approved:  s.start,
 		Scope: func(input json.RawMessage) string {
@@ -88,6 +91,27 @@ func (s *Service) Tools() []chat.Tool {
 	}}
 }
 
+// offered reports whether task_start is offered: once there are projects or
+// tasks, or while a coding agent can be started.
+func (s *Service) offered() bool { return s.busy() || s.installed() }
+
+// installed reports whether some agent's command is installed, looking again
+// at most once a minute.
+func (s *Service) installed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if time.Since(s.checked) > time.Minute {
+		s.checked, s.found = time.Now(), false
+		for _, p := range Presets {
+			if _, ok := command(p); ok {
+				s.found = true
+				break
+			}
+		}
+	}
+	return s.found
+}
+
 // busy reports whether there are projects or tasks to follow; until then
 // only task_start is offered.
 func (s *Service) busy() bool {
@@ -123,7 +147,7 @@ func (s *Service) askStart(ctx context.Context, call chat.ToolCall) (any, error)
 		for i, p := range list {
 			names[i] = p.Name
 		}
-		if !strings.HasPrefix(in.Project, "/") {
+		if !filepath.IsAbs(in.Project) {
 			return nil, fmt.Errorf("no project is called %q; saved projects: %s. Give the absolute path of a git repository instead", in.Project, strings.Join(names, ", "))
 		}
 		if _, err := git(ctx, in.Project, "rev-parse", "--show-toplevel"); err != nil {

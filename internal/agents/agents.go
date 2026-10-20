@@ -76,18 +76,15 @@ type Conn struct {
 
 // start runs the first installed command of p in dir.
 func start(ctx context.Context, p Preset, dir string) (Conn, error) {
-	var command []string
-	for _, c := range p.Commands {
-		if _, err := exec.LookPath(c[0]); err == nil {
-			command = c
-			break
-		}
-	}
-	if command == nil {
+	command, ok := command(p)
+	if !ok {
 		return Conn{}, fmt.Errorf("%s is not installed: install %s, or Node.js for npx", p.Title, p.Commands[0][0])
 	}
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = dir
+	// The agent and what it starts, such as the binary npx runs, end
+	// together.
+	group(cmd)
 	cmd.Env = environment()
 	stderr := &tail{}
 	cmd.Stderr = stderr
@@ -106,11 +103,21 @@ func start(ctx context.Context, p Preset, dir string) (Conn, error) {
 	stop := func() {
 		once.Do(func() {
 			_ = in.Close()
-			_ = cmd.Process.Kill()
+			kill(cmd)
 			_ = cmd.Wait()
 		})
 	}
 	return Conn{In: in, Out: out, Stop: stop, Stderr: stderr.String}, nil
+}
+
+// command is the first of p's commands whose program is installed.
+func command(p Preset) ([]string, bool) {
+	for _, c := range p.Commands {
+		if _, err := exec.LookPath(c[0]); err == nil {
+			return c, true
+		}
+	}
+	return nil, false
 }
 
 // environment is Mob's environment without its own MOB_* variables, such as

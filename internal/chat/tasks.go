@@ -115,6 +115,24 @@ func (s *Store) SetTaskStatus(id, status string) error {
 	return err
 }
 
+// StopTasks records every running or waiting task as stopped, for when Mob
+// starts and no agent runs.
+func (s *Store) StopTasks() error {
+	_, err := s.db.Exec("UPDATE tasks SET status=? WHERE status IN (?,?)", TaskStopped, TaskRunning, TaskWaiting)
+	return err
+}
+
+// Say adds what the owner wrote to a conversation whose reply is still
+// being written, as when the owner instructs a coding agent at work.
+func (s *Store) Say(conversationID, text string) error {
+	raw, err := json.Marshal([]Part{{"type": "text", "text": text}})
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", NewID(), conversationID, string(raw))
+	return err
+}
+
 // SetTaskSession records the agent's session for task id.
 func (s *Store) SetTaskSession(id, session string) error {
 	_, err := s.db.Exec("UPDATE tasks SET session=?,updated_at=? WHERE id=?", session, time.Now().UnixMilli(), id)

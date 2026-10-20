@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/chat"
 )
@@ -24,11 +25,17 @@ type Service struct {
 	// sessions are the agents running, by task ID.
 	sessions map[string]*session
 	closed   bool
+	// found is whether an agent's command was installed when last checked.
+	checked time.Time
+	found   bool
 }
 
 var _ chat.Delegate = (*Service)(nil)
 
 var errStopping = errors.New("Mob is stopping")
+
+// startWait is how long a message waits for an agent that is starting.
+const startWait = 30 * time.Second
 
 // task is the task whose conversation is conversationID.
 func (s *Service) task(conversationID string) (chat.Task, bool) {
@@ -51,8 +58,10 @@ func (s *Service) Reply(ctx context.Context, turn *chat.DelegateTurn) error {
 	if !ok {
 		return errors.New("no task answers this conversation")
 	}
-	if t.Status == chat.TaskStopped && turn.Text == "" {
-		return nil
+	if turn.Text == "" && s.running(t.ID) == nil {
+		// A decision reached no agent: it stopped, or Mob restarted, while
+		// the approval waited. Only the owner's next message starts one.
+		return turn.Stream("text", "The agent stopped before this was decided; send the task a message to continue.")
 	}
 	session, err := s.session(ctx, t)
 	if err != nil {
@@ -67,13 +76,13 @@ func (s *Service) Decide(conversationID string, d chat.Decision, a chat.Answer) 
 	if !ok {
 		return errors.New("no task answers this conversation")
 	}
-	s.mu.Lock()
-	session := s.sessions[t.ID]
-	s.mu.Unlock()
-	// An agent that stopped waiting, such as when Mob restarted, is
-	// started again by the next message.
-	if session != nil {
-		session.decide(d, a)
+	if session := s.running(t.ID); session != nil && session.decide(d, a) {
+		return nil
+	}
+	if a.Approved {
+		// The agent stopped waiting, such as when Mob restarted, so the
+		// approved call never ran.
+		return s.Store.Complete(d, nil, "", errors.New("the agent stopped before this was decided"))
 	}
 	return nil
 }
@@ -187,9 +196,31 @@ func (s *Service) Message(id, text string) error {
 	if !ok {
 		return fmt.Errorf("no task %s", id)
 	}
+	// An agent at work takes the text once its current prompt ends, in the
+	// turn already following it.
+	// A turn that has just begun may still be starting the agent.
+	for wait := time.Now().Add(startWait); s.Conversations.Active(t.ConversationID); time.Sleep(20 * time.Millisecond) {
+		if session := s.running(t.ID); session != nil && session.enqueue(text) {
+			return s.Store.Say(t.ConversationID, text)
+		}
+		if time.Now().After(wait) {
+			return errors.New("the agent is still starting; try again shortly")
+		}
+	}
 	_, err = s.Conversations.Start(chat.ChatRequest{ID: t.ConversationID, Text: text, RequestID: chat.NewID(), Owner: true}, nil)
 	return err
 }
+
+// running is the agent working on task id, or nil.
+func (s *Service) running(id string) *session {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessions[id]
+}
+
+// Recover records the tasks that were running or waiting when Mob last
+// stopped as stopped: their agents ended with it.
+func (s *Service) Recover() error { return s.Store.StopTasks() }
 
 // StopTask stops task id's turn and its agent.
 func (s *Service) StopTask(id string) error {
@@ -201,10 +232,7 @@ func (s *Service) StopTask(id string) error {
 		return fmt.Errorf("no task %s", id)
 	}
 	s.Conversations.Stop(t.ConversationID)
-	s.mu.Lock()
-	running := s.sessions[t.ID]
-	s.mu.Unlock()
-	if running != nil {
+	if running := s.running(t.ID); running != nil {
 		s.drop(t.ID, running)
 	}
 	return s.Store.SetTaskStatus(t.ID, chat.TaskStopped)

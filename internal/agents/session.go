@@ -249,49 +249,76 @@ func (s *session) reply(ctx context.Context, turn *chat.DelegateTurn) error {
 		s.reject(turn.ConversationID)
 		s.prompt(turn.Text)
 	}
-	s.mu.Lock()
-	idle := !s.prompting && len(s.items) == 0
-	s.mu.Unlock()
-	if idle {
+	if !s.busy() && len(s.items) == 0 {
 		return nil
 	}
 	s.status(chat.TaskRunning)
 	for {
-		select {
-		case x := <-s.items:
-			switch {
-			case x.update != nil:
-				if err := s.show(turn, *x.update); err != nil {
-					s.interrupt()
-					return err
-				}
-			case x.permission != nil:
-				asked, err := s.ask(turn, x.permission)
-				if err != nil {
-					x.permission.cancel()
-					s.interrupt()
-					return err
-				}
-				if asked {
-					s.status(chat.TaskWaiting)
-					return nil
-				}
-			default:
-				if s.next() {
-					continue
-				}
-				return s.ended(*x.end)
+		var x item
+		if s.busy() {
+			select {
+			case x = <-s.items:
+			case <-s.closed:
+				s.svc.drop(s.task.ID, s)
+				s.status(chat.TaskFailed)
+				return s.failed("keep running", errors.New("it exited"))
+			case <-ctx.Done():
+				s.interrupt()
+				s.status(chat.TaskStopped)
+				return ctx.Err()
 			}
-		case <-s.closed:
-			s.svc.drop(s.task.ID, s)
-			s.status(chat.TaskFailed)
-			return s.failed("keep running", errors.New("it exited"))
-		case <-ctx.Done():
-			s.interrupt()
-			s.status(chat.TaskStopped)
-			return ctx.Err()
+		} else {
+			// With no prompt running, show what the agent sent meanwhile,
+			// such as the commands it offers, and stop following it.
+			select {
+			case x = <-s.items:
+			default:
+				s.status(chat.TaskReview)
+				return nil
+			}
+		}
+		switch {
+		case x.update != nil:
+			if err := s.show(turn, *x.update); err != nil {
+				s.interrupt()
+				return err
+			}
+		case x.permission != nil:
+			asked, err := s.ask(turn, x.permission)
+			if err != nil {
+				x.permission.cancel()
+				s.interrupt()
+				return err
+			}
+			if asked {
+				s.status(chat.TaskWaiting)
+				return nil
+			}
+		default:
+			if s.next() {
+				continue
+			}
+			return s.ended(*x.end)
 		}
 	}
+}
+
+// busy reports whether a prompt runs.
+func (s *session) busy() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.prompting
+}
+
+// enqueue queues text for the agent while a prompt runs, reporting whether
+// one did.
+func (s *session) enqueue(text string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.prompting {
+		s.queue = append(s.queue, text)
+	}
+	return s.prompting
 }
 
 // ended reports how a prompt ended.
@@ -402,8 +429,9 @@ func (s *session) decide(d chat.Decision, a chat.Answer) bool {
 	s.mu.Lock()
 	p := s.pending[d.ApprovalID]
 	delete(s.pending, d.ApprovalID)
-	if p != nil && !a.Approved && strings.TrimSpace(a.Reason) != "" {
-		s.queue = append(s.queue, a.Reason)
+	reason := strings.TrimSpace(a.Reason)
+	if p != nil && !a.Approved && reason != "" {
+		s.queue = append(s.queue, reason)
 	}
 	s.mu.Unlock()
 	if p == nil {
@@ -412,6 +440,11 @@ func (s *session) decide(d chat.Decision, a chat.Answer) bool {
 	switch {
 	case !a.Approved:
 		p.choose(acp.PermissionOptionKindRejectOnce, acp.PermissionOptionKindRejectAlways)
+		if reason != "" {
+			// The reason is the agent's next prompt: the one at work ends
+			// rather than working around the denial without it.
+			_ = s.conn.Cancel(context.Background(), acp.CancelNotification{SessionId: s.id})
+		}
 	case a.Remember != "":
 		conversation := s.task.ConversationID
 		if a.Remember == chat.RememberAlways {
@@ -479,13 +512,40 @@ func (s *session) allowed(p *permission) bool {
 	return ok && err == nil
 }
 
-// inside reports whether path is dir or within it.
+// inside reports whether path is dir or within it once links are followed,
+// so a link in the worktree cannot lead an edit outside it.
 func inside(dir, path string) bool {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(dir, path)
 	}
-	rel, err := filepath.Rel(dir, filepath.Clean(path))
+	dir, ok := resolve(filepath.Clean(dir))
+	if !ok {
+		return false
+	}
+	real, ok := resolve(filepath.Clean(path))
+	if !ok {
+		return false
+	}
+	rel, err := filepath.Rel(dir, real)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolve follows the links in path; a file that does not exist yet is
+// resolved through its nearest existing parent. A link that leads nowhere
+// cannot be resolved.
+func resolve(path string) (string, bool) {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real, true
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return "", false
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return path, true
+	}
+	real, ok := resolve(parent)
+	return filepath.Join(real, filepath.Base(path)), ok
 }
 
 // toolName is how the conversation names a call of kind by this agent.

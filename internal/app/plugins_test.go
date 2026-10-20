@@ -248,6 +248,8 @@ func TestPluginToolsFollowTheirPlugins(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	// No coding agent can be started, so task_start is not offered.
+	t.Setenv("PATH", "")
 	srv := NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	available := func() (names []string) {
@@ -258,14 +260,14 @@ func TestPluginToolsFollowTheirPlugins(t *testing.T) {
 		}
 		return names
 	}
-	if got := strings.Join(available(), " "); got != "datetime remember tool_install task_start" {
+	if got := strings.Join(available(), " "); got != "datetime remember tool_install" {
 		t.Fatalf("with plugins off: %s", got)
 	}
 	var c configuration.Plugins
 	c.Email.Enabled = true
 	c.Cloudflare.Enabled = true
 	store.SaveSetting("plugins", c)
-	if got := strings.Join(available(), " "); got != "datetime remember email_inbox email_read email_send cloudflare tool_install task_start" {
+	if got := strings.Join(available(), " "); got != "datetime remember email_inbox email_read email_send cloudflare tool_install" {
 		t.Fatalf("with plugins on: %s", got)
 	}
 }

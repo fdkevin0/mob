@@ -131,6 +131,10 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 	server.ConfigureMCP(c)
 	server.Skills.Roots = skills.Roots(c.Dir)
 	server.Agents.Dir = c.Dir
+	if err := server.Agents.Recover(); err != nil {
+		cleanup()
+		return nil, err
+	}
 	if err := server.ApplySandbox(c.Sandbox, c.Dir); err != nil {
 		cleanup()
 		return nil, err
