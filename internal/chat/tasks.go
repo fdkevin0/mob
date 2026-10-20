@@ -196,4 +196,3 @@ func (s *Store) ToolsUsed(conversationID string) ([]string, error) {
 	}
 	return list, rows.Err()
 }
-
