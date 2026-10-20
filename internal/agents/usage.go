@@ -23,6 +23,11 @@ import (
 func modelOption(options []acp.SessionConfigOption) string {
 	for _, o := range options {
 		if o.Select != nil && o.Select.Category != nil && *o.Select.Category == acp.SessionConfigOptionCategoryModel {
+			// DeepSeek Harness names a model by its route: ["provider","model"].
+			var route []string
+			if json.Unmarshal([]byte(o.Select.CurrentValue), &route) == nil && len(route) > 0 {
+				return route[len(route)-1]
+			}
 			return string(o.Select.CurrentValue)
 		}
 	}

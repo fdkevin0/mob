@@ -118,7 +118,9 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		return nil, s.failed("start", err)
 	}
 	var modes *acp.SessionModeState
-	if t.Session != "" && init.AgentCapabilities.LoadSession {
+	switch {
+	case t.Session == "":
+	case init.AgentCapabilities.LoadSession:
 		// The agent replays the session while loading it; the
 		// conversation already shows it.
 		s.loading.Store(true)
@@ -126,6 +128,12 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		s.loading.Store(false)
 		if err == nil {
 			s.id, modes, s.model = acp.SessionId(t.Session), loaded.Modes, modelOption(loaded.ConfigOptions)
+		}
+	case init.AgentCapabilities.SessionCapabilities.Resume != nil:
+		// Resuming restores the session without replaying it.
+		resumed, err := s.conn.ResumeSession(ctx, acp.ResumeSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: []acp.McpServer{}})
+		if err == nil {
+			s.id, modes, s.model = acp.SessionId(t.Session), resumed.Modes, modelOption(resumed.ConfigOptions)
 		}
 	}
 	if s.id == "" {

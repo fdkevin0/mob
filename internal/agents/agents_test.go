@@ -32,6 +32,10 @@ type fake struct {
 	prompts []string
 	mode    string
 	loaded  string
+	// resumes makes it resume sessions instead of loading them; resumed is
+	// the session it resumed.
+	resumes bool
+	resumed string
 	// release lets a "hold" prompt end.
 	release chan struct{}
 	// spent is the cost "tokens" prompts report.
@@ -43,6 +47,10 @@ type fake struct {
 }
 
 func (f *fake) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
+	if f.resumes {
+		// Like DeepSeek Harness: sessions are resumed, not loaded.
+		return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{SessionCapabilities: acp.SessionCapabilities{Resume: &acp.SessionResumeCapabilities{}}}}, nil
+	}
 	return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{LoadSession: true}}, nil
 }
 func (f *fake) Authenticate(context.Context, acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {
@@ -58,7 +66,10 @@ func (f *fake) CloseSession(context.Context, acp.CloseSessionRequest) (acp.Close
 func (f *fake) ListSessions(context.Context, acp.ListSessionsRequest) (acp.ListSessionsResponse, error) {
 	return acp.ListSessionsResponse{}, nil
 }
-func (f *fake) ResumeSession(context.Context, acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
+func (f *fake) ResumeSession(_ context.Context, r acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
+	f.mu.Lock()
+	f.dir, f.resumed = r.Cwd, string(r.SessionId)
+	f.mu.Unlock()
 	return acp.ResumeSessionResponse{}, nil
 }
 func (f *fake) SetSessionConfigOption(context.Context, acp.SetSessionConfigOptionRequest) (acp.SetSessionConfigOptionResponse, error) {
@@ -176,6 +187,8 @@ type fakes struct {
 	// session and failLoad are given to the agents started next.
 	session  acp.SessionId
 	failLoad bool
+	// resumes, when set, makes the agents resume sessions.
+	resumes bool
 }
 
 func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) {
@@ -189,7 +202,7 @@ func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) 
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
 	fs.mu.Lock()
-	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad}
+	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad, resumes: fs.resumes}
 	fs.mu.Unlock()
 	f.conn = acp.NewAgentSideConnection(f, fromAgent, toAgent)
 	f.conn.SetLogger(slog.New(slog.DiscardHandler))
@@ -930,5 +943,46 @@ func TestMobReviewsAFinishedTask(t *testing.T) {
 	h.svc.mu.Unlock()
 	if h.svc.review(task) {
 		t.Fatal("reviewed past the limit")
+	}
+}
+
+func TestResumingASession(t *testing.T) {
+	h := newHarness(t)
+	h.fakes.resumes = true
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "dsh", "", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task = h.wait(task); task.Agent != "dsh" || task.Session != "s1" {
+		t.Fatalf("task = %+v", task)
+	}
+	if err := h.svc.StopTask(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	task = h.say(task, "again")
+	f := h.fakes.last()
+	if len(h.fakes.agents) != 2 || f.resumed != "s1" || f.dir != task.Worktree || h.reply(task) != "got again" {
+		t.Fatalf("agents %d, resumed %q in %q, reply %q", len(h.fakes.agents), f.resumed, f.dir, h.reply(task))
+	}
+}
+
+func TestStartPassesPatchAndEnvironment(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	// The patch file is the command's last argument.
+	p := Preset{Title: "Echo", Commands: [][]string{{"sh", "-c", `eval "cat \"\${$#}\""; echo "$MOB_AGENT_TEST"`, "sh"}}, Env: []string{"MOB_AGENT_TEST=on"}, Patch: "- id: x\n  disabled: true\n"}
+	conn, err := start(context.Background(), p, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(conn.Out)
+	conn.Stop()
+	if string(out) != "- id: x\n  disabled: true\non\n" {
+		t.Fatalf("out = %q", out)
+	}
+	left, _ := filepath.Glob(filepath.Join(os.TempDir(), "mob-agent-*.patch.yml"))
+	if len(left) != 0 {
+		t.Fatalf("patch files left: %v", left)
 	}
 }
