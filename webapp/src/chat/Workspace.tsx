@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Plugins } from './Plugins';
 import { Thread } from './Thread';
+import { PlusIcon } from './icons';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -89,7 +90,7 @@ export function Workspace({
 	const links = (
 		<>
 			<Button variant="outline" className="new-chat" disabled={busy || switching} onClick={() => void create()}>
-				＋ New conversation
+				<PlusIcon /> New conversation
 			</Button>
 			<nav aria-label="Conversations">
 				{conversations.map((c) => (
@@ -117,7 +118,7 @@ export function Workspace({
 				Plugins & cloud services
 			</Button>
 			<div className="sidebar-footer">
-				<p>
+				<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
 					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'}
 				</p>
 				{isPublicWeb() && (
@@ -174,7 +175,7 @@ export function Workspace({
 						connection={connection}
 						id={selected.id}
 						initial={selected.snapshot}
-						background={background}
+						title={conversations.find((c) => c.id === selected.id)?.title}
 						onBusy={setBusy}
 						onChanged={() => {
 							void refreshList().catch((e) => setError(errorText(e)));

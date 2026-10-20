@@ -4,6 +4,7 @@ import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { ArrowUpIcon, ChevronDownIcon, PlusIcon } from './icons';
 
 /**
  * Lobby is the public web workspace before a runner is connected. Signed-in visitors can look around and type;
@@ -22,7 +23,7 @@ export function Lobby({ draft, setDraft, connect }: { draft: string; setDraft: (
 					<span>Not connected</span>
 				</div>
 				<Button variant="outline" className="new-chat" onClick={connect}>
-					＋ New conversation
+					<PlusIcon /> New conversation
 				</Button>
 				<nav aria-label="Conversations">
 					<p className="muted lobby-note">Your conversations appear here once a runner is connected.</p>
@@ -50,16 +51,11 @@ export function Lobby({ draft, setDraft, connect }: { draft: string; setDraft: (
 					</Button>
 				</div>
 				<header className="thread-header">
-					<div>
-						<p className="workspace-label">Your workspace</p>
-						<Button variant="ghost" className="model-button" onClick={connect}>
-							No runner connected
-						</Button>
-					</div>
-					<span className="badge">Not connected</span>
+					<h1 className="thread-title">New conversation</h1>
 				</header>
 				<div className="conversation lobby-conversation">
 					<ConversationEmptyState
+						className="empty-state"
 						title="What’s on your mind?"
 						description="Mob runs on your own computer. Connect a runner when you are ready to send."
 					/>
@@ -71,10 +67,10 @@ export function Lobby({ draft, setDraft, connect }: { draft: string; setDraft: (
 						</Label>
 						<Textarea
 							id="message"
-							placeholder="Message Mob…"
+							placeholder="Message Mob, or type / for commands"
 							value={draft}
 							onChange={(e) => setDraft(e.target.value)}
-							rows={2}
+							rows={1}
 							onKeyDown={(e) => {
 								if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
 									e.preventDefault();
@@ -82,9 +78,16 @@ export function Lobby({ draft, setDraft, connect }: { draft: string; setDraft: (
 								}
 							}}
 						/>
-						<Button disabled={!draft.trim()}>Send ↑</Button>
+						<div className="composer-bar">
+							<Button type="button" variant="ghost" className="model-button" onClick={connect}>
+								No runner connected
+								<ChevronDownIcon />
+							</Button>
+							<Button className="send-button" aria-label="Send" title="Send (Enter)" disabled={!draft.trim()}>
+								<ArrowUpIcon />
+							</Button>
+						</div>
 					</form>
-					<p className="composer-hint">Your message stays here while you connect a runner.</p>
 				</div>
 			</main>
 		</div>

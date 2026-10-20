@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { isToolUIPart } from 'ai';
 import { useConversation } from './useConversation';
 import { useCompletion } from './useCompletion';
@@ -17,12 +17,13 @@ import { Dialog, DialogTrigger } from '../components/ui/dialog';
 import { api, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, SpinnerIcon, StopIcon } from './icons';
 
 export function Thread({
 	connection,
 	id,
 	initial,
-	background,
+	title,
 	onBusy,
 	onChanged,
 	onAction,
@@ -32,7 +33,7 @@ export function Thread({
 	connection: Connection;
 	id: string;
 	initial: Snapshot;
-	background: boolean;
+	title?: string;
 	onBusy: (busy: boolean) => void;
 	onChanged: () => void;
 	onAction: (action: Action) => void;
@@ -81,55 +82,32 @@ export function Thread({
 		};
 	}, [connection]);
 	const modelLabel = model?.startsWith('demo/') ? 'Demo mode · no model calls' : (model ?? 'Connecting…');
+	const textarea = useRef<HTMLTextAreaElement>(null);
+	// The message box grows with its text up to a limit, then scrolls.
+	useLayoutEffect(() => {
+		const box = textarea.current;
+		if (!box) return;
+		box.style.height = 'auto';
+		box.style.height = `${Math.min(box.scrollHeight, 220)}px`;
+	}, [input]);
 	return (
 		<>
 			<header className="thread-header">
-				<div>
-					<p className="workspace-label">Your workspace</p>
-					<Dialog open={choosing} onOpenChange={setChoosing}>
-						<DialogTrigger asChild>
-							<Button
-								variant="ghost"
-								className="model-button"
-								aria-haspopup="dialog"
-								aria-expanded={choosing}
-								title="This conversation's model; choose another without typing /model"
-							>
-								{modelLabel}
-							</Button>
-						</DialogTrigger>
-						{choosing && (
-							<ModelPicker
-								connection={connection}
-								current={model}
-								defaultModel={defaultModel}
-								onPick={(choice) => {
-									setChoosing(false);
-									run(choice ? `/model ${choice}` : '/model default');
-								}}
-							/>
-						)}
-					</Dialog>
-				</div>
-				<span
-					className="badge"
-					title={background ? 'Continues after this window closes' : 'Lifetime is controlled by the process that started the service'}
-				>
-					{background ? 'Background service' : 'Session service'}
-				</span>
+				<h1 className="thread-title">{title || 'New conversation'}</h1>
 			</header>
 			<ChatConversation className="conversation">
 				<ConversationContent className="conversation-content">
 					{messages.length === 0 && (
 						<ConversationEmptyState
+							className="empty-state"
 							title="What’s on your mind?"
 							description="Ask a question, explore an idea, or save something to remember."
 						/>
 					)}
 					{messages.map((message) => (
 						<Message key={message.id} from={message.role}>
-							<p className="message-role">{message.role === 'user' ? 'You' : 'Mob'}</p>
-							<MessageContent>
+							<p className="sr-only">{message.role === 'user' ? 'You' : 'Mob'}</p>
+							<MessageContent className={message.role === 'user' ? 'user-bubble' : 'assistant-content'}>
 								{message.parts.map((part, index) => {
 									if (part.type === 'text')
 										return (
@@ -140,27 +118,51 @@ export function Thread({
 									if (part.type === 'reasoning')
 										return (
 											<details className="reasoning" key={index}>
-												<summary>Reasoning</summary>
+												<summary>
+													<ChevronIcon /> Reasoning
+												</summary>
 												<p>{part.text}</p>
 											</details>
 										);
-									if (isToolUIPart(part))
+									if (isToolUIPart(part)) {
+										const name = part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5);
+										const state = toolState(part.state);
 										return (
-											<section className="tool-card" key={part.toolCallId}>
-												<strong>{part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5)}</strong>
-												<span className="tool-state">{part.state}</span>
-												<pre>{JSON.stringify(part.input, null, 2)}</pre>
+											<details
+												className={`tool-call ${state.kind}`}
+												key={part.toolCallId}
+												open={state.kind === 'waiting' || state.kind === 'failed'}
+											>
+												<summary onClick={state.kind === 'waiting' ? (e) => e.preventDefault() : undefined}>
+													<span className="tool-status" title={state.label}>
+														{state.icon}
+													</span>
+													<span className="tool-title">{toolTitle(name)}</span>
+													<span className="tool-detail">{toolDetail(part.input)}</span>
+													<span className="sr-only">{state.label}</span>
+													<ChevronIcon />
+												</summary>
+												{part.state !== 'approval-requested' && (
+													<div className="tool-body">
+														<pre>{JSON.stringify(part.input, null, 2)}</pre>
+														{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+														{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
+													</div>
+												)}
 												{part.state === 'approval-requested' && (
 													<ApprovalPrompt
-														question={part.type === 'tool-remember' ? 'Save this fact locally?' : 'Allow this request?'}
+														question={
+															name === 'remember'
+																? 'Mob wants to save this to memory.'
+																: `Mob wants to use ${toolTitle(name).toLowerCase()}.`
+														}
 														busy={busy}
 														decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
 													/>
 												)}
-												{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
-												{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
-											</section>
+											</details>
 										);
+									}
 									return null;
 								})}
 								{message.metadata?.status === 'step-limit' ? (
@@ -182,10 +184,11 @@ export function Thread({
 									)
 								)}
 							</MessageContent>
+							{message.role === 'assistant' && !(streaming && message === messages.at(-1)) && <CopyButton message={message} />}
 						</Message>
 					))}
 					{busy && (
-						<p className="muted" role="status">
+						<p className="thinking" role="status">
 							{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}
 						</p>
 					)}
@@ -230,11 +233,12 @@ export function Thread({
 						Message
 					</Label>
 					<Textarea
+						ref={textarea}
 						id="message"
-						placeholder="Message Mob…"
+						placeholder="Message Mob, or type / for commands"
 						value={input}
 						onChange={(e) => setInput(e.target.value)}
-						rows={2}
+						rows={1}
 						aria-autocomplete="list"
 						aria-controls={completion.suggestions.length ? 'command-suggestions' : undefined}
 						aria-activedescendant={completion.suggestions.length ? `suggestion-${completion.selected}` : undefined}
@@ -246,17 +250,104 @@ export function Thread({
 							}
 						}}
 					/>
-					{busy ? (
-						<Button type="button" onClick={() => void cancel()}>
-							Stop
-						</Button>
-					) : (
-						<Button disabled={!input.trim()}>Send ↑</Button>
-					)}
+					<div className="composer-bar">
+						<Dialog open={choosing} onOpenChange={setChoosing}>
+							<DialogTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									className="model-button"
+									aria-haspopup="dialog"
+									aria-expanded={choosing}
+									title="This conversation's model; choose another without typing /model"
+								>
+									{modelLabel}
+									<ChevronDownIcon />
+								</Button>
+							</DialogTrigger>
+							{choosing && (
+								<ModelPicker
+									connection={connection}
+									current={model}
+									defaultModel={defaultModel}
+									onPick={(choice) => {
+										setChoosing(false);
+										run(choice ? `/model ${choice}` : '/model default');
+									}}
+								/>
+							)}
+						</Dialog>
+						{busy ? (
+							<Button type="button" className="send-button" aria-label="Stop" title="Stop" onClick={() => void cancel()}>
+								<StopIcon />
+							</Button>
+						) : (
+							<Button className="send-button" aria-label="Send" title="Send (Enter)" disabled={!input.trim()}>
+								<ArrowUpIcon />
+							</Button>
+						)}
+					</div>
 				</form>
-				<p className="composer-hint">Type / for commands · Tab completes · Enter to send · Shift+Enter for a new line</p>
 			</div>
 		</>
+	);
+}
+
+// toolState turns an AI SDK tool state into what the row shows: running, waiting for approval, done or failed.
+function toolState(state: string): { kind: string; label: string; icon: ReactNode } {
+	if (state === 'approval-requested') return { kind: 'waiting', label: 'Waiting for your approval', icon: <HandIcon /> };
+	if (state === 'output-available') return { kind: 'done', label: 'Done', icon: <CheckIcon /> };
+	if (state === 'output-error') return { kind: 'failed', label: 'Failed', icon: <CrossIcon /> };
+	if (state === 'output-denied') return { kind: 'failed', label: 'Denied', icon: <CrossIcon /> };
+	return { kind: 'running', label: 'Running', icon: <SpinnerIcon /> };
+}
+
+const toolTitles: Record<string, string> = {
+	remember: 'Save memory',
+	sandbox: 'Run command',
+	tool_search: 'Search tools',
+	skill: 'Use skill',
+	web_fetch: 'Fetch page',
+	web_search: 'Search the web',
+};
+// toolTitle names a tool in words: a known title, or its id with separators as spaces.
+function toolTitle(name: string) {
+	const known = toolTitles[name];
+	if (known) return known;
+	const words = name.replace(/[_.-]+/g, ' ').trim();
+	return words.charAt(0).toUpperCase() + words.slice(1);
+}
+// toolDetail shows the call's first text argument on the row, such as the fact or the command.
+function toolDetail(input: unknown) {
+	if (!input || typeof input !== 'object') return '';
+	const value = Object.values(input).find((v) => typeof v === 'string');
+	return typeof value === 'string' ? value : '';
+}
+
+function CopyButton({ message }: { message: { parts: { type: string; text?: string }[] } }) {
+	const [copied, setCopied] = useState(false);
+	const text = message.parts
+		.filter((part) => part.type === 'text')
+		.map((part) => part.text)
+		.join('\n\n');
+	if (!text) return null;
+	return (
+		<div className="message-actions">
+			<Button
+				type="button"
+				variant="ghost"
+				aria-label={copied ? 'Copied' : 'Copy reply'}
+				title={copied ? 'Copied' : 'Copy'}
+				onClick={() => {
+					void navigator.clipboard?.writeText(text).then(() => {
+						setCopied(true);
+						setTimeout(() => setCopied(false), 1500);
+					});
+				}}
+			>
+				{copied ? <CheckIcon /> : <CopyIcon />}
+			</Button>
+		</div>
 	);
 }
 
@@ -273,30 +364,49 @@ function ApprovalPrompt({
 	busy: boolean;
 	decide: (approved: boolean, reason?: string, remember?: string) => void;
 }) {
+	const [denying, setDenying] = useState(false);
 	const [reason, setReason] = useState('');
-	const approving = busy || reason.trim() !== '';
 	return (
 		<div className="approval-prompt">
-			<p>{question} Approval expires after one hour. Remembered approvals are listed by /grants.</p>
-			<Input
-				aria-label="Reason for denying (optional)"
-				placeholder="Reason for denying (optional)"
-				value={reason}
-				maxLength={2000}
-				onChange={(e) => setReason(e.target.value)}
-			/>
-			<Button disabled={approving} onClick={() => decide(true)}>
-				Approve
-			</Button>
-			<Button variant="outline" disabled={approving} onClick={() => decide(true, undefined, 'conversation')}>
-				Allow in this conversation
-			</Button>
-			<Button variant="outline" disabled={approving} onClick={() => decide(true, undefined, 'always')}>
-				Always allow
-			</Button>
-			<Button variant="outline" disabled={busy} onClick={() => decide(false, reason)}>
-				Deny
-			</Button>
+			<p className="approval-question">{question}</p>
+			{denying ? (
+				<form
+					className="approval-actions"
+					onSubmit={(e) => {
+						e.preventDefault();
+						decide(false, reason);
+					}}
+				>
+					<Input
+						aria-label="Reason for denying (optional)"
+						placeholder="Tell Mob why (optional)"
+						value={reason}
+						maxLength={2000}
+						autoFocus
+						onChange={(e) => setReason(e.target.value)}
+					/>
+					<Button disabled={busy}>Deny</Button>
+					<Button type="button" variant="ghost" onClick={() => setDenying(false)}>
+						Back
+					</Button>
+				</form>
+			) : (
+				<div className="approval-actions">
+					<Button disabled={busy} onClick={() => decide(true)}>
+						Approve
+					</Button>
+					<Button variant="outline" disabled={busy} onClick={() => decide(true, undefined, 'conversation')}>
+						Allow in this conversation
+					</Button>
+					<Button variant="outline" disabled={busy} onClick={() => decide(true, undefined, 'always')}>
+						Always allow
+					</Button>
+					<Button variant="ghost" disabled={busy} onClick={() => setDenying(true)}>
+						Deny…
+					</Button>
+				</div>
+			)}
+			<p className="approval-note">Approval expires after one hour. Remembered approvals are listed by /grants.</p>
 		</div>
 	);
 }

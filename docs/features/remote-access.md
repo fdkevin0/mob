@@ -32,9 +32,13 @@ served by the Worker in `worker/`:
   sent automatically. A `mob open --web` link opens the dialog to show its
   progress, and a replaced token reopens it with the reason.
 
-The landing page and workspace share the dark theme, Geist fonts, pixel logo
-and basic controls. The workspace uses the same theme in the local browser and
-Wails desktop app. On narrow screens, Conversations opens a side panel; choosing
+The landing page and workspace share the dark theme, Geist fonts and pixel
+logo. The workspace uses calmer, rounded controls in the local browser, Wails
+desktop app and `/app`: one rounded message box holds the text, the model
+picker and a round send (or stop) button; replies have no role labels; each
+tool call is one line with its status that opens to show input and output,
+and a pending approval opens as a card with Approve, Allow in this
+conversation, Always allow and Deny (which then asks for an optional reason). On narrow screens, Conversations opens a side panel; choosing
 a conversation closes it. Model selection and sign-in dialogs contain keyboard
 focus and return it when closed. Plugin tabs support arrow-key navigation and
 keep unsaved configuration edits when switching tabs.
