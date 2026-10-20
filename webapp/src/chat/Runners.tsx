@@ -7,8 +7,11 @@ import { cloud, newKey } from './remote';
 
 type Runner = { id: string; session: string | null };
 const storageKey = (id: string) => `mob-runner-key:${id}`;
+// The Render Blueprint is render.yaml at the root of this repository.
+export const renderDeployURL = 'https://render.com/deploy?repo=https://github.com/fdkevin0/mob';
 
-export function Runners({ connect }: { connect: (connection: Connection) => void }) {
+/** Runners lists the account's runners and pairs new ones; deploy pairs one that Render runs instead of the user's computer. */
+export function Runners({ connect, deploy }: { connect: (connection: Connection) => void; deploy?: boolean }) {
 	const [runners, setRunners] = useState<Runner[]>([]);
 	const [pairing, setPairing] = useState<{ id: string; json: string; expiresAt: number }>();
 	const [error, setError] = useState('');
@@ -41,7 +44,11 @@ export function Runners({ connect }: { connect: (connection: Connection) => void
 			const key = newKey();
 			localStorage.setItem('mob-runner-storage-test', '1');
 			localStorage.removeItem('mob-runner-storage-test');
-			const result = await cloud<{ id: string; code: string; expiresAt: number }>('', { method: 'POST' });
+			// A deploy code lasts long enough for Render to build the runner before it claims it.
+			const result = await cloud<{ id: string; code: string; expiresAt: number }>('', {
+				method: 'POST',
+				...(deploy && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ for: 'deploy' }) }),
+			});
 			localStorage.setItem(storageKey(result.id), key);
 			setPairing({
 				id: result.id,
@@ -79,8 +86,15 @@ export function Runners({ connect }: { connect: (connection: Connection) => void
 	}
 	return (
 		<section aria-label="Remote runners">
-			<h2>Your runners</h2>
-			<p>Control Mob on another computer. Messages and tool results are encrypted between this browser and your runner.</p>
+			<h2>{deploy ? 'Deploy to Render' : 'Your runners'}</h2>
+			{deploy ? (
+				<p>
+					Run Mob in your own Render account: a background worker with a 1 GB disk, about $7.25 a month billed by Render. It needs no inbound
+					port; messages and tool results are encrypted between this browser and the runner.
+				</p>
+			) : (
+				<p>Control Mob on another computer. Messages and tool results are encrypted between this browser and your runner.</p>
+			)}
 			{runners.map((runner) => (
 				<div key={runner.id}>
 					<span>
@@ -95,17 +109,31 @@ export function Runners({ connect }: { connect: (connection: Connection) => void
 				</div>
 			))}
 			<Button type="button" disabled={busy} onClick={() => void pair()}>
-				Pair a runner
+				{deploy ? 'Create Render pairing' : 'Pair a runner'}
 			</Button>
 			{pairing && (
 				<div>
-					<p>
-						On your computer, run <code>mob runner pair</code> and paste this private pairing JSON. Then run <code>mob start</code> and{' '}
-						<code>mob runner</code>.
-					</p>
+					{deploy ? (
+						<p>
+							Copy this private pairing JSON, then choose <strong>Deploy to Render</strong> and paste it as <code>MOB_RUNNER_PAIRING</code>. The
+							runner appears here once Render has built and started it; then choose <strong>Open runner</strong>.
+						</p>
+					) : (
+						<p>
+							On your computer, run <code>mob runner pair</code> and paste this private pairing JSON. Then run <code>mob start</code> and{' '}
+							<code>mob runner</code>.
+						</p>
+					)}
 					<Label htmlFor="runner-pairing">Private pairing JSON (expires {new Date(pairing.expiresAt).toLocaleTimeString()})</Label>
 					<Textarea id="runner-pairing" rows={5} spellCheck={false} readOnly value={pairing.json} onFocus={(e) => e.target.select()} />
 					<p>Keep it private: it contains your encryption key. This browser keeps the key locally; clearing site data loses access.</p>
+					{deploy && (
+						<Button asChild>
+							<a href={renderDeployURL} target="_blank" rel="noopener noreferrer">
+								Deploy to Render
+							</a>
+						</Button>
+					)}{' '}
 					<Button type="button" onClick={() => setPairing(undefined)}>
 						Hide pairing data
 					</Button>

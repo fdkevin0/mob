@@ -57,9 +57,16 @@ export async function accountRunners(request: Request, env: Env, userID: string)
 		}
 		if (request.method === 'POST') {
 			await env.DB.prepare('DELETE FROM runner WHERE token_hash IS NULL AND expires_at <= ?').bind(Date.now()).run();
+			// A runner deployed to a cloud host claims its code only after the host builds it, which takes longer than pasting it in a terminal.
+			let deploy = false;
+			try {
+				deploy = JSON.parse((await limitedText(request, 256)) || '{}').for === 'deploy';
+			} catch {
+				return json({ error: 'Invalid request' }, 400);
+			}
 			const id = crypto.randomUUID(),
 				code = secret(),
-				expiresAt = Date.now() + 300_000;
+				expiresAt = Date.now() + (deploy ? 1_800_000 : 300_000);
 			// Bound registrations per account, including pending pairings.
 			const result = await env.DB.prepare(
 				'INSERT INTO runner (id,user_id,code_hash,expires_at,created_at) SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM runner WHERE user_id = ?) < 20',

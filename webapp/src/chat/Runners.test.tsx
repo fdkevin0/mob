@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { Runners } from './Runners';
+import { renderDeployURL, Runners } from './Runners';
 
 const id = '11111111-1111-4111-8111-111111111111';
 afterEach(() => {
@@ -52,4 +52,24 @@ it('does not send requests to a runner whose key is missing', async () => {
 	fireEvent.click(await screen.findByRole('button', { name: 'Open runner' }));
 	expect(screen.getByRole('alert').textContent).toContain('no key');
 	expect(connect).not.toHaveBeenCalled();
+});
+
+it('pairs a Render runner with a longer-lived code and links to the Blueprint', async () => {
+	let body = '';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (_url: string, init?: RequestInit) => {
+			if (init?.method === 'POST') {
+				body = String(init.body);
+				return Response.json({ id, code: 'one-time-code', expiresAt: Date.now() + 1800000 });
+			}
+			return Response.json([]);
+		}),
+	);
+	render(<Runners connect={vi.fn()} deploy />);
+	fireEvent.click(screen.getByRole('button', { name: 'Create Render pairing' }));
+	const field = (await screen.findByLabelText(/Private pairing JSON/)) as HTMLTextAreaElement;
+	expect(JSON.parse(body)).toEqual({ for: 'deploy' });
+	expect(body).not.toContain(JSON.parse(field.value).key);
+	expect(screen.getByRole('link', { name: 'Deploy to Render' }).getAttribute('href')).toBe(renderDeployURL);
 });

@@ -1,0 +1,19 @@
+# Render Blueprint for "Deploy to Render" in the web app's Connect a runner dialog.
+# docs/features/remote-access.md describes the deployment.
+services:
+  - type: worker
+    name: mob-runner
+    runtime: docker
+    # The smallest paid worker; Render has no free workers or free disks.
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile
+    # Updates are a manual deploy, so a merge to main never restarts a running turn.
+    autoDeployTrigger: "off"
+    disk:
+      name: mob-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      # The private pairing JSON from Connect a runner → Deploy to Render.
+      - key: MOB_RUNNER_PAIRING
+        sync: false

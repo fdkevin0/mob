@@ -242,6 +242,30 @@ try {
 	const stale = await account(`/${pair.id}/relay`, 'alice', { method: 'POST', body: JSON.stringify(envelope) });
 	assert.equal(stale.status, 409);
 
+	// A runner deployed to Render pairs itself from MOB_RUNNER_PAIRING and serves Mob in the same process.
+	const deployed = await account('', 'alice', { method: 'POST', body: JSON.stringify({ for: 'deploy' }) });
+	assert.equal(deployed.status, 201, await deployed.clone().text());
+	const deployPair = (await deployed.json()) as { id: string; code: string; expiresAt: number };
+	assert(deployPair.expiresAt - Date.now() > 25 * 60_000, 'deploy pairing should outlast a cloud build');
+	const deployDir = join(dir, 'deployed');
+	const deployKey = newKey();
+	const deployEnv = { ...env, MOB_DATA_DIR: deployDir, MOB_STATE_DIR: deployDir, MOB_RUNNER_PAIRING: JSON.stringify({ url: origin, ...deployPair, key: deployKey }) };
+	const deployArgs = ['runner', '--serve', '--addr=127.0.0.1:0'];
+	const cloudRunner = spawn(binary, deployArgs, { env: deployEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+	children.push(cloudRunner);
+	const deployedSession = async () => ((await (await account(`/${deployPair.id}`)).json()) as { session: string | null }).session;
+	await until(async () => Boolean(await deployedSession()), 'deployed runner online');
+	assert.equal((await encryptedFetch(deployPair.id, deployKey)(`${origin}/api/runners/${deployPair.id}/api/config`)).status, 200);
+	// A restart reuses runner.json instead of claiming the spent code again.
+	const firstSession = await deployedSession();
+	cloudRunner.kill();
+	await once(cloudRunner, 'exit');
+	children.push(spawn(binary, deployArgs, { env: deployEnv, stdio: ['ignore', 'pipe', 'pipe'] }));
+	await until(async () => {
+		const next = await deployedSession();
+		return Boolean(next && next !== firstSession);
+	}, 'deployed runner back online after restart');
+
 	assert.equal((await account(`/${pair.id}`, 'alice', { method: 'DELETE' })).status, 200);
 	assert.equal((await account(`/${pair.id}`)).status, 404);
 	const credentials = JSON.parse(credentialFile);
