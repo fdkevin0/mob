@@ -45,9 +45,9 @@ const appPolicy = [
 
 // The documentation (apps/docs) is public and runs no third-party code: it
 // shares an origin with /app, whose local storage holds Mob access tokens.
-// Each page's <meta> policy narrows scripts and styles to what its build
-// hashed; this header covers everything else and still applies if a page
-// lost its <meta>.
+// The build puts a <meta> policy at the top of every page's <head> (and fails
+// without one) that narrows scripts and styles to what it hashed; this header
+// covers the other directives and framing.
 const docsPolicy = [
 	"default-src 'self'",
 	"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
@@ -61,6 +61,10 @@ const docsPolicy = [
 	"form-action 'none'",
 	"frame-ancestors 'none'",
 ].join('; ');
+
+// Other files under /docs/media/ (images copied from the repository) are never
+// pages, so an SVG opened directly runs nothing.
+const docsFilePolicy = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox";
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -105,7 +109,8 @@ async function docs(env: Env, request: Request) {
 		status = 404;
 	}
 	const response = new Response(asset.body, { status, headers: asset.headers });
-	response.headers.set('Content-Security-Policy', docsPolicy);
+	const html = response.headers.get('Content-Type')?.startsWith('text/html') || response.status >= 300 && response.status < 400;
+	response.headers.set('Content-Security-Policy', html ? docsPolicy : docsFilePolicy);
 	response.headers.set('Referrer-Policy', 'no-referrer');
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	return response;

@@ -12,6 +12,8 @@ export interface Page {
 	/** Overrides the file's `# Heading`. */
 	title?: string;
 	description?: string;
+	/** The file "Edit page" opens, when the page is generated from it. */
+	editSource?: string;
 }
 
 const features = [
@@ -41,7 +43,13 @@ export const pages: Page[] = [
 	},
 	{ source: 'docs/features/README.md', slug: 'features', group: 'Features', title: 'Overview' },
 	...features.map((name): Page => ({ source: `docs/features/${name}.md`, slug: `features/${name}`, group: 'Features' })),
-	{ source: 'docs/environment-variables.md', slug: 'reference/configuration', group: 'Reference', title: 'Configuration keys' },
+	{
+		source: 'docs/environment-variables.md',
+		slug: 'reference/configuration',
+		group: 'Reference',
+		title: 'Configuration keys',
+		editSource: 'internal/configuration/options.go',
+	},
 	{ source: 'CONTRIBUTING.md', slug: 'contributing', group: 'Contributing' },
 	{ source: 'docs/architecture.md', slug: 'contributing/architecture', group: 'Contributing' },
 	{ source: 'docs/sandbox-verification.md', slug: 'contributing/sandbox-verification', group: 'Contributing' },

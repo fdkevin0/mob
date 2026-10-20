@@ -5,7 +5,7 @@ Mob runs on the user's machine and serves its clients over loopback.
 ## Public web UI
 
 The site at https://mob.fdkevin.cloud is deployed to Cloudflare Workers, so web
-changes reach users when they merge, without a release. It has four parts,
+changes reach users when they merge, without a release. It has five parts,
 served by the Worker in `worker/`:
 
 - `/` is the landing page, scrolled through in pages over one pinned isometric
