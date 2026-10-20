@@ -1,7 +1,12 @@
+import type { ComponentType } from 'react';
+import { RenderLogo } from './icons';
+
 /** A cloud host the Connect a runner dialog can deploy a runner to, in the user's own account. */
 export type Host = {
 	id: string;
 	name: string;
+	/** Logo is the host's mark, shown on its deploy button. */
+	Logo: ComponentType;
 	/** deployURL opens the host's one-click deployment; a host without one is not ready yet. */
 	deployURL?: string;
 	/** summary says what the free tier gives the runner and what it costs to keep conversations. */
@@ -17,6 +22,7 @@ export const hosts: Host[] = [
 	{
 		id: 'render',
 		name: 'Render',
+		Logo: RenderLogo,
 		// The Render Blueprint is render.yaml at the root of this repository.
 		deployURL: 'https://render.com/deploy?repo=https://github.com/fdkevin0/mob',
 		summary:

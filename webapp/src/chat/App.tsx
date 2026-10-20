@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../compon
 import { Workspace } from './Workspace';
 import { Runners } from './Runners';
 import { Lobby } from './Lobby';
+import { hosts } from './hosts';
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -77,7 +78,7 @@ export function App() {
       <DialogDescription className="dialog-description">Mob needs a runner to send messages. Choose where it runs.</DialogDescription>
       {choice ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setChoice(undefined); setError(''); }}>← Other runners</Button>{choice === 'cloud' ? <Runners connect={open} deploy /> : panel}</> : <div className="runner-choices">
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('own')}><strong>Your own runner</strong><span>Mob on this computer, or on another computer you pair. Conversations stay there.</span></Button>
-        <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('cloud')}><strong>Deploy to the cloud</strong><span>Mob in your own Render account, on its free tier. No computer needs to stay on.</span></Button>
+        <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('cloud')}><strong>Deploy to the cloud {hosts.filter(h => h.deployURL).map(h => <small key={h.id} className="host-mark"><h.Logo />{h.name}</small>)}</strong><span>Mob in your own Render account, on its free tier. No computer needs to stay on.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>
       </div>}</DialogContent></Dialog></>;
   return <main className="connect"><Logo /><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>{panel}</main>;

@@ -110,6 +110,7 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 									disabled={!h.deployURL}
 									onClick={() => setHostID(h.id)}
 								>
+									<h.Logo />
 									{h.name}
 									{!h.deployURL && <small> Coming soon</small>}
 								</Button>
@@ -159,16 +160,19 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 						Keep it private: it contains your encryption key{deploy && ' and the runner’s credential'}. This browser keeps the key locally;
 						clearing site data loses access.
 					</p>
-					{deploy && host.deployURL && (
-						<Button asChild>
-							<a href={host.deployURL} target="_blank" rel="noopener noreferrer">
-								Deploy to {host.name}
-							</a>
+					<div className="pairing-actions">
+						{deploy && host.deployURL && (
+							<Button asChild>
+								<a href={host.deployURL} target="_blank" rel="noopener noreferrer" className="host-deploy">
+									<host.Logo />
+									Deploy to {host.name}
+								</a>
+							</Button>
+						)}
+						<Button type="button" variant="ghost" onClick={() => setPairing(undefined)}>
+							Hide pairing data
 						</Button>
-					)}{' '}
-					<Button type="button" onClick={() => setPairing(undefined)}>
-						Hide pairing data
-					</Button>
+					</div>
 				</div>
 			)}
 			{error && <p role="alert">{error}</p>}
