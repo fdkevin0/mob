@@ -26,6 +26,26 @@ served by the Worker in `worker/`:
 - Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
   Turnstile check has to pass before the GitHub flow starts. Accounts and
   sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.
+- Passkeys are an extra way into an account that GitHub created; they never
+  create an account. **Sign in with a passkey** in the sign-in dialog skips
+  Turnstile (a passkey cannot be guessed or used to sign up) and opens `/app`.
+  A passkey that is not bound to any account is refused with a hint to sign in
+  with GitHub first. The relying party ID is the site's hostname, so passkeys
+  made on `mob.fdkevin.cloud` do not work on preview hostnames.
+- `/account` shows the signed-in user, the connected GitHub account and the
+  account's passkeys, which can be added, renamed and removed. The GitHub row
+  shows the current username: the page asks GitHub once per visit with the
+  stored OAuth token (Better Auth `account-info`), so a renamed account shows
+  its new name, and it only says Connected when GitHub does not answer.
+  Browsers do not reveal device names, so a new passkey is named after its
+  provider from the authenticator's AAGUID (such as iCloud Keychain, Google
+  Password Manager or Windows Hello) and is otherwise called Passkey; Apple
+  often reports an anonymous AAGUID. It can be renamed. Visitors without a session go to `/?signin=account` and come back
+  to `/account` after signing in. Adding a passkey needs a session less than a
+  day old; with an older session the page asks the user to sign in with
+  GitHub again. The landing page's account menu and the `/app` sidebar link to
+  it. The page has its own entry and a content security policy that allows
+  only the site itself.
 - `/app` is the web UI. The Worker sends visitors without a session back to
   `/?signin=app`. Signed-in visitors enter the workspace even when no runner or
   local Mob is connected yet: they can look around and type a message, and the
@@ -179,7 +199,9 @@ their work.
 The Worker deployment adds the `RUNNERS` Durable Object binding and its SQLite
 class migration, plus D1 migration `0002_runners.sql`. Apply the D1 migration
 before deploying this Worker; the existing Workers Builds command does so.
-No additional cloud secrets are needed. `bun run test:runner` runs the real
+No additional cloud secrets are needed. Passkeys add D1 migration
+`0003_passkey.sql` (the Better Auth `passkey` table), applied the same way.
+`bun run test:runner` runs the real
 Worker/D1/Durable Object, Go service, runner and browser encryption code
 locally with fake account sessions and an offline demo model.
 

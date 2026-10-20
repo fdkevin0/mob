@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
 // The public mode builds the site deployed to Cloudflare Workers (wrangler.jsonc):
-// the landing page plus the web UI. The Worker in worker/ serves both and sets
+// the landing page, the account page and the web UI. The Worker in worker/ serves both and sets
 // their content security policies.
 export default defineConfig(({ mode }) => ({
 	root: path.resolve(__dirname),
@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => ({
 		rollupOptions: {
 			input: {
 				chat: path.resolve(__dirname, 'index.html'),
-				...(mode === 'public' ? { landing: path.resolve(__dirname, 'landing.html') } : {}),
+				...(mode === 'public' ? { landing: path.resolve(__dirname, 'landing.html'), account: path.resolve(__dirname, 'account.html') } : {}),
 			},
 		},
 	},

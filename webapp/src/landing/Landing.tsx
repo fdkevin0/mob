@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { authClient, keepOffer, loadSite, openApp, pendingOffer, type Site } from './auth';
+import { authClient, keepOffer, loadSite, openApp, pendingOffer, returnAfterSignIn, type Site } from './auth';
 import { Logo } from '../components/brand/Logo';
 import { PixelIcon } from '../components/brand/PixelIcon';
 import { Button } from '../components/ui/button';
@@ -36,6 +36,7 @@ export function Landing() {
 		if (signin) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
 		if (linked) setDialog({ reason: 'Sign in with GitHub to connect this browser to Mob on your computer.' });
 		else if (signin === 'app') setDialog({});
+		else if (signin === 'account') { returnAfterSignIn('/account'); setDialog({ reason: 'Sign in to manage your account and passkeys.' }); }
 		else if (signin === 'done') setSignedIn(true);
 		else if (signin === 'failed') setDialog({ reason: 'GitHub sign-in did not finish. Try again.' });
 		loadSite().then(setSite).catch(e => setSiteError(`Sign-in is unavailable right now. ${e instanceof Error ? e.message : ''}`.trim()));
@@ -65,6 +66,7 @@ export function Landing() {
 							</button></DropdownMenuTrigger>
 							<DropdownMenuContent>
 								<DropdownMenuLabel className="ui-menu-label"><strong>{user.name}</strong>{user.email}</DropdownMenuLabel>
+								<DropdownMenuItem className="ui-menu-item" asChild><a href="/account">Account</a></DropdownMenuItem>
 								<DropdownMenuItem className="ui-menu-item" onSelect={() => { void authClient.signOut(); }}>Sign out</DropdownMenuItem>
 							</DropdownMenuContent>
 							</DropdownMenu>

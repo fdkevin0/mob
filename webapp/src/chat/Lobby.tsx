@@ -54,6 +54,9 @@ export function Lobby({
 					<Button variant="ghost" asChild>
 						<a href="/">Mob home</a>
 					</Button>
+					<Button variant="ghost" asChild>
+						<a href="/account">Account</a>
+					</Button>
 					<Button variant="ghost" disabled={connecting} onClick={connect}>
 						Connect a runner
 					</Button>

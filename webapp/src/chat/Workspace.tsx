@@ -124,9 +124,14 @@ export function Workspace({
 					{background ? 'keeps running' : 'stops with its process'}
 				</p>
 				{isPublicWeb() && (
-					<Button variant="ghost" asChild>
-						<a href="/">Mob home</a>
-					</Button>
+					<>
+						<Button variant="ghost" asChild>
+							<a href="/">Mob home</a>
+						</Button>
+						<Button variant="ghost" asChild>
+							<a href="/account">Account</a>
+						</Button>
+					</>
 				)}
 				<Button variant="ghost" onClick={disconnect} disabled={busy}>
 					Disconnect

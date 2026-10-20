@@ -52,7 +52,7 @@ try {
 	);
 	const origin = (await mf.ready).origin;
 	const db = await mf.getD1Database('DB');
-	for (const file of ['0001_better_auth.sql', '0002_runners.sql']) {
+	for (const file of ['0001_better_auth.sql', '0002_runners.sql', '0003_passkey.sql']) {
 		const sql = (await readFile(`worker/migrations/${file}`, 'utf8')).replace(/^--.*$/gm, '');
 		for (const statement of sql.split(';').filter((s) => s.trim())) await db.prepare(statement).run();
 	}
@@ -73,6 +73,22 @@ try {
 	const account = (path: string, user = 'alice', init?: RequestInit) =>
 		originalFetch(origin + '/api/runners' + path, { ...init, headers: { Cookie: cookies[user], Origin: origin, ...init?.headers } });
 	assert.equal((await originalFetch(origin + '/api/runners')).status, 401);
+
+	// Passkeys join an account that already signed in; anyone may start a passkey sign-in.
+	const authAPI = (path: string, user?: string) =>
+		originalFetch(origin + '/api/auth' + path, { headers: { Origin: origin, ...(user ? { Cookie: cookies[user] } : {}) } });
+	const signedOut = await originalFetch(origin + '/account', { redirect: 'manual' });
+	assert.equal(signedOut.status, 302);
+	assert.equal(signedOut.headers.get('Location'), origin + '/?signin=account');
+	assert.equal((await authAPI('/passkey/generate-register-options')).status, 401);
+	assert.equal((await authAPI('/passkey/list-user-passkeys')).status, 401);
+	assert.deepEqual(await (await authAPI('/passkey/list-user-passkeys', 'alice')).json(), []);
+	const registration = await authAPI('/passkey/generate-register-options', 'alice');
+	assert.equal(registration.status, 200, await registration.clone().text());
+	const options = (await registration.json()) as { rp: { id: string; name: string }; user: { name: string } };
+	assert.deepEqual(options.rp, { id: new URL(origin).hostname, name: 'Mob' });
+	assert.equal(options.user.name, 'alice@example.test');
+	assert.equal((await authAPI('/passkey/generate-authenticate-options')).status, 200);
 	const created = await account('', 'alice', { method: 'POST' });
 	assert.equal(created.status, 201, await created.clone().text());
 	const pair = (await created.json()) as { id: string; code: string };
@@ -240,7 +256,7 @@ try {
 	});
 	assert.equal(revoked.status, 401);
 	console.log(
-		'Runner integration passed: account isolation, one-time pairing, Go/browser encrypted chat, local-only boundaries, replay/reconnect and revocation.',
+		'Runner integration passed: account isolation, passkey binding, one-time pairing, Go/browser encrypted chat, local-only boundaries, replay/reconnect and revocation.',
 	);
 } finally {
 	globalThis.fetch = originalFetch;
