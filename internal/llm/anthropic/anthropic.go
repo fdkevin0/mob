@@ -40,6 +40,9 @@ const defaultOutput = 32000
 // budgets are thinking tokens per effort; "none" leaves thinking off.
 var budgets = map[string]int{"minimal": 1024, "low": 2048, "medium": 4096, "high": 8192, "xhigh": 16384, "max": 32000}
 
+// ephemeral marks the end of a prompt prefix to cache, for five minutes.
+var ephemeral = map[string]any{"type": "ephemeral"}
+
 var unsafeID = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
 // toolID adapts IDs another vendor issued to the pattern Anthropic accepts.
@@ -94,9 +97,20 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 	if maxTokens <= 0 {
 		maxTokens = defaultOutput
 	}
-	body := map[string]any{"model": m.ref.Model, "messages": messages(req), "stream": true}
+	// Anthropic caches a prompt's prefix only up to blocks marked for it:
+	// the tools, the system prompt and the latest message, so each step of a
+	// turn, and the next turn, reads what the previous one wrote. Compatible
+	// vendors that cache on their own ignore the marks.
+	msgs := messages(req)
+	if n := len(msgs); n > 0 {
+		blocks := msgs[n-1]["content"].([]map[string]any)
+		if last := blocks[len(blocks)-1]; last["type"] != "thinking" {
+			last["cache_control"] = ephemeral
+		}
+	}
+	body := map[string]any{"model": m.ref.Model, "messages": msgs, "stream": true}
 	if req.System != "" {
-		body["system"] = req.System
+		body["system"] = []map[string]any{{"type": "text", "text": req.System, "cache_control": ephemeral}}
 	}
 	if limit := m.info.Output; limit > 0 {
 		maxTokens = min(maxTokens, limit)
@@ -113,6 +127,7 @@ func (m *Model) Stream(ctx context.Context, req llm.Request, emit func(kind, del
 		for i, t := range req.Tools {
 			ts[i] = map[string]any{"name": t.Name, "description": t.Description, "input_schema": t.Parameters}
 		}
+		ts[len(ts)-1]["cache_control"] = ephemeral
 		body["tools"] = ts
 	}
 	raw, err := json.Marshal(body)

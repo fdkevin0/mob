@@ -14,7 +14,7 @@ import (
 func TestMessagesStream(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			System    string           `json:"system"`
+			System    []map[string]any `json:"system"`
 			MaxTokens int              `json:"max_tokens"`
 			Thinking  map[string]any   `json:"thinking"`
 			Messages  []map[string]any `json:"messages"`
@@ -25,7 +25,13 @@ func TestMessagesStream(t *testing.T) {
 			t.Errorf("bad request %s", r.URL.Path)
 		}
 		// Results answering one assistant turn arrive in one user message; foreign IDs are adapted.
-		if body.System != "sys" || len(body.Messages) != 3 || body.Messages[2]["role"] != "user" || len(body.Messages[2]["content"].([]any)) != 2 ||
+		// The tools, the system prompt and the latest block end cached prefixes.
+		cached := func(block any) bool { return block.(map[string]any)["cache_control"] != nil }
+		if len(body.System) != 1 || body.System[0]["text"] != "sys" || !cached(body.System[0]) || !cached(body.Tools[0]) ||
+			!cached(body.Messages[2]["content"].([]any)[1]) || cached(body.Messages[2]["content"].([]any)[0]) {
+			t.Errorf("bad cache marks %+v", body)
+		}
+		if len(body.Messages) != 3 || body.Messages[2]["role"] != "user" || len(body.Messages[2]["content"].([]any)) != 2 ||
 			body.Thinking["budget_tokens"] != float64(2048) || body.MaxTokens != 10000 || body.Tools[0]["input_schema"] == nil {
 			t.Errorf("bad body %+v", body)
 		}
