@@ -1,5 +1,6 @@
 // The Mob logo: an orange calf head on, after the 牛来的 meme, drawn as pixel art.
-// t top of the head, # hide, s shaded hide, p inner ear, b brow, w eye white,
+// It is mirror-symmetric left to right.
+// t top of the head, # hide, p inner ear, b brow, w eye white,
 // k pupil, m muzzle, M shaded muzzle, n nostril, c chin.
 export const calfHead = [
 	'.....tttttt.....',
@@ -7,11 +8,11 @@ export const calfHead = [
 	'#p.##########.p#',
 	'#pp##########pp#',
 	'.#p##########p#.',
-	'..############s.',
-	'..#bbbb##bbbb#s.',
-	'..##wkw##wkw##s.',
-	'..############s.',
-	'..#mmmmmmmmmm#s.',
+	'..############..',
+	'..#bbbb##bbbb#..',
+	'..##wkw##wkw##..',
+	'..############..',
+	'..#mmmmmmmmmm#..',
 	'.#mmmmmmmmmmmm#.',
 	'.#mMnmmmmmmnMm#.',
 	'.#mmmmmmmmmmmm#.',
@@ -21,7 +22,7 @@ export const calfHead = [
 ];
 
 export const calfColors: Record<string, string> = {
-	t: '#ffa04a', '#': '#f2852b', s: '#d2661c', p: '#f6b39a', b: '#3b2214', w: '#f6efe4',
+	t: '#ffa04a', '#': '#f2852b', p: '#f6b39a', b: '#3b2214', w: '#f6efe4',
 	k: '#2b170c', m: '#f7d2ad', M: '#e4b086', n: '#c8835f', c: '#f4dfc4',
 };
 
