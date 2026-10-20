@@ -64,6 +64,56 @@ func (s *Service) snapshot(_ context.Context, turn *chat.Turn) error {
 	return nil
 }
 
+// reviewLimit bounds the reviews Mob's model starts on its own for one task,
+// so a review that sends the agent more work cannot loop forever.
+const reviewLimit = 3
+
+// reviewPrompt starts the turn in which Mob's model reviews a finished task.
+const reviewPrompt = "Automatic task update from Mob, not written by the owner: coding task %s \"%s\" (%s in %s, branch %s) finished what it was asked. Review its work before reporting: use task_diff to see what changed, and task_check to run the project's tests or build if there are any. Then tell the owner in a few sentences whether it looks ready to merge, what is missing or wrong, and what they need to decide. Send the agent follow-up work with task_message only if the task clearly is not done."
+
+// review starts a turn in which Mob's model reviews task t's work, in the
+// conversation that started it, and tells the owner what it concludes. It
+// reports false when no review started, as for a task started otherwise, one
+// reviewed reviewLimit times, or a busy conversation; the owner then gets the
+// agent's own words.
+func (s *Service) review(t chat.Task) bool {
+	// A task another task started is that agent's to check.
+	if t.Parent == "" || s.Owns(t.Parent) {
+		return false
+	}
+	s.mu.Lock()
+	if s.reviews == nil {
+		s.reviews = map[string]int{}
+	}
+	if s.closed || s.reviews[t.ID] >= reviewLimit {
+		s.mu.Unlock()
+		return false
+	}
+	s.reviews[t.ID]++
+	s.mu.Unlock()
+	text := fmt.Sprintf(reviewPrompt, t.ID, t.Title, t.Agent, t.Project, t.Branch)
+	run, err := s.Conversations.Start(chat.ChatRequest{ID: t.Parent, Text: text, RequestID: chat.NewID(), Owner: true}, nil)
+	if err != nil {
+		return false
+	}
+	go func() {
+		<-run.Done()
+		n := chat.Notice{ConversationID: t.Parent, Approvals: s.Conversations.Pending(t.Parent)}
+		n.Text = fmt.Sprintf("**Task reviewed:** %s · %s\nBranch `%s`", t.Agent, t.Title, t.Branch)
+		said, _ := s.Store.LastReply(t.Parent)
+		said = strings.TrimSpace(said)
+		if r := []rune(said); len(r) > noticeLimit {
+			said = string(r[:noticeLimit]) + "…"
+		}
+		if said == "" {
+			said = "The review did not finish; open its conversation to see why."
+		}
+		n.Text += "\n\n" + said
+		s.Conversations.Notify(n)
+	}()
+	return true
+}
+
 // reviewTools let Mob's model check a task's work: what changed, and whether
 // a command such as the tests passes in its worktree.
 func (s *Service) reviewTools() []chat.Tool {

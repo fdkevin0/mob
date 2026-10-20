@@ -52,7 +52,7 @@ func (e *CommandError) Error() string { return e.Message }
 // Model is the reference a conversation's next turn uses.
 func (s *ConversationService) Model(id string) (string, error) {
 	ref, err := s.Store.ConversationModel(id)
-	if err != nil || ref != "" {
+	if err != nil || ref != "" || s.Models == nil {
 		return ref, err
 	}
 	return s.Models.Default(), nil

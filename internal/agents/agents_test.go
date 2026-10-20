@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -834,5 +835,89 @@ func TestLimitedKeepsTheEnd(t *testing.T) {
 	l.Write([]byte("defg"))
 	if got := l.String(); got != "… 3 bytes cut\ndefg" {
 		t.Fatalf("%q", got)
+	}
+}
+
+// reviewer is Mob's model reviewing a finished task: it reads the task's diff,
+// then concludes.
+type reviewer struct{}
+
+func (reviewer) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "reviewer"} }
+func (reviewer) Info() llm.Info { return llm.Info{ID: "reviewer", Tools: true} }
+func (reviewer) Stream(_ context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	last := req.Messages[len(req.Messages)-1]
+	if last.Role == "tool" {
+		text := "Looks ready to merge; the diff names its branch: " + fmt.Sprint(strings.Contains(last.Text, "mob/say-hello")) + "."
+		return llm.Result{Text: text}, emit("text", text)
+	}
+	id := regexp.MustCompile(`coding task (\w+)`).FindStringSubmatch(last.Text)
+	if id == nil {
+		return llm.Result{Text: "no task"}, nil
+	}
+	return llm.Result{Calls: []llm.ToolCall{{ID: "diff1", Name: "task_diff", Arguments: `{"task":"` + id[1] + `"}`}}}, nil
+}
+
+type reviewers struct{}
+
+func (reviewers) Default() string                          { return "test/reviewer" }
+func (reviewers) Resolve(string) (llm.Model, error)        { return reviewer{}, nil }
+func (reviewers) SetDefault(string) (llm.Ref, error)       { return reviewer{}.Ref(), nil }
+func (reviewers) List(context.Context, string) []llm.Group { return nil }
+
+func TestMobReviewsAFinishedTask(t *testing.T) {
+	h := newHarness(t)
+	h.conv.Models = reviewers{}
+	var mu sync.Mutex
+	var notices []chat.Notice
+	defer h.conv.Notices(func(n chat.Notice) { mu.Lock(); notices = append(notices, n); mu.Unlock() })()
+	origin, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var start chat.Tool
+	for _, tool := range h.svc.Tools() {
+		if tool.Name == "task_start" {
+			start = tool
+		}
+	}
+	input, _ := json.Marshal(map[string]string{"project": h.repo, "agent": "codex", "title": "Say hello", "prompt": "hello"})
+	out, err := start.Approved(context.Background(), chat.ApprovedCall{ConversationID: origin.ID, Input: input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, _, _ := h.svc.Store.Task(out.(map[string]any)["task"].(string))
+	if task = h.wait(task); task.Parent != origin.ID || task.Status != chat.TaskReview {
+		t.Fatalf("task = %+v", task)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		mu.Lock()
+		n := len(notices)
+		mu.Unlock()
+		if n > 0 && !h.conv.Active(origin.ID) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no review notice")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	got := notices
+	mu.Unlock()
+	// One notice, Mob's conclusion instead of the agent's words.
+	if len(got) != 1 || got[0].ConversationID != origin.ID || !strings.HasPrefix(got[0].Text, "**Task reviewed:** codex · Say hello\nBranch `"+task.Branch+"`\n\nLooks ready to merge") {
+		t.Fatalf("notices = %+v", got)
+	}
+	history, err := h.svc.Store.History(origin.ID)
+	if err != nil || len(history) != 2 || !strings.HasPrefix(chat.Text(history[0]), "Automatic task update from Mob") || history[1].Parts[0]["type"] != "tool-task_diff" {
+		t.Fatalf("review history = %s, %v", fmtJSON(history), err)
+	}
+	// Reviews on their own stop after reviewLimit.
+	h.svc.mu.Lock()
+	h.svc.reviews[task.ID] = reviewLimit
+	h.svc.mu.Unlock()
+	if h.svc.review(task) {
+		t.Fatal("reviewed past the limit")
 	}
 }
