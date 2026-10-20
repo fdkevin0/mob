@@ -788,8 +788,19 @@ func TestReviewingATask(t *testing.T) {
 	if untracked := got["untracked"].([]string); len(untracked) != 1 || untracked[0] != "new.txt" {
 		t.Fatalf("untracked = %v", untracked)
 	}
-	if patch := got["patch"].(string); !strings.Contains(patch, "+var B = 1") || strings.Contains(patch, "a.go") {
+	if patch := got["patch"].(string); !strings.Contains(patch, "+var B = 1") || strings.Contains(patch, "a.go") || strings.Contains(patch, "new.txt") {
 		t.Fatalf("patch = %q", patch)
+	}
+	// A new file the agent has not added shows in full, alone or with the rest.
+	for _, file := range []string{"new.txt", ""} {
+		out, err := h.svc.diff(context.Background(), task.ID, true, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		patch := out.(map[string]any)["patch"].(string)
+		if !strings.Contains(patch, "+++ b/new.txt") || !strings.Contains(patch, "+new") || strings.Contains(patch, "var B") == (file != "") {
+			t.Fatalf("patch of %q = %q", file, patch)
+		}
 	}
 	if _, err := h.svc.diff(context.Background(), "nope", false, ""); err == nil {
 		t.Fatal("diff of an unknown task")

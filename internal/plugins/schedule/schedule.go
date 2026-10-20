@@ -106,7 +106,7 @@ func (s *Service) RunDue() {
 		if sc.Repeat == "" {
 			_, _ = s.Store.Unschedule(sc.ID)
 		} else {
-			_ = s.Store.Reschedule(sc.ID, next(time.UnixMilli(sc.Next), sc.Repeat, zone(sc.Zone), now).UnixMilli())
+			_ = s.Store.Reschedule(sc.ID, next(time.UnixMilli(sc.Next), sc.Repeat, zone(sc.Zone), sc.Clock, now).UnixMilli())
 		}
 		if err != nil {
 			s.Conversations.Notify(chat.Notice{ConversationID: sc.ConversationID, Text: "**Scheduled prompt could not run:** " + firstLine(sc.Prompt) + "\n\n" + err.Error()})
@@ -119,7 +119,8 @@ func (s *Service) RunDue() {
 // report tells the owner what a scheduled turn concluded once it ends.
 func (s *Service) report(sc chat.Schedule, run *chat.Running) {
 	<-run.Done()
-	said, _ := s.Store.LastReply(sc.ConversationID)
+	// The reply this turn wrote, not a later turn's.
+	said, _ := s.Store.Reply(run.MessageID())
 	said = strings.TrimSpace(said)
 	if r := []rune(said); len(r) > noticeLimit {
 		said = string(r[:noticeLimit]) + "…"
@@ -131,26 +132,39 @@ func (s *Service) report(sc chat.Schedule, run *chat.Running) {
 }
 
 // next is the first time after now that a schedule last due at last runs
-// again. Days are counted in loc, so a daily schedule keeps its time of day
-// across daylight saving changes.
-func next(last time.Time, repeat string, loc *time.Location, now time.Time) time.Time {
-	t := last.In(loc)
-	for !t.After(now) {
-		switch repeat {
-		case "hourly":
+// again. Calendar repeats count days in loc and run at clock (15:04) there,
+// so a daily schedule keeps its time of day across daylight saving changes;
+// on a day that skips that time, Go moves that one run, not later ones.
+func next(last time.Time, repeat string, loc *time.Location, clock string, now time.Time) time.Time {
+	if repeat == "hourly" {
+		t := last
+		for !t.After(now) {
 			t = t.Add(time.Hour)
+		}
+		return t
+	}
+	day := last.In(loc)
+	hour, minute := day.Hour(), day.Minute()
+	if c, err := time.Parse("15:04", clock); err == nil {
+		hour, minute = c.Hour(), c.Minute()
+	}
+	y, m, d := day.Date()
+	for {
+		switch repeat {
 		case "weekly":
-			t = t.AddDate(0, 0, 7)
+			d += 7
 		case "weekdays":
-			t = t.AddDate(0, 0, 1)
-			for t.Weekday() == time.Saturday || t.Weekday() == time.Sunday {
-				t = t.AddDate(0, 0, 1)
+			d++
+			for wd := time.Date(y, m, d, 12, 0, 0, 0, loc).Weekday(); wd == time.Saturday || wd == time.Sunday; wd = time.Date(y, m, d, 12, 0, 0, 0, loc).Weekday() {
+				d++
 			}
 		default:
-			t = t.AddDate(0, 0, 1)
+			d++
+		}
+		if t := time.Date(y, m, d, hour, minute, 0, 0, loc); t.After(now) {
+			return t
 		}
 	}
-	return t
 }
 
 // zone is the named location, or Mob's own when the name is empty or unknown.
@@ -279,10 +293,10 @@ func (s *Service) add(_ context.Context, call chat.ApprovedCall) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	sc := chat.Schedule{ConversationID: call.ConversationID, Prompt: in.Prompt, Next: at.UnixMilli(), Repeat: in.Repeat, Zone: in.Timezone}
+	sc := chat.Schedule{ConversationID: call.ConversationID, Prompt: in.Prompt, Next: at.UnixMilli(), Repeat: in.Repeat, Zone: in.Timezone, Clock: at.In(zone(in.Timezone)).Format("15:04")}
 	// A repeat whose first time has passed starts at its next one.
 	if now := s.now(); sc.Repeat != "" && at.Before(now) {
-		sc.Next = next(at, sc.Repeat, zone(sc.Zone), now).UnixMilli()
+		sc.Next = next(at, sc.Repeat, zone(sc.Zone), sc.Clock, now).UnixMilli()
 	}
 	if err := s.Store.AddSchedule(&sc); err != nil {
 		return nil, err

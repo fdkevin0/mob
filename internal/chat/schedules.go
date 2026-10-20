@@ -12,17 +12,20 @@ type Schedule struct {
 	Next int64 `json:"next"`
 	// Repeat is empty for one run, or hourly, daily, weekdays or weekly.
 	Repeat string `json:"repeat,omitempty"`
-	// Zone is the IANA time zone repeats keep their time of day in.
+	// Zone is the IANA time zone repeats keep their time of day in, and
+	// Clock that time of day (15:04), which a day without it, such as one
+	// that skips an hour for daylight saving, does not change.
 	Zone      string `json:"zone,omitempty"`
+	Clock     string `json:"clock,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 }
 
-const scheduleColumns = "id,conversation_id,prompt,next,repeat,zone,created_at"
+const scheduleColumns = "id,conversation_id,prompt,next,repeat,zone,clock,created_at"
 
 // AddSchedule saves s with a new ID.
 func (s *Store) AddSchedule(sc *Schedule) error {
 	sc.ID, sc.CreatedAt = NewID(), time.Now().UnixMilli()
-	_, err := s.db.Exec("INSERT INTO schedules("+scheduleColumns+") VALUES(?,?,?,?,?,?,?)", sc.ID, sc.ConversationID, sc.Prompt, sc.Next, sc.Repeat, sc.Zone, sc.CreatedAt)
+	_, err := s.db.Exec("INSERT INTO schedules("+scheduleColumns+") VALUES(?,?,?,?,?,?,?,?)", sc.ID, sc.ConversationID, sc.Prompt, sc.Next, sc.Repeat, sc.Zone, sc.Clock, sc.CreatedAt)
 	return err
 }
 
@@ -37,7 +40,7 @@ func (s *Store) Schedules(before int64) ([]Schedule, error) {
 	list := []Schedule{}
 	for rows.Next() {
 		var sc Schedule
-		if err := rows.Scan(&sc.ID, &sc.ConversationID, &sc.Prompt, &sc.Next, &sc.Repeat, &sc.Zone, &sc.CreatedAt); err != nil {
+		if err := rows.Scan(&sc.ID, &sc.ConversationID, &sc.Prompt, &sc.Next, &sc.Repeat, &sc.Zone, &sc.Clock, &sc.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, sc)

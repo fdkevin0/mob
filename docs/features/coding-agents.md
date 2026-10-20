@@ -59,7 +59,8 @@ Owner-only tools:
 - `task_diff` shows what a task changed since its branch began: its commits
   (up to 30), each changed file with lines added and removed (committed and
   not), untracked files, and on request the patch, whole or for one file, up
-  to 24000 bytes. The branch began where it meets the project's `HEAD`, so
+  to 24000 bytes. The patch includes new files the agent has not added to
+  git, in full. The branch began where it meets the project's `HEAD`, so
   the project moving on does not show up as the task's change. It reads
   without approval.
 - `task_check` runs a shell command, such as the tests or the build, in a
@@ -111,9 +112,10 @@ task does, which misses the prompt cache once.
 
 ## Reviewing finished work
 
-A task started by an approved `task_start` remembers the conversation that
-approved it (`tasks.origin`). When the task's turn ends in review with
-something written, Mob's model reviews the work in that conversation before
+A task remembers the conversation that started it (`tasks.parent_id`, also
+used for the agent tree). When a task Mob's model started ends its turn in
+review with something written, the model reviews the work in that
+conversation before
 the owner hears about it: a turn starts there with a note, saved as the
 turn's message, saying it is an automatic update and asking the model to
 check the work with `task_diff` and `task_check`, then tell the owner whether
@@ -124,10 +126,10 @@ clearly not done.
 When that turn ends, the owner gets one notice, "Task reviewed", with the
 model's conclusion and any approval it waits for (such as a `task_check`
 command), instead of the agent's own words. At most three reviews start on
-their own for one task while Mob runs. A task started otherwise, such as with
-`StartTask` from code, one past its three reviews, or one whose conversation
-is busy, gets the agent's words in a "Task done" notice as before. Failed
-tasks are not reviewed.
+their own for one task while Mob runs. A task with no parent, one another
+task started (its agent checks it), one past its three reviews, or one whose
+conversation is busy or has no model gets the agent's words in a "Task done"
+notice as before. Failed tasks are not reviewed.
 
 ## Approvals
 

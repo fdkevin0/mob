@@ -12,7 +12,9 @@ tasks, a reminder, a check on something that is still running. The code is in
   first. `repeat` is `hourly`, `daily`, `weekdays` or `weekly`; without it the
   prompt runs once. Repeats keep their time of day in `timezone` (an IANA
   name), or in the time zone of the computer Mob runs on, so a daily 09:00
-  stays 09:00 across daylight saving changes.
+  stays 09:00 across daylight saving changes. On a day that skips that time
+  (02:30 when clocks jump from 02:00 to 03:00), that one run moves by the
+  hour; the next is back at 02:30.
 - A one-off time that has passed is refused. A repeat whose first time has
   passed starts at its next one.
 - Always allow covers every later `schedule` call; a prompt is at most 4000

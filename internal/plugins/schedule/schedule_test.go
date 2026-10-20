@@ -21,19 +21,24 @@ func TestNext(t *testing.T) {
 		repeat string
 		last   time.Time
 		loc    *time.Location
+		clock  string
 		now    time.Time
 		want   time.Time
 	}{
-		{"daily", friday, shanghai, friday, friday.AddDate(0, 0, 1)},
-		{"weekdays", friday, shanghai, friday, time.Date(2026, 10, 26, 9, 0, 0, 0, shanghai)},
-		{"weekly", friday, shanghai, friday, friday.AddDate(0, 0, 7)},
-		{"hourly", friday, shanghai, friday.Add(150 * time.Minute), friday.Add(3 * time.Hour)},
+		{"daily", friday, shanghai, "09:00", friday, friday.AddDate(0, 0, 1)},
+		{"weekdays", friday, shanghai, "09:00", friday, time.Date(2026, 10, 26, 9, 0, 0, 0, shanghai)},
+		{"weekly", friday, shanghai, "09:00", friday, friday.AddDate(0, 0, 7)},
+		{"hourly", friday, shanghai, "09:00", friday.Add(150 * time.Minute), friday.Add(3 * time.Hour)},
 		// Missed runs are skipped, not caught up one by one.
-		{"daily", friday, shanghai, friday.AddDate(0, 0, 3).Add(time.Hour), friday.AddDate(0, 0, 4)},
+		{"daily", friday, shanghai, "09:00", friday.AddDate(0, 0, 3).Add(time.Hour), friday.AddDate(0, 0, 4)},
 		// A daily run keeps its time of day across daylight saving's end.
-		{"daily", time.Date(2026, 10, 31, 9, 0, 0, 0, newYork), newYork, time.Date(2026, 10, 31, 9, 0, 0, 0, newYork), time.Date(2026, 11, 1, 9, 0, 0, 0, newYork)},
+		{"daily", time.Date(2026, 10, 31, 9, 0, 0, 0, newYork), newYork, "09:00", time.Date(2026, 10, 31, 9, 0, 0, 0, newYork), time.Date(2026, 11, 1, 9, 0, 0, 0, newYork)},
+		// And across its start: 02:30 does not exist on March 8, which
+		// moves that run but not the next.
+		{"daily", time.Date(2026, 3, 7, 2, 30, 0, 0, newYork), newYork, "02:30", time.Date(2026, 3, 8, 12, 0, 0, 0, newYork), time.Date(2026, 3, 9, 2, 30, 0, 0, newYork)},
+		{"daily", time.Date(2026, 3, 8, 2, 30, 0, 0, newYork), newYork, "02:30", time.Date(2026, 3, 8, 12, 0, 0, 0, newYork), time.Date(2026, 3, 9, 2, 30, 0, 0, newYork)},
 	} {
-		if got := next(c.last, c.repeat, c.loc, c.now); !got.Equal(c.want) {
+		if got := next(c.last, c.repeat, c.loc, c.clock, c.now); !got.Equal(c.want) {
 			t.Errorf("%s after %s: %s, want %s", c.repeat, c.now, got, c.want)
 		}
 	}
@@ -151,5 +156,34 @@ func TestSchedulesRunAndRepeat(t *testing.T) {
 	}
 	if all, _ = store.Schedules(0); len(all) != 1 || all[0].ID != past || !tools["schedules"].Available() {
 		t.Fatalf("after cancel: %+v", all)
+	}
+}
+
+func TestReportQuotesItsOwnTurn(t *testing.T) {
+	store, err := chat.OpenStore(filepath.Join(t.TempDir(), "mob.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversations := chat.NewConversation(store, models{})
+	defer func() { conversations.Close(); store.Close() }()
+	s := &Service{Store: store, Conversations: conversations}
+	var notices []chat.Notice
+	defer conversations.Notices(func(n chat.Notice) { notices = append(notices, n) })()
+	c, _ := store.Create()
+	run := func(text string) *chat.Running {
+		t.Helper()
+		r, err := conversations.Start(chat.ChatRequest{ID: c.ID, Text: text, RequestID: chat.NewID(), Owner: true}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		<-r.Done()
+		return r
+	}
+	scheduled := run("scheduled work")
+	run("a later message")
+	// The report comes after a newer reply, and still quotes its own turn.
+	s.report(chat.Schedule{ConversationID: c.ID, Prompt: "scheduled work"}, scheduled)
+	if len(notices) != 1 || !strings.Contains(notices[0].Text, "did: scheduled work") || strings.Contains(notices[0].Text, "later") {
+		t.Fatalf("notices = %+v", notices)
 	}
 }

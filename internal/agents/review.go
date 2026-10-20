@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -100,7 +101,8 @@ func (s *Service) review(t chat.Task) bool {
 		<-run.Done()
 		n := chat.Notice{ConversationID: t.Parent, Approvals: s.Conversations.Pending(t.Parent)}
 		n.Text = fmt.Sprintf("**Task reviewed:** %s · %s\nBranch `%s`", t.Agent, t.Title, t.Branch)
-		said, _ := s.Store.LastReply(t.Parent)
+		// The reply this turn wrote, not a later turn's.
+		said, _ := s.Store.Reply(run.MessageID())
 		said = strings.TrimSpace(said)
 		if r := []rune(said); len(r) > noticeLimit {
 			said = string(r[:noticeLimit]) + "…"
@@ -191,8 +193,9 @@ func (s *Service) diff(ctx context.Context, id string, patch bool, file string) 
 	if err != nil {
 		return nil, err
 	}
-	if list := lines(untracked); len(list) > 0 {
-		result["untracked"] = list
+	news := lines(untracked)
+	if len(news) > 0 {
+		result["untracked"] = news
 	}
 	if patch || file != "" {
 		args := []string{"diff", base}
@@ -203,12 +206,50 @@ func (s *Service) diff(ctx context.Context, id string, patch bool, file string) 
 		if err != nil {
 			return nil, err
 		}
+		// New files the agent has not added are part of its work too; git
+		// lists them relative to the worktree, so reading them stays in it.
+		for _, path := range news {
+			if len(text) > patchLimit {
+				break
+			}
+			if file != "" && path != filepath.ToSlash(filepath.Clean(file)) {
+				continue
+			}
+			added, err := newFile(ctx, t.Worktree, path)
+			if err != nil {
+				return nil, err
+			}
+			if text != "" && added != "" {
+				text += "\n"
+			}
+			text += added
+		}
 		if len(text) > patchLimit {
 			text = text[:patchLimit] + fmt.Sprintf("\n… cut at %d of %d bytes; ask for one file's patch", patchLimit, len(text))
 		}
 		result["patch"] = text
 	}
 	return result, nil
+}
+
+// newFile is the patch that adds path, an untracked file in dir.
+func newFile(ctx context.Context, dir, path string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "diff", "--no-index", "--", "/dev/null", path)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	// git diff --no-index exits 1 when the files differ, as they do here.
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		err = nil
+	}
+	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // lines splits git's output into lines; none for empty output.
