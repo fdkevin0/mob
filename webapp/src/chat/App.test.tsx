@@ -211,9 +211,9 @@ it('sends a typed token from the public web only to Mob on this computer', async
 
 it('opens the public web workspace without a runner and asks for one only when sending', async () => {
   vi.stubEnv('MODE', 'public');
-  const fetchMock = vi.fn(async (url: string) => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/runtime')) return Response.json({ background: false });
-    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }]);
+    if (url.endsWith('/conversations')) return init?.method === 'POST' ? Response.json({ id: 'new', title: 'New conversation' }) : Response.json([{ id: 'one', title: 'Existing' }]);
     if (url.endsWith('/config')) return Response.json({});
     return Response.json({ messages: [], active: false, model: 'demo/echo' });
   });
@@ -223,6 +223,8 @@ it('opens the public web workspace without a runner and asks for one only when s
     const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.submit(box.closest('form')!);
+    expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.change(box, { target: { value: 'hello 草稿' } });
     fireEvent.submit(box.closest('form')!);
     const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
@@ -234,6 +236,8 @@ it('opens the public web workspace without a runner and asks for one only when s
     await screen.findByRole('button', { name: /disconnect/i });
     expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('hello 草稿'));
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/new'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/one'))).toBe(false);
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/chat'))).toBe(false);
   } finally { vi.unstubAllEnvs(); }
 });

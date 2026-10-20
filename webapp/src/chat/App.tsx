@@ -71,11 +71,11 @@ export function App() {
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
     {error && <p role="alert">{error}</p>}</>;
   if (isPublicWeb()) return <>
-    <Lobby draft={draft} setDraft={setDraft} connect={() => { setOwn(false); setPrompting(true); }} />
+    <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setOwn(false); setPrompting(true); }} />
     <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
       <DialogDescription className="dialog-description">Mob needs a runner to send messages. Choose where it runs.</DialogDescription>
-      {own || error ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setOwn(false); setError(''); }}>← Other runners</Button>{panel}</> : <div className="runner-choices">
+      {own ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setOwn(false); setError(''); }}>← Other runners</Button>{panel}</> : <div className="runner-choices">
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setOwn(true)}><strong>Your own runner</strong><span>Mob on this computer, or on another computer you pair. Conversations stay there.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>
       </div>}</DialogContent></Dialog></>;

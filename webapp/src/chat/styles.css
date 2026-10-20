@@ -797,6 +797,10 @@
 	flex: 1;
 	display: flex;
 }
+.lobby-notice {
+	color: var(--destructive);
+	line-height: 1.5;
+}
 .lobby-note {
 	padding: 0 10px;
 	line-height: 1.6;

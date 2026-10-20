@@ -76,7 +76,8 @@ export function Workspace({
 				if (!live) return;
 				setConversations(list);
 				setBackground(runtime.background);
-				if (list.length) await open(list[0].id);
+				// A draft typed before connecting starts a new conversation, as the lobby showed.
+				if (list.length && !draft) await open(list[0].id);
 				else await create();
 			} catch (e) {
 				if (live) setError(errorText(e));
@@ -119,7 +120,8 @@ export function Workspace({
 			</Button>
 			<div className="sidebar-footer">
 				<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
-					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'}
+					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'} ·{' '}
+					{background ? 'keeps running' : 'stops with its process'}
 				</p>
 				{isPublicWeb() && (
 					<Button variant="ghost" asChild>

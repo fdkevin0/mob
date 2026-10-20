@@ -325,27 +325,33 @@ function toolDetail(input: unknown) {
 }
 
 function CopyButton({ message }: { message: { parts: { type: string; text?: string }[] } }) {
-	const [copied, setCopied] = useState(false);
+	const [result, setResult] = useState<'copied' | 'failed'>();
+	useEffect(() => {
+		if (!result) return;
+		const timer = setTimeout(() => setResult(undefined), 1500);
+		return () => clearTimeout(timer);
+	}, [result]);
 	const text = message.parts
 		.filter((part) => part.type === 'text')
 		.map((part) => part.text)
 		.join('\n\n');
 	if (!text) return null;
+	const label = result === 'copied' ? 'Copied' : result === 'failed' ? 'Copy failed' : 'Copy reply';
 	return (
 		<div className="message-actions">
 			<Button
 				type="button"
 				variant="ghost"
-				aria-label={copied ? 'Copied' : 'Copy reply'}
-				title={copied ? 'Copied' : 'Copy'}
+				aria-label={label}
+				title={label}
 				onClick={() => {
-					void navigator.clipboard?.writeText(text).then(() => {
-						setCopied(true);
-						setTimeout(() => setCopied(false), 1500);
-					});
+					// Writing fails when the page is not focused or the browser denies clipboard access.
+					Promise.resolve(navigator.clipboard?.writeText(text) ?? Promise.reject())
+						.then(() => setResult('copied'))
+						.catch(() => setResult('failed'));
 				}}
 			>
-				{copied ? <CheckIcon /> : <CopyIcon />}
+				{result === 'copied' ? <CheckIcon /> : result === 'failed' ? <CrossIcon /> : <CopyIcon />}
 			</Button>
 		</div>
 	);
