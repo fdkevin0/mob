@@ -47,6 +47,11 @@ DELETE FROM settings WHERE key IN ('api_key','api_key_origin');`},
 		// models read in their place.
 		{"20261012", `ALTER TABLE conversations ADD COLUMN summary TEXT NOT NULL DEFAULT '';
 ALTER TABLE conversations ADD COLUMN summary_through TEXT NOT NULL DEFAULT '';`},
+		// Coding agent tasks: each is one conversation an agent answers, working
+		// in its own worktree of a project.
+		{"20261020", `CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, conversation_id TEXT UNIQUE NOT NULL REFERENCES conversations(id),
+ project TEXT NOT NULL, agent TEXT NOT NULL, title TEXT NOT NULL, worktree TEXT NOT NULL, branch TEXT NOT NULL,
+ session TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);`},
 	},
 }
 

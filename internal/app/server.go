@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/fdkevin0/mob/internal/agents"
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/configuration"
 	"github.com/fdkevin0/mob/internal/extension"
@@ -43,6 +44,8 @@ type Server struct {
 	MCP *mcp.Hub
 	// Skills finds the skills the model can load; local sets its roots.
 	Skills *skills.Library
+	// Agents runs coding agent tasks; local sets where their worktrees go.
+	Agents *agents.Service
 	// box is the sandbox later turns use, nil while it is off.
 	box    atomic.Pointer[sandbox.Sandbox]
 	access access
@@ -59,6 +62,8 @@ func NewServer(store *chat.Store, providers *provider.Registry, token string) *S
 		}
 		return "", nil
 	}}
+	s.Agents = &agents.Service{Store: store, Conversations: s.ConversationService}
+	s.SetDelegate(s.Agents)
 	s.Commands.Register(s.pluginCommands()...)
 	s.register(s.plugins()...)
 	return s
@@ -69,6 +74,7 @@ func (s *Server) defaultModel() (llm.Model, error) { return s.Providers.Resolve(
 func (s *Server) Close() {
 	s.closePlugins()
 	s.ConversationService.Close()
+	s.Agents.Close()
 }
 
 func (s *Server) Handler(assets fs.FS) http.Handler {

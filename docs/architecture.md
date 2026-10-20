@@ -24,6 +24,7 @@ change the single-Go-binary release.
 | `internal/configuration` | shared option definitions for Cobra/Viper/generated reference, XDG loading, live reload, plugin configuration sections and secrets |
 | `internal/extension` | the lifecycle of plugins that run in the background, and plugin routes |
 | `internal/channel` | the bridge messaging channels answer through |
+| `internal/agents` | coding agent tasks over ACP: projects, worktrees, the agent processes and Mob's project-manager tools |
 | `internal/plugins/*` | email, Cloudflare, Telegram, WeChat iLink and MCP, each with its own tools, commands, routes and background run |
 | `internal/container`, `internal/sandbox` | the platform container runtimes and the model's `sandbox` tool |
 | `internal/runner`, `worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `worker/runners.ts` |
@@ -56,7 +57,9 @@ change the single-Go-binary release.
 - Plugins register tools, commands, routes, configuration and background runs
   beside their own code; the engine does not name them (see
   [Extensions](features/extensions.md)). Code from outside Mob arrives only over
-  MCP, including the optional [DeepSeek Harness tools bridge](features/deepseek-harness.md).
+  MCP, including the optional [DeepSeek Harness tools bridge](features/deepseek-harness.md),
+  and as [coding agents](features/coding-agents.md) over ACP, which answer
+  their tasks' conversations through `chat.Delegate`.
 - SQLite is the only persistence dependency: no generic repository and no
   external queue. Schema changes are migrations in `internal/chat/migrations.go`
   (see [Releases and upgrades](features/releases.md)).

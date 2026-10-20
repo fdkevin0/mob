@@ -248,6 +248,8 @@ func TestPluginToolsFollowTheirPlugins(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	// No coding agent can be started, so task_start is not offered.
+	t.Setenv("PATH", "")
 	srv := NewServer(store, provider.Offline(), strings.Repeat("t", 32))
 	defer srv.Close()
 	available := func() (names []string) {

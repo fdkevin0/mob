@@ -11,6 +11,8 @@ before it has an effect, and the owner can decide from any client or channel.
 - The email plugin offers `email_inbox`, `email_read` and `email_send`; the
   Cloudflare plugin offers `cloudflare`. Each is defined in its own package and
   offered only while its plugin is enabled.
+- [Coding agents](coding-agents.md) add `task_start` (asks for approval),
+  `tasks`, `task_message` and `task_stop`.
 - [MCP servers](mcp.md) add `mcp__<server>__<tool>` tools, and `tool_install`
   installs a remote server from the catalog.
 - While any [skill](skills.md) is installed, the `skill` tool loads one; it
