@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/llm"
 )
 
 // Preset is a coding agent Mob knows how to start.
@@ -31,6 +32,10 @@ type Preset struct {
 	Mode string
 	// SignIn tells the owner how to sign the agent in.
 	SignIn string
+	// Tally, for agents whose prompt responses do not say what they used,
+	// reads what the agent recorded its session used so far, and the model
+	// it last used.
+	Tally func(session string) (model string, used llm.Usage, err error)
 }
 
 // Presets are the agents tasks can use; the first is the default.
@@ -40,6 +45,7 @@ var Presets = []Preset{{
 	Commands: [][]string{{"codex-acp"}, {"npx", "-y", "@zed-industries/codex-acp@0.16.0"}},
 	Mode:     "auto",
 	SignIn:   "run `codex login` on the computer Mob runs on (`codex login --device-auth` without a browser there), or set OPENAI_API_KEY or CODEX_API_KEY for the Mob service",
+	Tally:    codexTally,
 }, {
 	Name:     "claude",
 	Title:    "Claude Agent",

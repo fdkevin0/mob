@@ -24,13 +24,13 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 	name, args, _ := strings.Cut(input.Text, " ")
 	args = strings.TrimSpace(args)
 	var reply string
-	var usage *llm.Usage
+	var used requests
 	var err error
 	switch name {
 	case "/models":
 		reply, err = s.models(ctx, input.ID, args)
 	case "/compact":
-		reply, usage, err = s.compact(ctx, input.ID)
+		reply, used, err = s.compact(ctx, input.ID)
 	default:
 		reply, err = s.switchModel(input.ID, args, input.Owner)
 	}
@@ -50,6 +50,7 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 		}
 		return errors.Join(err, e)
 	}
+	usage := used.total()
 	if usage != nil || stopped {
 		message.Usage = usage
 		status, failure := "complete", ""
@@ -61,6 +62,9 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 		}
 	}
 	if usage != nil {
+		if e := used.record(s.Store, input.ID, message.ID); e != nil {
+			return errors.Join(err, e)
+		}
 		if e := emit(Event{Kind: UsageReported, Usage: *usage}); e != nil {
 			return errors.Join(err, e)
 		}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/fdkevin0/mob/internal/llm"
 )
 
 // Delegate runs the turns of conversations an outside agent answers, such as
@@ -125,6 +127,16 @@ func (t *DelegateTurn) endStep() error {
 	t.segments = map[string]segment{}
 	t.stepped = false
 	return t.send(Event{Kind: StepFinished})
+}
+
+// Used records what the agent's session used for the reply; model names the
+// model, or the agent when it did not say which.
+func (t *DelegateTurn) Used(session, model string, u llm.Usage, took time.Duration) error {
+	t.message.Usage = add(t.message.Usage, u)
+	if err := t.store.RecordSessionUsage(t.ConversationID, t.message.ID, session, model, u, took); err != nil {
+		return err
+	}
+	return t.send(Event{Kind: UsageReported, Usage: u})
 }
 
 // HasTool reports whether the reply already shows call id.

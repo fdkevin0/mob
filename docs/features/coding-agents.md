@@ -50,8 +50,8 @@ Owner-only tools:
   agent in a turn that runs on its own. Always allow covers the same project
   and agent. Its prompt tells the model to hand coding work to agents rather
   than do it itself.
-- `tasks` lists the projects and tasks with status, branch, plan and the end of
-  each task's latest reply.
+- `tasks` lists the projects and tasks with status, branch, plan, the end of
+  each task's latest reply and what its agent used (see Usage below).
 - `task_message` passes instructions to a task's agent. While the agent is
   at work they are added to its conversation and sent once its current
   prompt ends. `task_stop` stops its turn and ends the agent.
@@ -88,7 +88,8 @@ once there is a project or task; the others once there is a project or task.
 
 When a task's turn ends waiting for an approval, done or failed, Mob raises a
 `chat.Notice` (`ConversationService.Notify`): the task's agent and title, the
-agent's last words (up to 1200 characters), its branch when done, the error
+agent's last words (up to 1200 characters), its branch and what it used when
+done, the error
 when failed or stopped early (such as at the agent's limit, with how to
 continue), and the approvals that wait. Stopping a task, even while its agent
 is starting, raises none and leaves it stopped.
@@ -96,6 +97,31 @@ Messaging channels pass notices on; [Telegram](channels.md) sends them with
 approval buttons, so the owner can follow and decide tasks from the phone. A
 turn started from a channel, such as a decision tapped there, sends that
 channel no notice, since its reply already says how the turn ended.
+
+## Usage
+
+What a task's agent used is recorded with Mob's own
+[token usage](turns-and-context.md#token-usage) when each of its prompts ends,
+so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
+`tasks` tool and the done notice show it.
+
+- An agent that reports a prompt's usage in its response (ACP's unstable
+  `usage`) is recorded as it says. Claude Agent does, with cache reads and
+  writes, and its `_meta.quota.model_usage` splits it by model. Input is
+  counted with the cache, as for Mob's own models; an agent whose total adds
+  the cache to its input, as Claude Agent's does, is counted that way.
+- Claude Agent also reports what its run has cost so far (`usage_update`);
+  what it added since the last prompt is recorded as that prompt's cost.
+- Codex (`codex-acp` 0.16) reports no tokens over ACP. Its ACP session is a
+  Codex thread of the same ID, so Mob reads the thread's rollout file
+  (`$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<session>.jsonl`, `CODEX_HOME`
+  defaulting to `~/.codex`): the last `token_count` total, less what the task
+  already recorded for that session, is the prompt's (a session that replaces
+  one that could not be loaded counts from zero, and the old one's usage
+  stays), under the model of the last
+  `turn_context`. Codex reports no cost.
+- An agent that reports neither shows no usage, and a prompt stopped from
+  Mob may record none. The code is in `internal/agents/usage.go`.
 
 ## Lifetime
 

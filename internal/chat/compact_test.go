@@ -89,6 +89,11 @@ func TestHistoryIsSummarizedNotOmitted(t *testing.T) {
 			t.Fatalf("summarizing was not charged to its turn: %+v", h.Usage)
 		}
 	}
+	// Each summary request is counted in the conversation's usage.
+	used, _ := s.ConversationUsage(id)
+	if u := used[id]; u.Requests != len(model.summaries) || u.Input != 100*len(model.summaries) || u.Turns != 1 || u.Models[0].Model != "test/summarizing" {
+		t.Fatalf("usage %+v", u)
+	}
 }
 
 // A window too small for everything to summarize at once gets it in parts,
@@ -109,6 +114,10 @@ func TestSummaryIsWrittenInPartsThatFit(t *testing.T) {
 	}
 	if !strings.Contains(model.requests[0].System, "SUMMARY "+fmt.Sprint(len(model.summaries))) {
 		t.Fatal("the turn did not read the last summary")
+	}
+	used, _ := s.ConversationUsage(id)
+	if u := used[id]; u.Requests != len(model.summaries) || u.Input != 100*len(model.summaries) {
+		t.Fatalf("%d summary requests counted as %+v", len(model.summaries), u)
 	}
 }
 
@@ -315,6 +324,9 @@ func TestCompactCommandSummarizesTheConversation(t *testing.T) {
 	if command := history[len(history)-1]; command.Usage == nil || command.Usage.Input != 100 {
 		t.Fatalf("the summary's cost was not saved: %+v", command.Usage)
 	}
+	if used, _ := s.ConversationUsage(id); used[id].Requests != len(model.summaries) || used[id].Models[0].Model != "test/summarizing" {
+		t.Fatalf("/compact's requests were not counted: %+v", used[id])
+	}
 	say("and then?")
 	req := model.requests[len(model.requests)-1]
 	if !strings.Contains(req.System, summaryNotice+"SUMMARY 1") || len(req.Messages) != 1 || req.Messages[0].Text != "and then?" {
@@ -365,5 +377,34 @@ func TestStoppedCompactKeepsItsCost(t *testing.T) {
 	}
 	if summary, _ := s.Summary(id); summary.Text != "" {
 		t.Fatalf("a stopped /compact stored a summary: %+v", summary)
+	}
+}
+
+// switching changes the default model while writing a summary.
+type switching struct {
+	*summarizing
+	models *models
+}
+
+func (m switching) Stream(ctx context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	if strings.HasPrefix(req.System, compactPrompt) {
+		m.models.def = "beta/two"
+	}
+	return m.summarizing.Stream(ctx, req, emit)
+}
+
+// /compact's requests count for the model that wrote the summary, even when
+// the default changes while it does.
+func TestCompactCountsTheModelThatSummarized(t *testing.T) {
+	s, id, _ := longHistory(t, 3)
+	defaults := &models{def: "test/summarizing"}
+	model := switching{&summarizing{info: llm.Info{ID: "summarizing", Context: 100000, Output: 4000}}, defaults}
+	service := NewConversation(s, only{defaults, model})
+	if err := service.Execute(context.Background(), ChatRequest{ID: id, Text: "/compact", RequestID: NewID(), Owner: true}, func(Event) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	used, _ := s.ConversationUsage(id)
+	if u := used[id]; len(model.summaries) != 1 || len(u.Models) != 1 || u.Models[0].Model != "test/summarizing" || u.Input != 100 {
+		t.Fatalf("the summary was counted as %+v", u)
 	}
 }

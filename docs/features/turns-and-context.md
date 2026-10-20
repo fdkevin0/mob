@@ -192,3 +192,33 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   conversation's model, and records what that cost on its reply, also when it
   is stopped. The code is in
   `internal/chat/compact.go`.
+
+## Token usage
+
+- Each model request records what it used in the `usage` table: the
+  conversation, the reply, the model (`provider/model`), input (every prompt
+  token, cached or not), output (reasoning included), reasoning, cache reads
+  and writes, the cost priced from the catalog, and how long the request took.
+  Summarizing, in a turn or by `/compact`, is recorded the same way, one row
+  for each request when a summary is written in parts. Replies
+  saved before 2026-10-20 were counted from the usage saved on them, one
+  request each, with no duration. The reply's own usage (the `data-usage`
+  stream events and its `usage` metadata) is unchanged.
+- `/usage`, in every client and channel, shows what the conversation used by
+  model: input, cache reads and writes, output, reasoning, requests and cost,
+  then the total, the share of input read from the cache, the number of
+  replies and how long the models worked. Cost is the provider's list price;
+  a subscription is not charged it.
+- The web workspace's **Token usage** page (`GET /api/usage?days=7|30|0`,
+  `Store.Report`) shows the last 7 days, 30 days or all time: total tokens,
+  the share of input read from the cache, cost and model time; a bar of where
+  the tokens went (fresh input, cache reads, cache writes, output); tokens per
+  day on the service's calendar stacked the same way, with each day's numbers on hover; tokens,
+  cache share, output, requests and cost by model; and the 20 conversations
+  and tasks that used the most, each opening its conversation. Replies
+  counted from before the table existed are dated to their conversation's
+  last update.
+- `Store.ConversationUsage(ids...)` returns the same summaries
+  (`chat.UsageSummary`) for other features. The code is in
+  `internal/chat/usage.go`.
+

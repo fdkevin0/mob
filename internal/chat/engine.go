@@ -217,9 +217,12 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	half := (budget - length - tokens(summaryNotice)) / 2
 	if through != "" && info.Context > 0 && length >= summaryTokens/4 && half > 0 {
 		_, _, older := prompt(history, message.ID, half)
-		text, usage, err := summarize(ctx, model, summary.Text, until(history, older), length)
-		if usage != nil {
+		text, requests, err := summarize(ctx, model, summary.Text, until(history, older), length)
+		if usage := requests.total(); usage != nil {
 			message.Usage = add(message.Usage, *usage)
+			if e := requests.record(store, conversationID, message.ID); e != nil {
+				return e
+			}
 			if e := send(Event{Kind: UsageReported, Usage: *usage}); e != nil {
 				return e
 			}
@@ -334,6 +337,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			message.Parts[index]["text"] = message.Parts[index]["text"].(string) + delta
 			return send(Event{Kind: SegmentDelta, Segment: kind, ID: ids[kind], Text: delta})
 		}
+		began := time.Now()
 		result, err := model.Stream(ctx, *req, stream)
 		// A refused prompt is made smaller and sent once more in the turn.
 		if errors.Is(err, llm.ErrContextOverflow) && !retried && len(ids) == 0 {
@@ -356,6 +360,9 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		if result.Usage != nil {
 			u := result.Usage.Priced(info.Cost)
 			message.Usage = add(message.Usage, u)
+			if e := store.RecordUsage(conversationID, message.ID, model.Ref().String(), u, time.Since(began)); e != nil && err == nil {
+				err = e
+			}
 			if e := send(Event{Kind: UsageReported, Usage: u}); e != nil && err == nil {
 				err = e
 			}

@@ -35,6 +35,10 @@ var definitions = []definition{
 	{"CommandRequest", chat.CommandRequest{}},
 	{"Action", chat.Action{}},
 	{"CommandResult", chat.CommandResult{}},
+	{"ModelUsage", chat.ModelUsage{}},
+	{"DayUsage", chat.DayUsage{}},
+	{"TopConversation", chat.TopConversation{}},
+	{"UsageReport", chat.UsageReport{}},
 }
 
 func contract() string {
@@ -54,7 +58,7 @@ func contract() string {
 			return "string"
 		case reflect.Bool:
 			return "boolean"
-		case reflect.Int, reflect.Int64, reflect.Uint32:
+		case reflect.Int, reflect.Int64, reflect.Uint32, reflect.Float64:
 			return "number"
 		case reflect.Slice:
 			return kind(t.Elem()) + "[]"
@@ -66,11 +70,10 @@ func contract() string {
 	}
 	for _, d := range definitions {
 		fmt.Fprintf(&out, "export type %s = {\n", d.name)
-		typ := reflect.TypeOf(d.value)
-		for i := 0; i < typ.NumField(); i++ {
-			f := typ.Field(i)
+		// Embedded structs' fields are written in place, as encoding/json does.
+		for _, f := range reflect.VisibleFields(reflect.TypeOf(d.value)) {
 			tag := strings.Split(f.Tag.Get("json"), ",")
-			if !f.IsExported() || tag[0] == "-" || tag[0] == "" {
+			if !f.IsExported() || f.Anonymous || tag[0] == "-" || tag[0] == "" {
 				continue
 			}
 			optional := ""
