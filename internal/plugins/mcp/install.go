@@ -254,7 +254,7 @@ func (h *Hub) await(ctx context.Context, name string) string {
 		}
 		h.mu.Unlock()
 		if strings.HasPrefix(status, "sign in to connect: ") {
-			return "The owner must sign in before its tools can be used: " + strings.TrimPrefix(status, "sign in to connect: ")
+			return "The owner must sign in before its tools can be used: " + strings.TrimPrefix(status, "sign in to connect: ") + " Give them the link and say: " + SignInHint
 		}
 		if strings.HasSuffix(status, " tools") || time.Now().After(deadline) {
 			return status + "; its tools are found with tool_search"

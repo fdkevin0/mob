@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +12,8 @@ import (
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/fdkevin0/mob/internal/chat"
 )
 
 // settings is a Settings kept in memory.
@@ -206,5 +210,53 @@ func TestOAuthValidateAndFingerprint(t *testing.T) {
 	// so approvals given for them stay valid.
 	if got := plain.fingerprint(); got != "ac285510d08fddebe99b9362" {
 		t.Fatalf("fingerprint changed: %s", got)
+	}
+}
+
+func TestOAuthSignInPastedFromAnotherDevice(t *testing.T) {
+	o := newOAuthServer(t)
+	server := Server{URL: o.URL + "/mcp", OAuth: true}
+	h := &Hub{Settings: &settings{}}
+	h.Configure(Servers{"web": server})
+	if _, err := h.FinishSignIn("http://127.0.0.1:1/callback?code=x&state=y"); err == nil {
+		t.Fatal("finished a sign-in nobody started")
+	}
+	go func() {
+		// The browser is on a phone: the authorization server sends it to
+		// an address it cannot reach, which the user copies and pastes.
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		resp, err := client.Get(signInLink(t, h, "web"))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		resp.Body.Close()
+		address := resp.Header.Get("Location")
+		if !strings.Contains(h.describe(), SignInHint) {
+			t.Errorf("describe lacks the hint: %s", h.describe())
+		}
+		if _, err := h.FinishSignIn(strings.Replace(address, "code=", "error=access_denied&x=", 1)); err == nil {
+			t.Error("finished a sign-in without a code")
+		}
+		var finished string
+		for _, command := range Commands(h) {
+			if command.Name == "signin" {
+				result, err := command.Run(context.Background(), chat.CommandCall{Fields: []string{address}, Owner: true})
+				if err != nil {
+					t.Error(err)
+				}
+				finished = fmt.Sprint(result)
+			}
+		}
+		if !strings.Contains(finished, "Signed in to web") {
+			t.Errorf("signin replied %s", finished)
+		}
+	}()
+	running(t, h, "web")
+	if g := h.grants()["web"]; g.Token == nil {
+		t.Fatalf("grant: %+v", g)
+	}
+	if _, err := h.FinishSignIn("http://127.0.0.1:1/callback?code=x"); err == nil {
+		t.Fatal("finished a sign-in twice")
 	}
 }

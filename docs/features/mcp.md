@@ -57,16 +57,19 @@ SDK:
 - Mob finds the server's authorization server, registers itself there by
   dynamic client registration, and asks for an authorization code with PKCE.
 - The server's status, shown by `/mcp`, becomes `sign in to connect: <link>`.
-  Open the link in a browser on the computer Mob runs on: the authorization
-  server sends the browser back to a loopback address that Mob listens on only
-  while it waits, for at most 10 minutes.
+  The authorization server sends the browser back to a loopback address that
+  Mob listens on only while it waits, for at most 10 minutes. In a browser on
+  the computer Mob runs on, that finishes the sign-in.
+- In a browser elsewhere, such as a phone, the loopback address does not open.
+  Copy the address the browser shows and send `/signin ADDRESS` from any client
+  or channel the owner uses: Mob matches it to the waiting sign-in by its
+  address, takes the code from it, and the SDK checks its state as it would
+  the browser's. `/mcp` and an install's result say this beside the link.
 - Mob keeps the client and token in its database and refreshes the token, so
   a restart does not sign in again. A sign-in belongs to the server's name and
   URL; changing the URL signs in again. Approvals do not record which account
   signed in.
-- `oauth` cannot be combined with an `Authorization` header. Signing in from
-  a phone, through a channel, is not supported yet: the loopback address is on
-  Mob's computer.
+- `oauth` cannot be combined with an `Authorization` header.
 
 ## Behaviour
 

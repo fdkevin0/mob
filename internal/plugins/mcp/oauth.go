@@ -7,6 +7,8 @@ import (
 	"html"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -132,6 +134,10 @@ func (s *signIn) Authorize(ctx context.Context, req *http.Request, resp *http.Re
 	go callback.Serve(listener)
 	defer callback.Close()
 	redirect := "http://" + listener.Addr().String() + "/callback"
+	// A browser on another device cannot reach the loopback address, so the
+	// user may paste the address it was sent to instead.
+	s.hub.wait(redirect, s.name, results)
+	defer s.hub.unwait(redirect)
 	handler, err := auth.NewAuthorizationCodeHandler(&auth.AuthorizationCodeHandlerConfig{
 		DynamicClientRegistrationConfig: &auth.DynamicClientRegistrationConfig{Metadata: &oauthex.ClientRegistrationMetadata{
 			ClientName:              "Mob",
@@ -210,4 +216,54 @@ func (s *savingSource) Token() (*oauth2.Token, error) {
 		s.save(token)
 	}
 	return token, nil
+}
+
+// waiting is a sign-in that waits for its result.
+type waiting struct {
+	server  string
+	results chan *auth.AuthorizationResult
+}
+
+func (h *Hub) wait(redirect, server string, results chan *auth.AuthorizationResult) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.signIns == nil {
+		h.signIns = map[string]waiting{}
+	}
+	h.signIns[redirect] = waiting{server, results}
+}
+
+func (h *Hub) unwait(redirect string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.signIns, redirect)
+}
+
+// SignInHint tells the user what to do when the page a sign-in returns to
+// does not open, as on a phone.
+const SignInHint = "If the page you return to after signing in does not open, copy its address and send /signin followed by it."
+
+// FinishSignIn completes a sign-in with the address the user's browser was
+// sent back to, pasted when it could not reach Mob, and names the server.
+func (h *Hub) FinishSignIn(address string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || u.Host == "" {
+		return "", errors.New("paste the whole address the browser was sent to, starting with http://127.0.0.1")
+	}
+	h.mu.Lock()
+	w, ok := h.signIns[u.Scheme+"://"+u.Host+u.Path]
+	h.mu.Unlock()
+	if !ok {
+		return "", errors.New("no sign-in is waiting for that address; it may have finished or expired, so check /mcp")
+	}
+	query := u.Query()
+	if failure := query.Get("error"); failure != "" || query.Get("code") == "" {
+		return "", fmt.Errorf("the address carries no sign-in: %s %s", failure, query.Get("error_description"))
+	}
+	select {
+	case w.results <- &auth.AuthorizationResult{Code: query.Get("code"), State: query.Get("state"), Iss: query.Get("iss")}:
+		return w.server, nil
+	default:
+		return "", errors.New("that sign-in has already finished")
+	}
 }

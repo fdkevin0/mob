@@ -20,7 +20,8 @@ func Extension(h *Hub) extension.Extension {
 	}}
 }
 
-// Commands show the servers and their tools.
+// Commands show the servers and their tools, and finish sign-ins pasted
+// from another device.
 func Commands(h *Hub) []chat.Command {
 	return []chat.Command{{
 		CommandSpec: chat.CommandSpec{Name: "mcp", Usage: "/mcp [remove NAME]", Summary: "Show MCP servers and their tools, or remove an installed one", Clients: chat.Interactive},
@@ -36,6 +37,19 @@ func Commands(h *Hub) []chat.Command {
 				return chat.Reply("Removed " + call.Fields[1] + " and its sign-in.")
 			}
 			return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: "usage: /mcp [remove NAME]"}
+		},
+	}, {
+		CommandSpec: chat.CommandSpec{Name: "signin", Usage: "/signin ADDRESS", Summary: "Finish signing in to an MCP server with the address the browser was sent to", Clients: []string{chat.ClientWeb, chat.ClientTUI, chat.ClientTelegram, chat.ClientWeChat, chat.ClientEmail}},
+		OwnerOnly:   true,
+		Run: func(_ context.Context, call chat.CommandCall) (chat.CommandResult, error) {
+			if len(call.Fields) != 1 {
+				return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: "usage: /signin ADDRESS"}
+			}
+			server, err := h.FinishSignIn(call.Fields[0])
+			if err != nil {
+				return chat.CommandResult{}, &chat.CommandError{Status: 400, Message: err.Error()}
+			}
+			return chat.Reply("Signed in to " + server + "; connecting. /mcp shows its tools.")
 		},
 	}}
 }
@@ -69,6 +83,9 @@ func (h *Hub) describe() string {
 			label += " (installed)"
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s |\n", chat.Cell(label), chat.Cell(status), strings.Join(tools, " "))
+	}
+	if strings.Contains(b.String(), "sign in to connect: ") {
+		b.WriteString("\n" + SignInHint)
 	}
 	b.WriteString("\nThe model loads a server's tools with tool_search when a task needs them, unless `exposure` says otherwise. Each call waits for your approval; **Always allow** stops asking for that tool on that server.")
 	return b.String()

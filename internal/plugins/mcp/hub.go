@@ -50,6 +50,8 @@ type Hub struct {
 	// asked.
 	registry   Registry
 	refreshing bool
+	// signIns wait for their results by redirect address.
+	signIns map[string]waiting
 }
 
 // state is one server as Mob last saw it.
