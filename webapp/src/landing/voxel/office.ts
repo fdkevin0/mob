@@ -1,13 +1,17 @@
 import { alarm, calf, colors, hex, leader, lying, move, skin, snore, tea, turn, type CalfStyle, type Pose, type RGB, type Voxel } from './model';
-import { add, block, random, rotate, type Facing, type Vec } from './motion';
+import { add, arc, block, random, rotate, type Facing, type Vec } from './motion';
+import { project } from './project';
 
 // The hero background: a square open-plan office of calves, run as a small
 // simulation. The floor is a 3 x 3 grid of cells, each holding a randomly
 // chosen group of shared desks (long benches either way round, or a small
 // pod of four) with no partitions. About seven in ten seats get a calf. Each
 // calf works, then wanders off to high-five a colleague, hand over a block
-// of work, fetch a milk tea or a coffee, or nap on the sofa, walking along
-// the lanes between the cells. Each page load lays out a new office.
+// of work, fetch a milk tea or a coffee, pin a note on the whiteboard, try
+// something out in the glass booth, put its hand up for the leader's nod, or
+// nap on the sofa, walking along the lanes between the cells. Each page load
+// lays out a new office. The landing page asks what a calf is doing to link
+// it to a feature, and plays a scripted task across the floor (`setStory`).
 
 const SIZE = 120; // the floor is SIZE x SIZE voxels
 const OCCUPANCY = 0.7; // calves per seat
@@ -36,6 +40,7 @@ const palette = {
 	table: hex('#8a7a66'), tableEdge: hex('#6c5f50'), leg: hex('#3a4048'),
 	screen: hex('#0f1114'), board: hex('#d9dccf'), counter: hex('#4a3a30'), counterTop: hex('#6d5646'),
 	machine: hex('#b0413e'), steel: hex('#a7adb5'), coffee: hex('#5a3a26'), mug: hex('#f2efe8'),
+	glass: hex('#62e0ea'), post: hex('#3a4f57'), boothFloor: hex('#16262b'),
 	sofa: hex('#3c4a7a'), sofaSeat: hex('#5b6bb0'), cushion: hex('#7d8bd0'), leaf: hex('#4f8f4a'), pot: hex('#6d5646'),
 };
 
@@ -111,6 +116,10 @@ const KITCHEN = 108;
 const bar: Spot[] = [12, 20, 28].map(z => ({ x: KITCHEN, z, facing: 1, out: [KITCHEN, z], lane: 97 }));
 const coffee: Spot[] = [48, 56].map(z => ({ x: KITCHEN, z, facing: 1, out: [KITCHEN, z], lane: 97 }));
 const sofa: Spot[] = [90, 104].map(z => ({ x: 110, z, facing: 1, out: [110, z], lane: 97 }));
+// The whiteboard on the back wall, and the glass booth in the front strip.
+const board: Spot[] = [45, 51].map(x => ({ x, z: 3, facing: 2, out: [x, 4], lane: nearest(x) }));
+const BOOTH = { x0: 12, x1: 30, z0: 102, z1: 116, door: 21 };
+const booth: Spot[] = [{ x: BOOTH.door, z: 110, facing: 0, out: [BOOTH.door, 99], lane: nearest(BOOTH.door) }];
 
 function kitchen(): Voxel[] {
 	const v: Voxel[] = [];
@@ -126,6 +135,23 @@ function kitchen(): Voxel[] {
 	for (let z = 84; z <= 110; z++) v.push([108, 2, z, ...(Math.floor((z - 84) / 7) % 2 ? palette.sofaSeat : palette.cushion), 0, 1]);
 	v.push(...box(109, 116, 2, 2, 84, 110, palette.sofaSeat), ...box(117, 118, 2, 6, 84, 110, palette.sofa));
 	v.push(...box(108, 118, 2, 4, 83, 83, palette.sofa), ...box(108, 118, 2, 4, 111, 111, palette.sofa));
+	return v;
+}
+
+// Glass panes as a sparse lattice of small glowing cubes, with solid posts.
+function glass(lit: boolean): Voxel[] {
+	const { x0, x1, z0, z1, door } = BOOTH;
+	const pane = palette.glass, k = lit ? 0.9 : 0.35;
+	const v: Voxel[] = [];
+	for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) v.push(...box(x, x, 0, 12, z, z, palette.post));
+	for (let y = 1; y <= 12; y += y === 12 ? 1 : 3) {
+		for (let x = x0 + 1; x < x1; x += y === 12 ? 1 : 2) {
+			v.push([x, y, z1, ...pane, k, y === 12 ? 1 : 0.35]);
+			if (Math.abs(x - door) > 2 || y > 9) v.push([x, y, z0, ...pane, k, y === 12 ? 1 : 0.35]);
+		}
+		for (let z = z0 + 1; z < z1; z += y === 12 ? 1 : 2) v.push([x0, y, z, ...pane, k, y === 12 ? 1 : 0.35], [x1, y, z, ...pane, k, y === 12 ? 1 : 0.35]);
+	}
+	v.push(...box(x0 + 1, x1 - 1, -1, -1, z0 + 1, z1 - 1, palette.boothFloor));
 	return v;
 }
 
@@ -149,7 +175,10 @@ function room(): Voxel[] {
 	return v;
 }
 
-type Errand = 'visit' | 'deliver' | 'tea' | 'coffee' | 'nap' | 'whip' | 'home';
+type Errand = 'visit' | 'deliver' | 'tea' | 'coffee' | 'nap' | 'memo' | 'sandbox' | 'whip' | 'approve' | 'home';
+
+// What a calf is up to, as the landing page names it.
+export type Activity = 'work' | 'back' | 'deliver' | 'ask' | 'sandbox' | 'memo' | 'drink' | 'nap' | 'high-five' | 'lead';
 
 type Agent = {
 	style: CalfStyle;
@@ -174,17 +203,29 @@ type Agent = {
 	leader?: boolean;
 	whipAt: number;
 	whipped?: boolean; // a napper the leader is already on the way to
+	asking?: number; // when it put its hand up for the leader's nod
+	claimed?: boolean; // the leader is on its way to that asker
+	approvedAt: number;
 };
+
+const NOTE_COLORS = [colors.lime, colors.amber, colors.cyan, colors.violet];
+
+// The scripted task the landing page plays across the floor: a message comes
+// in to the leader, it hands out the work, one calf asks first, and the result
+// goes back out. The crew are the three working calves nearest the leader.
+type Story = { step: number; since: number; crew: Agent[] };
+let story: Story | undefined;
 
 class Office {
 	time = 0;
 	rand: () => number;
 	agents: Agent[] = [];
 	fixed: Voxel[];
+	notes: { x: number; y: number; color: number }[] = [];
 
 	constructor(readonly seed: number) {
 		this.rand = random(seed);
-		for (const s of [...bar, ...coffee, ...sofa]) s.user = undefined;
+		for (const s of [...bar, ...coffee, ...sofa, ...board, ...booth]) s.user = undefined;
 		const { voxels, seats } = layout(seed);
 		this.fixed = [...room(), ...kitchen(), ...voxels];
 		// Seat about seven calves in ten, on randomly chosen seats.
@@ -195,15 +236,21 @@ class Office {
 			this.agents.push({
 				style: skin(seed + n * 7 + 3), home, at: [home.x, home.z], facing: home.facing, walked: 0,
 				state: 'work', until: 1 + this.rand() * 9, path: [], errand: 'home', where: home,
-				poseUntil: 0, spark: 0, deskBlock: this.rand() < 0.4 ? 6 : 0, deskCupUntil: 0, whipAt: 0,
+				poseUntil: 0, spark: 0, deskBlock: this.rand() < 0.4 ? 6 : 0, deskCupUntil: 0, whipAt: 0, approvedAt: -9,
 			});
 		}
 		// The one gold calf: the leader keeps watch from the middle of the floor.
 		const post: Spot = { x: 66, z: 41, facing: 0, out: [66, 41], lane: 66 };
 		this.agents.push({
 			style: leader, home: post, at: [post.x, post.z], facing: 0, walked: 0, state: 'work', until: 3, path: [],
-			errand: 'home', where: post, poseUntil: 0, spark: 0, deskBlock: 0, deskCupUntil: 0, leader: true, whipAt: 0,
+			errand: 'home', where: post, poseUntil: 0, spark: 0, deskBlock: 0, deskCupUntil: 0, leader: true, whipAt: 0, approvedAt: -9,
 		});
+		for (let n = 0; n < 5; n++) this.note();
+	}
+
+	note() {
+		this.notes.push({ x: 41 + Math.floor(this.rand() * 13), y: 5 + Math.floor(this.rand() * 5), color: Math.floor(this.rand() * NOTE_COLORS.length) });
+		if (this.notes.length > 9) this.notes.shift();
 	}
 
 	advance(to: number) {
@@ -233,6 +280,8 @@ class Office {
 			if (a.errand === 'tea' || a.errand === 'coffee') a.carry = a.errand;
 			if (a.where.user === a) a.where.user = undefined;
 			a.whipped = false;
+			// An asker never left its desk: back to work, nod or no nod.
+			if (a.where === a.home) { a.asking = undefined; a.claimed = false; a.state = 'work'; a.until = t + 4 + this.rand() * 8; return; }
 			return this.go(a, a.home, 'home');
 		}
 		if (a.leader) return this.lead(a);
@@ -245,17 +294,25 @@ class Office {
 			this.go(a, slot, errand);
 			return true;
 		};
-		if (r < 0.45) {
+		if (r < 0.34) {
 			const working = this.agents.filter(b => b !== a && !b.leader && b.state === 'work');
 			const b = working[Math.floor(this.rand() * working.length)];
 			if (b) {
-				const deliver = r < 0.2;
+				const deliver = r < 0.17;
 				a.target = b; a.carry = deliver ? 'block' : undefined;
 				return this.go(a, { x: b.home.out[0], z: b.home.out[1], facing: opposite(b.home.facing), out: b.home.out, lane: b.home.lane }, deliver ? 'deliver' : 'visit');
 			}
-		} else if (r < 0.62) { if (take(bar, 'tea')) return; }
-		else if (r < 0.8) { if (take(coffee, 'coffee')) return; }
-		else if (r < 0.88) { if (take(sofa, 'nap')) return; }
+		} else if (r < 0.46) { if (take(bar, 'tea')) return; }
+		else if (r < 0.58) { if (take(coffee, 'coffee')) return; }
+		else if (r < 0.65) { if (take(sofa, 'nap')) return; }
+		else if (r < 0.74) { if (take(board, 'memo')) return; }
+		else if (r < 0.82) { if (take(booth, 'sandbox')) return; }
+		else if (r < 0.9) {
+			// Hand up at the desk until the leader comes over to nod it through.
+			a.state = 'busy'; a.asking = t; a.claimed = false; a.until = t + 16;
+			a.pose = 'catch'; a.poseFacing = a.home.facing; a.poseUntil = a.until;
+			return;
+		}
 		// Otherwise a stretch at the desk and back to work.
 		a.pose = 'stretch'; a.poseFacing = a.home.facing; a.poseUntil = t + 1.4;
 		a.until = t + 1.4 + 4 + this.rand() * 8;
@@ -273,6 +330,14 @@ class Office {
 			const z = napper.where.z;
 			return this.go(a, { x: 99, z: z + 3, facing: 1, out: [99, z + 3], lane: 97 }, 'whip');
 		}
+		const asker = this.agents.find(b => b.asking !== undefined && !b.claimed && b !== story?.crew[0]);
+		if (asker) {
+			asker.claimed = true;
+			asker.until = Math.max(asker.until, t + 30);
+			a.target = asker;
+			const h = asker.home;
+			return this.go(a, { x: h.out[0], z: h.out[1], facing: opposite(h.facing), out: h.out, lane: h.lane }, 'approve');
+		}
 		const r = this.rand();
 		const working = this.agents.filter(b => b !== a && b.state === 'work');
 		if (r < 0.15 && working.length) {
@@ -286,7 +351,7 @@ class Office {
 
 	walk(a: Agent) {
 		// The leader hurries when someone is asleep on the job.
-		let left = (a.errand === 'whip' ? 1.6 : 1) * SPEED * TICK;
+		let left = (a.errand === 'whip' || a.errand === 'approve' ? 1.6 : 1) * SPEED * TICK;
 		a.walked += left;
 		while (left > 0 && a.path.length) {
 			const [tx, tz] = a.path[0];
@@ -320,6 +385,18 @@ class Office {
 			case 'nap':
 				a.state = 'nap'; a.until = t + 18 + this.rand() * 8; a.whipped = false;
 				break;
+			case 'memo':
+				a.state = 'busy'; a.until = t + 2.4; a.pose = 'catch'; a.poseFacing = a.facing; a.poseUntil = t + 1.6;
+				this.note();
+				break;
+			case 'sandbox':
+				a.state = 'busy'; a.until = t + 6; a.pose = 'hold'; a.poseFacing = a.facing; a.poseUntil = a.until;
+				break;
+			case 'approve':
+				// A nod: the asker gets a tick and goes back to work.
+				a.state = 'busy'; a.until = t + 1.2;
+				if (b && b.asking !== undefined) { b.asking = undefined; b.approvedAt = t; b.until = t + 1.2; b.poseUntil = t; }
+				break;
 			case 'whip':
 				// Two cracks of the whip; the napper jumps up on the first.
 				a.state = 'busy'; a.whipAt = t; a.until = t + 1.4;
@@ -342,6 +419,21 @@ function mug(x: number, y: number, z: number): Voxel[] {
 	return [[x, y, z, ...palette.mug, 0, 0.9], [x, y + 0.6, z, ...palette.coffee, 0, 0.7]];
 }
 
+const QUESTION = ['.##.', '#..#', '..#.', '.#..', '....', '.#..'];
+const TICK_MARK = ['.....#', '....#.', '#..#..', '.##...'];
+
+// A small sign made of half-size cubes, facing the camera, centred above (x, y, z).
+function glyph(rows: string[], [x, y, z]: Vec, color: RGB): Voxel[] {
+	const v: Voxel[] = [];
+	const w = rows[0].length;
+	rows.forEach((row, iy) => [...row].forEach((c, ix) => {
+		if (c !== '#') return;
+		const d = (ix - w / 2) * 0.5;
+		v.push([x + d * 0.7, y - iy * 0.55, z - d * 0.7, ...color, 1, 0.55]);
+	}));
+	return v;
+}
+
 function calfVoxels(a: Agent, t: number): Voxel[] {
 	const x = Math.round(a.at[0]), z = Math.round(a.at[1]);
 	if (a.state === 'nap') {
@@ -362,6 +454,17 @@ function calfVoxels(a: Agent, t: number): Voxel[] {
 	if ((a.carry === 'tea' || a.carry === 'coffee') && pose !== 'drink') v.push(...cup(...add(here, rotate([0, 6, 3], facing))));
 	if (pose === 'drink') v.push(...cup(...add(here, rotate([2, 8, 3], facing))));
 	if (pose === 'startle') v.push(...alarm(x, 15, z));
+	if (a.asking !== undefined && a.state === 'busy') v.push(...glyph(QUESTION, [x, 17, z], colors.amber));
+	if (t - a.approvedAt < 1.2) v.push(...glyph(TICK_MARK, [x, 17, z], colors.lime));
+	if (a.errand === 'sandbox' && a.state === 'busy') {
+		// Whatever it is trying out fizzes inside the glass, never past it.
+		const [hx, hy, hz] = add(here, rotate([0, 7.6, 3.2], facing));
+		v.push(block([hx, hy, hz], [colors.cyan, colors.violet, colors.amber][Math.floor(t * 5) % 3], 1.6, 1));
+		for (let k = 0; k < 4; k++) {
+			const p = (t * 1.3 + k / 4) % 1;
+			v.push([hx + Math.round(Math.sin(k * 2 + t * 3) * 4), hy + p * 4, hz + Math.round(Math.cos(k * 2 + t * 2) * 3), ...colors.cyan, 1, 0.4]);
+		}
+	}
 	if (t < a.spark) {
 		const [sx, sy, sz] = add(here, rotate([3, 11, 0], facing));
 		for (const [dx, dy] of [[0, 1.2], [0, -1.2], [1.2, 0], [-1.2, 0]]) v.push([sx + dx * 0.5, sy + dy, sz + dx, ...colors.amber, 1, 0.5]);
@@ -380,22 +483,120 @@ function deskVoxels(a: Agent, t: number): Voxel[] {
 	return v;
 }
 
+// Where a calf holds things, and where its desk is.
+const hands = (a: Agent): Vec => [a.at[0], 7, a.at[1]];
+const deskTop = (a: Agent): Vec => add([a.home.x, 0, a.home.z], rotate([0, 6, 4], a.home.facing));
+const OUTSIDE: Vec = [-16, 22, 44];
+
+const dimmed = (v: Voxel[], k: number): Voxel[] => v.map(p => [p[0], p[1], p[2], p[3] * k, p[4] * k, p[5] * k, p[6] * k, p[7]]);
+let fixedDim: Voxel[] | undefined;
+
+function marker([x, , z]: Vec, t: number): Voxel[] {
+	const bob = Math.floor(t * 3) % 2 ? 0.5 : 0;
+	return [[x, 19 + bob, z, ...colors.lime, 1, 1.1], [x, 18 + bob, z, ...colors.lime, 1, 0.5]];
+}
+
+// Plays one step of the story; returns the calves it is about.
+function playStory(s: Story, t: number, v: Voxel[]): Agent[] {
+	const boss = office.agents.find(a => a.leader)!;
+	const [asker] = s.crew;
+	const p = (t - s.since) % 3.6;
+	switch (s.step) {
+		case 0: // a message flies in over the wall to the leader
+			v.push(block(arc(OUTSIDE, hands(boss), p / 1.4, 10), colors.lime, 1.6, 1));
+			return [boss];
+		case 1: // the leader hands the work out to the crew's desks
+			s.crew.forEach((c, i) => {
+				const q = (p - i * 0.5) / 1.1;
+				if (q > 0 && q < 1) v.push(block(arc(hands(boss), deskTop(c), q, 8), [colors.cyan, colors.amber, colors.violet][i], 1.4, 1));
+				if (q >= 1) c.deskBlock = Math.max(c.deskBlock, t + 1);
+			});
+			return [boss, ...s.crew];
+		case 2: // one of them asks before doing something with side effects
+			if (asker.state === 'work') { asker.pose = 'catch'; asker.poseFacing = asker.home.facing; asker.poseUntil = t + 0.2; }
+			v.push(...glyph(p < 2.4 ? QUESTION : TICK_MARK, add(hands(asker), [0, 10, 0]), p < 2.4 ? colors.amber : colors.lime));
+			return [asker];
+		default: // the result goes back to the leader and out
+			if (p < 1.2) v.push(block(arc(deskTop(asker), hands(boss), p / 1.2, 8), colors.lime, 1.6, 1));
+			else if (p > 1.6 && p < 2.8) v.push(block(arc(hands(boss), OUTSIDE, (p - 1.6) / 1.2, 10), colors.lime, 1.6, 1));
+			return [asker, boss];
+	}
+}
+
+let highlight: Activity[] | undefined;
+
 export function officeVoxels(time: number): Voxel[] {
 	office.advance(time);
 	const t = office.time;
-	const v: Voxel[] = [...office.fixed];
+	const inBooth = booth[0].user?.state === 'busy';
+	const v: Voxel[] = [];
+	const extra: Voxel[] = [];
+	const focus = story ? playStory(story, t, extra) : undefined;
+	if (focus) v.push(...(fixedDim ??= dimmed(office.fixed, 0.35)), ...dimmed(glass(inBooth), 0.35));
+	else v.push(...office.fixed, ...glass(inBooth));
+	for (const n of office.notes) v.push([n.x, n.y, -0.2, ...NOTE_COLORS[n.color], 0.4, 0.9]);
 	// Steam curling up from the coffee machine.
 	for (let k = 0; k < 3; k++) {
 		const p = (t * 0.6 + k / 3) % 1;
 		v.push([113 + Math.round(Math.sin((p + k) * 6)) * 0.5, 13.5 + p * 6, 49, ...colors.white, 0.3, 0.9 - p * 0.5]);
 	}
-	for (const a of office.agents) v.push(...deskVoxels(a, t), ...calfVoxels(a, t));
-	return v;
+	for (const a of office.agents) {
+		const lit = focus ? focus.includes(a) : !highlight || highlight.includes(activity(a));
+		const own = [...deskVoxels(a, t), ...calfVoxels(a, t)];
+		v.push(...(lit ? own : dimmed(own, focus ? 0.28 : 0.5)));
+		if ((focus || highlight) && lit) v.push(...marker([a.at[0], 0, a.at[1]], t));
+	}
+	return [...v, ...extra];
+}
+
+export function activity(a: Agent): Activity {
+	if (a.leader) return 'lead';
+	if (a.state === 'nap' || a.errand === 'nap') return 'nap';
+	if (a.asking !== undefined || (story?.step === 2 && a === story.crew[0])) return 'ask';
+	switch (a.errand) {
+		case 'visit': return 'high-five';
+		case 'deliver': return 'deliver';
+		case 'tea': case 'coffee': return 'drink';
+		case 'memo': return 'memo';
+		case 'sandbox': return 'sandbox';
+		default: return a.state === 'walk' ? 'back' : 'work';
+	}
+}
+
+// Plays a step of the story (0 to 3), or stops it with undefined.
+export function setStory(step: number | undefined) {
+	if (step === undefined) { story = undefined; return; }
+	if (story?.step === step) return;
+	const boss = office.agents.find(a => a.leader)!;
+	const crew = story?.crew ?? office.agents
+		.filter(a => !a.leader && a.state === 'work')
+		.sort((a, b) => Math.hypot(a.at[0] - boss.at[0], a.at[1] - boss.at[1]) - Math.hypot(b.at[0] - boss.at[0], b.at[1] - boss.at[1]))
+		.slice(0, 3);
+	story = { step, since: office.time, crew };
+}
+
+// Marks the calves doing any of these, or none.
+export function setHighlight(activities: Activity[] | undefined) {
+	highlight = activities;
+}
+
+// The calf drawn at (x, y) on a canvas of that size, if any, nearest the
+// front when they overlap.
+export function calfAt(x: number, y: number, width: number, height: number): Activity | undefined {
+	const f = officeFrame(width, height);
+	let best: Agent | undefined;
+	for (const a of office.agents) {
+		const lying = a.state === 'nap';
+		const [cx, cy] = project(a.at[0] + (lying ? 3.5 : 0.5), lying ? 3 : 6, a.at[1] + 0.5, f);
+		if (Math.abs(x - cx) > (lying ? 7 : 4.5) * f.unit || Math.abs(y - cy) > (lying ? 4 : 7.5) * f.unit) continue;
+		if (!best || a.at[0] + a.at[1] > best.at[0] + best.at[1]) best = a;
+	}
+	return best && activity(best);
 }
 
 // Small calves: a voxel is a couple of rendered pixels, and the office sits
-// in the middle of the hero, under the title.
+// in the middle of the stage, under the title.
 export function officeFrame(width: number, height: number) {
-	const unit = Math.min(2.8, Math.max(1.6, width / 260));
-	return { unit, x: width / 2, y: height * 0.56 - (SIZE / Math.sqrt(6)) * unit };
+	const unit = Math.min(2.8, Math.max(1.6, Math.min(width / 260, height / 150)));
+	return { unit, x: width / 2, y: height * 0.54 - (SIZE / Math.sqrt(6)) * unit };
 }

@@ -8,15 +8,20 @@ The site at https://mob.fdkevin.cloud is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has three parts,
 served by the Worker in `worker/`:
 
-- `/` is the landing page. Behind the title, a faint isometric voxel office
-  plays out. Each load lays out a new square open-plan floor of shared desks
-  and seats calves on about 70% of them; every calf comes from one template
-  with a generated skin. They work, walk the lanes, high-five, hand each other
-  blocks of work, fetch milk tea or coffee and nap on the sofa, until the gold
-  leader calf comes over and cracks its whip. `?office=<seed>` pins a layout.
-  It is drawn with WebGPU (Canvas 2D where WebGPU is missing). Small voxel
-  scenes show the features. Both are idealised, not a picture of what Mob
-  does today.
+- `/` is the landing page, scrolled through in pages over one pinned isometric
+  voxel office. Each load lays out a new square open-plan floor of shared
+  desks and seats calves on about 70% of them; every calf comes from one
+  template with a generated skin. They work, walk the lanes, high-five, hand
+  each other blocks of work, fetch milk tea or coffee, pin notes on the
+  whiteboard, try things in the glass booth, put a hand up for the gold
+  leader's nod and nap on the sofa, until the leader comes over and cracks its
+  whip. `?office=<seed>` pins a layout. The first page is the title over the
+  office; the second plays one task step by step in a chat window while the
+  calves involved are lit up; the third moves the office left and lists the
+  features, and clicking a calf jumps to the feature its activity stands for.
+  With reduced motion the pages stack without animation. It is drawn with
+  WebGPU (Canvas 2D where WebGPU is missing). The office and the conversation
+  are idealised, not a picture of what Mob does today.
 - Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
   Turnstile check has to pass before the GitHub flow starts. Accounts and
   sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.
