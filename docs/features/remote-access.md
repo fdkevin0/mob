@@ -21,7 +21,14 @@ served by the Worker in `worker/`:
   Turnstile check has to pass before the GitHub flow starts. Accounts and
   sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.
 - `/app` is the web UI. The Worker sends visitors without a session back to
-  `/?signin=app`.
+  `/?signin=app`. Signed-in visitors enter the workspace even when no runner or
+  local Mob is connected yet: they can look around and type a message, and the
+  **Connect a runner** dialog (runners, Mob address and access token) opens only
+  when they do something that needs Mob, such as sending, starting a
+  conversation or opening plugins. A typed message is kept and placed in the
+  composer of the first conversation that opens after connecting; it is not
+  sent automatically. A `mob open --web` link opens the dialog to show its
+  progress, and a replaced token reopens it with the reason.
 
 The landing page and workspace share the dark theme, Geist fonts, pixel logo
 and basic controls. The workspace uses the same theme in the local browser and

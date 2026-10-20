@@ -26,6 +26,8 @@ export function Thread({
 	onBusy,
 	onChanged,
 	onAction,
+	draft,
+	clearDraft,
 }: {
 	connection: Connection;
 	id: string;
@@ -34,6 +36,9 @@ export function Thread({
 	onBusy: (busy: boolean) => void;
 	onChanged: () => void;
 	onAction: (action: Action) => void;
+	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
+	draft?: string;
+	clearDraft?: () => void;
 }) {
 	const {
 		model,
@@ -54,6 +59,11 @@ export function Thread({
 		commandResult,
 		dismissCommand,
 	} = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
+	useEffect(() => {
+		if (!draft) return;
+		setInput(draft);
+		clearDraft?.();
+	}, []);
 	const completion = useCompletion({ connection, id, input, setInput });
 	const [choosing, setChoosing] = useState(false);
 	const [defaultModel, setDefaultModel] = useState<string>();

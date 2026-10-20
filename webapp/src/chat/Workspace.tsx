@@ -9,7 +9,17 @@ import { Thread } from './Thread';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export function Workspace({ connection, disconnect }: { connection: Connection; disconnect: () => void }) {
+export function Workspace({
+	connection,
+	disconnect,
+	draft,
+	clearDraft,
+}: {
+	connection: Connection;
+	disconnect: () => void;
+	draft?: string;
+	clearDraft?: () => void;
+}) {
 	const [plugins, setPlugins] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -143,7 +153,9 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 						</SheetTrigger>
 						<SheetContent>
 							<SheetTitle className="dialog-title">Conversations</SheetTitle>
-							<SheetDescription className="dialog-description">Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.</SheetDescription>
+							<SheetDescription className="dialog-description">
+								Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.
+							</SheetDescription>
 							{links}
 						</SheetContent>
 					</Sheet>
@@ -168,6 +180,8 @@ export function Workspace({ connection, disconnect }: { connection: Connection; 
 							void refreshList().catch((e) => setError(errorText(e)));
 						}}
 						onAction={act}
+						draft={draft}
+						clearDraft={clearDraft}
 					/>
 				) : (
 					<div className="loading" role="status">

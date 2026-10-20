@@ -4,8 +4,10 @@ import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Workspace } from './Workspace';
 import { Runners } from './Runners';
+import { Lobby } from './Lobby';
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -15,6 +17,9 @@ export function App() {
   const [address, setAddress] = useState(serviceURL);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  // The public web opens the workspace without a runner; prompting shows how to connect one, and draft keeps what was typed meanwhile.
+  const [prompting, setPrompting] = useState(false);
+  const [draft, setDraft] = useState('');
   useEffect(() => {
     const desktop = window.go?.main?.Desktop;
     if (desktop) {
@@ -23,12 +28,14 @@ export function App() {
     }
     const saved = savedToken();
     let url = serviceURL();
+    // A sign-in link shows its progress and any failure in the connect dialog.
+    if (/[#&](offer|pair)=/.test(window.location.hash)) setPrompting(true);
     const restore = async () => {
       const link = signInLink();
       if (link) { url = link.url; return claimPairing(link); }
       return saved ? verify({ url, token: saved }) : undefined;
     };
-    restore().then(next => { if (next) { saveConnection(next); setConnection(next); } })
+    restore().then(next => { if (next) { saveConnection(next); setConnection(next); setPrompting(false); } })
       .catch(e => setError(current => current || reachText(url, e))).finally(() => setLoading(false));
   }, []);
   // A replaced token signs this window out; the desktop reads the new token instead.
@@ -40,7 +47,7 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
-      clearToken(rejected); setConnection(undefined); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
+      clearToken(rejected); setConnection(undefined); setPrompting(true); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
     };
     window.addEventListener(unauthorizedEvent, signOut);
     return () => window.removeEventListener(unauthorizedEvent, signOut);
@@ -49,17 +56,25 @@ export function App() {
     event.preventDefault(); setLoading(true); setError('');
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
     if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
-    try { await api(next, '/config'); saveConnection(next); setConnection(next); }
+    try { await api(next, '/config'); saveConnection(next); setConnection(next); setPrompting(false); }
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
-  if (connection) return <Workspace connection={connection} disconnect={() => { if (!connection.runner) clearToken(); setConnection(undefined); }} />;
+  const open = (next: Connection) => { setConnection(next); setPrompting(false); };
+  if (connection) return <Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { if (!connection.runner) clearToken(); setConnection(undefined); }} />;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.go?.main?.Desktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
-  return <main className="connect"><Logo /><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>
-    {isPublicWeb() && <Runners connect={setConnection} />}
+  const panel = <>
+    {isPublicWeb() && <Runners connect={open} />}
     <form onSubmit={connect}>{isPublicWeb() && <><Label htmlFor="address">Mob address</Label><Input id="address" type="url" value={address} onChange={e => setAddress(e.target.value)} required /></>}<Label htmlFor="token">Local access token</Label><Input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
-    {error && <p role="alert">{error}</p>}</main>;
+    {error && <p role="alert">{error}</p>}</>;
+  if (isPublicWeb()) return <>
+    <Lobby draft={draft} setDraft={setDraft} connect={() => setPrompting(true)} />
+    <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
+      <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
+      <DialogDescription className="dialog-description">Mob runs on your own computer. Connect to it to send messages; your conversations stay there.</DialogDescription>
+      {panel}</DialogContent></Dialog></>;
+  return <main className="connect"><Logo /><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>{panel}</main>;
 }
 
 // Storage can be unavailable, such as in a private window; the token form still works then.

@@ -321,7 +321,7 @@
 	font-size: 13px;
 }
 .error,
-.connect [role='alert'],
+:is(.connect, .connect-dialog) [role='alert'],
 .plugins [role='alert'] {
 	color: var(--destructive);
 	font-size: 13px;
@@ -350,19 +350,19 @@
 	letter-spacing: -0.04em;
 	margin: 32px 0 16px;
 }
-.connect p {
+:is(.connect, .connect-dialog) p {
 	color: var(--muted-foreground);
 	font-size: 14px;
 	line-height: 1.7;
 	margin: 16px 0;
 }
-.connect form {
+:is(.connect, .connect-dialog) form {
 	margin-top: 28px;
 }
-.connect .ui-input {
+:is(.connect, .connect-dialog) .ui-input {
 	margin: 8px 0 20px;
 }
-.connect code {
+:is(.connect, .connect-dialog) code {
 	color: var(--text);
 	font-family: var(--mono);
 	font-size: 12px;
@@ -533,4 +533,16 @@
 	.plugins h1 {
 		font-size: 24px;
 	}
+}
+.lobby-conversation {
+	flex: 1;
+	display: flex;
+	background: var(--panel);
+}
+.lobby-note {
+	padding: 0 10px;
+	line-height: 1.6;
+}
+.status-dot.offline {
+	background: var(--muted-foreground);
 }
