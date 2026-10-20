@@ -7,7 +7,7 @@
 		"dev": "bun scripts/sync.ts && astro dev",
 		"build": "bun scripts/sync.ts && astro build",
 		"preview": "astro preview",
-		"test": "tsc --noEmit -p . && bun test"
+		"test": "astro sync && tsc --noEmit -p . && bun test"
 	},
 	"dependencies": {
 		"@astrojs/starlight": "0.42.6",
