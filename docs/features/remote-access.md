@@ -23,6 +23,17 @@ served by the Worker in `worker/`:
 - `/app` is the web UI. The Worker sends visitors without a session back to
   `/?signin=app`.
 
+The landing page and workspace share the dark theme, Geist fonts, pixel logo
+and basic controls. The workspace uses the same theme in the local browser and
+Wails desktop app. On narrow screens, Conversations opens a side panel; choosing
+a conversation closes it. Model selection and sign-in dialogs contain keyboard
+focus and return it when closed. Plugin tabs support arrow-key navigation and
+keep unsaved configuration edits when switching tabs.
+
+The two pages have separate entries and network policies. Sharing presentation
+does not load the landing page's authentication client, Turnstile or voxel scenes
+into the workspace.
+
 Pairing with Mob on your computer works as before:
 
 - `mob open --web` asks the running service for a one-time pairing code and

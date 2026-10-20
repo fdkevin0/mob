@@ -7,6 +7,11 @@ import { CloudflarePlugin } from './plugins/CloudflarePlugin';
 import { WeChatILinkPlugin } from './plugins/WeChatILinkPlugin';
 import { errorText } from './plugins/shared';
 import { Deliveries } from './plugins/Deliveries';
+import { Logo } from '../components/brand/Logo';
+import { Button } from '../components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+
+const tabs = ['email', 'telegram', 'wechat_ilink', 'cloudflare', 'deliveries'] as const;
 
 export function Plugins({ connection, close }: { connection: Connection; close: () => void }) {
   const [config, setConfig] = useState<Configs>();
@@ -45,46 +50,45 @@ export function Plugins({ connection, close }: { connection: Connection; close: 
 
   return (
     <main className="plugins">
-      <header>
+      <header className="plugins-header">
         <div>
-          <p className="eyebrow">MOB / CONNECTIONS</p>
+          <Logo size={24} />
           <h1>Plugins & cloud services</h1>
         </div>
-        <button className="secondary" onClick={close}>
+        <Button variant="outline" onClick={close}>
           Back to chat
-        </button>
+        </Button>
       </header>
-      <nav className="plugin-tabs" aria-label="Connections">
-        {(['email', 'telegram', 'wechat_ilink', 'cloudflare', 'deliveries'] as const).map(name => (
-          <button
-            key={name}
-            aria-current={tab === name ? 'page' : undefined}
-            onClick={() => setTab(name)}
-          >
-            {name === 'email'
-              ? 'Email plugin'
-              : name === 'telegram'
-              ? 'Telegram'
-              : name === 'wechat_ilink'
-              ? 'WeChat (iLink)'
-              : name === 'cloudflare'
-              ? 'Cloudflare'
-              : 'Deliveries'}
-          </button>
-        ))}
-      </nav>
-      {error && <p role="alert">{error}</p>}
-      {!config ? (
-        <button onClick={() => void load()}>Retry</button>
-      ) : (
-        <>
-          <EmailPlugin connection={connection} initial={config.email} active={tab === 'email'} status={mailStatus} />
-          <TelegramPlugin connection={connection} initial={config.telegram} active={tab === 'telegram'} status={status} />
-          <WeChatILinkPlugin connection={connection} initial={config.wechat_ilink} active={tab === 'wechat_ilink'} />
-          <CloudflarePlugin connection={connection} initial={config.cloudflare} active={tab === 'cloudflare'} />
-        </>
-      )}
-      {tab === 'deliveries' && <Deliveries connection={connection} />}
+      <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
+        <TabsList aria-label="Connections">
+          {tabs.map(name => (
+            <TabsTrigger key={name} value={name}>
+              {name === 'email'
+                ? 'Email plugin'
+                : name === 'telegram'
+                ? 'Telegram'
+                : name === 'wechat_ilink'
+                ? 'WeChat (iLink)'
+                : name === 'cloudflare'
+                ? 'Cloudflare'
+                : 'Deliveries'}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {error && <p role="alert">{error}</p>}
+        {!config ? (
+          <Button onClick={() => void load()}>Retry</Button>
+        ) : (
+          <>
+            {/* Keep plugin state mounted so tab switches retain unsaved edits. */}
+            <TabsContent value="email" forceMount hidden={tab !== 'email'}><EmailPlugin connection={connection} initial={config.email} active={tab === 'email'} status={mailStatus} /></TabsContent>
+            <TabsContent value="telegram" forceMount hidden={tab !== 'telegram'}><TelegramPlugin connection={connection} initial={config.telegram} active={tab === 'telegram'} status={status} /></TabsContent>
+            <TabsContent value="wechat_ilink" forceMount hidden={tab !== 'wechat_ilink'}><WeChatILinkPlugin connection={connection} initial={config.wechat_ilink} active={tab === 'wechat_ilink'} /></TabsContent>
+            <TabsContent value="cloudflare" forceMount hidden={tab !== 'cloudflare'}><CloudflarePlugin connection={connection} initial={config.cloudflare} active={tab === 'cloudflare'} /></TabsContent>
+          </>
+        )}
+        <TabsContent value="deliveries"><Deliveries connection={connection} /></TabsContent>
+      </Tabs>
     </main>
   );
 }

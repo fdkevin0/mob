@@ -1,13 +1,16 @@
+import { Button } from '../../components/ui/button';
+import { Label } from '../../components/ui/label';
+import { Input } from '../../components/ui/input';
 import { useState, type ReactNode, type FormEvent } from 'react';
 import { api, type Connection } from '../api';
 import type { Configs } from './types';
 export const errorText = (e: unknown) => e instanceof Error ? e.message : String(e);
 export const requestId = () => crypto.randomUUID().replaceAll('-', '');
 export function Field({ label, value, onChange, secret = false, type = 'text', hint }: { label: string; value: string | number | undefined; onChange: (value: string) => void; secret?: boolean; type?: string; hint?: string }) {
-  return <label className="plugin-field">{label}<input type={secret ? 'password' : type} autoComplete="off" value={value ?? ''} onChange={e => onChange(e.target.value)} />{hint && <small>{hint}</small>}</label>;
+  return <Label className="plugin-field">{label}<Input type={secret ? 'password' : type} autoComplete="off" value={value ?? ''} onChange={e => onChange(e.target.value)} />{hint && <small>{hint}</small>}</Label>;
 }
 export function Toggle({ children, value, onChange }: { children: ReactNode; value: boolean; onChange: (v: boolean) => void }) {
-  return <label className="plugin-toggle"><input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} />{children}</label>;
+  return <Label className="plugin-toggle"><input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} />{children}</Label>;
 }
 
 
@@ -24,4 +27,4 @@ export function usePlugin<K extends keyof Configs>(name: K, initial: Configs[K],
 }
 export function Feedback({error,notice}:{error:string;notice:string}) { return <>{error && <p role="alert" className="error">{error}</p>}{notice && <p role="status">{notice}</p>}</>; }
 export function Result({value}:{value:unknown}) {return value===undefined?null:<pre className="plugin-result" aria-label="Operation result">{JSON.stringify(value,null,2)}</pre>;}
-export function Actions({busy,unavailable,test}:{busy:boolean;unavailable:boolean;test:()=>Promise<void>}) {return <><p className="muted">Credentials are stored locally in the database. Passwords and tokens are never returned to this form.</p><div className="plugin-actions"><button disabled={busy}>Save configuration</button><button type="button" className="secondary" disabled={unavailable} onClick={()=>void test()}>Test saved configuration</button></div></>;}
+export function Actions({busy,unavailable,test}:{busy:boolean;unavailable:boolean;test:()=>Promise<void>}) {return <><p className="muted">Credentials are stored locally in the database. Passwords and tokens are never returned to this form.</p><div className="plugin-actions"><Button disabled={busy}>Save configuration</Button><Button type="button" variant="outline" disabled={unavailable} onClick={()=>void test()}>Test saved configuration</Button></div></>;}

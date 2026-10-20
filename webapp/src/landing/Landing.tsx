@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { authClient, keepOffer, loadSite, openApp, pendingOffer, type Site } from './auth';
 import { Features } from './Features';
-import { Logo } from './Logo';
-import { PixelIcon } from './PixelIcon';
+import { Logo } from '../components/brand/Logo';
+import { PixelIcon } from '../components/brand/PixelIcon';
+import { Button } from '../components/ui/button';
+import { Dialog } from '../components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { SignIn } from './SignIn';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
 import { officeFrame, officeVoxels } from './voxel/office';
@@ -12,9 +15,13 @@ export function Landing() {
 	const [site, setSite] = useState<Site>();
 	const [siteError, setSiteError] = useState('');
 	const [dialog, setDialog] = useState<{ reason?: string }>();
-	const [menu, setMenu] = useState(false);
 	const [signedIn, setSignedIn] = useState(false);
+	const signInTrigger = useRef<HTMLButtonElement>(null);
 	const user = session.data?.user;
+	function showSignIn(event: MouseEvent<HTMLButtonElement>) {
+		signInTrigger.current = event.currentTarget;
+		setDialog({});
+	}
 
 	useEffect(() => {
 		const linked = keepOffer();
@@ -30,9 +37,9 @@ export function Landing() {
 
 	// Back from GitHub, or already signed in with a link waiting: on to the app.
 	useEffect(() => { if (user && (signedIn || pendingOffer())) openApp(); }, [user, signedIn]);
-	const close = useCallback(() => setDialog(undefined), []);
 
 	return (
+		<Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(undefined); }}>
 		<div className="landing">
 			<header className="nav">
 				<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
@@ -44,19 +51,19 @@ export function Landing() {
 				<div className="nav-account">
 					{session.isPending ? <span className="nav-pending" aria-hidden="true" /> : user ? (
 						<div className="account">
-							<button className="btn primary small" onClick={openApp}>Open Mob</button>
-							<button className="avatar" aria-label="Account" aria-expanded={menu} onClick={() => setMenu(open => !open)}>
+							<Button className="small" onClick={openApp}>Open Mob</Button>
+							<DropdownMenu>
+							<DropdownMenuTrigger asChild><button className="avatar" aria-label="Account">
 								{user.image ? <img src={user.image} alt="" /> : (user.name || user.email).slice(0, 1).toUpperCase()}
-							</button>
-							{menu ? (
-								<div className="account-menu" role="menu">
-									<p><strong>{user.name}</strong>{user.email}</p>
-									<button role="menuitem" onClick={async () => { await authClient.signOut(); setMenu(false); }}>Sign out</button>
-								</div>
-							) : null}
+							</button></DropdownMenuTrigger>
+							<DropdownMenuContent>
+								<DropdownMenuLabel className="ui-menu-label"><strong>{user.name}</strong>{user.email}</DropdownMenuLabel>
+								<DropdownMenuItem className="ui-menu-item" onSelect={() => { void authClient.signOut(); }}>Sign out</DropdownMenuItem>
+							</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
 					) : (
-						<button className="btn ghost small" onClick={() => setDialog({})}><PixelIcon name="lock" size={12} /> Sign in</button>
+						<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><PixelIcon name="lock" size={12} /> Sign in</Button>
 					)}
 				</div>
 			</header>
@@ -69,9 +76,9 @@ export function Landing() {
 						<p className="hero-sub">Local first · every channel · open source</p>
 						<div className="cta">
 							{user
-								? <button className="btn primary" onClick={openApp}>Open Mob</button>
-								: <button className="btn primary" onClick={() => setDialog({})}>Get started</button>}
-							<a className="btn ghost" href="https://github.com/fdkevin0/mob" rel="noreferrer">View source</a>
+								? <Button onClick={openApp}>Open Mob</Button>
+								: <Button aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}>Get started</Button>}
+							<Button variant="outline" asChild><a href="https://github.com/fdkevin0/mob" rel="noreferrer">View source</a></Button>
 						</div>
 					</div>
 				</section>
@@ -88,7 +95,7 @@ export function Landing() {
 						<span className="ok">✓</span> signed in<span className="cursor" />
 					</code></pre>
 					<div className="cta">
-						<a className="btn primary" href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Download</a>
+						<Button asChild><a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Download</a></Button>
 					</div>
 				</section>
 			</main>
@@ -99,7 +106,8 @@ export function Landing() {
 				<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
 			</footer>
 
-			{dialog ? <SignIn site={site} siteError={siteError} reason={dialog.reason} onClose={close} /> : null}
+			{dialog ? <SignIn site={site} siteError={siteError} reason={dialog.reason} returnFocus={signInTrigger} /> : null}
 		</div>
+		</Dialog>
 	);
 }

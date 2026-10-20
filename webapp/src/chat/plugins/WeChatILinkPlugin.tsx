@@ -1,3 +1,4 @@
+import { Button } from '../../components/ui/button';
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, type Connection } from '../api';
@@ -91,9 +92,9 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
           <div className="qr-section" style={{ margin: '1rem 0', padding: '1rem', border: '1px solid var(--border, #ccc)', borderRadius: '6px' }}>
             <h4>WeChat Scan Authorization</h4>
             <p className="muted">Generate a temporary authorization QR code for your WeChat account.</p>
-            <button type="button" disabled={fetchingQR} onClick={() => void requestQRCode()}>
+            <Button type="button" disabled={fetchingQR} onClick={() => void requestQRCode()}>
               {fetchingQR ? 'Generating QR Code...' : 'Get Login QR Code'}
-            </button>
+            </Button>
             {qrStatus && <p role="status" style={{ marginTop: '0.5rem', fontWeight: 500 }}>{qrStatus}</p>}
             {qrCode && qrCode.content && (
               <div style={{ marginTop: '0.5rem' }}>
@@ -128,14 +129,14 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
             onChange={v => setConfig({ ...config, allowedUsers: v.split(',').map(s => s.trim()).filter(Boolean) })}
           />
           <div>
-            <button
+            <Button
               type="button"
               className="plain"
               disabled={config.enabled || !secrets['botToken']}
               onClick={() => clearSecret('botToken')}
             >
               {secrets['botToken'] ? 'Will clear token on save' : 'Clear saved Bot Token'}
-            </button>
+            </Button>
             <small>Disable the plugin before clearing saved credentials, then save.</small>
           </div>
           <Actions busy={busy} unavailable={unavailable} test={test} />
