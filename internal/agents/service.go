@@ -64,12 +64,19 @@ func (s *Service) Reply(ctx context.Context, turn *chat.DelegateTurn) error {
 		return turn.Stream("text", "The agent stopped before this was decided; send the task a message to continue.")
 	}
 	session, err := s.session(ctx, t)
-	if err == nil {
+	switch {
+	case err == nil:
 		err = session.reply(ctx, turn)
-	} else {
+	case ctx.Err() != nil:
+		// Stopped while the agent was starting.
+		_ = s.Store.SetTaskStatus(t.ID, chat.TaskStopped)
+	default:
 		_ = s.Store.SetTaskStatus(t.ID, chat.TaskFailed)
 	}
-	s.notify(t.ID, turn, err)
+	if ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+		// Stopping a task is the owner's doing; it raises no notice.
+		s.notify(t.ID, turn, err)
+	}
 	return err
 }
 
@@ -92,6 +99,9 @@ func (s *Service) notify(id string, turn *chat.DelegateTurn, failure error) {
 	switch {
 	case t.Status == chat.TaskFailed && failure != nil:
 		n.Text = "**Task failed:** " + title + "\n\n" + failure.Error()
+	case failure != nil:
+		// The agent ended early but can go on, such as at its limit.
+		n.Text = "**Task stopped early:** " + title + "\n\n" + failure.Error()
 	case t.Status == chat.TaskWaiting:
 		if n.Approvals = s.Conversations.Pending(t.ConversationID); len(n.Approvals) == 0 {
 			return

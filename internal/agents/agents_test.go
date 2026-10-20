@@ -119,6 +119,9 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
+	case text == "limit":
+		f.say(ctx, id, acp.UpdateAgentMessageText("halfway"))
+		return acp.PromptResponse{StopReason: acp.StopReasonMaxTokens}, nil
 	case text == "login":
 		return acp.PromptResponse{}, acp.NewAuthRequired(nil)
 	case text == "wait":
@@ -134,9 +137,18 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 type fakes struct {
 	mu     sync.Mutex
 	agents []*fake
+	// slow, when set, makes starting an agent wait until it is stopped.
+	slow bool
 }
 
-func (fs *fakes) connect(_ context.Context, _ Preset, _ string) (Conn, error) {
+func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) {
+	fs.mu.Lock()
+	slow := fs.slow
+	fs.mu.Unlock()
+	if slow {
+		<-ctx.Done()
+		return Conn{}, ctx.Err()
+	}
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
 	f := &fake{release: make(chan struct{})}
@@ -544,6 +556,17 @@ func TestNoticesTellTheOwner(t *testing.T) {
 		t.Fatalf("failure notices = %+v", got)
 	}
 
+	limited, err := h.svc.StartTask(context.Background(), h.repo, "", "", "limit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limited = h.wait(limited); limited.Status != chat.TaskReview {
+		t.Fatalf("status = %q", limited.Status)
+	}
+	if got = took(); len(got) != 1 || !strings.Contains(got[0].Text, "**Task stopped early:** codex · limit\n\nCodex stopped at its limit (max_tokens); send a message to continue\n\nhalfway") {
+		t.Fatalf("limit notices = %+v", got)
+	}
+
 	stopped, err := h.svc.StartTask(context.Background(), h.repo, "", "", "wait")
 	if err != nil {
 		t.Fatal(err)
@@ -555,5 +578,24 @@ func TestNoticesTellTheOwner(t *testing.T) {
 	h.wait(stopped)
 	if got = took(); len(got) != 0 {
 		t.Fatalf("stopping a task told the owner: %+v", got)
+	}
+
+	// Nor does stopping one whose agent is still starting.
+	h.fakes.mu.Lock()
+	h.fakes.slow = true
+	h.fakes.mu.Unlock()
+	starting, err := h.svc.StartTask(context.Background(), h.repo, "", "", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := h.svc.StopTask(starting.ID); err != nil {
+		t.Fatal(err)
+	}
+	if starting = h.wait(starting); starting.Status != chat.TaskStopped {
+		t.Fatalf("status = %q", starting.Status)
+	}
+	if got = took(); len(got) != 0 {
+		t.Fatalf("stopping a starting task told the owner: %+v", got)
 	}
 }

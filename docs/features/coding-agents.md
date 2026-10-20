@@ -89,7 +89,9 @@ once there is a project or task; the others once there is a project or task.
 When a task's turn ends waiting for an approval, done or failed, Mob raises a
 `chat.Notice` (`ConversationService.Notify`): the task's agent and title, the
 agent's last words (up to 1200 characters), its branch when done, the error
-when failed, and the approvals that wait. Stopping a task raises none.
+when failed or stopped early (such as at the agent's limit, with how to
+continue), and the approvals that wait. Stopping a task, even while its agent
+is starting, raises none and leaves it stopped.
 Messaging channels pass notices on; [Telegram](channels.md) sends them with
 approval buttons, so the owner can follow and decide tasks from the phone. A
 turn started from a channel, such as a decision tapped there, sends that
