@@ -1,4 +1,4 @@
-// The public site at https://mob.fdkevin.cloud: the landing page, GitHub sign-in
+// The public site at https://usemob.app: the landing page, GitHub sign-in
 // (Better Auth with Turnstile, accounts in D1), the web UI behind it, which
 // connects to loopback Mob or an end-to-end encrypted runner relay, and the
 // documentation at /docs (apps/docs). Cloudflare Workers
@@ -63,7 +63,7 @@
 			}
 		}
 	},
-	"routes": [{ "pattern": "mob.fdkevin.cloud", "custom_domain": true }],
+	"routes": [{ "pattern": "usemob.app", "custom_domain": true, "previews_enabled": true }],
 	"observability": {
 		"logs": {
 			"enabled": true,
