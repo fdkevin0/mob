@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 )
@@ -25,16 +24,13 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 	name, args, _ := strings.Cut(input.Text, " ")
 	args = strings.TrimSpace(args)
 	var reply string
-	var usage *llm.Usage
-	var took time.Duration
+	var used requests
 	var err error
 	switch name {
 	case "/models":
 		reply, err = s.models(ctx, input.ID, args)
 	case "/compact":
-		began := time.Now()
-		reply, usage, err = s.compact(ctx, input.ID)
-		took = time.Since(began)
+		reply, used, err = s.compact(ctx, input.ID)
 	default:
 		reply, err = s.switchModel(input.ID, args, input.Owner)
 	}
@@ -54,6 +50,7 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 		}
 		return errors.Join(err, e)
 	}
+	usage := used.total()
 	if usage != nil || stopped {
 		message.Usage = usage
 		status, failure := "complete", ""
@@ -67,7 +64,7 @@ func (s *ConversationService) command(ctx context.Context, input ChatRequest, em
 	if usage != nil {
 		ref, e := s.Model(input.ID)
 		if e == nil {
-			e = s.Store.RecordUsage(input.ID, message.ID, ref, *usage, took)
+			e = used.record(s.Store, input.ID, message.ID, ref)
 		}
 		if e != nil {
 			return errors.Join(err, e)

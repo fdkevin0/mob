@@ -65,13 +65,13 @@ func (s *session) used(turn *chat.DelegateTurn, e ending) error {
 		if tallied != "" {
 			model = tallied
 		}
-		recorded, err := s.svc.Store.ModelTotals(turn.ConversationID)
+		// The tally counts this session alone; a task whose session could
+		// not be loaded again started a new one at zero.
+		r, err := s.svc.Store.SessionTotal(turn.ConversationID, string(s.id))
 		if err != nil {
 			return err
 		}
-		for _, r := range recorded {
-			u.Input, u.Output, u.Reasoning, u.CacheRead, u.CacheWrite = u.Input-r.Input, u.Output-r.Output, u.Reasoning-r.Reasoning, u.CacheRead-r.CacheRead, u.CacheWrite-r.CacheWrite
-		}
+		u.Input, u.Output, u.Reasoning, u.CacheRead, u.CacheWrite = u.Input-r.Input, u.Output-r.Output, u.Reasoning-r.Reasoning, u.CacheRead-r.CacheRead, u.CacheWrite-r.CacheWrite
 		u.Reasoning, u.CacheRead, u.CacheWrite = max(u.Reasoning, 0), max(u.CacheRead, 0), max(u.CacheWrite, 0)
 		if u.Input > 0 || u.Output > 0 {
 			rows = []modelUsage{{"", u}}
@@ -92,7 +92,7 @@ func (s *session) used(turn *chat.DelegateTurn, e ending) error {
 		} else {
 			took = 0
 		}
-		if err := turn.Used(r.model, r.usage, took); err != nil {
+		if err := turn.Used(string(s.id), r.model, r.usage, took); err != nil {
 			return err
 		}
 	}

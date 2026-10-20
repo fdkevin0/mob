@@ -111,12 +111,16 @@ func TestReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if all.Total != 1440 || all.Conversations != 2 || all.Turns != 3 || len(all.Days) != 2 || all.Since != 0 {
+	today := time.Now().Format(time.DateOnly)
+	if all.Total != 1440 || all.Conversations != 2 || all.Turns != 3 || len(all.Days) != 2 || all.Since != 0 || all.FirstDay != time.UnixMilli(old).Format(time.DateOnly) || all.LastDay != today {
 		t.Fatalf("all time %+v", all)
 	}
 	week, err := s.Report(time.Now().AddDate(0, 0, -7), 1)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if week.FirstDay != time.Now().AddDate(0, 0, -7).Format(time.DateOnly) || week.LastDay != today {
+		t.Fatalf("week spans %s to %s", week.FirstDay, week.LastDay)
 	}
 	if week.Total != 440 || len(week.Days) != 1 || week.Days[0].Total != 440 || len(week.Models) != 2 || week.Models[0].Model != "gpt" {
 		t.Fatalf("week %+v", week)

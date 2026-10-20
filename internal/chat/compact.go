@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/fdkevin0/mob/internal/llm"
 )
@@ -21,10 +22,37 @@ const (
 	transcriptOutput = 2000
 )
 
+// requests are what each model request used and how long it took.
+type requests []request
+
+type request struct {
+	usage llm.Usage
+	took  time.Duration
+}
+
+// total is what the requests used together, or nil without any.
+func (r requests) total() *llm.Usage {
+	var total *llm.Usage
+	for _, q := range r {
+		total = add(total, q.usage)
+	}
+	return total
+}
+
+// record adds each request to the reply messageID's usage.
+func (r requests) record(store *Store, conversationID, messageID, model string) error {
+	for _, q := range r {
+		if err := store.RecordUsage(conversationID, messageID, model, q.usage, q.took); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // summarize folds messages into previous with model, as many messages at a
 // time as fit its window, in a summary of at most limit tokens, and returns
-// the new summary and what it cost.
-func summarize(ctx context.Context, model llm.Model, previous string, messages []Message, limit int) (string, *llm.Usage, error) {
+// the new summary and what each of its requests used.
+func summarize(ctx context.Context, model llm.Model, previous string, messages []Message, limit int) (string, requests, error) {
 	info := model.Info()
 	maxTokens := min(summaryTokens, limit)
 	if info.Output > 0 {
@@ -32,7 +60,7 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 	}
 	// About three words take four tokens.
 	system := compactPrompt + fmt.Sprintf(" Use at most about %d words.", maxTokens*3/8)
-	var usage *llm.Usage
+	var usage requests
 	summary, part := previous, ""
 	flush := func() error {
 		if part == "" {
@@ -45,9 +73,10 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 		if info.Context > 0 && tokens(system)+tokens(text)+maxTokens > info.Context {
 			return fmt.Errorf("summarizing would exceed %s's context", info.ID)
 		}
+		began := time.Now()
 		result, err := model.Stream(ctx, llm.Request{System: system, Messages: []llm.Message{{Role: "user", Text: text}}, MaxTokens: maxTokens}, func(string, string) error { return nil })
 		if result.Usage != nil {
-			usage = add(usage, result.Usage.Priced(info.Cost))
+			usage = append(usage, request{result.Usage.Priced(info.Cost), time.Since(began)})
 		}
 		if err != nil {
 			return err
@@ -98,7 +127,7 @@ func summarize(ctx context.Context, model llm.Model, previous string, messages [
 // compact summarizes every message since the conversation's summary, so
 // later turns read the summary in their place. A conversation without a model
 // or messages to summarize is told so in the reply.
-func (s *ConversationService) compact(ctx context.Context, id string) (string, *llm.Usage, error) {
+func (s *ConversationService) compact(ctx context.Context, id string) (string, requests, error) {
 	ref, err := s.Model(id)
 	if err != nil {
 		return "", nil, err

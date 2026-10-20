@@ -89,9 +89,9 @@ func TestHistoryIsSummarizedNotOmitted(t *testing.T) {
 			t.Fatalf("summarizing was not charged to its turn: %+v", h.Usage)
 		}
 	}
-	// What summarizing used is counted in the conversation's usage.
+	// Each summary request is counted in the conversation's usage.
 	used, _ := s.ConversationUsage(id)
-	if u := used[id]; u.Requests != 1 || u.Input != 100*len(model.summaries) || u.Turns != 1 || u.Models[0].Model != "test/summarizing" {
+	if u := used[id]; u.Requests != len(model.summaries) || u.Input != 100*len(model.summaries) || u.Turns != 1 || u.Models[0].Model != "test/summarizing" {
 		t.Fatalf("usage %+v", u)
 	}
 }
@@ -114,6 +114,10 @@ func TestSummaryIsWrittenInPartsThatFit(t *testing.T) {
 	}
 	if !strings.Contains(model.requests[0].System, "SUMMARY "+fmt.Sprint(len(model.summaries))) {
 		t.Fatal("the turn did not read the last summary")
+	}
+	used, _ := s.ConversationUsage(id)
+	if u := used[id]; u.Requests != len(model.summaries) || u.Input != 100*len(model.summaries) {
+		t.Fatalf("%d summary requests counted as %+v", len(model.summaries), u)
 	}
 }
 
@@ -319,6 +323,9 @@ func TestCompactCommandSummarizesTheConversation(t *testing.T) {
 	history, _ := s.History(id)
 	if command := history[len(history)-1]; command.Usage == nil || command.Usage.Input != 100 {
 		t.Fatalf("the summary's cost was not saved: %+v", command.Usage)
+	}
+	if used, _ := s.ConversationUsage(id); used[id].Requests != len(model.summaries) || used[id].Models[0].Model != "test/summarizing" {
+		t.Fatalf("/compact's requests were not counted: %+v", used[id])
 	}
 	say("and then?")
 	req := model.requests[len(model.requests)-1]

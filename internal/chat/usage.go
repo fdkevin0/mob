@@ -40,12 +40,18 @@ type UsageSummary struct {
 	Models []ModelUsage `json:"models"`
 }
 
-// RecordUsage adds what one model request, or one turn of an outside agent,
-// used to the reply messageID of conversationID. model names the model, or
-// the agent when it did not say which.
+// RecordUsage adds what one model request used to the reply messageID of
+// conversationID.
 func (s *Store) RecordUsage(conversationID, messageID, model string, u llm.Usage, took time.Duration) error {
-	_, err := s.db.Exec("INSERT INTO usage(conversation_id,message_id,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-		conversationID, messageID, model, u.Input, u.Output, u.Reasoning, u.CacheRead, u.CacheWrite, u.Cost, took.Milliseconds(), time.Now().UnixMilli())
+	return s.RecordSessionUsage(conversationID, messageID, "", model, u, took)
+}
+
+// RecordSessionUsage adds what one turn of an outside agent's session used
+// to the reply messageID of conversationID. model names the model, or the
+// agent when it did not say which.
+func (s *Store) RecordSessionUsage(conversationID, messageID, session, model string, u llm.Usage, took time.Duration) error {
+	_, err := s.db.Exec("INSERT INTO usage(conversation_id,message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+		conversationID, messageID, session, model, u.Input, u.Output, u.Reasoning, u.CacheRead, u.CacheWrite, u.Cost, took.Milliseconds(), time.Now().UnixMilli())
 	return err
 }
 
@@ -102,18 +108,14 @@ func (s *Store) ConversationUsage(ids ...string) (map[string]UsageSummary, error
 	return result, counts.Err()
 }
 
-// ModelTotals sums what conversationID recorded by model, for agents that
-// report what a session used so far rather than what a turn used.
-func (s *Store) ModelTotals(conversationID string) (map[string]llm.Usage, error) {
-	summary, err := s.ConversationUsage(conversationID)
-	if err != nil {
-		return nil, err
-	}
-	totals := map[string]llm.Usage{}
-	for _, m := range summary[conversationID].Models {
-		totals[m.Model] = llm.Usage{Input: m.Input, Output: m.Output, Reasoning: m.Reasoning, CacheRead: m.CacheRead, CacheWrite: m.CacheWrite, Cost: m.Cost}
-	}
-	return totals, nil
+// SessionTotal sums what conversationID recorded for an outside agent's
+// session, for agents that report what a session used so far rather than
+// what a turn used.
+func (s *Store) SessionTotal(conversationID, session string) (llm.Usage, error) {
+	var u llm.Usage
+	err := s.db.QueryRow("SELECT COALESCE(SUM(input),0),COALESCE(SUM(output),0),COALESCE(SUM(reasoning),0),COALESCE(SUM(cache_read),0),COALESCE(SUM(cache_write),0),COALESCE(SUM(cost),0) FROM usage WHERE conversation_id=? AND session=?",
+		conversationID, session).Scan(&u.Input, &u.Output, &u.Reasoning, &u.CacheRead, &u.CacheWrite, &u.Cost)
+	return u, err
 }
 
 func (u Usage) add(v Usage) Usage {
@@ -184,6 +186,11 @@ func (s UsageSummary) Markdown() string {
 type UsageReport struct {
 	// Since is the report's start in Unix milliseconds; 0 covers everything.
 	Since int64 `json:"since"`
+	// FirstDay and LastDay are the local calendar days (YYYY-MM-DD) the
+	// report spans on the service's clock: from Since, or the first day that
+	// used any, to today.
+	FirstDay string `json:"firstDay"`
+	LastDay  string `json:"lastDay"`
 	UsageSummary
 	// Conversations counts the conversations that used any.
 	Conversations int `json:"conversations"`
@@ -221,9 +228,12 @@ func scanUsage(u *Usage, dest ...any) []any {
 func (s *Store) Report(since time.Time, top int) (UsageReport, error) {
 	report := UsageReport{Days: []DayUsage{}, Top: []TopConversation{}}
 	from := int64(0)
+	report.LastDay = time.Now().Format(time.DateOnly)
+	report.FirstDay = report.LastDay
 	if !since.IsZero() {
 		from = since.UnixMilli()
 		report.Since = from
+		report.FirstDay = since.Local().Format(time.DateOnly)
 	}
 	report.Models = []ModelUsage{}
 	err := s.db.QueryRow("SELECT COUNT(DISTINCT message_id),COUNT(DISTINCT conversation_id) FROM usage WHERE created_at>=?", from).Scan(&report.Turns, &report.Conversations)
@@ -255,6 +265,9 @@ func (s *Store) Report(since time.Time, top int) (UsageReport, error) {
 	})
 	if err != nil {
 		return report, err
+	}
+	if since.IsZero() && len(report.Days) > 0 && report.Days[0].Date < report.FirstDay {
+		report.FirstDay = report.Days[0].Date
 	}
 	err = s.each(`SELECT u.conversation_id,COALESCE(c.title,''),COALESCE(t.agent,''),`+usageColumns+`,COUNT(DISTINCT u.message_id) FROM usage u
  LEFT JOIN conversations c ON c.id=u.conversation_id LEFT JOIN tasks t ON t.conversation_id=u.conversation_id

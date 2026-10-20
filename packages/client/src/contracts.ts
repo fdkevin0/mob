@@ -140,6 +140,8 @@ export type TopConversation = {
 };
 export type UsageReport = {
   since: number;
+  firstDay: string;
+  lastDay: string;
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;

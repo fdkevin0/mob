@@ -7,6 +7,8 @@ const connection = { url: 'http://localhost', token: 'local-token' };
 const counts = { reasoningTokens: 0, cacheWriteTokens: 0, cost: 0, durationMs: 0, requests: 1 };
 const report: UsageReport = {
 	since: 1,
+	firstDay: '2026-10-14',
+	lastDay: '2026-10-20',
 	totalTokens: 12000,
 	inputTokens: 10000,
 	outputTokens: 2000,
@@ -56,10 +58,14 @@ it('says so when nothing was used', async () => {
 	expect(await screen.findByText(/No tokens were used in this period/)).toBeTruthy();
 });
 
-it('gives every day of the period a column', () => {
-	const days = fillDays(report.days, 7, new Date(2026, 9, 21));
+it('gives every day the service reports a column, on its calendar', () => {
+	const days = fillDays(report.days, '2026-10-15', '2026-10-21');
 	expect(days.map((d) => d.date)).toEqual(['2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21']);
 	expect(days[5].totalTokens).toBe(12000);
-	expect(fillDays([], 0)).toEqual([]);
+	// A service a day ahead of this browser still shows its own today.
+	const ahead = fillDays([{ ...report.days[0], date: '2026-10-21', totalTokens: 110 }], '2026-10-21', '2026-10-21');
+	expect(ahead).toHaveLength(1);
+	expect(ahead[0].totalTokens).toBe(110);
+	expect(fillDays([], '2026-10-21', '2026-10-21')).toHaveLength(1);
 	expect([tokens(950), tokens(12345), tokens(1240000)]).toEqual(['950', '12k', '1.24M']);
 });

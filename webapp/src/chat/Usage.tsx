@@ -38,22 +38,16 @@ function duration(ms: number) {
 	return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
-// localDate is a day as the server groups it: YYYY-MM-DD in local time.
-const localDate = (d: Date) =>
-	`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-// Every day of the period gets a column, so quiet days show as gaps.
-export function fillDays(days: DayUsage[], period: number, today = new Date()): DayUsage[] {
-	if (!days.length && !period) return [];
+// Every day the report spans gets a column, so quiet days show as gaps. Days
+// are the service's calendar days, which need not be this browser's.
+export function fillDays(days: DayUsage[], first: string, last: string): DayUsage[] {
+	if (!first || !last) return days;
 	const byDate = new Map(days.map((d) => [d.date, d]));
-	const last = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-	const first = period
-		? new Date(last.getFullYear(), last.getMonth(), last.getDate() - period + 1)
-		: new Date(`${days[0].date}T00:00:00`);
 	const empty = { totalTokens: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, durationMs: 0, requests: 0 };
 	const list: DayUsage[] = [];
-	for (const d = first; d <= last; d.setDate(d.getDate() + 1)) {
-		const date = localDate(d);
+	// Counting in UTC keeps each step one calendar day, whatever this browser's zone.
+	for (let d = new Date(`${first}T00:00:00Z`), end = new Date(`${last}T00:00:00Z`); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+		const date = d.toISOString().slice(0, 10);
 		list.push(byDate.get(date) ?? { date, ...empty });
 	}
 	return list;
@@ -105,14 +99,14 @@ export function Usage({ connection, close, open }: { connection: Connection; clo
 			) : report.totalTokens === 0 ? (
 				<p>No tokens were used in this period. Replies and coding agent tasks count here once they finish.</p>
 			) : (
-				<Report report={report} period={period} open={open} />
+				<Report report={report} open={open} />
 			)}
 		</main>
 	);
 }
 
-function Report({ report, period, open }: { report: UsageReport; period: number; open: (id: string) => void }) {
-	const days = useMemo(() => fillDays(report.days, period), [report, period]);
+function Report({ report, open }: { report: UsageReport; open: (id: string) => void }) {
+	const days = useMemo(() => fillDays(report.days, report.firstDay, report.lastDay), [report]);
 	const top = Math.max(...report.models.map((m) => m.totalTokens), 1);
 	return (
 		<>

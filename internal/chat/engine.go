@@ -217,11 +217,10 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	half := (budget - length - tokens(summaryNotice)) / 2
 	if through != "" && info.Context > 0 && length >= summaryTokens/4 && half > 0 {
 		_, _, older := prompt(history, message.ID, half)
-		began := time.Now()
-		text, usage, err := summarize(ctx, model, summary.Text, until(history, older), length)
-		if usage != nil {
+		text, requests, err := summarize(ctx, model, summary.Text, until(history, older), length)
+		if usage := requests.total(); usage != nil {
 			message.Usage = add(message.Usage, *usage)
-			if e := store.RecordUsage(conversationID, message.ID, model.Ref().String(), *usage, time.Since(began)); e != nil {
+			if e := requests.record(store, conversationID, message.ID, model.Ref().String()); e != nil {
 				return e
 			}
 			if e := send(Event{Kind: UsageReported, Usage: *usage}); e != nil {

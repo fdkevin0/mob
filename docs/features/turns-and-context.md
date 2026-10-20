@@ -199,7 +199,8 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   conversation, the reply, the model (`provider/model`), input (every prompt
   token, cached or not), output (reasoning included), reasoning, cache reads
   and writes, the cost priced from the catalog, and how long the request took.
-  Summarizing, in a turn or by `/compact`, is recorded the same way. Replies
+  Summarizing, in a turn or by `/compact`, is recorded the same way, one row
+  for each request when a summary is written in parts. Replies
   saved before 2026-10-20 were counted from the usage saved on them, one
   request each, with no duration. The reply's own usage (the `data-usage`
   stream events and its `usage` metadata) is unchanged.
@@ -212,7 +213,7 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   `Store.Report`) shows the last 7 days, 30 days or all time: total tokens,
   the share of input read from the cache, cost and model time; a bar of where
   the tokens went (fresh input, cache reads, cache writes, output); tokens per
-  local day stacked the same way, with each day's numbers on hover; tokens,
+  day on the service's calendar stacked the same way, with each day's numbers on hover; tokens,
   cache share, output, requests and cost by model; and the 20 conversations
   and tasks that used the most, each opening its conversation. Replies
   counted from before the table existed are dated to their conversation's

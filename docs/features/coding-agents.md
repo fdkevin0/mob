@@ -116,7 +116,9 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
   Codex thread of the same ID, so Mob reads the thread's rollout file
   (`$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<session>.jsonl`, `CODEX_HOME`
   defaulting to `~/.codex`): the last `token_count` total, less what the task
-  already recorded, is the prompt's, under the model of the last
+  already recorded for that session, is the prompt's (a session that replaces
+  one that could not be loaded counts from zero, and the old one's usage
+  stays), under the model of the last
   `turn_context`. Codex reports no cost.
 - An agent that reports neither shows no usage, and a prompt stopped from
   Mob may record none. The code is in `internal/agents/usage.go`.

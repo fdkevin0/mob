@@ -129,11 +129,11 @@ func (t *DelegateTurn) endStep() error {
 	return t.send(Event{Kind: StepFinished})
 }
 
-// Used records what the agent's model used for the reply; model names the
+// Used records what the agent's session used for the reply; model names the
 // model, or the agent when it did not say which.
-func (t *DelegateTurn) Used(model string, u llm.Usage, took time.Duration) error {
+func (t *DelegateTurn) Used(session, model string, u llm.Usage, took time.Duration) error {
 	t.message.Usage = add(t.message.Usage, u)
-	if err := t.store.RecordUsage(t.ConversationID, t.message.ID, model, u, took); err != nil {
+	if err := t.store.RecordSessionUsage(t.ConversationID, t.message.ID, session, model, u, took); err != nil {
 		return err
 	}
 	return t.send(Event{Kind: UsageReported, Usage: u})

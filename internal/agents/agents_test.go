@@ -33,6 +33,10 @@ type fake struct {
 	release chan struct{}
 	// spent is the cost "tokens" prompts report.
 	spent float64
+	// session is the ID of the sessions it creates, "s1" when empty;
+	// failLoad makes loading a session fail.
+	session  acp.SessionId
+	failLoad bool
 }
 
 func (f *fake) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
@@ -63,10 +67,17 @@ var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []
 func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSessionResponse, error) {
 	f.mu.Lock()
 	f.dir = r.Cwd
+	id := f.session
 	f.mu.Unlock()
-	return acp.NewSessionResponse{SessionId: "s1", Modes: modes}, nil
+	if id == "" {
+		id = "s1"
+	}
+	return acp.NewSessionResponse{SessionId: id, Modes: modes}, nil
 }
 func (f *fake) LoadSession(ctx context.Context, r acp.LoadSessionRequest) (acp.LoadSessionResponse, error) {
+	if f.failLoad {
+		return acp.LoadSessionResponse{}, acp.NewInternalError(nil)
+	}
 	f.mu.Lock()
 	f.dir, f.loaded = r.Cwd, string(r.SessionId)
 	f.mu.Unlock()
@@ -154,6 +165,9 @@ type fakes struct {
 	agents []*fake
 	// slow, when set, makes starting an agent wait until it is stopped.
 	slow bool
+	// session and failLoad are given to the agents started next.
+	session  acp.SessionId
+	failLoad bool
 }
 
 func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) {
@@ -166,7 +180,9 @@ func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) 
 	}
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
-	f := &fake{release: make(chan struct{})}
+	fs.mu.Lock()
+	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad}
+	fs.mu.Unlock()
 	f.conn = acp.NewAgentSideConnection(f, fromAgent, toAgent)
 	f.conn.SetLogger(slog.New(slog.DiscardHandler))
 	fs.mu.Lock()
@@ -621,6 +637,12 @@ func TestUsageIsRecorded(t *testing.T) {
 	h := newHarness(t)
 	// Codex says what its session used only in its own records.
 	rollout := filepath.Join(home, "sessions", "2026", "10", "20", "rollout-2026-10-20T10-00-00-s1.jsonl")
+	write := func(session, lines string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(filepath.Dir(rollout), "rollout-2026-10-20T11-00-00-"+session+".jsonl"), []byte(lines), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(rollout), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -645,13 +667,28 @@ func TestUsageIsRecorded(t *testing.T) {
 	if u := used[task.ConversationID]; u.Input != 1500 || u.CacheRead != 1200 || u.Output != 150 || u.Reasoning != 5 || u.Turns != 2 || u.Requests != 2 || len(u.Models) != 1 || u.Models[0].Model != "gpt-test" {
 		t.Fatalf("Codex usage %+v", u)
 	}
+	// A session that cannot be loaded again is replaced by one counting
+	// from zero; what the old one used stays.
+	if err := h.svc.StopTask(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(task)
+	h.fakes.mu.Lock()
+	h.fakes.session, h.fakes.failLoad = "s2", true
+	h.fakes.mu.Unlock()
+	write("s2", line(100, 0, 20))
+	task = h.say(task, "more")
+	used, _ = h.svc.Store.ConversationUsage(task.ConversationID)
+	if u := used[task.ConversationID]; task.Session != "s2" || u.Input != 1600 || u.Output != 170 || u.Turns != 3 {
+		t.Fatalf("usage after a new session %+v (session %s)", u, task.Session)
+	}
 	// Agents that report usage in their responses are taken at their word,
 	// with input counted with the cache, and the cost they report.
 	task = h.say(task, "tokens")
 	task = h.say(task, "tokens")
 	used, _ = h.svc.Store.ConversationUsage(task.ConversationID)
 	u := used[task.ConversationID]
-	if len(u.Models) != 2 || u.Models[0].Model != "claude-test" || u.Models[0].Input != 2000 || u.Models[0].CacheRead != 1800 || u.Models[0].CacheWrite != 180 || u.Models[0].Output != 80 || fmt.Sprintf("%.2f", u.Cost) != "0.50" {
+	if len(u.Models) != 3 || u.Models[0].Model != "claude-test" || u.Models[0].Input != 2000 || u.Models[0].CacheRead != 1800 || u.Models[0].CacheWrite != 180 || u.Models[0].Output != 80 || fmt.Sprintf("%.2f", u.Cost) != "0.50" {
 		t.Fatalf("reported usage %+v", u)
 	}
 	overview, err := h.svc.overview("")
