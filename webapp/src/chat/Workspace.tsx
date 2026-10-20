@@ -4,6 +4,7 @@ import type { Action } from './contracts';
 import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
+import { AgentTree } from './AgentTree';
 import { Plugins } from './Plugins';
 import { Usage } from './Usage';
 import { Thread } from './Thread';
@@ -24,6 +25,7 @@ export function Workspace({
 }) {
 	const [plugins, setPlugins] = useState(false);
 	const [usage, setUsage] = useState(false);
+	const [agents, setAgents] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
@@ -42,6 +44,7 @@ export function Workspace({
 			const snapshot = await api<Snapshot>(connection, `/conversations/${id}`);
 			setSelected({ id, snapshot });
 			setNavigation(false);
+			setAgents(false);
 		} catch (e) {
 			setError(errorText(e));
 		} finally {
@@ -109,6 +112,18 @@ export function Workspace({
 					</Button>
 				))}
 			</nav>
+			<Button
+				variant="ghost"
+				className="sidebar-plugins"
+				aria-current={agents ? 'page' : undefined}
+				disabled={busy}
+				onClick={() => {
+					setNavigation(false);
+					setAgents(true);
+				}}
+			>
+				Agents
+			</Button>
 			<Button
 				variant="ghost"
 				className="sidebar-plugins"
@@ -202,7 +217,13 @@ export function Workspace({
 						</Button>
 					</div>
 				)}
-				{selected ? (
+				{agents ? (
+					<AgentTree
+						connection={connection}
+						open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
+						close={() => setAgents(false)}
+					/>
+				) : selected ? (
 					<Thread
 						key={selected.id}
 						connection={connection}

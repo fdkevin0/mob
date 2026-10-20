@@ -205,8 +205,9 @@ func (s *Service) Close() {
 }
 
 // StartTask makes a worktree of project for a new task and hands prompt to
-// the agent in a turn that runs on its own.
-func (s *Service) StartTask(ctx context.Context, project, agent, title, prompt string) (chat.Task, error) {
+// the agent in a turn that runs on its own. parent is the conversation that
+// started it, if any.
+func (s *Service) StartTask(ctx context.Context, parent, project, agent, title, prompt string) (chat.Task, error) {
 	p, ok, err := s.project(project)
 	if err != nil {
 		return chat.Task{}, err
@@ -228,7 +229,7 @@ func (s *Service) StartTask(ctx context.Context, project, agent, title, prompt s
 	if err != nil {
 		return chat.Task{}, err
 	}
-	t := chat.Task{Project: p.Name, Agent: a.Name, Title: title, Worktree: dir, Branch: branch, Status: chat.TaskRunning}
+	t := chat.Task{Project: p.Name, Agent: a.Name, Title: title, Worktree: dir, Branch: branch, Status: chat.TaskRunning, Parent: parent}
 	if err := s.Store.CreateTask(&t); err != nil {
 		return chat.Task{}, err
 	}

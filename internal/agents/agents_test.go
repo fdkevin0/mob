@@ -62,6 +62,11 @@ func (f *fake) SetSessionConfigOption(context.Context, acp.SetSessionConfigOptio
 	return acp.SetSessionConfigOptionResponse{}, nil
 }
 
+var modelCategory = acp.SessionConfigOptionCategoryModel
+
+var models = []acp.SessionConfigOption{{Select: &acp.SessionConfigOptionSelect{Id: "model", Type: "select", Category: &modelCategory, CurrentValue: "gpt-5.5-codex/high",
+	Options: acp.SessionConfigSelectOptions{Ungrouped: &acp.SessionConfigSelectOptionsUngrouped{{Value: "gpt-5.5-codex/high", Name: "gpt-5.5-codex (high)"}}}}}}
+
 var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}, {Id: "acceptEdits", Name: "Accept edits"}}}
 
 func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSessionResponse, error) {
@@ -72,7 +77,7 @@ func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSe
 	if id == "" {
 		id = "s1"
 	}
-	return acp.NewSessionResponse{SessionId: id, Modes: modes}, nil
+	return acp.NewSessionResponse{SessionId: id, Modes: modes, ConfigOptions: models}, nil
 }
 func (f *fake) LoadSession(ctx context.Context, r acp.LoadSessionRequest) (acp.LoadSessionResponse, error) {
 	if f.failLoad {
@@ -291,7 +296,7 @@ func (h *harness) reply(task chat.Task) string {
 
 func (h *harness) start(prompt string) chat.Task {
 	h.t.Helper()
-	task, err := h.svc.StartTask(context.Background(), h.repo, "", "", prompt)
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "", "", prompt)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -344,7 +349,7 @@ func fmtJSON(v any) string {
 
 func TestClaudeAgent(t *testing.T) {
 	h := newHarness(t)
-	task, err := h.svc.StartTask(context.Background(), h.repo, "claude", "", "login")
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "claude", "", "login")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +424,7 @@ func TestWritingInsteadOfDecidingDenies(t *testing.T) {
 
 func TestStopAndReload(t *testing.T) {
 	h := newHarness(t)
-	task, err := h.svc.StartTask(context.Background(), h.repo, "", "wait", "wait")
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "", "wait", "wait")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +487,7 @@ func TestStartTaskTool(t *testing.T) {
 
 func TestMessageWhileWorking(t *testing.T) {
 	h := newHarness(t)
-	task, err := h.svc.StartTask(context.Background(), h.repo, "", "", "hold")
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "", "", "hold")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +583,7 @@ func TestNoticesTellTheOwner(t *testing.T) {
 		t.Fatalf("done notices = %+v", got)
 	}
 
-	failed, err := h.svc.StartTask(context.Background(), h.repo, "claude", "", "login")
+	failed, err := h.svc.StartTask(context.Background(), "", h.repo, "claude", "", "login")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,7 +592,7 @@ func TestNoticesTellTheOwner(t *testing.T) {
 		t.Fatalf("failure notices = %+v", got)
 	}
 
-	limited, err := h.svc.StartTask(context.Background(), h.repo, "", "", "limit")
+	limited, err := h.svc.StartTask(context.Background(), "", h.repo, "", "", "limit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -598,7 +603,7 @@ func TestNoticesTellTheOwner(t *testing.T) {
 		t.Fatalf("limit notices = %+v", got)
 	}
 
-	stopped, err := h.svc.StartTask(context.Background(), h.repo, "", "", "wait")
+	stopped, err := h.svc.StartTask(context.Background(), "", h.repo, "", "", "wait")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -615,7 +620,7 @@ func TestNoticesTellTheOwner(t *testing.T) {
 	h.fakes.mu.Lock()
 	h.fakes.slow = true
 	h.fakes.mu.Unlock()
-	starting, err := h.svc.StartTask(context.Background(), h.repo, "", "", "hello")
+	starting, err := h.svc.StartTask(context.Background(), "", h.repo, "", "", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -697,5 +702,44 @@ func TestUsageIsRecorded(t *testing.T) {
 	}
 	if listed := overview.(map[string]any)["tasks"].([]map[string]any)[0]["usage"].(chat.UsageSummary); listed.Total != u.Total {
 		t.Fatalf("tasks lists %+v", listed)
+	}
+}
+
+func TestTreeShowsWhoStartedWhom(t *testing.T) {
+	h := newHarness(t)
+	mob, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, err := h.svc.StartTask(context.Background(), mob.ID, h.repo, "", "Greet", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := h.wait(started)
+	alone := h.start("hello")
+	nodes, err := h.svc.Tree("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 3 {
+		t.Fatalf("nodes = %+v", nodes)
+	}
+	byID := map[string]AgentNode{}
+	for _, n := range nodes {
+		byID[n.ConversationID] = n
+	}
+	child, root := byID[task.ConversationID], byID[mob.ID]
+	if child.Parent != mob.ID || child.Label != "Codex" || child.Model != "gpt-5.5-codex/high" || child.Status != chat.TaskReview || child.Task == nil || fmtJSON(child.Tools) != `["read"]` {
+		t.Fatalf("task node = %+v", child)
+	}
+	if root.Agent != Mob || root.Status != Idle || root.Parent != "" || root.Task != nil {
+		t.Fatalf("mob node = %+v", root)
+	}
+	if byID[alone.ConversationID].Parent != "" {
+		t.Fatalf("unstarted task = %+v", byID[alone.ConversationID])
+	}
+	text := outline(nodes)
+	if !strings.Contains(text, "- **Idle** · Mob · New conversation\n  - **Done** · Codex · Greet · ") {
+		t.Fatalf("outline =\n%s", text)
 	}
 }

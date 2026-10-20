@@ -157,3 +157,48 @@ export type UsageReport = {
   days: DayUsage[];
   top: TopConversation[];
 };
+export type UsageSummary = {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cost: number;
+  durationMs: number;
+  requests: number;
+  turns: number;
+  models: ModelUsage[];
+};
+export type PlanEntry = {
+  content: string;
+  status: string;
+};
+export type Task = {
+  id: string;
+  conversationId: string;
+  project: string;
+  agent: string;
+  title: string;
+  worktree: string;
+  branch: string;
+  session?: string;
+  status: string;
+  parent?: string;
+  plan?: PlanEntry[];
+  createdAt: number;
+  updatedAt: number;
+};
+export type AgentNode = {
+  conversationId: string;
+  parent?: string;
+  agent: string;
+  label: string;
+  model?: string;
+  title: string;
+  status: string;
+  approvals: number;
+  tools: string[];
+  task?: Task;
+  usage?: UsageSummary;
+};

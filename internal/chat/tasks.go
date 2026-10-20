@@ -21,6 +21,9 @@ type Task struct {
 	// Session is the agent's own session ID, for loading it again.
 	Session string `json:"session,omitempty"`
 	Status  string `json:"status"`
+	// Parent is the conversation that started the task: Mob's, or another
+	// task's; empty when none did.
+	Parent string `json:"parent,omitempty"`
 	// Plan is the agent's latest plan, as it reported it.
 	Plan      []PlanEntry `json:"plan,omitempty"`
 	CreatedAt int64       `json:"createdAt"`
@@ -45,7 +48,7 @@ const (
 	TaskFailed  = "failed"
 )
 
-const taskColumns = "id,conversation_id,project,agent,title,worktree,branch,session,status,plan,created_at,updated_at"
+const taskColumns = "id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,plan,created_at,updated_at"
 
 // CreateTask saves t with a new conversation titled after it, which the
 // agent's replies go into.
@@ -64,7 +67,7 @@ func (s *Store) CreateTask(t *Task) error {
 	if _, err = tx.Exec("INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)", t.ConversationID, string(title), now); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,'',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, now, now); err != nil {
+	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,'',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, t.Parent, now, now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -73,7 +76,7 @@ func (s *Store) CreateTask(t *Task) error {
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	var t Task
 	var plan string
-	err := row.Scan(&t.ID, &t.ConversationID, &t.Project, &t.Agent, &t.Title, &t.Worktree, &t.Branch, &t.Session, &t.Status, &plan, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.ID, &t.ConversationID, &t.Project, &t.Agent, &t.Title, &t.Worktree, &t.Branch, &t.Session, &t.Status, &t.Parent, &plan, &t.CreatedAt, &t.UpdatedAt)
 	if err == nil && plan != "" {
 		err = json.Unmarshal([]byte(plan), &t.Plan)
 	}
@@ -171,4 +174,25 @@ func (s *Store) LastReply(conversationID string) (string, error) {
 		}
 	}
 	return text, nil
+}
+
+// ToolsUsed lists the tools a conversation's replies called, by name, in the
+// order they were first called.
+func (s *Store) ToolsUsed(conversationID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT substr(json_extract(p.value,'$.type'),6) AS name FROM messages m, json_each(m.parts) p
+ WHERE m.conversation_id=? AND m.role='assistant' AND json_extract(p.value,'$.type') LIKE 'tool-%'
+ GROUP BY name ORDER BY MIN(m.seq*1000+p.key)`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		list = append(list, name)
+	}
+	return list, rows.Err()
 }
