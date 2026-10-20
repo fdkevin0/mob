@@ -33,8 +33,8 @@ from each directory.
 - While any skill is found, the owner's turns are offered the `skill` tool, and
   the system prompt lists each skill's name and description. Only found names
   are accepted.
-- With more than 20 skills the prompt only says how many there are, and the
-  model finds the ones a task needs with
+- With more than 20 skills the prompt only says how many there are, the
+  `skill` tool no longer lists every name, and the model finds the ones a task needs with
   [`tool_search`](tools-and-approvals.md#exposure-and-tool_search), which
   returns each match's description and the `skill` call that loads it.
 - `skill` with a name returns the instructions without frontmatter, wrapped in

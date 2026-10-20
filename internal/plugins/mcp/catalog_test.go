@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -221,6 +222,15 @@ func TestInstall(t *testing.T) {
 		t.Fatalf("config.yaml lost a name: %+v", again.configured())
 	}
 
+	// config.yaml listing the same URL under another name shadows it too.
+	again.Configure(Servers{"docs": {URL: curated[1].URL}})
+	if _, ok := again.configured()["cloudflare-docs"]; ok || again.Installed("cloudflare-docs") || !slices.Equal(again.Shadowed(), []string{"cloudflare-docs"}) {
+		t.Fatalf("an install shared a configured URL: %+v", again.configured())
+	}
+	if !strings.Contains(again.describe(), "installed cloudflare-docs") {
+		t.Fatalf("describe: %s", again.describe())
+	}
+
 	if err := h.Remove("mine"); err == nil {
 		t.Fatal("removed a configured server")
 	}
@@ -229,5 +239,86 @@ func TestInstall(t *testing.T) {
 	}
 	if changes != 2 || h.Installed("cloudflare-docs") || len(h.configured()) != 1 {
 		t.Fatalf("after remove: %d changes, %+v", changes, h.configured())
+	}
+
+	// A shadowed install can be removed, keeping the configured server's sign-in.
+	if _, err := tool.Approved(context.Background(), chat.ApprovedCall{ApprovalID: "a3", Input: raw, Store: store}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.saveGrant("cloudflare-docs", &grant{URL: "https://other.example/mcp", ClientID: "configured"}); err != nil {
+		t.Fatal(err)
+	}
+	h.Configure(Servers{"cloudflare-docs": {URL: "https://other.example/mcp", OAuth: true}})
+	if err := h.Remove("cloudflare-docs"); err != nil {
+		t.Fatal(err)
+	}
+	if g := h.grants()["cloudflare-docs"]; len(h.Shadowed()) != 0 || g.ClientID != "configured" {
+		t.Fatalf("after removing a shadowed install: %v, grant %+v", h.Shadowed(), g)
+	}
+}
+
+func TestInstallRechecksTheCatalog(t *testing.T) {
+	settle = 50 * time.Millisecond
+	saved := &settings{}
+	failed := errors.New("reconnect failed")
+	h := &Hub{Settings: saved, Changed: func() error { return failed }}
+	h.Configure(nil)
+	tool := h.InstallTool()
+	raw, _ := json.Marshal(installRequest{Server: "elsewhere", Name: "x", URL: "https://elsewhere.example/mcp", Source: "mob"})
+	if _, err := tool.Approved(context.Background(), chat.ApprovedCall{ApprovalID: "a1", Input: raw}); err == nil || h.Installed("elsewhere") {
+		t.Fatalf("installed a server the catalog does not list: %v", err)
+	}
+	// A failed reconnect still reports the install it kept.
+	raw, _ = json.Marshal(installRequest{Server: "cloudflare-docs", Name: curated[1].Name, URL: curated[1].URL, Source: "mob"})
+	out, err := tool.Approved(context.Background(), chat.ApprovedCall{ApprovalID: "a2", Input: raw})
+	if err != nil || !h.Installed("cloudflare-docs") {
+		t.Fatalf("install: %v", err)
+	}
+	if result := out.(map[string]string); result["installed"] != "cloudflare-docs" || !strings.Contains(result["status"], "reconnect failed") {
+		t.Fatalf("result: %+v", result)
+	}
+}
+
+func TestRegistryFailureWaits(t *testing.T) {
+	asked := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer server.Close()
+	h := &Hub{Settings: &settings{}, Transport: func() http.RoundTripper { return server.Client().Transport }}
+	h.Configure(nil)
+	h.ConfigureRegistry(Registry{URL: server.URL, Namespaces: []string{"com.example/*"}})
+	wait := func() {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			h.mu.Lock()
+			refreshing := h.refreshing
+			h.mu.Unlock()
+			if !refreshing {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the refresh never finished")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	h.Listings()
+	wait()
+	for range 3 {
+		h.Listings()
+		wait()
+	}
+	if asked != 1 {
+		t.Fatalf("asked a failing registry %d times", asked)
+	}
+	retryAfter = 0
+	defer func() { retryAfter = time.Hour }()
+	h.Listings()
+	wait()
+	if asked != 2 {
+		t.Fatalf("asked %d times after the pause", asked)
 	}
 }

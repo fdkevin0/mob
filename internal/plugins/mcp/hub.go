@@ -50,6 +50,11 @@ type Hub struct {
 	// asked.
 	registry   Registry
 	refreshing bool
+	// cached is what the registry last listed; tried is the registry last
+	// asked, at triedAt.
+	cached  *catalog
+	tried   Registry
+	triedAt time.Time
 	// signIns wait for their results by redirect address.
 	signIns map[string]waiting
 }

@@ -56,6 +56,7 @@ func Commands(h *Hub) []chat.Command {
 
 // describe is a table of the servers and the tools they offer.
 func (h *Hub) describe() string {
+	shadowed := h.Shadowed()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.servers) == 0 {
@@ -83,6 +84,9 @@ func (h *Hub) describe() string {
 			label += " (installed)"
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s |\n", chat.Cell(label), chat.Cell(status), strings.Join(tools, " "))
+	}
+	if len(shadowed) > 0 {
+		fmt.Fprintf(&b, "\nconfig.yaml has the name or URL of installed %s, so the configured server is used; `/mcp remove NAME` forgets the install.\n", strings.Join(shadowed, ", "))
 	}
 	if strings.Contains(b.String(), "sign in to connect: ") {
 		b.WriteString("\n" + SignInHint)

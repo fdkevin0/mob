@@ -138,8 +138,12 @@ func TestManySkillsAreFoundBySearch(t *testing.T) {
 	if strings.Contains(tool.Prompt, "<available_skills>") || !strings.Contains(tool.Prompt, "21 skills are installed") {
 		t.Fatalf("prompt: %s", tool.Prompt)
 	}
-	if names := tool.Parameters["properties"].(map[string]any)["name"].(map[string]any)["enum"].([]string); len(names) != listed+1 {
-		t.Fatalf("enum: %v", names)
+	// The names come from tool_search, not an enum of every skill.
+	if name := tool.Parameters["properties"].(map[string]any)["name"].(map[string]any); name["enum"] != nil {
+		t.Fatalf("name: %v", name)
+	}
+	if _, err := call(t, l, map[string]any{"name": "missing"}); err == nil {
+		t.Fatal("loaded a skill that is not installed")
 	}
 	entries := l.Entries()
 	if len(entries) != listed+1 || entries[0].Kind != "skill" || entries[0].Name != "last" || !entries[0].OwnerOnly || entries[0].Use != `Call the skill tool with name "last".` {

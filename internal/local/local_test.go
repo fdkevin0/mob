@@ -21,7 +21,7 @@ func TestProvidersReloadWhileRunning(t *testing.T) {
 	dir := t.TempDir()
 	offlineCatalog(t, dir)
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte(fmt.Sprintf("data_dir: %q\naddr: 127.0.0.1:0\n", dir)), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(fmt.Sprintf("data_dir: %q\naddr: 127.0.0.1:0\nmcp_registry:\n  namespaces: com.example/*\n", dir)), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("MOB_CONFIG", path)
@@ -34,6 +34,10 @@ func TestProvidersReloadWhileRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer app.Close()
+	// The catalog's registry is set at startup, not only on a reload.
+	if r := app.Server.MCP.Registry(); len(r.Namespaces) != 1 || r.Namespaces[0] != "com.example/*" {
+		t.Fatalf("registry at startup: %+v", r)
+	}
 	config := func() string {
 		req, _ := http.NewRequest("GET", app.Connection.URL+"/api/config", nil)
 		req.Header.Set("Authorization", "Bearer "+app.Connection.Token)

@@ -75,11 +75,12 @@ func (h *Hub) Configure(servers Servers) bool {
 }
 
 // merge sets the servers from config.yaml and installs, and reports whether
-// they changed. Call it with h.mu held.
+// they changed. An install whose name or URL config.yaml has is shadowed by
+// it. Call it with h.mu held.
 func (h *Hub) merge(installs map[string]installed) bool {
 	merged := maps.Clone(h.config)
 	for name, i := range installs {
-		if _, taken := merged[name]; !taken {
+		if !h.shadowed(name, i) {
 			if merged == nil {
 				merged = Servers{}
 			}
@@ -93,16 +94,46 @@ func (h *Hub) merge(installs map[string]installed) bool {
 	return true
 }
 
-// Installed reports whether a server came from the catalog.
-func (h *Hub) Installed(name string) bool {
-	h.mu.Lock()
-	_, configured := h.config[name]
-	h.mu.Unlock()
-	_, ok := h.installs()[name]
-	return ok && !configured
+// shadowed reports whether config.yaml has an install's name or URL. Call it
+// with h.mu held.
+func (h *Hub) shadowed(name string, i installed) bool {
+	if _, taken := h.config[name]; taken {
+		return true
+	}
+	for _, s := range h.config {
+		if s.URL == i.Listing.URL {
+			return true
+		}
+	}
+	return false
 }
 
-// install keeps a server the owner approved and connects to it.
+// Installed reports whether a server came from the catalog and is not
+// shadowed by config.yaml.
+func (h *Hub) Installed(name string) bool {
+	i, ok := h.installs()[name]
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return ok && !h.shadowed(name, i)
+}
+
+// Shadowed are the installs config.yaml has taken the name or URL of.
+func (h *Hub) Shadowed() []string {
+	installs := h.installs()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var names []string
+	for name, i := range installs {
+		if h.shadowed(name, i) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// install keeps a server the owner approved and connects to it. An error
+// from reconnecting comes after the install is kept, as errReconnect.
 func (h *Hub) install(r installRequest, approvalID string) error {
 	if h.Settings == nil {
 		return errors.New("installed servers cannot be kept")
@@ -119,24 +150,39 @@ func (h *Hub) install(r installRequest, approvalID string) error {
 	if err != nil {
 		return err
 	}
-	return h.changed(installs)
+	if err := h.changed(installs); err != nil {
+		return reconnectError{err}
+	}
+	return nil
 }
 
-// Remove forgets an installed server and its sign-in.
+// reconnectError is a server kept but not reconnected.
+type reconnectError struct{ err error }
+
+func (e reconnectError) Error() string { return "installed, but reconnecting failed: " + e.err.Error() }
+
+// Remove forgets an installed server, and its sign-in unless config.yaml
+// has a server of that name, which keeps its own.
 func (h *Hub) Remove(name string) error {
-	if !h.Installed(name) {
-		return fmt.Errorf("%s is not an installed server", name)
-	}
 	h.installMu.Lock()
 	installs := h.installs()
+	if _, ok := installs[name]; !ok {
+		h.installMu.Unlock()
+		return fmt.Errorf("%s is not an installed server", name)
+	}
 	delete(installs, name)
 	err := h.Settings.SaveSetting(installedKey, installs)
 	h.installMu.Unlock()
 	if err != nil {
 		return err
 	}
-	if err := h.saveGrant(name, nil); err != nil {
-		return err
+	h.mu.Lock()
+	_, configured := h.config[name]
+	h.mu.Unlock()
+	if !configured {
+		if err := h.saveGrant(name, nil); err != nil {
+			return err
+		}
 	}
 	return h.changed(installs)
 }
@@ -222,6 +268,10 @@ func (h *Hub) InstallTool() chat.Tool {
 			if err := json.Unmarshal(call.Input, &r); err != nil {
 				return nil, err
 			}
+			// The catalog may have dropped the server while the owner decided.
+			if l, ok := h.listing(r.URL); !ok || l.needs() != "" {
+				return nil, errors.New("the catalog no longer offers this server; find one with tool_search")
+			}
 			h.mu.Lock()
 			_, taken := h.servers[r.Server]
 			h.mu.Unlock()
@@ -229,6 +279,10 @@ func (h *Hub) InstallTool() chat.Tool {
 				return nil, fmt.Errorf("the name %s is taken now; ask again", r.Server)
 			}
 			if err := h.install(r, call.ApprovalID); err != nil {
+				var reconnect reconnectError
+				if errors.As(err, &reconnect) {
+					return map[string]string{"installed": r.Server, "status": err.Error()}, nil
+				}
 				return nil, err
 			}
 			return map[string]string{"installed": r.Server, "status": h.await(ctx, r.Server)}, nil

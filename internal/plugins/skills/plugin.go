@@ -68,7 +68,7 @@ func (l *Library) Tools() []chat.Tool {
 			Name:        "skill",
 			Description: "Load a skill's instructions by name, or read one of its files by its path relative to the skill.",
 			Parameters: map[string]any{"type": "object", "properties": map[string]any{
-				"name": map[string]any{"type": "string", "enum": names},
+				"name": nameParameter(names),
 				"path": map[string]any{"type": "string", "description": "A file in the skill, such as references/guide.md; omit it to load SKILL.md."},
 			}, "required": []string{"name"}, "additionalProperties": false},
 		},
@@ -76,6 +76,15 @@ func (l *Library) Tools() []chat.Tool {
 		OwnerOnly: true,
 		Run:       l.run,
 	}}
+}
+
+// nameParameter lists the skills' names while the prompt does; beyond that
+// the model learns them from tool_search.
+func nameParameter(names []string) map[string]any {
+	if len(names) > listed {
+		return map[string]any{"type": "string", "description": "The skill's name, as tool_search gave it"}
+	}
+	return map[string]any{"type": "string", "enum": names}
 }
 
 func (l *Library) run(_ context.Context, call chat.ToolCall) (any, error) {

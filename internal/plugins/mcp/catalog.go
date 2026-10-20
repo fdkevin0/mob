@@ -30,6 +30,9 @@ const (
 	maxListings = 500
 )
 
+// retryAfter is how long Mob waits to ask a registry again after it failed.
+var retryAfter = time.Hour
+
 // Registry is where the catalog finds remote servers besides Mob's own list.
 type Registry struct {
 	URL string
@@ -102,20 +105,49 @@ func (h *Hub) ConfigureRegistry(r Registry) {
 	h.registry = r
 }
 
+// Registry is where the catalog looks.
+func (h *Hub) Registry() Registry {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.registry
+}
+
+func sameRegistry(a, b Registry) bool {
+	return a.URL == b.URL && slices.Equal(a.Namespaces, b.Namespaces)
+}
+
+// listed is what the registry last listed, read from the setting once.
+func (h *Hub) listed() catalog {
+	h.mu.Lock()
+	c := h.cached
+	h.mu.Unlock()
+	if c != nil {
+		return *c
+	}
+	var loaded catalog
+	if h.Settings != nil {
+		h.Settings.Setting(catalogKey, &loaded)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.cached == nil {
+		h.cached = &loaded
+	}
+	return *h.cached
+}
+
 // Listings are the servers the model may install: Mob's own, then those the
 // registry listed, without any that are configured or installed already.
 func (h *Hub) Listings() []Listing {
 	h.mu.Lock()
 	registry, servers := h.registry, h.servers
 	h.mu.Unlock()
-	var cached catalog
-	if h.Settings != nil {
-		h.Settings.Setting(catalogKey, &cached)
-	}
-	if len(registry.Namespaces) > 0 && (!slices.Equal(cached.Registry.Namespaces, registry.Namespaces) || cached.Registry.URL != registry.URL || time.Since(cached.Synced) > refreshAfter) {
+	cached := h.listed()
+	current := len(registry.Namespaces) > 0 && sameRegistry(cached.Registry, registry)
+	if len(registry.Namespaces) > 0 && (!current || time.Since(cached.Synced) > refreshAfter) {
 		h.refresh(registry)
 	}
-	if len(registry.Namespaces) == 0 || !slices.Equal(cached.Registry.Namespaces, registry.Namespaces) || cached.Registry.URL != registry.URL {
+	if !current {
 		cached.Listings = nil
 	}
 	taken := map[string]bool{}
@@ -145,14 +177,15 @@ func (h *Hub) listing(u string) (Listing, bool) {
 }
 
 // refresh asks the registry for its listings in the background, once at a
-// time, and keeps them.
+// time, and keeps them. After a failure it waits retryAfter before asking
+// the same registry again.
 func (h *Hub) refresh(r Registry) {
 	h.mu.Lock()
-	if h.refreshing {
+	if h.refreshing || sameRegistry(h.tried, r) && time.Since(h.triedAt) < retryAfter {
 		h.mu.Unlock()
 		return
 	}
-	h.refreshing = true
+	h.refreshing, h.tried, h.triedAt = true, r, time.Now()
 	h.mu.Unlock()
 	go func() {
 		defer func() {
@@ -163,9 +196,16 @@ func (h *Hub) refresh(r Registry) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		listings, err := fetchRegistry(ctx, &http.Client{Transport: h.base()}, r)
-		// A failure keeps what was listed before; it is asked again later.
-		if err == nil && h.Settings != nil {
-			h.Settings.SaveSetting(catalogKey, catalog{Registry: r, Synced: time.Now(), Listings: listings})
+		if err != nil {
+			// What was listed before stays.
+			return
+		}
+		c := catalog{Registry: r, Synced: time.Now(), Listings: listings}
+		h.mu.Lock()
+		h.cached = &c
+		h.mu.Unlock()
+		if h.Settings != nil {
+			h.Settings.SaveSetting(catalogKey, c)
 		}
 	}()
 }

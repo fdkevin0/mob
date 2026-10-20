@@ -108,24 +108,28 @@ this machine.
   Without namespaces Mob asks no registry. With them, it reads the latest
   version of each matching server in the background, at most once a day or
   when the setting changes, and keeps what it found in the `mcp_catalog`
-  setting. A failed read keeps the last list. Only active servers are listed,
+  setting. A failed read keeps the last list and is not retried for an hour.
+  Only active servers are listed,
   one entry for each Streamable HTTP endpoint served over https. The registry
   checks only who owns a name, so keep the namespaces to publishers you trust.
 - Servers that are configured or installed already are left out. `tool_search`
   finds the rest, as entries of kind `MCP server`, in the owner's turns.
-- `tool_install` takes a listed URL and asks the owner to approve installing it.
+- `tool_install` takes a listed URL and asks the owner to approve installing it,
+  and checks again on approval that the catalog still lists it.
   The approval shows the name the server's tools will carry, the registry name,
   version, URL, repository and where the listing came from. A server whose
   listing requires a header is not installed: its entry tells the model that
   the owner adds it to `config.yaml`.
 - An approved server is kept in the `mcp_installed` setting, never in
   `config.yaml`, and joins the configured servers with `oauth: true` under a name
-  made from its URL (`cloudflare-docs` for `docs.mcp.cloudflare.com`). A name
-  `config.yaml` later takes is the configured server's. Mob reconnects, and the
-  call returns within a few seconds with the server's tools or the sign-in link
-  for the owner.
-- `/mcp` marks installed servers. `/mcp remove NAME` forgets an installed
-  server and its sign-in.
+  made from its URL (`cloudflare-docs` for `docs.mcp.cloudflare.com`). When
+  `config.yaml` later lists the same name or URL, the configured server is used
+  instead. Mob reconnects, and the call returns within a few seconds with the
+  server's tools or the sign-in link for the owner; an install that is kept but
+  fails to reconnect says so.
+- `/mcp` marks installed servers and names installs `config.yaml` shadows.
+  `/mcp remove NAME` forgets an installed server and its sign-in; a shadowed
+  install's name keeps the configured server's sign-in.
 
 ## Trust
 
