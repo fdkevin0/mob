@@ -12,6 +12,7 @@ import (
 	"github.com/fdkevin0/mob/internal/extension"
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/plugins/mcp"
+	"github.com/fdkevin0/mob/internal/plugins/schedule"
 	"github.com/fdkevin0/mob/internal/plugins/skills"
 	"github.com/fdkevin0/mob/internal/protocol"
 	"github.com/fdkevin0/mob/internal/provider"
@@ -47,6 +48,8 @@ type Server struct {
 	Skills *skills.Library
 	// Agents runs coding agent tasks; local sets where their worktrees go.
 	Agents *agents.Service
+	// Schedules runs the prompts the owner's model scheduled.
+	Schedules *schedule.Service
 	// box is the sandbox later turns use, nil while it is off.
 	box    atomic.Pointer[sandbox.Sandbox]
 	access access
@@ -65,6 +68,7 @@ func NewServer(store *chat.Store, providers *provider.Registry, token string) *S
 	}}
 	s.Agents = &agents.Service{Store: store, Conversations: s.ConversationService}
 	s.SetDelegate(s.Agents)
+	s.Schedules = &schedule.Service{Store: store, Conversations: s.ConversationService}
 	s.Commands.Register(s.pluginCommands()...)
 	s.register(s.plugins()...)
 	return s
