@@ -59,6 +59,19 @@ func onlyStepLimit(err error) bool {
 	return !joined && errors.Is(err, ErrStepLimit)
 }
 
+// MessageID is the ID of the reply the turn writes, once it has started;
+// empty before then and for turns that write none, such as commands.
+func (r *Running) MessageID() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.events {
+		if e.Kind == TurnStarted {
+			return e.MessageID
+		}
+	}
+	return ""
+}
+
 // Stop cancels the turn.
 func (r *Running) Stop() { r.cancel() }
 

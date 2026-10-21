@@ -28,6 +28,7 @@ const features = [
 	'mcp',
 	'deepseek-harness',
 	'coding-agents',
+	'schedules',
 	'skills',
 	'extensions',
 	'releases',

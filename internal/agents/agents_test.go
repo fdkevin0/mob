@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 
 	"github.com/fdkevin0/mob/internal/chat"
+	"github.com/fdkevin0/mob/internal/llm"
 )
 
 // fake is an ACP agent that acts on the words of each prompt.
@@ -741,5 +744,191 @@ func TestTreeShowsWhoStartedWhom(t *testing.T) {
 	text := outline(nodes)
 	if !strings.Contains(text, "- **Idle** · Mob · New conversation\n  - **Done** · Codex · Greet · ") {
 		t.Fatalf("outline =\n%s", text)
+	}
+}
+
+func TestReviewingATask(t *testing.T) {
+	h := newHarness(t)
+	task := h.start("hello")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	write := func(path, text string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The agent commits one file and leaves another changed and one new;
+	// meanwhile the project moves on.
+	write(filepath.Join(task.Worktree, "a.go"), "package a\n")
+	write(filepath.Join(task.Worktree, "b.go"), "package b\n")
+	git(task.Worktree, "add", ".")
+	git(task.Worktree, "commit", "-q", "-m", "add a and b")
+	write(filepath.Join(task.Worktree, "b.go"), "package b\n\nvar B = 1\n")
+	write(filepath.Join(task.Worktree, "new.txt"), "new\n")
+	write(filepath.Join(h.repo, "main.go"), "package main\n")
+	git(h.repo, "add", ".")
+	git(h.repo, "commit", "-q", "-m", "main moves on")
+
+	out, err := h.svc.diff(context.Background(), task.ID, false, "b.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.(map[string]any)
+	commits, changed := got["commits"].([]string), strings.Join(got["changed"].([]string), ";")
+	if len(commits) != 1 || !strings.HasSuffix(commits[0], "add a and b") || !strings.Contains(changed, "a.go") || !strings.Contains(changed, "3\t0\tb.go") || strings.Contains(changed, "main.go") {
+		t.Fatalf("diff = %s", fmtJSON(got))
+	}
+	if untracked := got["untracked"].([]string); len(untracked) != 1 || untracked[0] != "new.txt" {
+		t.Fatalf("untracked = %v", untracked)
+	}
+	if patch := got["patch"].(string); !strings.Contains(patch, "+var B = 1") || strings.Contains(patch, "a.go") || strings.Contains(patch, "new.txt") {
+		t.Fatalf("patch = %q", patch)
+	}
+	// A new file the agent has not added shows in full, alone or with the rest.
+	for _, file := range []string{"new.txt", ""} {
+		out, err := h.svc.diff(context.Background(), task.ID, true, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		patch := out.(map[string]any)["patch"].(string)
+		if !strings.Contains(patch, "+++ b/new.txt") || !strings.Contains(patch, "+new") || strings.Contains(patch, "var B") == (file != "") {
+			t.Fatalf("patch of %q = %q", file, patch)
+		}
+	}
+	if _, err := h.svc.diff(context.Background(), "nope", false, ""); err == nil {
+		t.Fatal("diff of an unknown task")
+	}
+
+	// task_check asks first, then runs in the worktree it was approved for.
+	var check chat.Tool
+	for _, tool := range h.svc.Tools() {
+		if tool.Name == "task_check" {
+			check = tool
+		}
+	}
+	if _, err := check.Run(context.Background(), chat.ToolCall{Input: map[string]any{"task": task.ID, "command": " "}}); err == nil {
+		t.Fatal("empty command accepted")
+	}
+	if runtime.GOOS != "windows" {
+		input, _ := json.Marshal(map[string]string{"task": task.ID, "project": task.Project, "worktree": task.Worktree, "command": "ls new.txt; echo failing >&2; exit 3"})
+		out, err := check.Approved(context.Background(), chat.ApprovedCall{Input: input})
+		result := out.(map[string]any)
+		if err != nil || result["exitCode"] != 3 || !strings.Contains(result["output"].(string), "new.txt") || !strings.Contains(result["output"].(string), "failing") {
+			t.Fatalf("check = %v, %v", result, err)
+		}
+		if check.Scope(input) != task.Project+" ls new.txt; echo failing >&2; exit 3" {
+			t.Fatalf("scope = %q", check.Scope(input))
+		}
+	}
+
+	// The owner's turns see the task; other callers' do not.
+	for _, owner := range []bool{true, false} {
+		turn := &chat.Turn{Owner: owner, Request: &llm.Request{}}
+		if err := h.svc.snapshot(context.Background(), turn); err != nil {
+			t.Fatal(err)
+		}
+		if seen := strings.Contains(turn.Request.System, "review: hello (task "+task.ID); seen != owner {
+			t.Fatalf("owner %v: system = %q", owner, turn.Request.System)
+		}
+	}
+}
+
+func TestLimitedKeepsTheEnd(t *testing.T) {
+	l := &limited{max: 4}
+	l.Write([]byte("abc"))
+	l.Write([]byte("defg"))
+	if got := l.String(); got != "… 3 bytes cut\ndefg" {
+		t.Fatalf("%q", got)
+	}
+}
+
+// reviewer is Mob's model reviewing a finished task: it reads the task's diff,
+// then concludes.
+type reviewer struct{}
+
+func (reviewer) Ref() llm.Ref   { return llm.Ref{Provider: "test", Model: "reviewer"} }
+func (reviewer) Info() llm.Info { return llm.Info{ID: "reviewer", Tools: true} }
+func (reviewer) Stream(_ context.Context, req llm.Request, emit func(string, string) error) (llm.Result, error) {
+	last := req.Messages[len(req.Messages)-1]
+	if last.Role == "tool" {
+		text := "Looks ready to merge; the diff names its branch: " + fmt.Sprint(strings.Contains(last.Text, "mob/say-hello")) + "."
+		return llm.Result{Text: text}, emit("text", text)
+	}
+	id := regexp.MustCompile(`coding task (\w+)`).FindStringSubmatch(last.Text)
+	if id == nil {
+		return llm.Result{Text: "no task"}, nil
+	}
+	return llm.Result{Calls: []llm.ToolCall{{ID: "diff1", Name: "task_diff", Arguments: `{"task":"` + id[1] + `"}`}}}, nil
+}
+
+type reviewers struct{}
+
+func (reviewers) Default() string                          { return "test/reviewer" }
+func (reviewers) Resolve(string) (llm.Model, error)        { return reviewer{}, nil }
+func (reviewers) SetDefault(string) (llm.Ref, error)       { return reviewer{}.Ref(), nil }
+func (reviewers) List(context.Context, string) []llm.Group { return nil }
+
+func TestMobReviewsAFinishedTask(t *testing.T) {
+	h := newHarness(t)
+	h.conv.Models = reviewers{}
+	var mu sync.Mutex
+	var notices []chat.Notice
+	defer h.conv.Notices(func(n chat.Notice) { mu.Lock(); notices = append(notices, n); mu.Unlock() })()
+	origin, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var start chat.Tool
+	for _, tool := range h.svc.Tools() {
+		if tool.Name == "task_start" {
+			start = tool
+		}
+	}
+	input, _ := json.Marshal(map[string]string{"project": h.repo, "agent": "codex", "title": "Say hello", "prompt": "hello"})
+	out, err := start.Approved(context.Background(), chat.ApprovedCall{ConversationID: origin.ID, Input: input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, _, _ := h.svc.Store.Task(out.(map[string]any)["task"].(string))
+	if task = h.wait(task); task.Parent != origin.ID || task.Status != chat.TaskReview {
+		t.Fatalf("task = %+v", task)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		mu.Lock()
+		n := len(notices)
+		mu.Unlock()
+		if n > 0 && !h.conv.Active(origin.ID) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no review notice")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	got := notices
+	mu.Unlock()
+	// One notice, Mob's conclusion instead of the agent's words.
+	if len(got) != 1 || got[0].ConversationID != origin.ID || !strings.HasPrefix(got[0].Text, "**Task reviewed:** codex · Say hello\nBranch `"+task.Branch+"`\n\nLooks ready to merge") {
+		t.Fatalf("notices = %+v", got)
+	}
+	history, err := h.svc.Store.History(origin.ID)
+	if err != nil || len(history) != 2 || !strings.HasPrefix(chat.Text(history[0]), "Automatic task update from Mob") || history[1].Parts[0]["type"] != "tool-task_diff" {
+		t.Fatalf("review history = %s, %v", fmtJSON(history), err)
+	}
+	// Reviews on their own stop after reviewLimit.
+	h.svc.mu.Lock()
+	h.svc.reviews[task.ID] = reviewLimit
+	h.svc.mu.Unlock()
+	if h.svc.review(task) {
+		t.Fatal("reviewed past the limit")
 	}
 }

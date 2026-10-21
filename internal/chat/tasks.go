@@ -155,8 +155,18 @@ func (s *Store) SetTaskPlan(id string, plan []PlanEntry) error {
 // LastReply is the last text of the conversation's latest reply: what the
 // agent said after its last tool call.
 func (s *Store) LastReply(conversationID string) (string, error) {
+	return s.lastText(s.db.QueryRow("SELECT parts FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY seq DESC LIMIT 1", conversationID))
+}
+
+// Reply is the last text of the reply with ID messageID, such as the one a
+// Running turn wrote; empty when there is none.
+func (s *Store) Reply(messageID string) (string, error) {
+	return s.lastText(s.db.QueryRow("SELECT parts FROM messages WHERE id=? AND role='assistant'", messageID))
+}
+
+func (s *Store) lastText(row *sql.Row) (string, error) {
 	var raw string
-	err := s.db.QueryRow("SELECT parts FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY seq DESC LIMIT 1", conversationID).Scan(&raw)
+	err := row.Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}

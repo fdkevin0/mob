@@ -28,6 +28,8 @@ type Service struct {
 	// found is whether an agent's command was installed when last checked.
 	checked time.Time
 	found   bool
+	// reviews counts the reviews started on their own, by task ID.
+	reviews map[string]int
 }
 
 var _ chat.Delegate = (*Service)(nil)
@@ -108,6 +110,10 @@ func (s *Service) notify(id string, turn *chat.DelegateTurn, failure error) {
 		}
 		n.Text = "**Task waits for your decision:** " + title
 	case t.Status == chat.TaskReview && turn.Wrote():
+		// Mob's model checks the work first and tells the owner what it found.
+		if s.review(t) {
+			return
+		}
 		n.Text = "**Task done:** " + title + "\nBranch `" + t.Branch + "`"
 		if used, err := s.Store.ConversationUsage(t.ConversationID); err == nil {
 			if u, ok := used[t.ConversationID]; ok {

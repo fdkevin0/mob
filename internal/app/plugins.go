@@ -54,6 +54,7 @@ func (s *Server) plugins() []plugin {
 	wechatRun := wechatilink.Extension(wechat)
 	mcpRun := mcp.Extension(s.MCP)
 	mailRun := email.Extension(mail.Config, s.Store, s.ConversationService)
+	scheduleRun := s.Schedules.Extension()
 	return []plugin{
 		{name: "email", commands: email.Commands(mail), tools: email.Tools(mail.Config), routes: email.Routes(mail), background: &mailRun},
 		{name: "telegram", background: &telegramRun},
@@ -61,7 +62,8 @@ func (s *Server) plugins() []plugin {
 		{name: "wechat_ilink", routes: wechatilink.Routes(wechat), background: &wechatRun},
 		{name: "mcp", commands: mcp.Commands(s.MCP), tools: []chat.Tool{s.MCP.InstallTool()}, source: s.MCP.Tools, entries: s.MCP.Entries, background: &mcpRun},
 		{name: "skills", commands: skills.Commands(s.Skills), source: s.Skills.Tools, entries: s.Skills.Entries},
-		{name: "agents", commands: s.Agents.Commands(), tools: s.Agents.Tools()},
+		{name: "agents", commands: s.Agents.Commands(), tools: s.Agents.Tools(), hooks: s.Agents.Hooks()},
+		{name: "schedules", commands: s.Schedules.Commands(), tools: s.Schedules.Tools(), background: &scheduleRun},
 	}
 }
 
