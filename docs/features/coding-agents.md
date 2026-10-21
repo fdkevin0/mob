@@ -163,7 +163,11 @@ notice as before. Failed tasks are not reviewed.
   conversation, decided like any other: Approve, Allow in this conversation,
   Always allow, or Deny with an optional reason, from any client. Allow and
   Always allow are remembered as grants for the call's tool name and title,
-  and the agent is answered with its own "always" option.
+  and the agent is answered with its own "always" option. DeepSeek Harness
+  and CodeBuddy Code send requests that name only the call they showed
+  before; theirs are remembered for that call's title with its whole input,
+  so remembering one command never allows another. A request with neither a
+  title nor an input is allowed that once but never remembered.
 - Unlike a model's tool call, the agent keeps waiting while an approval is
   pending. The turn that asked ends, and the decision starts a turn that
   follows the agent on; the approved call shows how it ended there. A denial with

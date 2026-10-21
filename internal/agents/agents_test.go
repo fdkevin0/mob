@@ -157,6 +157,23 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
+	case strings.HasPrefix(text, "cmd "), text == "bare":
+		// Like DeepSeek Harness and CodeBuddy Code: the call is shown
+		// first, and the permission request names only its ID.
+		call := acp.ToolCallId("call-" + text)
+		if text == "bare" {
+			f.say(ctx, id, acp.StartToolCall(call, "", acp.WithStartKind(acp.ToolKindOther), acp.WithStartStatus(acp.ToolCallStatusPending)))
+		} else {
+			f.say(ctx, id, acp.StartToolCall(call, "bash", acp.WithStartKind(acp.ToolKindOther), acp.WithStartStatus(acp.ToolCallStatusPending), acp.WithStartRawInput(map[string]any{"command": strings.TrimPrefix(text, "cmd ")})))
+		}
+		answer, err := f.conn.RequestPermission(ctx, acp.RequestPermissionRequest{SessionId: id, ToolCall: acp.ToolCallUpdate{ToolCallId: call}, Options: []acp.PermissionOption{
+			{Kind: acp.PermissionOptionKindAllowOnce, Name: "Allow once", OptionId: "allow-once"},
+			{Kind: acp.PermissionOptionKindRejectOnce, Name: "Reject", OptionId: "reject-once"},
+		}})
+		if err != nil || answer.Outcome.Selected == nil {
+			return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
+		}
+		f.say(ctx, id, acp.UpdateAgentMessageText(string(answer.Outcome.Selected.OptionId)))
 	case text == "limit":
 		f.say(ctx, id, acp.UpdateAgentMessageText("halfway"))
 		return acp.PromptResponse{StopReason: acp.StopReasonMaxTokens}, nil
@@ -1006,5 +1023,40 @@ func TestStartPassesPatchAndEnvironment(t *testing.T) {
 	left, _ := filepath.Glob(filepath.Join(os.TempDir(), "mob-agent-*.patch.yml"))
 	if len(left) != 0 {
 		t.Fatalf("patch files left: %v", left)
+	}
+}
+
+func TestRememberingANamelessRequest(t *testing.T) {
+	h := newHarness(t)
+	task := h.start("cmd curl https://trusted.example")
+	if task.Status != chat.TaskWaiting {
+		t.Fatalf("status = %q", task.Status)
+	}
+	pending := h.conv.Pending(task.ConversationID)
+	if len(pending) != 1 || pending[0].Tool != "codex_other" || !strings.Contains(fmtJSON(pending[0].Input), "trusted.example") {
+		t.Fatalf("pending = %+v", pending)
+	}
+	task = h.decide(task, chat.Answer{Approved: true, Remember: chat.RememberAlways})
+	if task.Status != chat.TaskReview || h.reply(task) != "allow-once" {
+		t.Fatalf("status %q, reply %q", task.Status, h.reply(task))
+	}
+	// The same command is allowed from then on; another one is not.
+	if task = h.say(task, "cmd curl https://trusted.example"); task.Status != chat.TaskReview || h.reply(task) != "allow-once" {
+		t.Fatalf("same command: status %q, reply %q", task.Status, h.reply(task))
+	}
+	if task = h.say(task, "cmd curl https://unrelated.example"); task.Status != chat.TaskWaiting {
+		t.Fatalf("another command was allowed: status %q, reply %q", task.Status, h.reply(task))
+	}
+	task = h.decide(task, chat.Answer{Approved: false})
+
+	// A request with nothing to tell it apart is never remembered.
+	task = h.say(task, "bare")
+	task = h.decide(task, chat.Answer{Approved: true, Remember: chat.RememberAlways})
+	if task = h.say(task, "bare"); task.Status != chat.TaskWaiting {
+		t.Fatalf("a nameless request was remembered: status %q", task.Status)
+	}
+	grants, err := h.svc.Store.Grants()
+	if err != nil || len(grants) != 1 || grants[0].Scope != `bash {"command":"curl https://trusted.example"}` {
+		t.Fatalf("grants = %+v, %v", grants, err)
 	}
 }
