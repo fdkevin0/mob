@@ -1571,13 +1571,17 @@
 }
 .agent-approval p {
 	margin: 0;
-	font-size: 12px;
+}
+/* The whole request shows: what is approved is never hidden. */
+.agent-approval-text {
+	margin: 4px 0 0;
+	max-height: 160px;
+	overflow: auto;
+	font-family: var(--mono);
+	font-size: 11px;
 	line-height: 1.5;
 	color: #d7dcd4;
-	display: -webkit-box;
-	-webkit-line-clamp: 3;
-	-webkit-box-orient: vertical;
-	overflow: hidden;
+	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 .agent-approval-tool {

@@ -22,6 +22,12 @@ func TestDescribeApproval(t *testing.T) {
 	if got != want {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
+	if _, whole := DescribeApprovalWhole("email_send", mail{Text: strings.Repeat("x", approvalField+5)}); whole {
+		t.Fatal("a cut field counts as whole")
+	}
+	if _, whole := DescribeApprovalWhole("email_send", mail{Text: "short"}); !whole {
+		t.Fatal("a short field counts as cut")
+	}
 	if got := DescribeApproval("t", nil); got != "t" {
 		t.Fatalf("nil input: %q", got)
 	}

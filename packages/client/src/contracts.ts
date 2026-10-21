@@ -193,6 +193,7 @@ export type AgentApproval = {
   id: string;
   tool: string;
   text: string;
+  whole: boolean;
 };
 export type AgentNode = {
   conversationId: string;

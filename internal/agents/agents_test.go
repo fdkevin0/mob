@@ -1036,6 +1036,14 @@ func TestRememberingANamelessRequest(t *testing.T) {
 	if len(pending) != 1 || pending[0].Tool != "codex_other" || !strings.Contains(fmtJSON(pending[0].Input), "trusted.example") {
 		t.Fatalf("pending = %+v", pending)
 	}
+	// The tree shows the command, not only the request's generic title.
+	nodes, err := h.svc.Tree("")
+	if err != nil || len(nodes) != 1 || len(nodes[0].Approvals) != 1 {
+		t.Fatalf("tree = %+v, %v", nodes, err)
+	}
+	if a := nodes[0].Approvals[0]; a.Tool != "codex_other" || !a.Whole || !strings.Contains(a.Text, "title: bash") || !strings.Contains(a.Text, "curl https://trusted.example") {
+		t.Fatalf("approval = %+v", a)
+	}
 	task = h.decide(task, chat.Answer{Approved: true, Remember: chat.RememberAlways})
 	if task.Status != chat.TaskReview || h.reply(task) != "allow-once" {
 		t.Fatalf("status %q, reply %q", task.Status, h.reply(task))
@@ -1058,5 +1066,26 @@ func TestRememberingANamelessRequest(t *testing.T) {
 	grants, err := h.svc.Store.Grants()
 	if err != nil || len(grants) != 1 || grants[0].Scope != `bash {"command":"curl https://trusted.example"}` {
 		t.Fatalf("grants = %+v, %v", grants, err)
+	}
+}
+
+func TestMessageUntilStops(t *testing.T) {
+	h := newHarness(t)
+	task := h.start("hello")
+	stop := make(chan struct{})
+	if err := h.svc.MessageUntil(task.ID, "wait", stop); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(5 * time.Second); h.svc.running(task.ID) == nil; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the agent did not start")
+		}
+	}
+	// The token that sent the instruction is revoked: its turn ends.
+	close(stop)
+	for deadline := time.Now().Add(5 * time.Second); h.conv.Active(task.ConversationID); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the turn outlived its stop")
+		}
 	}
 }

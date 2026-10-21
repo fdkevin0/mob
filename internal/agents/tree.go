@@ -42,29 +42,23 @@ type AgentNode struct {
 type AgentApproval struct {
 	ID   string `json:"id"`
 	Tool string `json:"tool"`
-	// Text says what is asked, in a few lines.
+	// Text is what is asked: one "field: value" line per input field, so
+	// that a command shows in full rather than only its title.
 	Text string `json:"text"`
+	// Whole is false when a field was too long to show; the owner then
+	// decides in the conversation.
+	Whole bool `json:"whole"`
 }
-
-// approvalText bounds how much of a request a card shows, in runes.
-const approvalText = 400
 
 // waiting lists the decisions that wait in conversationID.
 func (s *Service) waiting(conversationID string) []AgentApproval {
 	pending := s.Conversations.Pending(conversationID)
 	list := make([]AgentApproval, len(pending))
 	for i, p := range pending {
-		text := chat.DescribeApproval(p.Tool, p.Input)
-		// An agent's request names itself in a title.
-		if in, ok := p.Input.(map[string]any); ok {
-			if title, ok := in["title"].(string); ok && title != "" {
-				text = title
-			}
-		}
-		if r := []rune(text); len(r) > approvalText {
-			text = string(r[:approvalText]) + "…"
-		}
-		list[i] = AgentApproval{ID: p.ID, Tool: p.Tool, Text: text}
+		text, whole := chat.DescribeApprovalWhole(p.Tool, p.Input)
+		// The card names the tool itself.
+		_, text, _ = strings.Cut(text, "\n")
+		list[i] = AgentApproval{ID: p.ID, Tool: p.Tool, Text: text, Whole: whole}
 	}
 	return list
 }

@@ -52,16 +52,31 @@ const approvalField = 600
 // approve, for channels that cannot show the web UI's card: the tool, then
 // one "field: value" line per input field in the order the tool gave them.
 func DescribeApproval(tool string, input any) string {
+	text, _ := DescribeApprovalWhole(tool, input)
+	return text
+}
+
+// DescribeApprovalWhole is DescribeApproval, and whether it shows every
+// field whole rather than cut short.
+func DescribeApprovalWhole(tool string, input any) (string, bool) {
+	whole := true
+	clip := func(text string) string {
+		if runes := []rune(text); len(runes) > approvalField {
+			whole = false
+			return string(runes[:approvalField]) + "…"
+		}
+		return text
+	}
 	var b strings.Builder
 	b.WriteString(tool)
 	raw, err := json.Marshal(input)
 	if err != nil || bytes.Equal(raw, []byte("null")) {
-		return b.String()
+		return b.String(), whole
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
 		b.WriteString("\n" + clip(string(raw)))
-		return b.String()
+		return b.String(), whole
 	}
 	for dec.More() {
 		key, err := dec.Token()
@@ -81,12 +96,5 @@ func DescribeApproval(tool string, input any) string {
 		}
 		fmt.Fprintf(&b, "\n%s: %s", key, clip(text))
 	}
-	return b.String()
-}
-
-func clip(text string) string {
-	if runes := []rune(text); len(runes) > approvalField {
-		return string(runes[:approvalField]) + "…"
-	}
-	return text
+	return b.String(), whole
 }

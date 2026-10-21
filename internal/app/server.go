@@ -316,7 +316,7 @@ func (s *Server) instruct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid message", 400)
 		return
 	}
-	if err := s.Agents.Message(r.PathValue("id"), in.Text); err != nil {
+	if err := s.Agents.MessageUntil(r.PathValue("id"), in.Text, revocation(r.Context())); err != nil {
 		http.Error(w, err.Error(), 409)
 		return
 	}

@@ -116,8 +116,11 @@ that started agents folds them away (it then shows how many are hidden) and
 clicking again unfolds them; its arrow button opens its conversation.
 
 A card that needs the owner shows up to two of its waiting decisions, each
-with what is asked, and **Approve**, **Always allow** and **Deny…** (which
-takes an optional reason); more are left to the conversation. A running or
+with everything it asks (one `field: value` line per input field, so an
+agent's command shows rather than only its title), and **Approve**, **Always
+allow** and **Deny…** (which takes an optional reason); more are left to the
+conversation. A request with a field too long to show whole (`whole: false`)
+can only be denied there and is approved from its conversation. A running or
 waiting card has **Stop**, and a task's card has **Instruct**, which sends the
 agent one more line while it runs. They use:
 
@@ -126,7 +129,8 @@ agent one more line while it runs. They use:
   (202; 409 when the decision is no longer waiting).
 - `POST /api/tasks/{id}/stop`: stops the task (404 when there is none).
 - `POST /api/tasks/{id}/message` with `{text}`: sends the running agent an
-  instruction (202; 409 when the task is not running).
+  instruction (202; 409 when the agent is still starting). A turn it starts
+  ends when the token that sent it is revoked.
 
 Mob's own card stops with `POST /api/conversations/{id}/stop`. The
 header counts the agents, filters to what runs, needs the owner or failed,

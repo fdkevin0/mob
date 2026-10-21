@@ -121,9 +121,9 @@ function Avatar({ agent }: { agent: string }) {
 
 // What the owner can do from a card; each resolves once the service took it.
 export type Act = {
-	decide: (conversationId: string, approval: string, approved: boolean, extra?: { reason?: string; remember?: string }) => Promise<void>;
-	stop: (node: AgentNode) => Promise<void>;
-	message: (taskId: string, text: string) => Promise<void>;
+	decide: (conversationId: string, approval: string, approved: boolean, extra?: { reason?: string; remember?: string }) => Promise<unknown>;
+	stop: (node: AgentNode) => Promise<unknown>;
+	message: (taskId: string, text: string) => Promise<unknown>;
 };
 
 // shownApprovals bounds the decisions a card offers; the rest wait in the conversation.
@@ -139,9 +139,9 @@ function Decision({ node, approval, act, busy }: { node: AgentNode; approval: Ag
 	};
 	return (
 		<div className="agent-approval">
-			<p title={approval.text}>
-				<span className="agent-approval-tool">{approval.tool}</span> {approval.text}
-			</p>
+			<p className="agent-approval-tool">{approval.tool}</p>
+			{approval.text && <pre className="agent-approval-text">{approval.text}</pre>}
+			{!approval.whole && <p className="agent-more">Too long to show here; open its conversation to approve it.</p>}
 			{denying ? (
 				<form className="agent-inline" onSubmit={deny}>
 					<input aria-label="Why deny (optional)" placeholder="Why? (optional)" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus disabled={busy} />
@@ -154,12 +154,16 @@ function Decision({ node, approval, act, busy }: { node: AgentNode; approval: Ag
 				</form>
 			) : (
 				<div className="agent-approval-actions">
-					<button type="button" className="agent-button approve" disabled={busy} onClick={() => void decide(true)}>
-						Approve
-					</button>
-					<button type="button" className="agent-button" disabled={busy} title="Approve, and allow the same request without asking from now on" onClick={() => void decide(true, { remember: 'always' })}>
-						Always allow
-					</button>
+					{approval.whole && (
+						<>
+							<button type="button" className="agent-button approve" disabled={busy} onClick={() => void decide(true)}>
+								Approve
+							</button>
+							<button type="button" className="agent-button" disabled={busy} title="Approve, and allow the same request without asking from now on" onClick={() => void decide(true, { remember: 'always' })}>
+								Always allow
+							</button>
+						</>
+					)}
 					<button type="button" className="agent-button deny" disabled={busy} onClick={() => setDenying(true)}>
 						Deny…
 					</button>
@@ -169,14 +173,15 @@ function Decision({ node, approval, act, busy }: { node: AgentNode; approval: Ag
 	);
 }
 
-function Instruct({ task, act, busy, done }: { task: string; act: Act; busy: boolean; done: () => void }) {
+function Instruct({ send, busy, done }: { send: (text: string) => Promise<boolean>; busy: boolean; done: () => void }) {
 	const [text, setText] = useState('');
-	const send = (e: FormEvent) => {
+	const submit = (e: FormEvent) => {
 		e.preventDefault();
-		if (text.trim()) void act.message(task, text.trim()).then(done);
+		// A send that failed keeps the text to try again.
+		if (text.trim()) void send(text.trim()).then((sent) => sent && done());
 	};
 	return (
-		<form className="agent-inline" onSubmit={send}>
+		<form className="agent-inline" onSubmit={submit}>
 			<input aria-label="Instruction for the agent" placeholder="Tell the agent…" value={text} onChange={(e) => setText(e.target.value)} autoFocus disabled={busy} />
 			<button type="submit" className="agent-button approve" disabled={busy || !text.trim()}>
 				Send
@@ -203,19 +208,22 @@ function Card({
 	const [instructing, setInstructing] = useState(false);
 	// Every action shows it is under way and what went wrong, if anything did.
 	const run =
-		<A extends unknown[]>(f: (...args: A) => Promise<void>) =>
+		<A extends unknown[]>(f: (...args: A) => Promise<unknown>) =>
 		async (...args: A) => {
 			setBusy(true);
 			setFailure('');
 			try {
 				await f(...args);
+				return true;
 			} catch (e) {
 				setFailure(errorText(e));
+				return false;
 			} finally {
 				setBusy(false);
 			}
 		};
-	const actions: Act = { decide: run(act.decide), stop: run(act.stop), message: run(act.message) };
+	const message = run(act.message);
+	const actions: Act = { decide: run(act.decide), stop: run(act.stop), message };
 	const { node, children } = branch;
 	const status = statuses[node.status] ?? { label: node.status };
 	const plan = node.task?.plan ?? [];
@@ -277,7 +285,7 @@ function Card({
 			{node.approvals.length > shownApprovals && (
 				<p className="agent-more">{node.approvals.length - shownApprovals} more wait in its conversation.</p>
 			)}
-			{instructing && node.task && <Instruct task={node.task.id} act={actions} busy={busy} done={() => setInstructing(false)} />}
+			{instructing && node.task && <Instruct send={(text) => message(node.task!.id, text)} busy={busy} done={() => setInstructing(false)} />}
 			{failure && (
 				<p className="agent-failure" role="alert">
 					{failure}
