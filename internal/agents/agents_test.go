@@ -32,6 +32,12 @@ type fake struct {
 	prompts []string
 	mode    string
 	loaded  string
+	// resumes makes it resume sessions instead of loading them; resumed is
+	// the session it resumed.
+	resumes bool
+	resumed string
+	// signedOut makes it ask to sign in, with a login no variable answers.
+	signedOut bool
 	// release lets a "hold" prompt end.
 	release chan struct{}
 	// spent is the cost "tokens" prompts report.
@@ -43,6 +49,10 @@ type fake struct {
 }
 
 func (f *fake) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
+	if f.resumes {
+		// Like DeepSeek Harness: sessions are resumed, not loaded.
+		return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{SessionCapabilities: acp.SessionCapabilities{Resume: &acp.SessionResumeCapabilities{}}}}, nil
+	}
 	return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{LoadSession: true}}, nil
 }
 func (f *fake) Authenticate(context.Context, acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {
@@ -58,7 +68,10 @@ func (f *fake) CloseSession(context.Context, acp.CloseSessionRequest) (acp.Close
 func (f *fake) ListSessions(context.Context, acp.ListSessionsRequest) (acp.ListSessionsResponse, error) {
 	return acp.ListSessionsResponse{}, nil
 }
-func (f *fake) ResumeSession(context.Context, acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
+func (f *fake) ResumeSession(_ context.Context, r acp.ResumeSessionRequest) (acp.ResumeSessionResponse, error) {
+	f.mu.Lock()
+	f.dir, f.resumed = r.Cwd, string(r.SessionId)
+	f.mu.Unlock()
 	return acp.ResumeSessionResponse{}, nil
 }
 func (f *fake) SetSessionConfigOption(context.Context, acp.SetSessionConfigOptionRequest) (acp.SetSessionConfigOptionResponse, error) {
@@ -73,6 +86,9 @@ var models = []acp.SessionConfigOption{{Select: &acp.SessionConfigOptionSelect{I
 var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}, {Id: "acceptEdits", Name: "Accept edits"}}}
 
 func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSessionResponse, error) {
+	if f.signedOut {
+		return acp.NewSessionResponse{}, acp.NewAuthRequired(nil)
+	}
 	f.mu.Lock()
 	f.dir = r.Cwd
 	id := f.session
@@ -141,6 +157,23 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
+	case strings.HasPrefix(text, "cmd "), text == "bare":
+		// Like DeepSeek Harness and CodeBuddy Code: the call is shown
+		// first, and the permission request names only its ID.
+		call := acp.ToolCallId("call-" + text)
+		if text == "bare" {
+			f.say(ctx, id, acp.StartToolCall(call, "", acp.WithStartKind(acp.ToolKindOther), acp.WithStartStatus(acp.ToolCallStatusPending)))
+		} else {
+			f.say(ctx, id, acp.StartToolCall(call, "bash", acp.WithStartKind(acp.ToolKindOther), acp.WithStartStatus(acp.ToolCallStatusPending), acp.WithStartRawInput(map[string]any{"command": strings.TrimPrefix(text, "cmd ")})))
+		}
+		answer, err := f.conn.RequestPermission(ctx, acp.RequestPermissionRequest{SessionId: id, ToolCall: acp.ToolCallUpdate{ToolCallId: call}, Options: []acp.PermissionOption{
+			{Kind: acp.PermissionOptionKindAllowOnce, Name: "Allow once", OptionId: "allow-once"},
+			{Kind: acp.PermissionOptionKindRejectOnce, Name: "Reject", OptionId: "reject-once"},
+		}})
+		if err != nil || answer.Outcome.Selected == nil {
+			return acp.PromptResponse{StopReason: acp.StopReasonCancelled}, nil
+		}
+		f.say(ctx, id, acp.UpdateAgentMessageText(string(answer.Outcome.Selected.OptionId)))
 	case text == "limit":
 		f.say(ctx, id, acp.UpdateAgentMessageText("halfway"))
 		return acp.PromptResponse{StopReason: acp.StopReasonMaxTokens}, nil
@@ -176,6 +209,9 @@ type fakes struct {
 	// session and failLoad are given to the agents started next.
 	session  acp.SessionId
 	failLoad bool
+	// resumes, when set, makes the agents resume sessions; signedOut makes
+	// them ask to sign in.
+	resumes, signedOut bool
 }
 
 func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) {
@@ -189,7 +225,7 @@ func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) 
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
 	fs.mu.Lock()
-	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad}
+	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad, resumes: fs.resumes, signedOut: fs.signedOut}
 	fs.mu.Unlock()
 	f.conn = acp.NewAgentSideConnection(f, fromAgent, toAgent)
 	f.conn.SetLogger(slog.New(slog.DiscardHandler))
@@ -362,6 +398,22 @@ func TestClaudeAgent(t *testing.T) {
 	}
 	history, _ := h.svc.Store.History(task.ConversationID)
 	if failure := fmtJSON(history[len(history)-1].Metadata["error"]); !strings.Contains(failure, "Claude Agent is not signed in") || !strings.Contains(failure, "/login") {
+		t.Fatalf("error = %s", failure)
+	}
+}
+
+func TestCodeBuddyAsksToLogIn(t *testing.T) {
+	h := newHarness(t)
+	h.fakes.signedOut = true
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "codebuddy", "", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task = h.wait(task); task.Agent != "codebuddy" || task.Status != chat.TaskFailed {
+		t.Fatalf("task = %+v", task)
+	}
+	history, _ := h.svc.Store.History(task.ConversationID)
+	if failure := fmtJSON(history[len(history)-1].Metadata["error"]); !strings.Contains(failure, "CodeBuddy Code is not signed in: run `codebuddy`") {
 		t.Fatalf("error = %s", failure)
 	}
 }
@@ -930,5 +982,81 @@ func TestMobReviewsAFinishedTask(t *testing.T) {
 	h.svc.mu.Unlock()
 	if h.svc.review(task) {
 		t.Fatal("reviewed past the limit")
+	}
+}
+
+func TestResumingASession(t *testing.T) {
+	h := newHarness(t)
+	h.fakes.resumes = true
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "dsh", "", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task = h.wait(task); task.Agent != "dsh" || task.Session != "s1" {
+		t.Fatalf("task = %+v", task)
+	}
+	if err := h.svc.StopTask(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	task = h.say(task, "again")
+	f := h.fakes.last()
+	if len(h.fakes.agents) != 2 || f.resumed != "s1" || f.dir != task.Worktree || h.reply(task) != "got again" {
+		t.Fatalf("agents %d, resumed %q in %q, reply %q", len(h.fakes.agents), f.resumed, f.dir, h.reply(task))
+	}
+}
+
+func TestStartPassesPatchAndEnvironment(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	// The patch file is the command's last argument.
+	p := Preset{Title: "Echo", Commands: [][]string{{"sh", "-c", `eval "cat \"\${$#}\""; echo "$MOB_AGENT_TEST"`, "sh"}}, Env: []string{"MOB_AGENT_TEST=on"}, Patch: "- id: x\n  disabled: true\n"}
+	conn, err := start(context.Background(), p, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(conn.Out)
+	conn.Stop()
+	if string(out) != "- id: x\n  disabled: true\non\n" {
+		t.Fatalf("out = %q", out)
+	}
+	left, _ := filepath.Glob(filepath.Join(os.TempDir(), "mob-agent-*.patch.yml"))
+	if len(left) != 0 {
+		t.Fatalf("patch files left: %v", left)
+	}
+}
+
+func TestRememberingANamelessRequest(t *testing.T) {
+	h := newHarness(t)
+	task := h.start("cmd curl https://trusted.example")
+	if task.Status != chat.TaskWaiting {
+		t.Fatalf("status = %q", task.Status)
+	}
+	pending := h.conv.Pending(task.ConversationID)
+	if len(pending) != 1 || pending[0].Tool != "codex_other" || !strings.Contains(fmtJSON(pending[0].Input), "trusted.example") {
+		t.Fatalf("pending = %+v", pending)
+	}
+	task = h.decide(task, chat.Answer{Approved: true, Remember: chat.RememberAlways})
+	if task.Status != chat.TaskReview || h.reply(task) != "allow-once" {
+		t.Fatalf("status %q, reply %q", task.Status, h.reply(task))
+	}
+	// The same command is allowed from then on; another one is not.
+	if task = h.say(task, "cmd curl https://trusted.example"); task.Status != chat.TaskReview || h.reply(task) != "allow-once" {
+		t.Fatalf("same command: status %q, reply %q", task.Status, h.reply(task))
+	}
+	if task = h.say(task, "cmd curl https://unrelated.example"); task.Status != chat.TaskWaiting {
+		t.Fatalf("another command was allowed: status %q, reply %q", task.Status, h.reply(task))
+	}
+	task = h.decide(task, chat.Answer{Approved: false})
+
+	// A request with nothing to tell it apart is never remembered.
+	task = h.say(task, "bare")
+	task = h.decide(task, chat.Answer{Approved: true, Remember: chat.RememberAlways})
+	if task = h.say(task, "bare"); task.Status != chat.TaskWaiting {
+		t.Fatalf("a nameless request was remembered: status %q", task.Status)
+	}
+	grants, err := h.svc.Store.Grants()
+	if err != nil || len(grants) != 1 || grants[0].Scope != `bash {"command":"curl https://trusted.example"}` {
+		t.Fatalf("grants = %+v, %v", grants, err)
 	}
 }

@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -66,6 +67,12 @@ type session struct {
 type call struct {
 	name  string
 	input map[string]any
+	// What the agent said about the call, for a permission request that
+	// names only its ID.
+	title     string
+	kind      *acp.ToolKind
+	locations []acp.ToolCallLocation
+	raw       any
 }
 
 // item is one thing the agent sent: an update, a permission request, or the
@@ -118,7 +125,9 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		return nil, s.failed("start", err)
 	}
 	var modes *acp.SessionModeState
-	if t.Session != "" && init.AgentCapabilities.LoadSession {
+	switch {
+	case t.Session == "":
+	case init.AgentCapabilities.LoadSession:
 		// The agent replays the session while loading it; the
 		// conversation already shows it.
 		s.loading.Store(true)
@@ -126,6 +135,12 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		s.loading.Store(false)
 		if err == nil {
 			s.id, modes, s.model = acp.SessionId(t.Session), loaded.Modes, modelOption(loaded.ConfigOptions)
+		}
+	case init.AgentCapabilities.SessionCapabilities.Resume != nil:
+		// Resuming restores the session without replaying it.
+		resumed, err := s.conn.ResumeSession(ctx, acp.ResumeSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: []acp.McpServer{}})
+		if err == nil {
+			s.id, modes, s.model = acp.SessionId(t.Session), resumed.Modes, modelOption(resumed.ConfigOptions)
 		}
 	}
 	if s.id == "" {
@@ -469,7 +484,7 @@ func (s *session) decide(d chat.Decision, a chat.Answer) bool {
 			// rather than working around the denial without it.
 			_ = s.conn.Cancel(context.Background(), acp.CancelNotification{SessionId: s.id})
 		}
-	case a.Remember != "":
+	case a.Remember != "" && p.scope != "":
 		conversation := s.task.ConversationID
 		if a.Remember == chat.RememberAlways {
 			conversation = ""
@@ -492,12 +507,34 @@ func (s *session) decide(d chat.Decision, a chat.Answer) bool {
 func (s *session) ask(turn *chat.DelegateTurn, p *permission) (asked bool, err error) {
 	tc := p.request.ToolCall
 	input := describe(tc.Title, tc.Kind, tc.Locations, tc.RawInput)
+	kind, locations, title, raw := tc.Kind, tc.Locations, "", tc.RawInput
+	if tc.Title != nil {
+		title = *tc.Title
+	}
 	if known, ok := s.calls[tc.ToolCallId]; ok {
 		for k, v := range known.input {
 			if _, set := input[k]; !set {
 				input[k] = v
 			}
 		}
+		// The request may name only the call the agent showed before.
+		if kind == nil {
+			kind = known.kind
+		}
+		if len(locations) == 0 {
+			locations = known.locations
+		}
+		if title == "" {
+			title = known.title
+		}
+		if raw == nil {
+			raw = known.raw
+		}
+	}
+	p.tool, p.scope = s.toolName(kind), scope(tc.Title, title, raw)
+	if s.inWorktree(kind, locations) || s.granted(p) {
+		p.choose(acp.PermissionOptionKindAllowOnce, acp.PermissionOptionKindAllowAlways)
+		return false, nil
 	}
 	if !turn.HasTool(string(tc.ToolCallId)) {
 		if err := turn.Tool(string(tc.ToolCallId), p.tool, input); err != nil {
@@ -523,17 +560,43 @@ func (s *session) ask(turn *chat.DelegateTurn, p *permission) (asked bool, err e
 	return true, nil
 }
 
-// allowed reports whether the agent may go ahead without asking: an edit
-// inside the task's worktree, or a call the owner chose to keep allowing.
-func (s *session) allowed(p *permission) bool {
-	tc := p.request.ToolCall
-	if tc.Kind != nil && (*tc.Kind == acp.ToolKindEdit || *tc.Kind == acp.ToolKindDelete || *tc.Kind == acp.ToolKindMove) && len(tc.Locations) > 0 {
-		if !slices.ContainsFunc(tc.Locations, func(l acp.ToolCallLocation) bool { return !inside(s.task.Worktree, l.Path) }) {
-			return true
-		}
+// inWorktree reports whether a call is an edit, delete or move of files all
+// inside the task's worktree, which the agent may make without asking.
+func (s *session) inWorktree(kind *acp.ToolKind, locations []acp.ToolCallLocation) bool {
+	if kind == nil || (*kind != acp.ToolKindEdit && *kind != acp.ToolKindDelete && *kind != acp.ToolKindMove) || len(locations) == 0 {
+		return false
+	}
+	return !slices.ContainsFunc(locations, func(l acp.ToolCallLocation) bool { return !inside(s.task.Worktree, l.Path) })
+}
+
+// granted reports whether the owner chose to keep allowing calls like p. A
+// call with nothing to tell it apart from others is never remembered.
+func (s *session) granted(p *permission) bool {
+	if p.scope == "" {
+		return false
 	}
 	ok, err := s.svc.Store.Granted(s.task.ConversationID, p.tool, p.scope)
 	return ok && err == nil
+}
+
+// scope is what remembering an approval of a call covers: the title the
+// agent gave the request, as Codex and Claude Agent give the command or
+// file; or, when the request names only the call, as DeepSeek Harness and
+// CodeBuddy Code do, the call's title with its whole input, so that
+// remembering one command never allows another. Empty when there is
+// neither.
+func scope(requested *string, title string, raw any) string {
+	if requested != nil && strings.TrimSpace(*requested) != "" {
+		return *requested
+	}
+	if raw == nil {
+		return ""
+	}
+	input, err := json.Marshal(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(title + " " + string(input))
 }
 
 // inside reports whether path is dir or within it once links are followed,
@@ -646,7 +709,7 @@ func (s *session) show(turn *chat.DelegateTurn, u acp.SessionUpdate) error {
 	case u.ToolCall != nil:
 		tc := u.ToolCall
 		kind := tc.Kind
-		c := call{s.toolName(&kind), describe(tc.Title, &kind, tc.Locations, tc.RawInput)}
+		c := call{s.toolName(&kind), describe(tc.Title, &kind, tc.Locations, tc.RawInput), tc.Title, &kind, tc.Locations, tc.RawInput}
 		s.calls[tc.ToolCallId] = c
 		if err := turn.Tool(string(tc.ToolCallId), c.name, c.input); err != nil {
 			return err
@@ -656,7 +719,11 @@ func (s *session) show(turn *chat.DelegateTurn, u acp.SessionUpdate) error {
 		tc := u.ToolCallUpdate
 		c, known := s.calls[tc.ToolCallId]
 		if !known {
-			c = call{s.toolName(tc.Kind), describe(tc.Title, tc.Kind, tc.Locations, tc.RawInput)}
+			title := ""
+			if tc.Title != nil {
+				title = *tc.Title
+			}
+			c = call{s.toolName(tc.Kind), describe(tc.Title, tc.Kind, tc.Locations, tc.RawInput), title, tc.Kind, tc.Locations, tc.RawInput}
 			s.calls[tc.ToolCallId] = c
 		}
 		if tc.Status != nil && (*tc.Status == acp.ToolCallStatusCompleted || *tc.Status == acp.ToolCallStatusFailed) && !turn.HasTool(string(tc.ToolCallId)) {
@@ -718,11 +785,8 @@ func (c client) SessionUpdate(_ context.Context, n acp.SessionNotification) erro
 func (c client) RequestPermission(ctx context.Context, request acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
 	s := c.s
 	tc := request.ToolCall
-	p := &permission{request: request, tool: s.toolName(tc.Kind), answer: make(chan acp.RequestPermissionOutcome, 1)}
-	if tc.Title != nil {
-		p.scope = *tc.Title
-	}
-	if s.allowed(p) {
+	p := &permission{request: request, answer: make(chan acp.RequestPermissionOutcome, 1)}
+	if s.inWorktree(tc.Kind, tc.Locations) {
 		p.choose(acp.PermissionOptionKindAllowOnce, acp.PermissionOptionKindAllowAlways)
 	} else if !s.deliver(item{permission: p}) {
 		p.cancel()

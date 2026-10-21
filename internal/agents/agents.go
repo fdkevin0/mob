@@ -36,6 +36,11 @@ type Preset struct {
 	// reads what the agent recorded its session used so far, and the model
 	// it last used.
 	Tally func(session string) (model string, used llm.Usage, err error)
+	// Env is added to the agent's environment.
+	Env []string
+	// Patch, when set, is a DeepSeek Harness configuration layer the
+	// agent is started with.
+	Patch string
 }
 
 // Presets are the agents tasks can use; the first is the default.
@@ -52,6 +57,22 @@ var Presets = []Preset{{
 	Commands: [][]string{{"claude-agent-acp"}, {"npx", "-y", "@agentclientprotocol/claude-agent-acp@0.94.0"}},
 	Mode:     "acceptEdits",
 	SignIn:   "run `claude` and sign in with your Claude subscription (/login) on the computer Mob runs on, or set ANTHROPIC_API_KEY for the Mob service",
+}, {
+	Name:  "dsh",
+	Title: "DeepSeek Harness",
+	// Only through npx: other programs are also called dsh.
+	Commands: [][]string{{"npx", "-y", "@deepseek-ai/dsh@0.2.1-rc.2", "--profile", "acp"}},
+	SignIn:   "save a DeepSeek API key in DeepSeek Harness (`npx @deepseek-ai/dsh web`, Models), or set DEEPSEEK_API_KEY for the Mob service",
+	// What the agent does stays on this computer: no session log upload
+	// to DeepSeek and no telemetry.
+	Env:   []string{"DSH_TELEMETRY_MODE=DISABLED"},
+	Patch: "- id: session-log-deepseek\n  disabled: true\n",
+}, {
+	Name:     "codebuddy",
+	Title:    "CodeBuddy Code",
+	Commands: [][]string{{"codebuddy", "--acp"}, {"npx", "-y", "@tencent-ai/codebuddy-code@2.171.0", "--acp"}},
+	Mode:     "acceptEdits",
+	SignIn:   "run `codebuddy` on the computer Mob runs on and log in with the Tencent account you use for WorkBuddy or CodeBuddy (WeChat for the China edition), or set CODEBUDDY_API_KEY for the Mob service, with CODEBUDDY_INTERNET_ENVIRONMENT=internal for the China edition",
 }}
 
 // preset finds an agent by name; empty is the default.
@@ -92,12 +113,28 @@ func start(ctx context.Context, p Preset, dir string) (Conn, error) {
 	if !ok {
 		return Conn{}, fmt.Errorf("%s is not installed: install %s, or Node.js for npx", p.Title, p.Commands[0][0])
 	}
+	command = slices.Clone(command)
+	patch := ""
+	if p.Patch != "" {
+		// A file of its own, which nobody else can have written.
+		f, err := os.CreateTemp("", "mob-agent-*.patch.yml")
+		if err != nil {
+			return Conn{}, err
+		}
+		patch = f.Name()
+		_, err = f.WriteString(p.Patch)
+		if err = errors.Join(err, f.Close()); err != nil {
+			_ = os.Remove(patch)
+			return Conn{}, err
+		}
+		command = append(command, "--patch", patch)
+	}
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = dir
 	// The agent and what it starts, such as the binary npx runs, end
 	// together.
 	group(cmd)
-	cmd.Env = environment()
+	cmd.Env = append(environment(), p.Env...)
 	stderr := &tail{}
 	cmd.Stderr = stderr
 	in, err := cmd.StdinPipe()
@@ -109,6 +146,9 @@ func start(ctx context.Context, p Preset, dir string) (Conn, error) {
 		return Conn{}, err
 	}
 	if err := cmd.Start(); err != nil {
+		if patch != "" {
+			_ = os.Remove(patch)
+		}
 		return Conn{}, err
 	}
 	var once sync.Once
@@ -117,6 +157,9 @@ func start(ctx context.Context, p Preset, dir string) (Conn, error) {
 			_ = in.Close()
 			kill(cmd)
 			_ = cmd.Wait()
+			if patch != "" {
+				_ = os.Remove(patch)
+			}
 		})
 	}
 	return Conn{In: in, Out: out, Stop: stop, Stderr: stderr.String}, nil

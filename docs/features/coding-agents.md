@@ -13,13 +13,29 @@ instructions. The agent writes the code. Agents speak the
 | --- | --- | --- |
 | `codex` (default) | `codex-acp` when installed, otherwise `npx -y @zed-industries/codex-acp@0.16.0` | the ChatGPT subscription `codex login` saved on that computer (`codex login --device-auth` where it has no browser), or `OPENAI_API_KEY` / `CODEX_API_KEY` in the service's environment |
 | `claude` (Claude Agent) | `claude-agent-acp` when installed, otherwise `npx -y @agentclientprotocol/claude-agent-acp@0.94.0` | the Claude subscription `claude` saved on that computer (run `claude` and `/login`), or `ANTHROPIC_API_KEY` in the service's environment |
+| `dsh` (DeepSeek Harness) | `npx -y @deepseek-ai/dsh@0.2.1-rc.2 --profile acp` (only through `npx`, since other programs are also called `dsh`) | the DeepSeek API key saved in DeepSeek Harness (`npx @deepseek-ai/dsh web`, Models page), or `DEEPSEEK_API_KEY` in the service's environment |
+| `codebuddy` (CodeBuddy Code) | `codebuddy --acp` when installed, otherwise `npx -y @tencent-ai/codebuddy-code@2.171.0 --acp` | the Tencent account `codebuddy` logged in with on that computer (WeChat for the China edition, Google or GitHub for the international one; the same account as WorkBuddy), or `CODEBUDDY_API_KEY` in the service's environment, with `CODEBUDDY_INTERNET_ENVIRONMENT=internal` for the China edition |
 
 The agent runs on the computer Mob runs on, as the same user, with Mob's
 environment minus its `MOB_*` variables. Mob keeps no agent credentials: the
 agent uses its own sign-in. When it asks to sign in, Mob tries an
 environment-variable method whose variable is set, and otherwise fails the
 turn with how to sign in. Claude Agent only finds out it is not signed in
-when it answers a prompt; that turn fails the same way. Amp is planned next.
+when it answers a prompt; that turn fails the same way. DeepSeek Harness asks
+for no sign-in; without a key, its first prompt fails and says where to save
+one. Mob never reads or passes on a DeepSeek key, including the one in its own
+DeepSeek provider. Amp is planned next.
+
+Mob starts DeepSeek Harness with its DeepSeek session-log upload plugin
+disabled (a `--patch` layer in a temporary file only the service's user can
+read, removed when the agent ends) and `DSH_TELEMETRY_MODE=DISABLED`, so what
+the agent does is not sent to DeepSeek beyond the model requests themselves.
+Its model is the ACP profile's default, `deepseek-v4-flash`.
+
+Tencent's WorkBuddy desktop app offers no programmatic interface; CodeBuddy
+Code, the command-line agent built on the same agent core, is how Mob reaches
+it. Its login methods are interactive, so without a login (or
+`CODEBUDDY_API_KEY`) starting a session fails with how to log in.
 
 ## Projects and tasks
 
@@ -137,14 +153,21 @@ notice as before. Failed tasks are not reviewed.
   commands in the worktree without asking, and asks before using the network
   or writing elsewhere. Claude Agent starts in its `acceptEdits` mode: it
   edits files without asking and asks before running commands, so its
-  commands are approvals in the task. Mob also answers yes, without asking, to any edit,
+  commands are approvals in the task. CodeBuddy Code starts in its
+  `acceptEdits` mode too. DeepSeek Harness has no modes: its own
+  `workspace-write` sandbox lets it write in the worktree and asks before going
+  further, offering only one-time answers. Mob also answers yes, without asking, to any edit,
   delete or move whose files are all inside the task's worktree once links
   are followed, so a link in the repository cannot lead an edit out of it.
 - Every other permission the agent asks for is an approval in the task's
   conversation, decided like any other: Approve, Allow in this conversation,
   Always allow, or Deny with an optional reason, from any client. Allow and
   Always allow are remembered as grants for the call's tool name and title,
-  and the agent is answered with its own "always" option.
+  and the agent is answered with its own "always" option. DeepSeek Harness
+  and CodeBuddy Code send requests that name only the call they showed
+  before; theirs are remembered for that call's title with its whole input,
+  so remembering one command never allows another. A request with neither a
+  title nor an input is allowed that once but never remembered.
 - Unlike a model's tool call, the agent keeps waiting while an approval is
   pending. The turn that asked ends, and the decision starts a turn that
   follows the agent on; the approved call shows how it ended there. A denial with
@@ -207,8 +230,10 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
   more starts nothing; the call is marked failed and the reply says to send
   the task a message to continue.
 - When Mob starts an agent for a task that already has a session, it loads that
-  session (Codex and Claude Agent support this), so the agent remembers the work; the history
-  the agent replays while loading is not shown again.
+  session (Codex, Claude Agent and CodeBuddy Code support this), so the agent remembers the work; the history
+  the agent replays while loading is not shown again. An agent that cannot
+  load sessions but can resume them, as DeepSeek Harness, resumes it instead,
+  without a replay.
 - Delegated conversations reuse `ConversationService`: `SetDelegate` hands the
   turns of the conversations a `chat.Delegate` owns to it instead of the model
   loop, and `chat.DelegateTurn` writes and saves the reply as the engine does.
