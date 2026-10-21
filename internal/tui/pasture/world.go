@@ -31,7 +31,7 @@ type Calf struct {
 }
 
 // The default herd: four calves at different depths, the orange one in front.
-var defaultHerd = []Calf{{Size: 1, Coat: 0}, {Size: 0.7, Coat: 3}, {Size: 0.84, Coat: 7}, {Size: 0.77, Coat: 12}}
+var defaultHerd = []Calf{{Size: 1, Coat: 0}, {Size: 0.7, Coat: 3}, {Size: 0.84, Coat: 9}, {Size: 0.77, Coat: 15}}
 
 type butterfly struct {
 	x, y, vx, vy float64
@@ -97,10 +97,6 @@ func (c *calf) points() [3][2]float64 {
 	mx, my := c.mouth()
 	return [3][2]float64{{mx, my}, {c.x + c.facing*c.length*0.2, c.y}, {c.x, c.y}}
 }
-
-// pixelAspect stretches sprite pixels a little taller than wide, so the face
-// spans more terminal rows.
-const pixelAspect = 1.35
 
 type eventKind int
 
@@ -186,18 +182,17 @@ func (w *world) resize(width, height, cellW, cellH float64) {
 func (w *world) seed() {
 	W, H := w.width, w.height
 	minSide := math.Min(W, H)
-	baseLength := clamp(minSide*0.44, 170, 430)
+	// Sprite pixels are a cell wide and half a cell tall.
+	length, height := float64(spriteW*cellW), float64(spriteH*cellH/2)
 
 	w.calves = w.calves[:0]
 	for i, spec := range w.herd {
-		length := baseLength * spec.Size
 		orbitRadius := minSide * between(0.28, 0.4)
 		a := float64(i)/float64(len(w.herd))*tau + between(-0.4, 0.4)
 		orbitDir := 1.0
 		if i%2 == 1 {
 			orbitDir = -1
 		}
-		height := length * spriteH / spriteW * pixelAspect
 		heading := a + orbitDir*math.Pi/2
 		facing := 1.0
 		if math.Cos(heading) < 0 {

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 var sgrPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -22,8 +23,8 @@ func TestFrameFillsTheField(t *testing.T) {
 		t.Fatalf("rows = %d, want 30", len(lines))
 	}
 	for i, line := range lines {
-		if len(line) != 90 {
-			t.Fatalf("row %d is %d cells wide, want 90", i, len(line))
+		if n := utf8.RuneCountInString(line); n != 90 {
+			t.Fatalf("row %d is %d cells wide, want 90", i, n)
 		}
 	}
 	if !strings.Contains(lines[15], "Mob") {

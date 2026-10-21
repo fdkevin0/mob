@@ -1,43 +1,45 @@
 package pasture
 
-import (
-	"math"
-	"strings"
-)
+import "math"
 
 // The calf is pixel art in the Mob logo's blocky style: a side-on body with
-// the logo's face turned to the viewer, facing right. Legs change per pose.
+// the logo's face turned to the viewer, facing right. It is drawn with half
+// blocks, so a pixel is one cell wide and half a cell tall, which is square.
 //
-// t top of the hide, # hide, u belly, l leg, h hoof, K tail tuft,
-// p inner ear, b brow, k eye, m muzzle, n nostril, c chin, z closed eye.
+// t top of the hide, # hide, s shaded hide, u belly, l leg, h hoof,
+// K tail tuft, p inner ear, b brow, w eye white, k pupil, m muzzle,
+// M shaded muzzle, n nostril, c chin.
 const (
-	spriteW = 21
-	spriteH = 12
+	spriteW = 24
+	spriteH = 16
 )
 
 var calfHead = []string{
-	"...ttttt...",
-	"p.#######.p",
-	"pp#######pp",
-	".#bb###bb#.",
-	".#k#####k#.",
-	".#mmmmmmm#.",
-	".mnmmmmmnm.",
-	"..mmmmmmm..",
-	"...ccccc...",
+	"....tttt....",
+	"..tttttttt..",
+	"#p########p#",
+	".#p######p#.",
+	"..########..",
+	"..#bb##bb#..",
+	"..#wk##wk#..",
+	"..########..",
+	".#mmmmmmmm#.",
+	".#MnmmmmnM#.",
+	".#mmmmmmmm#.",
+	"..#McccccM..",
+	"...ssssss...",
 }
 
 var calfBody = []string{
-	".ttttttttttt",
-	"K#########tt",
-	"K##########t",
-	"..#########.",
-	"..#########.",
-	"..uuuuuuuuu.",
+	".tttttttttttt.",
+	"t############t",
+	"##############",
+	"##############",
+	"##############",
+	"##############",
+	"s############s",
+	".uuuuuuuuuuuu.",
 }
-
-// Leg columns per pose; each leg is two rows of shin and a hoof.
-type legs [4][3]int
 
 type pose int
 
@@ -49,11 +51,9 @@ const (
 	hopping
 )
 
-var poseLegs = map[pose]legs{
-	standing: {{3, 3, 3}, {6, 6, 6}, {11, 11, 11}, {14, 14, 14}},
-	strideA:  {{3, 2, 2}, {6, 7, 7}, {11, 10, 10}, {14, 15, 15}},
-	strideB:  {{4, 4, 5}, {5, 5, 4}, {12, 12, 13}, {13, 13, 12}},
-}
+// legX are the left columns of the four legs, back to front; each leg is
+// two pixels wide.
+var legX = [4]int{3, 6, 11, 14}
 
 // sprites holds every pose as a spriteH × spriteW grid of pixel codes.
 var sprites = func() map[pose][]string {
@@ -61,51 +61,90 @@ var sprites = func() map[pose][]string {
 	for _, p := range []pose{standing, strideA, strideB, lying, hopping} {
 		grid := make([][]byte, spriteH)
 		for y := range grid {
-			grid[y] = []byte(strings.Repeat(".", spriteW))
+			grid[y] = make([]byte, spriteW)
+			for x := range grid[y] {
+				grid[y][x] = '.'
+			}
 		}
 		put := func(x, y int, c byte) {
 			if x >= 0 && y >= 0 && x < spriteW && y < spriteH && c != '.' {
 				grid[y][x] = c
 			}
 		}
-		bodyTop, headTop := 3, 0
+		// Body and head top rows; lying sinks both, a hop lifts them.
+		bodyTop, headTop := 4, 0
 		switch p {
 		case lying:
-			// Legs folded under, head resting low.
-			bodyTop, headTop = 6, 3
+			bodyTop, headTop = 8, 3
 		case hopping:
-			bodyTop, headTop = 2, 0
+			bodyTop, headTop = 3, 0
+		}
+		legTop := bodyTop + len(calfBody)
+		switch p {
+		case lying:
+			// Legs folded under: only the hooves peek out.
+			for _, x := range legX {
+				put(x, spriteH-1, 'h')
+				put(x+1, spriteH-1, 'h')
+			}
+		case hopping:
+			for _, x := range legX {
+				put(x, legTop, 'l')
+				put(x+1, legTop, 'l')
+				put(x, legTop+1, 'h')
+				put(x+1, legTop+1, 'h')
+			}
+		default:
+			for k, x := range legX {
+				// A stride swings diagonal pairs forward and back and lifts
+				// the swinging hoof.
+				shift, lift := 0, 0
+				if p != standing {
+					forward := k == 0 || k == 3
+					if p == strideB {
+						forward = !forward
+					}
+					if forward {
+						shift, lift = 1, 1
+					} else {
+						shift = -1
+					}
+				}
+				for y := legTop; y < spriteH-1-lift; y++ {
+					dx := 0
+					if y >= legTop+2 {
+						dx = shift
+					}
+					put(x+dx, y, 'l')
+					put(x+dx+1, y, 'l')
+				}
+				put(x+shift, spriteH-1-lift, 'h')
+				put(x+shift+1, spriteH-1-lift, 'h')
+			}
 		}
 		for y, row := range calfBody {
 			for x := range len(row) {
-				put(x+1, bodyTop+y, row[x])
+				put(x+2, bodyTop+y, row[x])
 			}
 		}
-		switch p {
-		case lying:
-			for _, x := range []int{3, 6, 12, 15} {
-				put(x, spriteH-1, 'h')
-			}
-		case hopping:
-			// Tucked legs mid-hop.
-			for _, x := range []int{3, 6, 11, 14} {
-				put(x, bodyTop+6, 'l')
-				put(x, bodyTop+7, 'h')
-			}
-		default:
-			for _, leg := range poseLegs[p] {
-				put(leg[0], 9, 'l')
-				put(leg[1], 10, 'l')
-				put(leg[2], 11, 'h')
-			}
+		// The tail hangs off the rump and swings with the stride.
+		tail := 0
+		if p == strideA {
+			tail = -1
 		}
+		put(1, bodyTop+1, 's')
+		put(0+max(0, -tail), bodyTop+2, 's')
+		put(0, bodyTop+3, 's')
+		put(0+tail+1, bodyTop+4, 'K')
+		put(0+tail+1, bodyTop+5, 'K')
 		for y, row := range calfHead {
 			for x := range len(row) {
 				c := row[x]
-				if p == lying && c == 'k' {
-					c = 'z'
+				if p == lying && (c == 'w' || c == 'k') {
+					// Eyes shut: only the brows stay.
+					c = '#'
 				}
-				put(x+10, headTop+y, c)
+				put(x+12, headTop+y, c)
 			}
 		}
 		rows := make([]string, spriteH)
@@ -149,9 +188,9 @@ type coat struct {
 }
 
 var (
-	mobOrange = coat{body: hex("#f2852b"), top: hex("#ffa04a"), belly: hex("#f7d2ad")}
+	mobOrange = coat{body: hex("#f2852b"), top: hex("#ffa04a"), belly: hex("#e0742a")}
 	coats     = []string{"#f1f0ea", "#2b2826", "#d08a4e", "#a8683d", "#8d929a", "#d9c39b", "#5ab4f0", "#b9a8ff", "#9bd86a", "#f2a7b8", "#6b4a35"}
-	face      = map[byte]rgb{'p': hex("#f6b39a"), 'b': hex("#3b2214"), 'k': hex("#2b170c"), 'z': hex("#3b2214"), 'm': hex("#f7d2ad"), 'n': hex("#c8835f"), 'c': hex("#f4dfc4"), 'h': hex("#3b2214"), 'K': hex("#2b170c")}
+	face      = map[byte]rgb{'p': hex("#f6b39a"), 'b': hex("#3b2214"), 'w': hex("#f6efe4"), 'k': hex("#2b170c"), 'm': hex("#f7d2ad"), 'M': hex("#e4b086"), 'n': hex("#c8835f"), 'c': hex("#f4dfc4"), 'h': hex("#3b2214"), 'K': hex("#3b2214")}
 	pale      = hex("#f1ece2")
 	dark      = hex("#2b2826")
 )
@@ -180,7 +219,7 @@ func coatFor(seed int) coat {
 			mark = pale
 		}
 	}
-	c := coat{body: body, top: body.scale(1.12), belly: body.scale(0.85)}
+	c := coat{body: body, top: lift(body), belly: body.scale(0.85)}
 	switch kind := next(); {
 	case kind < 0.45:
 		c.spotted, c.spots = true, mark
@@ -195,22 +234,47 @@ func coatFor(seed int) coat {
 	return c
 }
 
-// colour is the pixel's colour, before lighting.
-func (c coat) colour(code byte) rgb {
+// lift brightens a colour toward white for the sunlit back.
+func lift(c rgb) rgb {
+	return rgb{c.r + (255-c.r)*0.25, c.g + (255-c.g)*0.25, c.b + (255-c.b)*0.25}
+}
+
+// colour is the pixel's colour, or false for an empty pixel. x and y are
+// sprite coordinates, which spots and the blaze are anchored to.
+func (c coat) colour(code byte, x, y, id int) (rgb, bool) {
 	switch code {
+	case '.':
+		return rgb{}, false
 	case 't':
-		return c.top
+		return c.top, true
 	case 'u':
-		return c.belly
+		return c.belly, true
+	case 's':
+		return c.body.scale(0.8), true
 	case 'l':
-		return c.body.scale(0.78)
+		return c.body.scale(0.72), true
 	case '#':
-		return c.body
+		if c.blaze && x >= 17 && x <= 18 {
+			return pale, true
+		}
+		if c.spotted && x < 13 && spot(x, y, id) {
+			return c.spots, true
+		}
+		return c.body, true
 	}
 	if v, ok := face[code]; ok {
-		return v
+		return v, true
 	}
-	return c.body
+	return c.body, true
+}
+
+// spot reports whether a hide pixel falls on a patch.
+func spot(x, y, id int) bool {
+	gx, gy := float64(x)/5, float64(y)/4
+	cx, cy := math.Floor(gx), math.Floor(gy)
+	jx := hash3(int(cx), int(cy), id)*0.5 + 0.25
+	jy := hash3(int(cx), int(cy), id+11)*0.5 + 0.25
+	return (gx-cx-jx)*(gx-cx-jx)+(gy-cy-jy)*(gy-cy-jy) < 0.1
 }
 
 // gait picks the pose for a calf from what it is doing.

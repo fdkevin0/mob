@@ -93,7 +93,7 @@ local tmux have been tested. Real IME input, SSH, macOS and Windows have not.
   terminal control bytes before rendering; a reply stays plain while it streams.
 - While a conversation is empty, and while it connects, the Bubble Tea TUI shows
   the pasture in place of the transcript: calves chase flocks of butterflies,
-  nap and high-five, drawn as ASCII after
+  nap and high-five (pixel-art calves, ASCII butterflies), after
   [ascii-sharks](https://github.com/stackedlol/ascii-sharks). The first message
   or command result replaces it, and it stops drawing once hidden. `mob pasture`
   shows it full screen, where the pointer scares butterflies and a click

@@ -10,8 +10,7 @@ import (
 //  1. a pure black field
 //  2. a wake field that diffuses where things move, lighting cells cyan
 //  3. butterflies as minimal glyphs, one per cell, glinting on hard turns
-//  4. calves rasterised cell by cell with supersampled edges: coloured
-//     blocks shaded by the light, dense glyphs, and shimmering accents
+//  4. calves as blocky pixel art in half blocks, two pixels to a cell
 
 // Cell size in pixels. The sim runs in pixels; a terminal cell is about
 // twice as tall as it is wide.
@@ -26,47 +25,20 @@ var (
 	flutterAlphas = []float64{0.28, 0.42, 0.58, 0.74, 0.9}
 	flutterRGB    = rgb{230, 238, 255}
 	wakeRGB       = rgb{110, 230, 255}
-	accents       = []rgb{hex("#e0892c"), hex("#e03a32"), hex("#b44ae0"), hex("#33c8cc"), hex("#3cb54a"), hex("#3150e8"), hex("#d9c14a")}
 	black         = rgb{}
 	white         = rgb{255, 255, 255}
-	inkLight      = hex("#0e0f13")
-	inkDark       = hex("#1b1d24")
-	eyeGlint      = hex("#9aa0ad")
 	alertRGB      = hex("#f2c33a")
 )
-
-// Sparse glyphs on bright hide, dense glyphs in shadow, so the texture
-// reinforces the shading instead of fighting it.
-const (
-	skinRamp   = ":;t%SX8#@"
-	ridgeGlyph = "@8%"
-	edgeHeavy  = ":;"
-	edgeLight  = ".',`"
-	markGlyph  = "#%@"
-)
-
-const (
-	flagBody = iota + 1
-	flagEdge
-	flagRidge
-	flagEye
-	// flagMark is dark detail: brows, hooves, the tail tuft and spots.
-	flagMark
-)
-
-// Sub-cell sample offsets for anti-aliased silhouettes.
-var subsamples = [][2]float64{{0.25, 0.3}, {0.75, 0.3}, {0.25, 0.72}, {0.75, 0.72}}
 
 type renderer struct {
 	cols, rows int
 
 	energy, energyTmp, heat []float64
 
-	calfFlag  []uint8
-	calfShade []float64
-	calfColor []rgb
-	calfKey   []uint32
-	calfDepth []float64
+	// calfMask says which halves of a cell hold calf pixels: 1 top, 2 bottom.
+	calfMask   []uint8
+	calfTop    []rgb
+	calfBottom []rgb
 
 	// flutterStamp marks cells holding a butterfly this frame; wake skips them.
 	flutterStamp []uint32
@@ -74,7 +46,7 @@ type renderer struct {
 	flutterWing  []bool
 	frame        uint32
 
-	glyph []byte
+	glyph []rune
 	fg    []rgb
 	bg    []rgb
 }
@@ -85,15 +57,13 @@ func (r *renderer) resize(cols, rows int) {
 	r.energy = make([]float64, n)
 	r.energyTmp = make([]float64, n)
 	r.heat = make([]float64, n)
-	r.calfFlag = make([]uint8, n)
-	r.calfShade = make([]float64, n)
-	r.calfColor = make([]rgb, n)
-	r.calfKey = make([]uint32, n)
-	r.calfDepth = make([]float64, n)
+	r.calfMask = make([]uint8, n)
+	r.calfTop = make([]rgb, n)
+	r.calfBottom = make([]rgb, n)
 	r.flutterStamp = make([]uint32, n)
 	r.flutterLevel = make([]uint8, n)
 	r.flutterWing = make([]bool, n)
-	r.glyph = make([]byte, n)
+	r.glyph = make([]rune, n)
 	r.fg = make([]rgb, n)
 	r.bg = make([]rgb, n)
 }
@@ -104,9 +74,8 @@ func (r *renderer) render(w *world, dt float64, title []string) string {
 	if r.cols == 0 || r.rows == 0 {
 		return ""
 	}
-	t := w.time
 	r.consumeEvents(w)
-	r.rasterizeCalves(w.calves, t)
+	r.rasterizeCalves(w.calves)
 	r.depositWake(w, dt)
 	r.diffuse(dt)
 
@@ -117,7 +86,7 @@ func (r *renderer) render(w *world, dt float64, title []string) string {
 	r.drawWake()
 	r.drawHeat()
 	r.drawFlutters()
-	r.drawCalves(t)
+	r.drawCalves()
 	r.drawOverlays(w)
 	r.drawTitle(title)
 	return r.compose()
@@ -226,220 +195,61 @@ func (r *renderer) diffuse(dt float64) {
 
 // ── calves ─────────────────────────────────────────────────────────────
 
-// rasterizeCalves supersamples every cell in each calf's box against its
-// sprite. Fully covered cells become solid hide; partial cells become edge
-// glyphs.
-func (r *renderer) rasterizeCalves(calves []calf, t float64) {
-	for i := range r.calfFlag {
-		r.calfFlag[i] = 0
+// rasterizeCalves paints each calf's sprite pixel for pixel into the half
+// cells it covers, farther calves first.
+func (r *renderer) rasterizeCalves(calves []calf) {
+	for i := range r.calfMask {
+		r.calfMask[i] = 0
 	}
 	for ci := range calves {
 		c := &calves[ci]
 		sprite := sprites[gait(c)]
 		hide := coatFor(c.coat)
-		px := c.length / spriteW
-		py := c.height / spriteH
-		left := c.x - c.length/2
-		top := c.y - c.height/2
-		if c.state == roaming && c.speed > 4 {
-			// A little bob in the step.
-			top -= math.Abs(math.Sin(c.phase)) * py * 0.4
-		}
-		// sample returns the sprite pixel under a point, or 0 off the calf.
-		sample := func(x, y float64) (byte, int, int) {
-			sx := (x - left) / px
-			sy := (y - top) / py
-			if sx < 0 || sy < 0 || sx >= spriteW || sy >= spriteH {
-				return 0, 0, 0
+		dim := 0.72 + 0.28*c.depth
+		col0 := int(math.Round((c.x - c.length/2) / cellW))
+		half0 := int(math.Round((c.y - c.height/2) / (cellH / 2)))
+		for sy, row := range sprite {
+			half := half0 + sy
+			cellRow := half >> 1
+			if half < 0 || cellRow >= r.rows {
+				continue
 			}
-			if c.facing < 0 {
-				sx = spriteW - sx
-			}
-			ix, iy := min(int(sx), spriteW-1), int(sy)
-			code := sprite[iy][ix]
-			if code == '.' {
-				return 0, ix, iy
-			}
-			return code, ix, iy
-		}
-		c0 := max(0, int(math.Floor(left/cellW)))
-		c1 := min(r.cols-1, int(math.Floor((left+c.length)/cellW)))
-		r0 := max(0, int(math.Floor(top/cellH)))
-		r1 := min(r.rows-1, int(math.Floor((top+c.height)/cellH)))
-		dim := 0.7 + 0.3*c.depth
-		headTop := spriteTop(sprite)
-		for row := r0; row <= r1; row++ {
-			for col := c0; col <= c1; col++ {
-				x, y := float64(col*cellW), float64(row*cellH)
-				code, ix, iy := sample(x+cellW/2, y+cellH/2)
-				centre := code != 0
-				hits := 0
-				if centre {
-					hits = 1
+			for sx := range len(row) {
+				x := sx
+				if c.facing < 0 {
+					x = spriteW - 1 - sx
 				}
-				// Eyes and brows win any sample they touch, so the face
-				// survives at small sizes.
-				for _, s := range subsamples {
-					sc, sx, sy := sample(x+s[0]*cellW, y+s[1]*cellH)
-					if sc == 0 {
-						continue
-					}
-					hits++
-					if priority(sc) > priority(code) {
-						code, ix, iy = sc, sx, sy
-					}
-				}
-				if hits == 0 {
+				colour, ok := hide.colour(row[x], x, sy, c.id)
+				col := col0 + sx
+				if !ok || col < 0 || col >= r.cols {
 					continue
 				}
-				coverage := float64(hits) / 5
-				i := row*r.cols + col
-				// Body-anchored key, so each glyph rides along with the hide.
-				r.calfKey[i] = uint32(hash3(ix, iy, c.id) * 4294967295)
-				r.calfDepth[i] = dim
-				colour := hide.colour(code)
-				flag, shade := shading(code, iy)
-				if hide.blaze && (code == '#' || code == 't') && ix >= 14 && ix <= 16 && iy <= headTop+4 {
-					colour = pale
-				}
-				if hide.spotted && (code == '#' || code == 't') && spot(ix, iy, c.id) {
-					flag, colour = flagMark, hide.spots
-				}
-				r.calfColor[i] = colour
-				if priority(code) > 1 || centre && hits >= 3 {
-					r.calfFlag[i] = uint8(flag)
-					flicker := (hash3(col, row, int(t*6)) - 0.5) * 0.06
-					r.calfShade[i] = clamp(shade+flicker, 0, 1)
+				i := cellRow*r.cols + col
+				if half&1 == 0 {
+					r.calfTop[i] = colour.scale(dim)
+					r.calfMask[i] |= 1
 				} else {
-					r.calfFlag[i] = flagEdge
-					r.calfShade[i] = coverage
+					r.calfBottom[i] = colour.scale(dim)
+					r.calfMask[i] |= 2
 				}
 			}
 		}
 	}
 }
 
-// spriteTop is the first row of the head, which moves down when lying.
-func spriteTop(sprite []string) int {
-	for y, row := range sprite {
-		if strings.Contains(row, "t") {
-			return y
-		}
-	}
-	return 0
-}
-
-func priority(code byte) int {
-	switch code {
-	case 'k', 'z':
-		return 3
-	case 'b':
-		return 2
-	case 0:
-		return 0
-	}
-	return 1
-}
-
-// spot reports whether a hide pixel falls on a patch, on a jittered grid so
-// the patches ride along with the calf.
-func spot(x, y, id int) bool {
-	gx, gy := float64(x)/4, float64(y)/3
-	cx, cy := math.Floor(gx), math.Floor(gy)
-	jx := hash3(int(cx), int(cy), id)*0.5 + 0.25
-	jy := hash3(int(cx), int(cy), id+11)*0.5 + 0.25
-	return (gx-cx-jx)*(gx-cx-jx)+(gy-cy-jy)*(gy-cy-jy) < 0.09
-}
-
-// shading lights the calf from above: the back catches the light and the
-// belly falls into shadow.
-func shading(code byte, y int) (int, float64) {
-	shade := 0.72 - 0.42*float64(y)/spriteH
-	switch code {
-	case 'k', 'z':
-		return flagEye, 0
-	case 'b', 'h', 'K':
-		return flagMark, 0.2
-	case 't':
-		return flagRidge, 0.95
-	case 'm', 'c', 'p', 'n':
-		return flagBody, math.Max(shade, 0.66)
-	case 'l', 'u':
-		return flagBody, shade * 0.85
-	}
-	return flagBody, shade
-}
-
-func (r *renderer) drawCalves(t float64) {
-	for i, flag := range r.calfFlag {
-		if flag == 0 {
-			continue
-		}
-		key := r.calfKey[i]
-		shade := r.calfShade[i]
-		dim := r.calfDepth[i]
-		colour := r.calfColor[i]
-		// Colours re-roll on a staggered clock so the hide shimmers.
-		tick := int(t*2.4 + float64(key%997)/97)
-		roll := hash3(int(key), tick, 7)
-
-		if flag == flagEdge {
-			// Soft, anti-aliased silhouette: no block, just a light glyph.
-			set := edgeLight
-			if shade >= 0.5 {
-				set = edgeHeavy
-			}
-			r.glyph[i] = set[(key>>8)%uint32(len(set))]
-			r.fg[i] = colour.scale((0.35 + 0.45*shade) * dim)
-			if roll < 0.07 {
-				r.fg[i] = accents[key%uint32(len(accents))]
-			}
-			continue
-		}
-
-		var glyph byte
-		level := 0.45 + 0.55*shade
-		switch flag {
-		case flagRidge:
-			glyph = ridgeGlyph[(key>>8)%uint32(len(ridgeGlyph))]
-		case flagEye:
-			level, glyph = 0.08, 'o'
-		case flagMark:
-			level = 0.55 + shade*0.3
-			glyph = markGlyph[(key>>8)%uint32(len(markGlyph))]
-		default:
-			jitter := int((key>>4)%3) - 1
-			glyph = skinRamp[int(clamp(math.Floor((1-shade)*8.99)+float64(jitter), 0, float64(len(skinRamp)-1)))]
-		}
-		block := colour.scale(level * dim)
-		if flag == flagEye {
-			block = colour.scale(0.5)
-		}
-		r.bg[i] = block
-		r.glyph[i] = glyph
-		switch {
-		case flag == flagEye && colour == face['z']:
-			r.glyph[i], r.fg[i] = '-', eyeGlint
-		case flag == flagEye:
-			r.fg[i] = eyeGlint
-		case flag == flagMark:
-			r.fg[i] = block.scale(1.6)
-		case roll < 0.09:
-			r.fg[i] = accents[key%uint32(len(accents))]
-		case roll < 0.13:
-			r.fg[i] = white
-		case luminance(block) < 0.22:
-			// Dark ink disappears on a dark hide.
-			r.fg[i] = block.scale(2)
-		case shade > 0.55:
-			r.fg[i] = inkLight
-		default:
-			r.fg[i] = inkDark
+// drawCalves turns pairs of pixels into half-block cells.
+func (r *renderer) drawCalves() {
+	for i, mask := range r.calfMask {
+		switch mask {
+		case 1:
+			r.glyph[i], r.fg[i], r.bg[i] = '▀', r.calfTop[i], black
+		case 2:
+			r.glyph[i], r.fg[i], r.bg[i] = '▄', r.calfBottom[i], black
+		case 3:
+			r.glyph[i], r.fg[i], r.bg[i] = '▀', r.calfTop[i], r.calfBottom[i]
 		}
 	}
 }
-
-func luminance(c rgb) float64 { return (c.r*0.3 + c.g*0.59 + c.b*0.11) / 255 }
 
 // drawOverlays floats a calf's mood over its head: Zs over a sleeper and a
 // "!" when it spots a butterfly or is startled.
@@ -452,7 +262,7 @@ func (r *renderer) drawOverlays(w *world) {
 		case c.state == napping:
 			for k := range 3 {
 				age := math.Mod(w.time*0.45+float64(k)/3, 1)
-				glyph := byte('z')
+				glyph := 'z'
 				if age > 0.5 {
 					glyph = 'Z'
 				}
@@ -466,7 +276,7 @@ func (r *renderer) drawOverlays(w *world) {
 	}
 }
 
-func (r *renderer) put(x, y float64, glyph byte, fg rgb) {
+func (r *renderer) put(x, y float64, glyph rune, fg rgb) {
 	if i := r.cellIndex(x, y); i >= 0 {
 		r.glyph[i], r.fg[i] = glyph, fg
 	}
@@ -490,7 +300,7 @@ func (r *renderer) markFlutters(w *world) {
 				continue
 			}
 			c := r.cellIndex(f.x, f.y)
-			if c < 0 || r.flutterStamp[c] == r.frame || r.calfFlag[c] != 0 {
+			if c < 0 || r.flutterStamp[c] == r.frame || r.calfMask[c] != 0 {
 				continue
 			}
 			r.flutterStamp[c] = r.frame
@@ -536,7 +346,7 @@ func (r *renderer) drawHeat() {
 // drawWake lights cells cyan where the wake field is strong.
 func (r *renderer) drawWake() {
 	for i, e := range r.energy {
-		if e <= 0.45 || r.calfFlag[i] != 0 {
+		if e <= 0.45 || r.calfMask[i] != 0 {
 			continue
 		}
 		level := clamp(math.Floor((e-0.45)*5), 0, alphaLevels-1)
@@ -552,15 +362,20 @@ func (r *renderer) drawTitle(lines []string) {
 		if row < 0 || row >= r.rows {
 			continue
 		}
-		start := (r.cols - len(line)) / 2
-		for j := range len(line) {
+		text := []rune(line)
+		start := (r.cols - len(text)) / 2
+		// Clear a cell either side so nothing runs into the words.
+		for j := -1; j <= len(text); j++ {
 			col := start + j
-			if col < 0 || col >= r.cols || line[j] == ' ' {
+			if col < 0 || col >= r.cols {
 				continue
 			}
 			i := row*r.cols + col
-			r.glyph[i], r.bg[i] = line[j], black
-			r.fg[i] = white
+			r.glyph[i], r.bg[i] = ' ', black
+			if j < 0 || j == len(text) {
+				continue
+			}
+			r.glyph[i], r.fg[i] = text[j], white
 			if k > 0 {
 				r.fg[i] = white.scale(0.55)
 			}
@@ -587,7 +402,7 @@ func (r *renderer) compose() string {
 				sgr(&b, 38, fg)
 				lastFg, freshFg = fg, false
 			}
-			b.WriteByte(r.glyph[i])
+			b.WriteRune(r.glyph[i])
 		}
 		b.WriteString("\x1b[0m")
 		if row < r.rows-1 {
