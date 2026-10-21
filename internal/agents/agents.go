@@ -67,6 +67,12 @@ var Presets = []Preset{{
 	// to DeepSeek and no telemetry.
 	Env:   []string{"DSH_TELEMETRY_MODE=DISABLED"},
 	Patch: "- id: session-log-deepseek\n  disabled: true\n",
+}, {
+	Name:     "codebuddy",
+	Title:    "CodeBuddy Code",
+	Commands: [][]string{{"codebuddy", "--acp"}, {"npx", "-y", "@tencent-ai/codebuddy-code@2.171.0", "--acp"}},
+	Mode:     "acceptEdits",
+	SignIn:   "run `codebuddy` on the computer Mob runs on and log in with the Tencent account you use for WorkBuddy or CodeBuddy (WeChat for the China edition), or set CODEBUDDY_API_KEY for the Mob service, with CODEBUDDY_INTERNET_ENVIRONMENT=internal for the China edition",
 }}
 
 // preset finds an agent by name; empty is the default.

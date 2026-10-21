@@ -36,6 +36,8 @@ type fake struct {
 	// the session it resumed.
 	resumes bool
 	resumed string
+	// signedOut makes it ask to sign in, with a login no variable answers.
+	signedOut bool
 	// release lets a "hold" prompt end.
 	release chan struct{}
 	// spent is the cost "tokens" prompts report.
@@ -84,6 +86,9 @@ var models = []acp.SessionConfigOption{{Select: &acp.SessionConfigOptionSelect{I
 var modes = &acp.SessionModeState{CurrentModeId: "read-only", AvailableModes: []acp.SessionMode{{Id: "read-only", Name: "Read only"}, {Id: "auto", Name: "Auto"}, {Id: "acceptEdits", Name: "Accept edits"}}}
 
 func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSessionResponse, error) {
+	if f.signedOut {
+		return acp.NewSessionResponse{}, acp.NewAuthRequired(nil)
+	}
 	f.mu.Lock()
 	f.dir = r.Cwd
 	id := f.session
@@ -187,8 +192,9 @@ type fakes struct {
 	// session and failLoad are given to the agents started next.
 	session  acp.SessionId
 	failLoad bool
-	// resumes, when set, makes the agents resume sessions.
-	resumes bool
+	// resumes, when set, makes the agents resume sessions; signedOut makes
+	// them ask to sign in.
+	resumes, signedOut bool
 }
 
 func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) {
@@ -202,7 +208,7 @@ func (fs *fakes) connect(ctx context.Context, _ Preset, _ string) (Conn, error) 
 	toAgent, fromClient := io.Pipe()
 	toClient, fromAgent := io.Pipe()
 	fs.mu.Lock()
-	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad, resumes: fs.resumes}
+	f := &fake{release: make(chan struct{}), session: fs.session, failLoad: fs.failLoad, resumes: fs.resumes, signedOut: fs.signedOut}
 	fs.mu.Unlock()
 	f.conn = acp.NewAgentSideConnection(f, fromAgent, toAgent)
 	f.conn.SetLogger(slog.New(slog.DiscardHandler))
@@ -375,6 +381,22 @@ func TestClaudeAgent(t *testing.T) {
 	}
 	history, _ := h.svc.Store.History(task.ConversationID)
 	if failure := fmtJSON(history[len(history)-1].Metadata["error"]); !strings.Contains(failure, "Claude Agent is not signed in") || !strings.Contains(failure, "/login") {
+		t.Fatalf("error = %s", failure)
+	}
+}
+
+func TestCodeBuddyAsksToLogIn(t *testing.T) {
+	h := newHarness(t)
+	h.fakes.signedOut = true
+	task, err := h.svc.StartTask(context.Background(), "", h.repo, "codebuddy", "", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task = h.wait(task); task.Agent != "codebuddy" || task.Status != chat.TaskFailed {
+		t.Fatalf("task = %+v", task)
+	}
+	history, _ := h.svc.Store.History(task.ConversationID)
+	if failure := fmtJSON(history[len(history)-1].Metadata["error"]); !strings.Contains(failure, "CodeBuddy Code is not signed in: run `codebuddy`") {
 		t.Fatalf("error = %s", failure)
 	}
 }
