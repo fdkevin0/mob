@@ -15,6 +15,7 @@ import (
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/local"
 	"github.com/fdkevin0/mob/internal/provider"
+	"github.com/fdkevin0/mob/internal/tui/pasture"
 )
 
 func TestTUIUsesSharedService(t *testing.T) {
@@ -455,5 +456,23 @@ func TestTUIFollowsARunningTurn(t *testing.T) {
 	history, _ := store.History(c.ID)
 	if want := chat.Text(history[len(history)-1]); draft != want || !strings.Contains(draft, "from another client") {
 		t.Fatalf("followed %q, saved %q", draft, want)
+	}
+}
+
+func TestPastureFillsAnEmptyConversationOnly(t *testing.T) {
+	m := model{configured: true, id: "c", input: textarea.New(), viewport: viewport.New(), pasture: pasture.New(), ctx: context.Background()}
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = updated.(model)
+	updated, cmd := m.Update(pasture.Frame{At: time.Now()})
+	m = updated.(model)
+	if _, ok := cmd().(pasture.Frame); !ok || !strings.Contains(m.View().Content, "Type a message to start") {
+		t.Fatal("an empty conversation does not show the pasture")
+	}
+	m.messages = []chat.Message{{ID: "u", Role: "user", Parts: []chat.Part{{"type": "text", "text": "hello calves"}}}}
+	m.render()
+	updated, _ = m.Update(pasture.Frame{At: time.Now()})
+	m = updated.(model)
+	if content := m.View().Content; strings.Contains(content, "Type a message to start") || !strings.Contains(content, "hello calves") {
+		t.Fatalf("the pasture covers the transcript:\n%s", content)
 	}
 }

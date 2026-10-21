@@ -91,6 +91,13 @@ local tmux have been tested. Real IME input, SSH, macOS and Windows have not.
 - The original Bubble Tea TUI renders assistant replies and command results as Markdown with
   glamour (dark or light from the terminal background). Text is stripped of
   terminal control bytes before rendering; a reply stays plain while it streams.
+- While a conversation is empty, and while it connects, the Bubble Tea TUI shows
+  the pasture in place of the transcript: calves chase flocks of butterflies,
+  nap and high-five, drawn as ASCII after
+  [ascii-sharks](https://github.com/stackedlol/ascii-sharks). The first message
+  or command result replaces it, and it stops drawing once hidden. `mob pasture`
+  shows it full screen, where the pointer scares butterflies and a click
+  scatters them; q quits.
 - Messaging channels run commands through the registry too; see
   [Channels](channels.md). After each connection the Telegram bot calls
   `setMyCommands`, scoped to the owner's private chat, with the commands listed

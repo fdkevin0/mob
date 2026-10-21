@@ -17,6 +17,7 @@ import (
 	"github.com/fdkevin0/mob/internal/local"
 	"github.com/fdkevin0/mob/internal/node"
 	"github.com/fdkevin0/mob/internal/provider"
+	"github.com/fdkevin0/mob/internal/tui/pasture"
 	"github.com/fdkevin0/mob/internal/version"
 	"github.com/fdkevin0/mob/webapp"
 	"github.com/pkg/browser"
@@ -158,6 +159,9 @@ func newRootCommand() *cobra.Command {
 		}},
 		&cobra.Command{Use: "tui", Short: "Open the terminal UI", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			return runTUI(cmd, config)
+		}},
+		&cobra.Command{Use: "pasture", Short: "Watch the calves play in the terminal (q quits)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+			return pasture.Run()
 		}},
 	)
 	token := &cobra.Command{Use: "token", Short: "Manage the local access token"}

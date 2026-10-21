@@ -20,6 +20,7 @@ stable release; none is published yet.
 
 ```bash
 mob tui                    # terminal UI; starts the service when needed
+mob pasture                # calves at play in the terminal; q quits
 mob open                   # sign a browser in to the running service
 mob open --web             # or sign in https://mob.fdkevin.cloud to it
 mob start / status / stop  # run the service in the background

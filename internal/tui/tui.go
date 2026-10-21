@@ -23,6 +23,7 @@ import (
 	"github.com/fdkevin0/mob/internal/llm"
 	"github.com/fdkevin0/mob/internal/local"
 	"github.com/fdkevin0/mob/internal/protocol"
+	"github.com/fdkevin0/mob/internal/tui/pasture"
 )
 
 type snapshot struct {
@@ -77,6 +78,10 @@ type model struct {
 	streamCancel        context.CancelFunc
 	// pastes hold long pasted texts the input shows as placeholders.
 	pastes []paste
+	// pasture plays in place of an empty transcript; frame is its last drawing.
+	pasture   *pasture.Pasture
+	frame     string
+	lastFrame time.Time
 }
 
 func Run(connection local.Connection) error {
@@ -93,12 +98,12 @@ func Run(connection local.Connection) error {
 	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
 		style = "dark"
 	}
-	m := model{connection: connection, input: input, viewport: viewport.New(), ctx: ctx, cancel: cancel, width: 80, status: "Connecting…", markdown: &markdown{style: style}}
+	m := model{connection: connection, input: input, viewport: viewport.New(), ctx: ctx, cancel: cancel, width: 80, status: "Connecting…", markdown: &markdown{style: style}, pasture: pasture.New()}
 	_, err := tea.NewProgram(m).Run()
 	return err
 }
 
-func (m model) Init() tea.Cmd { return tea.Batch(m.checkConfig(), nextTick()) }
+func (m model) Init() tea.Cmd { return tea.Batch(m.checkConfig(), nextTick(), pasture.Tick()) }
 func (m model) checkConfig() tea.Cmd {
 	return func() tea.Msg {
 		var result modelConfiguration
@@ -229,6 +234,8 @@ func waitEvent(events <-chan streamEvent) tea.Cmd { return func() tea.Msg { retu
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case pasture.Frame:
+		return m.animate(msg.At)
 	case pluginsLoaded:
 		if msg.Err != nil {
 			m.failure = msg.Err.Error()
@@ -539,11 +546,72 @@ func (m *model) render() {
 		m.viewport.GotoBottom()
 	}
 }
+
+// pastureSize is the field the calves play in, or zero when the screen has
+// something else to show there.
+func (m model) pastureSize() (int, int) {
+	if m.pasture == nil || m.plugin != nil || m.height == 0 {
+		return 0, 0
+	}
+	if !m.configured {
+		return max(20, m.width-4), max(3, m.height-6)
+	}
+	if len(m.messages) > 0 || m.listText != "" || m.busy || m.remoteBusy {
+		return 0, 0
+	}
+	return max(20, m.width-4), m.viewport.Height()
+}
+
+// animate draws the next pasture frame while it is on screen, and checks
+// back less often while it is not.
+func (m model) animate(at time.Time) (tea.Model, tea.Cmd) {
+	cols, rows := m.pastureSize()
+	if cols == 0 {
+		m.lastFrame = time.Time{}
+		return m, tea.Tick(time.Second/4, func(t time.Time) tea.Msg { return pasture.Frame{At: t} })
+	}
+	elapsed := pasture.FrameInterval
+	if !m.lastFrame.IsZero() {
+		elapsed = at.Sub(m.lastFrame)
+	}
+	m.lastFrame = at
+	m.pasture.Resize(cols, rows)
+	if m.configured {
+		m.pasture.Title = []string{"Mob", "Type a message to start · / for commands"}
+	}
+	m.pasture.Advance(elapsed)
+	m.frame = m.pasture.Render(elapsed)
+	return m, pasture.Tick()
+}
+
+// pastureView is the last pasture frame while it fits the screen.
+func (m model) pastureView() string {
+	cols, rows := m.pastureSize()
+	if cols == 0 {
+		return ""
+	}
+	if c, r := m.pasture.Size(); c != cols || r != rows {
+		return ""
+	}
+	return m.frame
+}
+
+// transcript is the conversation, or the pasture while there is none.
+func (m model) transcript() string {
+	if frame := m.pastureView(); frame != "" {
+		return frame
+	}
+	return m.viewport.View()
+}
+
 func (m model) View() tea.View {
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Render("Mob / terminal")
-	body := title + "\n" + safe(m.status) + "\n" + safe(m.failure) + "\n" + m.viewport.View() + "\n" + m.suggestionView() + m.input.View() + "\n/ commands · Tab complete · Ctrl+P connections · Ctrl+S stop · Ctrl+C quit · PgUp/PgDn scroll"
+	body := title + "\n" + safe(m.status) + "\n" + safe(m.failure) + "\n" + m.transcript() + "\n" + m.suggestionView() + m.input.View() + "\n/ commands · Tab complete · Ctrl+P connections · Ctrl+S stop · Ctrl+C quit · PgUp/PgDn scroll"
 	if !m.configured {
 		body = title + "\nConnecting… (Ctrl+R retry · Ctrl+C quit)\n" + safe(m.failure)
+		if frame := m.pastureView(); frame != "" {
+			body += "\n" + frame
+		}
 	}
 	if m.plugin != nil {
 		body = title + "\n" + m.plugin.view() + "\n" + safe(m.failure)
