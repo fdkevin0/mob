@@ -113,7 +113,22 @@ Needs you, Done, Failed, Stopped), the tools it used, the task's title,
 project and branch, its cost and tokens (broken down by cache and model on
 hover), its plan's progress and how long it took. Clicking a card
 that started agents folds them away (it then shows how many are hidden) and
-clicking again unfolds them; its arrow button opens its conversation. The
+clicking again unfolds them; its arrow button opens its conversation.
+
+A card that needs the owner shows up to two of its waiting decisions, each
+with what is asked, and **Approve**, **Always allow** and **Deny…** (which
+takes an optional reason); more are left to the conversation. A running or
+waiting card has **Stop**, and a task's card has **Instruct**, which sends the
+agent one more line while it runs. They use:
+
+- `POST /api/conversations/{id}/decide` with `{id, approved, reason?,
+  remember?}`: answers a waiting decision as the owner and resumes the turn
+  (202; 409 when the decision is no longer waiting).
+- `POST /api/tasks/{id}/stop`: stops the task (404 when there is none).
+- `POST /api/tasks/{id}/message` with `{text}`: sends the running agent an
+  instruction (202; 409 when the task is not running).
+
+Mob's own card stops with `POST /api/conversations/{id}/stop`. The
 header counts the agents, filters to what runs, needs the owner or failed,
 and adds up what they all cost. The page reads the tree again every three seconds while it is shown.
 Logos come from LobeHub's MIT-licensed `@lobehub/icons-static-svg`, inlined

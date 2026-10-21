@@ -189,6 +189,11 @@ export type Task = {
   createdAt: number;
   updatedAt: number;
 };
+export type AgentApproval = {
+  id: string;
+  tool: string;
+  text: string;
+};
 export type AgentNode = {
   conversationId: string;
   parent?: string;
@@ -197,7 +202,7 @@ export type AgentNode = {
   model?: string;
   title: string;
   status: string;
-  approvals: number;
+  approvals: AgentApproval[];
   tools: string[];
   task?: Task;
   usage?: UsageSummary;

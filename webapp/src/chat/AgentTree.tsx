@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { api, type Connection } from './api';
-import type { AgentNode } from './contracts';
+import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
@@ -13,11 +13,13 @@ import {
 	FileIcon,
 	GlobeIcon,
 	HandIcon,
+	MessageIcon,
 	OpenIcon,
 	PencilIcon,
 	SearchIcon,
 	SparkIcon,
 	SpinnerIcon,
+	StopIcon,
 	TerminalIcon,
 } from './icons';
 
@@ -117,17 +119,103 @@ function Avatar({ agent }: { agent: string }) {
 	);
 }
 
+// What the owner can do from a card; each resolves once the service took it.
+export type Act = {
+	decide: (conversationId: string, approval: string, approved: boolean, extra?: { reason?: string; remember?: string }) => Promise<void>;
+	stop: (node: AgentNode) => Promise<void>;
+	message: (taskId: string, text: string) => Promise<void>;
+};
+
+// shownApprovals bounds the decisions a card offers; the rest wait in the conversation.
+const shownApprovals = 2;
+
+function Decision({ node, approval, act, busy }: { node: AgentNode; approval: AgentApproval; act: Act; busy: boolean }) {
+	const [denying, setDenying] = useState(false);
+	const [reason, setReason] = useState('');
+	const decide = (approved: boolean, extra?: { reason?: string; remember?: string }) => act.decide(node.conversationId, approval.id, approved, extra);
+	const deny = (e: FormEvent) => {
+		e.preventDefault();
+		void decide(false, { reason: reason.trim() || undefined });
+	};
+	return (
+		<div className="agent-approval">
+			<p title={approval.text}>
+				<span className="agent-approval-tool">{approval.tool}</span> {approval.text}
+			</p>
+			{denying ? (
+				<form className="agent-inline" onSubmit={deny}>
+					<input aria-label="Why deny (optional)" placeholder="Why? (optional)" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus disabled={busy} />
+					<button type="submit" className="agent-button deny" disabled={busy}>
+						Deny
+					</button>
+					<button type="button" className="agent-button" onClick={() => setDenying(false)} disabled={busy}>
+						Cancel
+					</button>
+				</form>
+			) : (
+				<div className="agent-approval-actions">
+					<button type="button" className="agent-button approve" disabled={busy} onClick={() => void decide(true)}>
+						Approve
+					</button>
+					<button type="button" className="agent-button" disabled={busy} title="Approve, and allow the same request without asking from now on" onClick={() => void decide(true, { remember: 'always' })}>
+						Always allow
+					</button>
+					<button type="button" className="agent-button deny" disabled={busy} onClick={() => setDenying(true)}>
+						Deny…
+					</button>
+				</div>
+			)}
+		</div>
+	);
+}
+
+function Instruct({ task, act, busy, done }: { task: string; act: Act; busy: boolean; done: () => void }) {
+	const [text, setText] = useState('');
+	const send = (e: FormEvent) => {
+		e.preventDefault();
+		if (text.trim()) void act.message(task, text.trim()).then(done);
+	};
+	return (
+		<form className="agent-inline" onSubmit={send}>
+			<input aria-label="Instruction for the agent" placeholder="Tell the agent…" value={text} onChange={(e) => setText(e.target.value)} autoFocus disabled={busy} />
+			<button type="submit" className="agent-button approve" disabled={busy || !text.trim()}>
+				Send
+			</button>
+		</form>
+	);
+}
+
 function Card({
 	branch,
 	open,
 	collapsed,
 	toggle,
+	act,
 }: {
 	branch: Branch;
 	open: (conversationId: string) => void;
 	collapsed: boolean;
 	toggle: () => void;
+	act: Act;
 }) {
+	const [busy, setBusy] = useState(false);
+	const [failure, setFailure] = useState('');
+	const [instructing, setInstructing] = useState(false);
+	// Every action shows it is under way and what went wrong, if anything did.
+	const run =
+		<A extends unknown[]>(f: (...args: A) => Promise<void>) =>
+		async (...args: A) => {
+			setBusy(true);
+			setFailure('');
+			try {
+				await f(...args);
+			} catch (e) {
+				setFailure(errorText(e));
+			} finally {
+				setBusy(false);
+			}
+		};
+	const actions: Act = { decide: run(act.decide), stop: run(act.stop), message: run(act.message) };
 	const { node, children } = branch;
 	const status = statuses[node.status] ?? { label: node.status };
 	const plan = node.task?.plan ?? [];
@@ -137,7 +225,7 @@ function Card({
 	const hidden = collapsed ? descendants(branch) : 0;
 	// Clicking a card with agents under it folds them; its buttons do their own thing.
 	const click = (e: MouseEvent) => {
-		if (children.length && !(e.target as Element).closest('button')) toggle();
+		if (children.length && !(e.target as Element).closest('button, input, form, .agent-approval')) toggle();
 	};
 	return (
 		<article
@@ -160,7 +248,7 @@ function Card({
 				<span className="agent-status" data-status={node.status}>
 					{status.icon}
 					{status.label}
-					{node.approvals > 1 && ` · ${node.approvals}`}
+					{node.approvals.length > 1 && ` · ${node.approvals.length}`}
 				</span>
 			</header>
 			<p className="agent-task">
@@ -183,6 +271,18 @@ function Card({
 					<span style={{ width: `${(done / plan.length) * 100}%` }} />
 				</div>
 			)}
+			{node.approvals.slice(0, shownApprovals).map((a) => (
+				<Decision key={a.id} node={node} approval={a} act={actions} busy={busy} />
+			))}
+			{node.approvals.length > shownApprovals && (
+				<p className="agent-more">{node.approvals.length - shownApprovals} more wait in its conversation.</p>
+			)}
+			{instructing && node.task && <Instruct task={node.task.id} act={actions} busy={busy} done={() => setInstructing(false)} />}
+			{failure && (
+				<p className="agent-failure" role="alert">
+					{failure}
+				</p>
+			)}
 			<footer>
 				<span className="agent-spent" title={node.usage ? usageTitle(node.usage) : undefined}>
 					{node.usage?.totalTokens ? <strong>{spent(node.usage)}</strong> : null}
@@ -192,6 +292,30 @@ function Card({
 						.join('')}
 				</span>
 				<span className="agent-actions">
+					{node.task && (
+						<button
+							type="button"
+							className="agent-open"
+							aria-label={`Instruct ${node.label}: ${node.title}`}
+							aria-pressed={instructing}
+							title="Tell the agent what to do next"
+							onClick={() => setInstructing(!instructing)}
+						>
+							<MessageIcon />
+						</button>
+					)}
+					{live(node.status) && (
+						<button
+							type="button"
+							className="agent-open"
+							aria-label={`Stop ${node.label}: ${node.title}`}
+							title={node.task ? 'Stop the agent; its branch stays' : 'Stop this turn'}
+							disabled={busy}
+							onClick={() => void actions.stop(node)}
+						>
+							<StopIcon />
+						</button>
+					)}
 					<button type="button" className="agent-open" aria-label={`Open ${node.label}: ${node.title}`} title="Open its conversation" onClick={() => open(node.conversationId)}>
 						<OpenIcon />
 					</button>
@@ -218,22 +342,24 @@ function Subtree({
 	open,
 	collapsed,
 	toggle,
+	act,
 }: {
 	branch: Branch;
 	depth: number;
 	open: (conversationId: string) => void;
 	collapsed: Set<string>;
 	toggle: (id: string) => void;
+	act: Act;
 }) {
 	const id = branch.node.conversationId;
 	const shut = collapsed.has(id);
 	return (
 		<li className="agent-branch">
-			<Card branch={branch} open={open} collapsed={shut} toggle={() => toggle(id)} />
+			<Card branch={branch} open={open} collapsed={shut} toggle={() => toggle(id)} act={act} />
 			{!shut && branch.children.length > 0 && (
 				<ul className={depth === 0 ? 'agent-children row' : 'agent-children'}>
 					{branch.children.map((c) => (
-						<Subtree key={c.node.conversationId} branch={c} depth={depth + 1} open={open} collapsed={collapsed} toggle={toggle} />
+						<Subtree key={c.node.conversationId} branch={c} depth={depth + 1} open={open} collapsed={collapsed} toggle={toggle} act={act} />
 					))}
 				</ul>
 			)}
@@ -360,6 +486,7 @@ export function AgentTree({
 	const [collapsed, setCollapsed] = useState(new Set<string>());
 	const [now, setNow] = useState(Date.now());
 	const canvas = useRef<HTMLDivElement>(null);
+	const reload = useRef(() => {});
 
 	useEffect(() => {
 		let alive = true;
@@ -372,6 +499,7 @@ export function AgentTree({
 					setError('');
 				})
 				.catch((e) => alive && setError(errorText(e)));
+		reload.current = () => void load();
 		void load();
 		const timer = setInterval(load, refreshEvery);
 		return () => {
@@ -379,6 +507,18 @@ export function AgentTree({
 			clearInterval(timer);
 		};
 	}, [connection]);
+
+	// An action changes the tree at once, and again when the turn it starts gets going.
+	const post = async (path: string, body: object) => {
+		await api(connection, path, body);
+		reload.current();
+		setTimeout(() => reload.current(), 1000);
+	};
+	const act: Act = {
+		decide: (conversationId, approval, approved, extra) => post(`/conversations/${conversationId}/decide`, { id: approval, approved, ...extra }),
+		stop: (node) => post(node.task ? `/tasks/${node.task.id}/stop` : `/conversations/${node.conversationId}/stop`, {}),
+		message: (task, text) => post(`/tasks/${task}/message`, { text }),
+	};
 
 	const all = nodes ?? [];
 	const count = (status: string) => all.filter((n) => n.status === status).length;
@@ -451,7 +591,7 @@ export function AgentTree({
 				<Links canvas={canvas} edges={lines} version={`${lines.map((l) => l.join(':')).join(',')} ${filter ?? ''} ${now}`} />
 				<ul className="agents-tree">
 					{shown.map((b) => (
-						<Subtree key={b.node.conversationId} branch={b} depth={0} open={open} collapsed={collapsed} toggle={toggle} />
+						<Subtree key={b.node.conversationId} branch={b} depth={0} open={open} collapsed={collapsed} toggle={toggle} act={act} />
 					))}
 				</ul>
 			</div>
