@@ -29,13 +29,38 @@ type AgentNode struct {
 	Title string `json:"title"`
 	// Status is a task status, or running, waiting or idle for Mob.
 	Status string `json:"status"`
-	// Approvals counts the decisions that wait for the owner.
-	Approvals int `json:"approvals"`
+	// Approvals are the decisions that wait for the owner, oldest first.
+	Approvals []AgentApproval `json:"approvals"`
 	// Tools are the kinds of tool the agent used, such as execute or edit.
 	Tools []string   `json:"tools"`
 	Task  *chat.Task `json:"task,omitempty"`
 	// Usage is what the conversation used, when it recorded any.
 	Usage *chat.UsageSummary `json:"usage,omitempty"`
+}
+
+// AgentApproval is a decision waiting in an agent's conversation.
+type AgentApproval struct {
+	ID   string `json:"id"`
+	Tool string `json:"tool"`
+	// Text is what is asked: one "field: value" line per input field, so
+	// that a command shows in full rather than only its title.
+	Text string `json:"text"`
+	// Whole is false when a field was too long to show; the owner then
+	// decides in the conversation.
+	Whole bool `json:"whole"`
+}
+
+// waiting lists the decisions that wait in conversationID.
+func (s *Service) waiting(conversationID string) []AgentApproval {
+	pending := s.Conversations.Pending(conversationID)
+	list := make([]AgentApproval, len(pending))
+	for i, p := range pending {
+		text, whole := chat.DescribeApprovalWhole(p.Tool, p.Input)
+		// The card names the tool itself.
+		_, text, _ = strings.Cut(text, "\n")
+		list[i] = AgentApproval{ID: p.ID, Tool: p.Tool, Text: text, Whole: whole}
+	}
+	return list
 }
 
 // Tree lists the tasks, most recently updated first, then the conversations
@@ -68,7 +93,7 @@ func (s *Service) Tree(project string) ([]AgentNode, error) {
 		}
 		task := t
 		nodes = append(nodes, AgentNode{ConversationID: t.ConversationID, Parent: t.Parent, Agent: t.Agent, Label: label, Model: s.sessionModel(t.ID), Title: t.Title,
-			Status: t.Status, Approvals: len(s.Conversations.Pending(t.ConversationID)), Tools: kinds, Task: &task})
+			Status: t.Status, Approvals: s.waiting(t.ConversationID), Tools: kinds, Task: &task})
 		if t.Parent != "" && !isTask[t.Parent] {
 			parents[t.Parent] = true
 		}
@@ -83,9 +108,9 @@ func (s *Service) Tree(project string) ([]AgentNode, error) {
 		if !parents[c.ID] {
 			continue
 		}
-		n := AgentNode{ConversationID: c.ID, Agent: Mob, Label: "Mob", Title: c.Title, Status: Idle, Approvals: len(s.Conversations.Pending(c.ID)), Tools: []string{}}
+		n := AgentNode{ConversationID: c.ID, Agent: Mob, Label: "Mob", Title: c.Title, Status: Idle, Approvals: s.waiting(c.ID), Tools: []string{}}
 		switch {
-		case n.Approvals > 0:
+		case len(n.Approvals) > 0:
 			n.Status = chat.TaskWaiting
 		case s.Conversations.Active(c.ID):
 			n.Status = chat.TaskRunning

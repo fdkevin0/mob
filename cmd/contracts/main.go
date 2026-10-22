@@ -43,6 +43,7 @@ var definitions = []definition{
 	{"UsageSummary", chat.UsageSummary{}},
 	{"PlanEntry", chat.PlanEntry{}},
 	{"Task", chat.Task{}},
+	{"AgentApproval", agents.AgentApproval{}},
 	{"AgentNode", agents.AgentNode{}},
 }
 

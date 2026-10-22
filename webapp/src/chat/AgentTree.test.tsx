@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AgentTree, duration, link, tree } from './AgentTree';
 import type { AgentNode, Task } from './contracts';
@@ -25,7 +25,7 @@ const node = (t: Task, extra: Partial<AgentNode> = {}): AgentNode => ({
 	label: 'Codex',
 	title: t.title,
 	status: t.status,
-	approvals: 0,
+	approvals: [],
 	tools: [],
 	task: t,
 	...extra,
@@ -47,10 +47,10 @@ const nodes: AgentNode[] = [
 			models: [],
 		},
 	}),
-	node(task('copy', 'waiting', 1000, 3000, 'm1'), { approvals: 1 }),
+	node(task('copy', 'waiting', 1000, 3000, 'm1'), { approvals: [{ id: 'a1', tool: 'claude_execute', text: 'input: {"command":"npm test"}', whole: true }] }),
 	node(task('test', 'failed', 5000, 9000, 'c-build')),
 	node(task('lonely', 'review', 0, 500)),
-	{ conversationId: 'm1', agent: 'mob', label: 'Mob', title: 'Launch pricing', status: 'idle', approvals: 0, tools: [] },
+	{ conversationId: 'm1', agent: 'mob', label: 'Mob', title: 'Launch pricing', status: 'idle', approvals: [], tools: [] },
 ];
 
 it('routes fanned-out links across and nested ones down the side', () => {
@@ -103,4 +103,56 @@ it('shows cards, filters what needs the owner and opens a conversation', async (
 	// Runtimes and models show their logos.
 	expect(screen.getAllByRole('img', { name: 'Codex' }).length).toBe(4);
 	expect(screen.getAllByRole('img', { name: 'OpenAI' }).length).toBe(4);
+});
+
+it('decides, stops and instructs from the cards', async () => {
+	const calls: [string, unknown][] = [];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url: string, init?: RequestInit) => {
+			if (init?.method === 'POST') {
+				calls.push([new URL(url).pathname, JSON.parse(String(init.body))]);
+				return Response.json({ ok: true }, { status: 202 });
+			}
+			return Response.json(nodes);
+		}),
+	);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	const copy = (await screen.findByText('input: {"command":"npm test"}')).closest('article')!;
+	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Always allow' }));
+	await waitFor(() => expect(calls[0]).toEqual(['/api/conversations/c-copy/decide', { id: 'a1', approved: true, remember: 'always' }]));
+	// Clicking inside a decision does not fold the card's agents.
+	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Deny…' }));
+	fireEvent.change(within(copy as HTMLElement).getByLabelText('Why deny (optional)'), { target: { value: 'not yet' } });
+	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Deny' }));
+	await waitFor(() => expect(calls[1]).toEqual(['/api/conversations/c-copy/decide', { id: 'a1', approved: false, reason: 'not yet' }]));
+	fireEvent.click(screen.getByRole('button', { name: 'Stop Codex: build' }));
+	await waitFor(() => expect(calls[2]).toEqual(['/api/tasks/build/stop', {}]));
+	fireEvent.click(screen.getByRole('button', { name: 'Instruct Codex: test' }));
+	fireEvent.change(screen.getByLabelText('Instruction for the agent'), { target: { value: 'fix the flaky test' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+	await waitFor(() => expect(calls[3]).toEqual(['/api/tasks/test/message', { text: 'fix the flaky test' }]));
+	await waitFor(() => expect(screen.queryByLabelText('Instruction for the agent')).toBeNull());
+	// Finished agents offer no stop.
+	expect(screen.queryByRole('button', { name: 'Stop Codex: lonely' })).toBeNull();
+});
+
+it('keeps an instruction that failed to send, and approves only what it shows whole', async () => {
+	const long = nodes.map((n) => (n.approvals.length ? { ...n, approvals: [{ ...n.approvals[0], whole: false }] } : n));
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (_url: string, init?: RequestInit) =>
+			init?.method === 'POST' ? Response.json({ error: 'the agent is still starting; try again shortly' }, { status: 409 }) : Response.json(long),
+		),
+	);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	const copy = (await screen.findByText('input: {"command":"npm test"}')).closest('article') as HTMLElement;
+	expect(within(copy).queryByRole('button', { name: 'Approve' })).toBeNull();
+	expect(within(copy).queryByRole('button', { name: 'Always allow' })).toBeNull();
+	expect(within(copy).getByText(/open its conversation to approve it/)).toBeTruthy();
+	fireEvent.click(screen.getByRole('button', { name: 'Instruct Codex: test' }));
+	fireEvent.change(screen.getByLabelText('Instruction for the agent'), { target: { value: 'fix the flaky test' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+	await screen.findByText(/still starting/);
+	expect((screen.getByLabelText('Instruction for the agent') as HTMLInputElement).value).toBe('fix the flaky test');
 });

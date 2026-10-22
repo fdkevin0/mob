@@ -247,7 +247,11 @@ func (s *Service) StartTask(ctx context.Context, parent, project, agent, title, 
 }
 
 // Message hands text to task id's agent in a turn that runs on its own.
-func (s *Service) Message(id, text string) error {
+func (s *Service) Message(id, text string) error { return s.MessageUntil(id, text, nil) }
+
+// MessageUntil is Message, but a turn it starts also ends when stop closes,
+// such as when the token that asked for it is revoked.
+func (s *Service) MessageUntil(id, text string, stop <-chan struct{}) error {
 	t, ok, err := s.Store.Task(id)
 	if err != nil {
 		return err
@@ -266,7 +270,7 @@ func (s *Service) Message(id, text string) error {
 			return errors.New("the agent is still starting; try again shortly")
 		}
 	}
-	_, err = s.Conversations.Start(chat.ChatRequest{ID: t.ConversationID, Text: text, RequestID: chat.NewID(), Owner: true}, nil)
+	_, err = s.Conversations.Start(chat.ChatRequest{ID: t.ConversationID, Text: text, RequestID: chat.NewID(), Owner: true}, stop)
 	return err
 }
 

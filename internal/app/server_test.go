@@ -301,3 +301,54 @@ func TestSnapshotShowsExpiredApprovals(t *testing.T) {
 		t.Fatalf("an expired approval is offered: %v", parts)
 	}
 }
+
+func TestTreeDecidesAndInstructs(t *testing.T) {
+	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c, _ := s.Create()
+	m, err := s.Begin(c.ID, chat.NewID(), "remember x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Parts = append(m.Parts, chat.Part{"type": "tool-remember", "toolCallId": "call", "state": "input-available", "input": map[string]string{"fact": "x"}})
+	approval, err := s.RequestApproval(c.ID, m, "call", map[string]string{"fact": "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(s, provider.Offline(), strings.Repeat("t", 32))
+	defer server.Close()
+	call := func(path string, body any) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "http://127.0.0.1/api"+path, bytes.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer "+server.Token())
+		w := httptest.NewRecorder()
+		server.Handler(nil).ServeHTTP(w, req)
+		return w
+	}
+	if w := call("/conversations/"+c.ID+"/decide", chat.Answer{ID: approval, Approved: true}); w.Code != 202 {
+		t.Fatalf("decide: %d %s", w.Code, w.Body)
+	}
+	for deadline := time.Now().Add(5 * time.Second); server.Active(c.ID); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the decision's turn did not end")
+		}
+	}
+	if facts, _ := s.Memories(c.ID, true); len(facts) != 1 || facts[0] != "x" {
+		t.Fatalf("approved fact not saved: %v", facts)
+	}
+	if w := call("/conversations/"+c.ID+"/decide", chat.Answer{ID: approval, Approved: true}); w.Code != 409 {
+		t.Fatalf("a decided approval was decided again: %d", w.Code)
+	}
+	if w := call("/conversations/"+c.ID+"/decide", map[string]any{}); w.Code != 400 {
+		t.Fatalf("decision without an approval: %d", w.Code)
+	}
+	if w := call("/tasks/none/message", map[string]string{"text": "go on"}); w.Code != 409 || !strings.Contains(w.Body.String(), "no task") {
+		t.Fatalf("message to no task: %d %s", w.Code, w.Body)
+	}
+	if w := call("/tasks/none/stop", map[string]any{}); w.Code != 404 {
+		t.Fatalf("stop of no task: %d", w.Code)
+	}
+}

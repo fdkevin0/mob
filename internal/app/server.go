@@ -152,6 +152,15 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 		data, err := s.Agents.Tree(r.URL.Query().Get("project"))
 		respond(w, data, err)
 	})
+	mux.HandleFunc("POST /api/tasks/{id}/stop", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.Agents.StopTask(r.PathValue("id")); err != nil {
+			http.Error(w, err.Error(), 404)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"stopped": true})
+	})
+	mux.HandleFunc("POST /api/tasks/{id}/message", s.instruct)
+	mux.HandleFunc("POST /api/conversations/{id}/decide", s.decide)
 	mux.HandleFunc("GET /api/commands", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, s.Commands.Specs(r.URL.Query().Get("client")))
 	})
@@ -276,6 +285,42 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	follow(w, r, run, 0)
+}
+
+// decide answers an approval waiting in a conversation, as the agent tree
+// does; the turn it starts runs on its own, and 202 says it began.
+func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
+	var answer chat.Answer
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&answer); err != nil || answer.ID == "" {
+		http.Error(w, "invalid decision", 400)
+		return
+	}
+	_, err := s.Start(chat.ChatRequest{ID: r.PathValue("id"), RequestID: chat.NewID(), Approval: &answer, Owner: true}, revocation(r.Context()))
+	var command *chat.CommandError
+	switch {
+	case err == nil:
+		writeJSON(w, 202, map[string]bool{"started": true})
+	case errors.Is(err, chat.ErrStaleApproval):
+		http.Error(w, err.Error(), 409)
+	case errors.As(err, &command):
+		http.Error(w, command.Message, command.Status)
+	default:
+		respond(w, nil, err)
+	}
+}
+
+// instruct passes the owner's words to a task's agent.
+func (s *Server) instruct(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Text string }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, chatBody)).Decode(&in); err != nil || strings.TrimSpace(in.Text) == "" {
+		http.Error(w, "invalid message", 400)
+		return
+	}
+	if err := s.Agents.MessageUntil(r.PathValue("id"), in.Text, revocation(r.Context())); err != nil {
+		http.Error(w, err.Error(), 409)
+		return
+	}
+	writeJSON(w, 202, map[string]bool{"sent": true})
 }
 
 // resume streams the conversation's running turn from the start, or from the
