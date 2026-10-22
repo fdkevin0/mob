@@ -39,6 +39,8 @@ type Conversation struct {
 type Store struct {
 	db   *sql.DB
 	lock *flock.Flock
+	// Changes tells clients what each write changed.
+	Changes Changes
 }
 
 func NewID() string {
@@ -104,6 +106,9 @@ func (s *Store) Close() error { return errors.Join(s.db.Close(), s.lock.Unlock()
 func (s *Store) Create() (Conversation, error) {
 	c := Conversation{NewID(), "New conversation", time.Now().UnixMilli()}
 	_, err := s.db.Exec("INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)", c.ID, c.Title, c.UpdatedAt)
+	if err == nil {
+		s.Changes.conversation(c.ID, true)
+	}
 	return c, err
 }
 
@@ -187,7 +192,10 @@ func (s *Store) Begin(id, requestID, text, model string) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	return m, tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.Changes.conversation(id, text != "")
+	}
+	return m, err
 }
 
 // Command records a slash command and its reply. Commands stay in the
@@ -207,7 +215,10 @@ func (s *Store) Command(id, requestID, text, reply string) (Message, error) {
 	if _, err = tx.Exec("UPDATE conversations SET updated_at=? WHERE id=?", time.Now().UnixMilli(), id); err != nil {
 		return Message{}, err
 	}
-	return m, tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.Changes.conversation(id, true)
+	}
+	return m, err
 }
 
 func (s *Store) Save(m Message, status, failure string) error {
@@ -221,6 +232,9 @@ func (s *Store) Save(m Message, status, failure string) error {
 		usage = string(encoded)
 	}
 	_, err = s.db.Exec("UPDATE messages SET parts=?,status=?,error=?,usage=? WHERE id=?", string(raw), status, failure, usage, m.ID)
+	if err == nil {
+		s.messageChanged(m.ID)
+	}
 	return err
 }
 
@@ -253,6 +267,9 @@ func (s *Store) SetConversationModel(id, model string) error {
 			err = sql.ErrNoRows
 		}
 	}
+	if err == nil {
+		s.Changes.conversation(id, false)
+	}
 	return err
 }
 
@@ -283,7 +300,10 @@ func (s *Store) RequestApproval(conversationID string, m Message, callID string,
 	if _, err = tx.Exec("UPDATE messages SET parts=? WHERE id=?", string(parts), m.ID); err != nil {
 		return "", err
 	}
-	return id, tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.Changes.conversation(conversationID, false)
+	}
+	return id, err
 }
 
 var ErrStaleApproval = errors.New("approval is unknown, expired, or already decided")
@@ -365,7 +385,10 @@ func (s *Store) decide(conversationID, approvalID string, approved bool, reason 
 			return d, err
 		}
 	}
-	return d, tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.Changes.conversation(conversationID, false)
+	}
+	return d, err
 }
 
 // Complete records what an approved call returned and where a large output
@@ -391,7 +414,10 @@ func (s *Store) Complete(d Decision, output any, file string, failure error) err
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.messageChanged(d.MessageID)
+	}
+	return err
 }
 
 // updatePart changes the decided call's part in its stored message.
@@ -501,7 +527,10 @@ func (s *Store) ExpireApprovals(conversationID string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err == nil && len(expired) > 0 {
+		s.Changes.conversation(conversationID, false)
+	}
+	return err
 }
 
 // SaveFact keeps a fact for the conversation, and for every conversation of

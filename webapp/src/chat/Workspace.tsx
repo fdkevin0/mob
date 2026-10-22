@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { api, isPublicWeb, type Connection, type Conversation, type Snapshot } from './api';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Changes } from '@mob/client';
+import { api, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
@@ -51,6 +52,21 @@ export function Workspace({
 	const [switching, setSwitching] = useState(false);
 	const [background, setBackground] = useState(false);
 
+	// The service says what changed, so the list and the open views reload only then.
+	const changes = useMemo(() => new Changes(webClient(connection)), [connection]);
+	useEffect(changes.start, [changes]);
+	useEffect(() => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const unsubscribe = changes.subscribe((change) => {
+			if (change !== 'reset' && !change.list) return;
+			clearTimeout(timer);
+			timer = setTimeout(() => void refreshList().catch(() => { /* the next change or action refreshes it */ }), 200);
+		});
+		return () => {
+			unsubscribe();
+			clearTimeout(timer);
+		};
+	}, [changes]);
 	const cache = useRef(new Map<string, Snapshot>());
 	const remember = (id: string, snapshot: Snapshot) => {
 		cache.current.delete(id);
@@ -290,6 +306,7 @@ export function Workspace({
 					<Suspense fallback={panel}>
 						<AgentTree
 							connection={connection}
+							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
 							close={() => setAgents(false)}
 						/>
@@ -303,6 +320,7 @@ export function Workspace({
 						title={conversations.find((c) => c.id === selected.id)?.title}
 						onBusy={setBusy}
 						onLeave={(snapshot) => remember(selected.id, snapshot)}
+						changes={changes}
 						onChanged={() => {
 							void refreshList().catch((e) => setError(errorText(e)));
 						}}

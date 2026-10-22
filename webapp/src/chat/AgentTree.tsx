@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import type { Changes } from '@mob/client';
 import { api, type Connection } from './api';
 import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '../components/brand/Logo';
@@ -481,10 +482,13 @@ function edges(branches: Branch[], collapsed: Set<string>): [string, string, str
 
 export function AgentTree({
 	connection,
+	changes,
 	open,
 	close,
 }: {
 	connection: Connection;
+	/** changes, while live, replaces refreshing on a timer: the tree reloads when something changed. */
+	changes?: Changes;
 	open: (conversationId: string) => void;
 	close: () => void;
 }) {
@@ -514,15 +518,26 @@ export function AgentTree({
 			if (!document.hidden) void load();
 		};
 		document.addEventListener('visibilitychange', shown);
+		// While changes are live, the timer only keeps the times shown current.
 		const timer = setInterval(() => {
-			if (!document.hidden) void load();
+			if (document.hidden) return;
+			if (changes?.live) setNow(Date.now());
+			else void load();
 		}, refreshEvery);
+		// A tree shows tasks and their conversations, so any change reloads it, a burst of them once.
+		let soon: ReturnType<typeof setTimeout> | undefined;
+		const unsubscribe = changes?.subscribe(() => {
+			clearTimeout(soon);
+			soon = setTimeout(() => void load(), 1000);
+		});
 		return () => {
 			alive = false;
 			clearInterval(timer);
+			clearTimeout(soon);
+			unsubscribe?.();
 			document.removeEventListener('visibilitychange', shown);
 		};
-	}, [connection]);
+	}, [connection, changes]);
 
 	// An action changes the tree at once, and again when the turn it starts gets going.
 	const post = async (path: string, body: object) => {

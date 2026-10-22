@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { isToolUIPart } from 'ai';
+import type { Changes } from '@mob/client';
 import { useConversation } from './useConversation';
 import { useCompletion } from './useCompletion';
 import {
@@ -28,6 +29,7 @@ export function Thread({
 	onChanged,
 	onAction,
 	onLeave,
+	changes,
 	draft,
 	clearDraft,
 }: {
@@ -39,6 +41,7 @@ export function Thread({
 	onChanged: () => void;
 	onAction: (action: Action) => void;
 	onLeave?: (snapshot: Snapshot) => void;
+	changes?: Changes;
 	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
 	draft?: string;
 	clearDraft?: () => void;
@@ -61,7 +64,7 @@ export function Thread({
 		cancel,
 		commandResult,
 		dismissCommand,
-	} = useConversation({ connection, id, initial, onBusy, onChanged, onAction, onLeave });
+	} = useConversation({ connection, id, initial, onBusy, onChanged, onAction, onLeave, changes });
 	useEffect(() => {
 		if (!draft) return;
 		setInput(draft);

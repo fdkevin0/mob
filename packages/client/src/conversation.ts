@@ -1,6 +1,7 @@
 import { Chat } from '@ai-sdk/react';
 import { DefaultChatTransport, generateId, readUIMessageStream } from 'ai';
 import { MobClient, type ChatMessage, type ClientType, type Snapshot } from './api';
+import type { Changes } from './changes';
 import type { Action, CommandResult } from './contracts';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -40,6 +41,8 @@ export class ConversationClient {
 	private approvalController?: AbortController;
 	private followController?: AbortController;
 	private inputRevision = 0;
+	// stale is set when history may have changed but could not be reloaded yet; the next tick reloads it.
+	private stale = false;
 	private pendingSend?: { requestId: string; text: string; inputRevision: number; settled: boolean; uncertain: boolean };
 
 	constructor(
@@ -52,6 +55,8 @@ export class ConversationClient {
 			onChanged?: () => void;
 			/** throttleMs limits how often streamed text updates subscribers, so a UI renders at most once per interval. */
 			throttleMs?: number;
+			/** changes, while live, replaces polling: the conversation reloads when the service says it changed. */
+			changes?: Changes;
 		},
 	) {
 		const { client, id, initial } = options;
@@ -125,10 +130,15 @@ export class ConversationClient {
 			if (!hidden()) void this.reload();
 		};
 		if (typeof document !== 'undefined') document.addEventListener('visibilitychange', shown);
+		// While the change stream is live, ticks only retry a reload that had to wait.
 		this.timer = setInterval(() => {
-			if (!hidden()) void this.reload();
+			if (!hidden() && (this.stale || !this.options.changes?.live)) void this.reload();
 		}, pollInterval);
+		const unsubscribe = this.options.changes?.subscribe((change) => {
+			if (change === 'reset' || change.conversation === this.options.id) void this.reload();
+		});
 		return () => {
+			unsubscribe?.();
 			if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', shown);
 			this.active = false;
 			this.generation++;
@@ -171,8 +181,11 @@ export class ConversationClient {
 			this.following ||
 			this.running ||
 			(this.pendingSend && !this.pendingSend.settled)
-		)
+		) {
+			this.stale = true;
 			return;
+		}
+		this.stale = false;
 		const generation = this.generation;
 		const sequence = ++this.reloadSequence;
 		try {
@@ -186,8 +199,10 @@ export class ConversationClient {
 				this.following ||
 				this.running ||
 				(this.pendingSend && !this.pendingSend.settled)
-			)
+			) {
+				this.stale = true;
 				return;
+			}
 			this.publishedReloadSequence = sequence;
 			const pending = this.pendingSend;
 			if (pending) {
@@ -217,6 +232,7 @@ export class ConversationClient {
 			this.recoveryFailure = '';
 			if (snapshot.active) void this.follow(snapshot.messages);
 		} catch (e) {
+			this.stale = true;
 			if (
 				this.active &&
 				generation === this.generation &&
@@ -245,7 +261,12 @@ export class ConversationClient {
 
 	// Replays start from fresh state: never append replayed deltas to a draft.
 	private async follow(baseline: ChatMessage[]) {
-		if (this.followController || !this.active || Date.now() < this.followRetry) return;
+		if (this.followController || !this.active) return;
+		// A follow that failed waits a tick before trying again.
+		if (Date.now() < this.followRetry) {
+			this.stale = true;
+			return;
+		}
 		const controller = new AbortController();
 		this.followController = controller;
 		this.following = true;
@@ -273,6 +294,7 @@ export class ConversationClient {
 		} finally {
 			this.followController = undefined;
 			this.following = false;
+			this.stale = true;
 			this.update(completed ? { remoteBusy: false } : {});
 			// The next poll reconciles persisted history. Do not loop on a stale
 			// active snapshot followed by 204, or replace the just-replayed reply.
