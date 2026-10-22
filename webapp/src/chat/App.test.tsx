@@ -369,12 +369,13 @@ it('keeps Token usage closed while a submitted command is dispatched, so the com
 it('opens the conversation the address names and returns to cached conversations at once', async () => {
   localStorage.setItem('mob-token', 'current');
   window.history.replaceState(null, '', '/#/c/two');
-  const reads: string[] = [];
+  let hold = false;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/runtime')) return Response.json({ background: false });
     if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'First' }, { id: 'two', title: 'Second' }]);
     const id = url.match(/\/conversations\/(\w+)$/)?.[1];
-    if (id) { reads.push(id); return Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' }); }
+    if (id === 'two' && hold) return new Promise<Response>(() => {});
+    if (id) { return Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' }); }
     return Response.json({});
   }));
   render(<App />);
@@ -383,9 +384,9 @@ it('opens the conversation the address names and returns to cached conversations
   screen.getByRole('button', { name: 'First' }).click();
   await screen.findByText('reply in one');
   expect(window.location.hash).toBe('#/c/one');
-  const before = reads.length;
+  // The cached conversation shows although its refresh never returns.
+  hold = true;
   window.history.back();
-  // The cached conversation shows before its refresh returns.
   await screen.findByText('reply in two');
-  expect(reads.slice(before).filter(id => id === 'two').length).toBeLessThanOrEqual(1);
+  expect(window.location.hash).toBe('#/c/two');
 });
