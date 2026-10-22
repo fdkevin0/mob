@@ -50,6 +50,8 @@ export class ConversationClient {
 			clientType: ClientType;
 			onAction?: (action: Action) => void;
 			onChanged?: () => void;
+			/** throttleMs limits how often streamed text updates subscribers, so a UI renders at most once per interval. */
+			throttleMs?: number;
 		},
 	) {
 		const { client, id, initial } = options;
@@ -110,17 +112,24 @@ export class ConversationClient {
 	start = () => {
 		this.active = true;
 		this.unsubscribes = [
-			this.chat['~registerMessagesCallback'](this.publishChat),
+			this.chat['~registerMessagesCallback'](this.publishChat, this.options.throttleMs),
 			this.chat['~registerStatusCallback'](this.publishChat),
 			this.chat['~registerErrorCallback'](this.publishChat),
 		];
 		this.publishChat();
 		void this.reload();
 		this.options.onChanged?.();
+		// A hidden page skips polling and catches up as soon as it is shown again.
+		const hidden = () => typeof document !== 'undefined' && document.hidden;
+		const shown = () => {
+			if (!hidden()) void this.reload();
+		};
+		if (typeof document !== 'undefined') document.addEventListener('visibilitychange', shown);
 		this.timer = setInterval(() => {
-			void this.reload();
+			if (!hidden()) void this.reload();
 		}, pollInterval);
 		return () => {
+			if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', shown);
 			this.active = false;
 			this.generation++;
 			clearInterval(this.timer);
@@ -198,7 +207,8 @@ export class ConversationClient {
 					});
 				}
 			}
-			this.chat.messages = snapshot.messages;
+			const messages = reuseMessages(this.chat.messages, snapshot.messages);
+			if (messages !== this.chat.messages) this.chat.messages = messages;
 			this.update({
 				model: snapshot.model,
 				remoteBusy: snapshot.active,
@@ -385,4 +395,18 @@ export class ConversationClient {
 			}
 		}
 	};
+}
+
+// reuseMessages keeps each message object that a reload left unchanged, so a UI that memoizes
+// messages by identity only renders what changed; it returns current itself when nothing did.
+export function reuseMessages(current: ChatMessage[], next: ChatMessage[]): ChatMessage[] {
+	const byId = new Map(current.map((m) => [m.id, m]));
+	let changed = current.length !== next.length;
+	const merged = next.map((message, index) => {
+		const previous = byId.get(message.id);
+		const kept = previous && JSON.stringify(previous) === JSON.stringify(message) ? previous : message;
+		if (kept !== current[index]) changed = true;
+		return kept;
+	});
+	return changed ? merged : current;
 }

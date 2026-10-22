@@ -572,3 +572,16 @@ it('keeps text typed while the service is down', async () => {
 	await vi.advanceTimersByTimeAsync(4000);
 	expect(session.getSnapshot().input).toBe('Newer draft');
 });
+
+it('keeps unchanged messages as the same objects across reloads', async () => {
+	const { reuseMessages } = await import('./conversation');
+	const one = { id: 'one', role: 'user' as const, parts: [{ type: 'text' as const, text: 'hi' }] };
+	const two = { id: 'two', role: 'assistant' as const, parts: [{ type: 'text' as const, text: 'hello' }] };
+	const current = [one, two];
+	expect(reuseMessages(current, structuredClone(current))).toBe(current);
+	const edited = { ...two, parts: [{ type: 'text' as const, text: 'hello there' }] };
+	const next = reuseMessages(current, [structuredClone(one), edited]);
+	expect(next).not.toBe(current);
+	expect(next[0]).toBe(one);
+	expect(next[1]).toBe(edited);
+});

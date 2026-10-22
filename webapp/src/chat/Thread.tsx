@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { isToolUIPart } from 'ai';
 import { useConversation } from './useConversation';
 import { useCompletion } from './useCompletion';
@@ -14,7 +14,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogTrigger } from '../components/ui/dialog';
-import { api, type Connection, type Snapshot } from './api';
+import { api, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, SpinnerIcon, StopIcon } from './icons';
@@ -27,6 +27,7 @@ export function Thread({
 	onBusy,
 	onChanged,
 	onAction,
+	onLeave,
 	draft,
 	clearDraft,
 }: {
@@ -37,6 +38,7 @@ export function Thread({
 	onBusy: (busy: boolean) => void;
 	onChanged: () => void;
 	onAction: (action: Action) => void;
+	onLeave?: (snapshot: Snapshot) => void;
 	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
 	draft?: string;
 	clearDraft?: () => void;
@@ -59,7 +61,7 @@ export function Thread({
 		cancel,
 		commandResult,
 		dismissCommand,
-	} = useConversation({ connection, id, initial, onBusy, onChanged, onAction });
+	} = useConversation({ connection, id, initial, onBusy, onChanged, onAction, onLeave });
 	useEffect(() => {
 		if (!draft) return;
 		setInput(draft);
@@ -81,7 +83,7 @@ export function Thread({
 			live = false;
 		};
 	}, [connection]);
-	const modelLabel = model?.startsWith('demo/') ? 'Demo mode · no model calls' : (model ?? 'Connecting…');
+	const modelLabel = model?.startsWith('demo/') ? 'Demo mode · no model calls' : model || 'Connecting…';
 	const textarea = useRef<HTMLTextAreaElement>(null);
 	// The message box grows with its text up to a limit, then scrolls.
 	useLayoutEffect(() => {
@@ -104,88 +106,16 @@ export function Thread({
 							description="Ask a question, explore an idea, or save something to remember."
 						/>
 					)}
-					{messages.map((message) => (
-						<Message key={message.id} from={message.role}>
-							<p className="sr-only">{message.role === 'user' ? 'You' : 'Mob'}</p>
-							<MessageContent className={message.role === 'user' ? 'user-bubble' : 'assistant-content'}>
-								{message.parts.map((part, index) => {
-									if (part.type === 'text')
-										return (
-											<MessageResponse key={index} isAnimating={streaming && message === messages.at(-1)}>
-												{part.text}
-											</MessageResponse>
-										);
-									if (part.type === 'reasoning')
-										return (
-											<details className="reasoning" key={index}>
-												<summary>
-													<ChevronIcon /> Reasoning
-												</summary>
-												<p>{part.text}</p>
-											</details>
-										);
-									if (isToolUIPart(part)) {
-										const name = part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5);
-										const state = toolState(part.state);
-										return (
-											<details
-												className={`tool-call ${state.kind}`}
-												key={part.toolCallId}
-												open={state.kind === 'waiting' || state.kind === 'failed'}
-											>
-												<summary onClick={state.kind === 'waiting' ? (e) => e.preventDefault() : undefined}>
-													<span className="tool-status" title={state.label}>
-														{state.icon}
-													</span>
-													<span className="tool-title">{toolTitle(name)}</span>
-													<span className="tool-detail">{toolDetail(part.input)}</span>
-													<span className="sr-only">{state.label}</span>
-													<ChevronIcon />
-												</summary>
-												{part.state !== 'approval-requested' && (
-													<div className="tool-body">
-														<pre>{JSON.stringify(part.input, null, 2)}</pre>
-														{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
-														{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
-													</div>
-												)}
-												{part.state === 'approval-requested' && (
-													<ApprovalPrompt
-														question={
-															name === 'remember'
-																? 'Mob wants to save this to memory.'
-																: `Mob wants to use ${toolTitle(name).toLowerCase()}.`
-														}
-														busy={busy}
-														decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
-													/>
-												)}
-											</details>
-										);
-									}
-									return null;
-								})}
-								{message.metadata?.status === 'step-limit' ? (
-									<div className="step-limit">
-										<p className="muted" role="status">
-											Stopped after reaching the tool step limit.
-										</p>
-										{message === messages.at(-1) && !busy && (
-											<Button variant="outline" onClick={proceed}>
-												Continue
-											</Button>
-										)}
-									</div>
-								) : (
-									message.metadata?.error && (
-										<p className="error" role="status">
-											{message.metadata.status}: {message.metadata.error}
-										</p>
-									)
-								)}
-							</MessageContent>
-							{message.role === 'assistant' && !(streaming && message === messages.at(-1)) && <CopyButton message={message} />}
-						</Message>
+					{messages.map((message, index) => (
+						<MessageView
+							key={message.id}
+							message={message}
+							animating={streaming && index === messages.length - 1}
+							last={index === messages.length - 1}
+							busy={busy}
+							decide={decide}
+							proceed={proceed}
+						/>
 					))}
 					{busy && (
 						<p className="thinking" role="status">
@@ -292,6 +222,108 @@ export function Thread({
 		</>
 	);
 }
+
+type Decide = (approvalId: string, approved: boolean, reason?: string, remember?: string) => Promise<void> | void;
+
+// MessageView renders one message. It is memoized so that streaming a reply re-renders only that reply,
+// not the whole history: the client keeps unchanged messages as the same objects.
+const MessageView = memo(function MessageView({
+	message,
+	animating,
+	last,
+	busy,
+	decide,
+	proceed,
+}: {
+	message: ChatMessage;
+	animating: boolean;
+	last: boolean;
+	busy: boolean;
+	decide: Decide;
+	proceed: () => void;
+}) {
+	return (
+		<Message from={message.role}>
+			<p className="sr-only">{message.role === 'user' ? 'You' : 'Mob'}</p>
+			<MessageContent className={message.role === 'user' ? 'user-bubble' : 'assistant-content'}>
+				{message.parts.map((part, index) => {
+					if (part.type === 'text')
+						return (
+							<MessageResponse key={index} isAnimating={animating}>
+								{part.text}
+							</MessageResponse>
+						);
+					if (part.type === 'reasoning')
+						return (
+							<details className="reasoning" key={index}>
+								<summary>
+									<ChevronIcon /> Reasoning
+								</summary>
+								<p>{part.text}</p>
+							</details>
+						);
+					if (isToolUIPart(part)) {
+						const name = part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5);
+						const state = toolState(part.state);
+						return (
+							<details
+								className={`tool-call ${state.kind}`}
+								key={part.toolCallId}
+								open={state.kind === 'waiting' || state.kind === 'failed'}
+							>
+								<summary onClick={state.kind === 'waiting' ? (e) => e.preventDefault() : undefined}>
+									<span className="tool-status" title={state.label}>
+										{state.icon}
+									</span>
+									<span className="tool-title">{toolTitle(name)}</span>
+									<span className="tool-detail">{toolDetail(part.input)}</span>
+									<span className="sr-only">{state.label}</span>
+									<ChevronIcon />
+								</summary>
+								{part.state !== 'approval-requested' && (
+									<div className="tool-body">
+										<pre>{JSON.stringify(part.input, null, 2)}</pre>
+										{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+										{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
+									</div>
+								)}
+								{part.state === 'approval-requested' && (
+									<ApprovalPrompt
+										question={
+											name === 'remember' ? 'Mob wants to save this to memory.' : `Mob wants to use ${toolTitle(name).toLowerCase()}.`
+										}
+										busy={busy}
+										decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
+									/>
+								)}
+							</details>
+						);
+					}
+					return null;
+				})}
+				{message.metadata?.status === 'step-limit' ? (
+					<div className="step-limit">
+						<p className="muted" role="status">
+							Stopped after reaching the tool step limit.
+						</p>
+						{last && !busy && (
+							<Button variant="outline" onClick={proceed}>
+								Continue
+							</Button>
+						)}
+					</div>
+				) : (
+					message.metadata?.error && (
+						<p className="error" role="status">
+							{message.metadata.status}: {message.metadata.error}
+						</p>
+					)
+				)}
+			</MessageContent>
+			{message.role === 'assistant' && !animating && <CopyButton message={message} />}
+		</Message>
+	);
+});
 
 // toolState turns an AI SDK tool state into what the row shows: running, waiting for approval, done or failed.
 function toolState(state: string): { kind: string; label: string; icon: ReactNode } {

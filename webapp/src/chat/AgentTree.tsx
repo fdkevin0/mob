@@ -509,10 +509,18 @@ export function AgentTree({
 				.catch((e) => alive && setError(errorText(e)));
 		reload.current = () => void load();
 		void load();
-		const timer = setInterval(load, refreshEvery);
+		// A hidden page stops refreshing and catches up when it is shown again.
+		const shown = () => {
+			if (!document.hidden) void load();
+		};
+		document.addEventListener('visibilitychange', shown);
+		const timer = setInterval(() => {
+			if (!document.hidden) void load();
+		}, refreshEvery);
 		return () => {
 			alive = false;
 			clearInterval(timer);
+			document.removeEventListener('visibilitychange', shown);
 		};
 	}, [connection]);
 

@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent, type Connection } from './api';
 import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
-import { Workspace } from './Workspace';
 import { Runners } from './Runners';
 import { Lobby } from './Lobby';
 import { hosts } from './hosts';
+
+// The workspace and its chat renderer load in parallel with signing in, so the lobby and the connect form
+// paint without waiting for them.
+const workspace = import('./Workspace');
+const Workspace = lazy(() => workspace.then((m) => ({ default: m.Workspace })));
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -63,7 +67,7 @@ export function App() {
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
   const open = (next: Connection) => { setConnection(next); setPrompting(false); };
-  if (connection) return <Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { if (!connection.runner) clearToken(); setConnection(undefined); }} />;
+  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { if (!connection.runner) clearToken(); setConnection(undefined); }} /></Suspense>;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.go?.main?.Desktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   const panel = <>

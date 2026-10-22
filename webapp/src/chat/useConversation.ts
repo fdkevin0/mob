@@ -10,6 +10,7 @@ export function useConversation({
 	onBusy,
 	onChanged,
 	onAction,
+	onLeave,
 }: {
 	connection: Connection;
 	id: string;
@@ -17,9 +18,11 @@ export function useConversation({
 	onBusy: (busy: boolean) => void;
 	onChanged: () => void;
 	onAction?: (action: Action) => void;
+	/** onLeave receives what the conversation showed when it closes, so reopening it can show that at once. */
+	onLeave?: (snapshot: Snapshot) => void;
 }) {
-	const callbacks = useRef({ onChanged, onAction });
-	callbacks.current = { onChanged, onAction };
+	const callbacks = useRef({ onChanged, onAction, onLeave });
+	callbacks.current = { onChanged, onAction, onLeave };
 	const conversation = useMemo(
 		() =>
 			new ConversationClient({
@@ -27,13 +30,22 @@ export function useConversation({
 				id,
 				initial,
 				clientType: 'web',
+				// About 20 renders a second keeps streaming smooth without re-rendering on every token.
+				throttleMs: 50,
 				onChanged: () => callbacks.current.onChanged(),
 				onAction: (action) => callbacks.current.onAction?.(action),
 			}),
 		[connection, id],
 	);
 	const state = useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
-	useEffect(conversation.start, [conversation]);
+	useEffect(() => {
+		const stop = conversation.start();
+		return () => {
+			stop();
+			const { messages, model, remoteBusy } = conversation.getSnapshot();
+			callbacks.current.onLeave?.({ messages, model, active: remoteBusy });
+		};
+	}, [conversation]);
 	useEffect(() => {
 		onBusy(state.busy);
 		return () => onBusy(false);
