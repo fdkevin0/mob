@@ -41,6 +41,7 @@ type Store struct {
 	lock *flock.Flock
 	// Changes tells clients what each write changed.
 	Changes Changes
+	expiry  expiryTimers
 }
 
 func NewID() string {
@@ -94,6 +95,10 @@ func OpenStore(path string) (*Store, error) {
 		_ = s.Close()
 		return nil, err
 	}
+	if err := s.scheduleAllExpiries(); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
 	if err := os.Chmod(path, 0600); err != nil {
 		_ = s.Close()
 		return nil, err
@@ -101,7 +106,10 @@ func OpenStore(path string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Close() error { return errors.Join(s.db.Close(), s.lock.Unlock()) }
+func (s *Store) Close() error {
+	s.stopExpiries()
+	return errors.Join(s.db.Close(), s.lock.Unlock())
+}
 
 func (s *Store) Create() (Conversation, error) {
 	c := Conversation{NewID(), "New conversation", time.Now().UnixMilli()}
@@ -302,6 +310,7 @@ func (s *Store) RequestApproval(conversationID string, m Message, callID string,
 	}
 	if err = tx.Commit(); err == nil {
 		s.Changes.conversation(conversationID, false)
+		s.scheduleExpiry(conversationID)
 	}
 	return id, err
 }

@@ -97,18 +97,22 @@ export function Workspace({
 		setNavigation(false);
 		setAgents(false);
 	}
+	// choice counts what was asked to show, so a slow response for an earlier choice is dropped.
+	const choice = useRef(0);
 	async function open(id: string, replace = false) {
+		const ticket = ++choice.current;
 		setError('');
 		// A cached conversation shows at once; its thread reloads the latest messages as it opens.
 		const cached = cache.current.get(id);
 		if (cached) return show(id, cached, replace);
 		setSwitching(true);
 		try {
-			show(id, await load(id), replace);
+			const snapshot = await load(id);
+			if (ticket === choice.current) show(id, snapshot, replace);
 		} catch (e) {
-			setError(errorText(e));
+			if (ticket === choice.current) setError(errorText(e));
 		} finally {
-			setSwitching(false);
+			if (ticket === choice.current) setSwitching(false);
 		}
 	}
 	function act(action: Action) {
@@ -120,16 +124,17 @@ export function Workspace({
 	}
 	// A new conversation opens as soon as the service names it; the list refreshes behind it.
 	async function create(replace = false) {
+		const ticket = ++choice.current;
 		setSwitching(true);
 		try {
 			const next = await api<Conversation>(connection, '/conversations', {});
 			setConversations((list) => [next, ...list.filter((c) => c.id !== next.id)]);
-			show(next.id, { messages: [], active: false, model: '' }, replace);
+			if (ticket === choice.current) show(next.id, { messages: [], active: false, model: '' }, replace);
 			void refreshList().catch((e) => setError(errorText(e)));
 		} catch (e) {
-			setError(errorText(e));
+			if (ticket === choice.current) setError(errorText(e));
 		} finally {
-			setSwitching(false);
+			if (ticket === choice.current) setSwitching(false);
 		}
 	}
 	useEffect(() => {

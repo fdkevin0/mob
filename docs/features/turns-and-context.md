@@ -44,6 +44,9 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   only retries a reload that had to wait for a stream to end. When the stream is
   down, or the service predates it (404), polling resumes. Hidden pages skip
   polling and reload when shown again.
+- A pending approval expires when its hour passes, on a timer the store arms
+  for each conversation's earliest pending approval (and again on start), so
+  clients following changes see the expiry without asking for a snapshot.
   Successful snapshot reconciliation clears transient polling/follow errors,
   but does not dismiss a failed command or approval decision.
   The original Go terminal follows the same service contract independently.

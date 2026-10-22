@@ -524,11 +524,14 @@ export function AgentTree({
 			if (changes?.live) setNow(Date.now());
 			else void load();
 		}, refreshEvery);
-		// A tree shows tasks and their conversations, so any change reloads it, a burst of them once.
+		// A tree shows tasks and their conversations, so any change reloads it: at most once a second, and
+		// never postponed, so continuous activity still refreshes it.
 		let soon: ReturnType<typeof setTimeout> | undefined;
 		const unsubscribe = changes?.subscribe(() => {
-			clearTimeout(soon);
-			soon = setTimeout(() => void load(), 1000);
+			soon ??= setTimeout(() => {
+				soon = undefined;
+				void load();
+			}, 1000);
 		});
 		return () => {
 			alive = false;

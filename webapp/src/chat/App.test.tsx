@@ -390,3 +390,30 @@ it('opens the conversation the address names and returns to cached conversations
   await screen.findByText('reply in two');
   expect(window.location.hash).toBe('#/c/two');
 });
+
+it('keeps the newest back or forward choice when an earlier one answers later', async () => {
+  localStorage.setItem('mob-token', 'current');
+  window.history.replaceState(null, '', '/#/c/three');
+  let releaseTwo!: () => void;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'First' }, { id: 'two', title: 'Second' }, { id: 'three', title: 'Third' }]);
+    const id = url.match(/\/conversations\/(\w+)$/)?.[1];
+    const snapshot = () => Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' });
+    if (id === 'two') return new Promise<Response>(resolve => { releaseTwo = () => resolve(snapshot()); });
+    if (id) return snapshot();
+    return Response.json({});
+  }));
+  render(<App />);
+  await screen.findByText('reply in three');
+  const go = (id: string) => { window.history.replaceState(null, '', `/#/c/${id}`); window.dispatchEvent(new PopStateEvent('popstate')); };
+  go('two');
+  await waitFor(() => expect(releaseTwo).toBeDefined());
+  go('one');
+  await screen.findByText('reply in one');
+  releaseTwo();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(window.location.hash).toBe('#/c/one');
+  expect(screen.queryByText('reply in two')).toBeNull();
+  expect(screen.getByText('reply in one')).toBeTruthy();
+});
