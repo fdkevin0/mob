@@ -29,7 +29,7 @@ a {
 	text-decoration: none;
 }
 ::selection {
-	background: var(--lime);
+	background: var(--brand);
 	color: var(--bg);
 }
 :focus-visible {
@@ -81,7 +81,7 @@ a {
 .btn-primary {
 	background: var(--primary);
 	color: var(--primary-foreground);
-	box-shadow: 3px 3px 0 color-mix(in srgb, var(--lime) 20%, transparent);
+	box-shadow: 3px 3px 0 color-mix(in srgb, var(--brand) 20%, transparent);
 }
 .btn-primary:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--primary) 85%, var(--text));
@@ -92,8 +92,8 @@ a {
 	color: var(--text);
 }
 .btn-outline:hover:not(:disabled) {
-	border-color: var(--lime);
-	color: var(--lime);
+	border-color: var(--brand);
+	color: var(--brand);
 }
 .btn-ghost {
 	background: transparent;
@@ -206,8 +206,8 @@ a {
 	font-size: 12px;
 }
 .ui-tabs-trigger[data-state='active'] {
-	color: var(--lime);
-	border-bottom-color: var(--lime);
+	color: var(--brand);
+	border-bottom-color: var(--brand);
 }
 .ui-menu {
 	z-index: 60;
@@ -237,7 +237,7 @@ a {
 }
 .ui-menu-item[data-highlighted] {
 	background: var(--accent);
-	color: var(--lime);
+	color: var(--brand);
 	outline: none;
 }
 
