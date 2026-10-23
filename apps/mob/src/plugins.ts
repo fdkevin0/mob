@@ -4,3 +4,4 @@ import './sandbox';
 import './mcp';
 import './skills';
 import './schedules';
+import './cloudflare';
