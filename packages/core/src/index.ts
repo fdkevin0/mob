@@ -28,3 +28,4 @@ export * from './app/configuration';
 export * from './app/extension';
 export * from './app/http';
 export * from './app/schedule';
+export { Bridge, ReplyError, useText, type Message as ChannelMessage, type Reply, type Texts, type Use } from './app/channel';
