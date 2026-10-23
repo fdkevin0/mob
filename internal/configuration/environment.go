@@ -86,7 +86,7 @@ const (
 // DefaultWebURL is the public web UI deployed to Cloudflare Workers from this
 // repository (wrangler.jsonc). It connects to loopback Mob or an encrypted runner;
 // the cloud stores account and runner metadata, not conversation content.
-const DefaultWebURL = "https://mob.fdkevin.cloud"
+const DefaultWebURL = "https://usemob.app"
 
 // WebOrigin returns the origin a web_url's pages send, or "" when it is empty.
 // The page must be served over https, or over http from a loopback host while

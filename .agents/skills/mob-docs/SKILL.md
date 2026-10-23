@@ -28,7 +28,7 @@ Paths below are relative to this skill. Read only what the task needs.
 
 ## Editing and organizing
 
-The repository's Markdown is also published at https://mob.fdkevin.cloud/docs.
+The repository's Markdown is also published at https://usemob.app/docs.
 Write relative links between files as usual; a new page under `docs/` needs an
 entry in [apps/docs/pages.ts](../../../apps/docs/pages.ts).
 
