@@ -2,3 +2,4 @@
 import './sandbox';
 import './skills';
 import './schedules';
+import './mcp';
