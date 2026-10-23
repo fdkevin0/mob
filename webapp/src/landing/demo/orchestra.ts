@@ -188,6 +188,7 @@ export function view(run: Run, task: Task): View | undefined {
 	const spent = task.waits && run.decided !== undefined ? (task.waits.at - task.start) + (until - run.decided) : Math.min(until, task.waits?.at ?? Infinity) - task.start;
 	const fraction = status === 'review' ? 1 : Math.min(0.95, Math.max(0, spent / length));
 	const log = task.log
+		.filter(l => !l.failed || failed(run, byId.get(l.failed)!))
 		.filter(l => l.after ? run.decision !== undefined && (l.after === 'deny') === (run.decision === 'deny') && run.decided! + l.at <= upTo : task.start + l.at <= upTo)
 		.map(l => l.text);
 	if (stopped) log.push('Stopped by you; its branch stays');

@@ -66,6 +66,7 @@ it('does not retry a task stopped before it failed, and says part was stopped', 
 	const end = at(done, reported(done));
 	expect(view(end, byId('t7'))).toBeUndefined();
 	expect(status(end, 't2')).toBe('review');
+	expect(view(end, byId('t2'))!.log).not.toContain('Merged the fix into retry-t2');
 	expect(report(end, 0).results).toEqual(['50 of 50 runs pass', 'Partly stopped, not checked']);
 });
 
