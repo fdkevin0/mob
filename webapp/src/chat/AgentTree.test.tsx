@@ -156,3 +156,32 @@ it('keeps an instruction that failed to send, and approves only what it shows wh
 	await screen.findByText(/still starting/);
 	expect((screen.getByLabelText('Instruction for the agent') as HTMLInputElement).value).toBe('fix the flaky test');
 });
+
+it('keeps refreshing while changes arrive faster than a second apart', async () => {
+	vi.useFakeTimers();
+	try {
+		const reads: number[] = [];
+		vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+			if (url.endsWith('/tasks')) reads.push(Date.now());
+			return Response.json(nodes);
+		}));
+		let emit!: () => void;
+		const changes = {
+			live: true,
+			subscribe: (listener: (change: { seq: number; conversation: string }) => void) => {
+				emit = () => listener({ seq: 1, conversation: 'c-build' });
+				return () => {};
+			},
+		} as unknown as import('@mob/client').Changes;
+		render(<AgentTree connection={{ url: 'http://localhost', token: 't' }} changes={changes} open={() => {}} close={() => {}} />);
+		await vi.advanceTimersByTimeAsync(10);
+		const first = reads.length;
+		for (let i = 0; i < 20; i++) {
+			emit();
+			await vi.advanceTimersByTimeAsync(500);
+		}
+		expect(reads.length - first).toBeGreaterThanOrEqual(9);
+	} finally {
+		vi.useRealTimers();
+	}
+});

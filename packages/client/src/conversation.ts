@@ -1,6 +1,7 @@
 import { Chat } from '@ai-sdk/react';
 import { DefaultChatTransport, generateId, readUIMessageStream } from 'ai';
 import { MobClient, type ChatMessage, type ClientType, type Snapshot } from './api';
+import type { Changes } from './changes';
 import type { Action, CommandResult } from './contracts';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -40,6 +41,8 @@ export class ConversationClient {
 	private approvalController?: AbortController;
 	private followController?: AbortController;
 	private inputRevision = 0;
+	// stale is set when history may have changed but could not be reloaded yet; the next tick reloads it.
+	private stale = false;
 	private pendingSend?: { requestId: string; text: string; inputRevision: number; settled: boolean; uncertain: boolean };
 
 	constructor(
@@ -50,6 +53,10 @@ export class ConversationClient {
 			clientType: ClientType;
 			onAction?: (action: Action) => void;
 			onChanged?: () => void;
+			/** throttleMs limits how often streamed text updates subscribers, so a UI renders at most once per interval. */
+			throttleMs?: number;
+			/** changes, while live, replaces polling: the conversation reloads when the service says it changed. */
+			changes?: Changes;
 		},
 	) {
 		const { client, id, initial } = options;
@@ -110,17 +117,29 @@ export class ConversationClient {
 	start = () => {
 		this.active = true;
 		this.unsubscribes = [
-			this.chat['~registerMessagesCallback'](this.publishChat),
+			this.chat['~registerMessagesCallback'](this.publishChat, this.options.throttleMs),
 			this.chat['~registerStatusCallback'](this.publishChat),
 			this.chat['~registerErrorCallback'](this.publishChat),
 		];
 		this.publishChat();
 		void this.reload();
 		this.options.onChanged?.();
+		// A hidden page skips polling and catches up as soon as it is shown again.
+		const hidden = () => typeof document !== 'undefined' && document.hidden;
+		const shown = () => {
+			if (!hidden()) void this.reload();
+		};
+		if (typeof document !== 'undefined') document.addEventListener('visibilitychange', shown);
+		// While the change stream is live, ticks only retry a reload that had to wait.
 		this.timer = setInterval(() => {
-			void this.reload();
+			if (!hidden() && (this.stale || !this.options.changes?.live)) void this.reload();
 		}, pollInterval);
+		const unsubscribe = this.options.changes?.subscribe((change) => {
+			if (change === 'reset' || change.conversation === this.options.id) void this.reload();
+		});
 		return () => {
+			unsubscribe?.();
+			if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', shown);
 			this.active = false;
 			this.generation++;
 			clearInterval(this.timer);
@@ -162,8 +181,11 @@ export class ConversationClient {
 			this.following ||
 			this.running ||
 			(this.pendingSend && !this.pendingSend.settled)
-		)
+		) {
+			this.stale = true;
 			return;
+		}
+		this.stale = false;
 		const generation = this.generation;
 		const sequence = ++this.reloadSequence;
 		try {
@@ -177,8 +199,10 @@ export class ConversationClient {
 				this.following ||
 				this.running ||
 				(this.pendingSend && !this.pendingSend.settled)
-			)
+			) {
+				this.stale = true;
 				return;
+			}
 			this.publishedReloadSequence = sequence;
 			const pending = this.pendingSend;
 			if (pending) {
@@ -198,7 +222,8 @@ export class ConversationClient {
 					});
 				}
 			}
-			this.chat.messages = snapshot.messages;
+			const messages = reuseMessages(this.chat.messages, snapshot.messages);
+			if (messages !== this.chat.messages) this.chat.messages = messages;
 			this.update({
 				model: snapshot.model,
 				remoteBusy: snapshot.active,
@@ -207,6 +232,7 @@ export class ConversationClient {
 			this.recoveryFailure = '';
 			if (snapshot.active) void this.follow(snapshot.messages);
 		} catch (e) {
+			this.stale = true;
 			if (
 				this.active &&
 				generation === this.generation &&
@@ -235,7 +261,12 @@ export class ConversationClient {
 
 	// Replays start from fresh state: never append replayed deltas to a draft.
 	private async follow(baseline: ChatMessage[]) {
-		if (this.followController || !this.active || Date.now() < this.followRetry) return;
+		if (this.followController || !this.active) return;
+		// A follow that failed waits a tick before trying again.
+		if (Date.now() < this.followRetry) {
+			this.stale = true;
+			return;
+		}
 		const controller = new AbortController();
 		this.followController = controller;
 		this.following = true;
@@ -263,6 +294,7 @@ export class ConversationClient {
 		} finally {
 			this.followController = undefined;
 			this.following = false;
+			this.stale = true;
 			this.update(completed ? { remoteBusy: false } : {});
 			// The next poll reconciles persisted history. Do not loop on a stale
 			// active snapshot followed by 204, or replace the just-replayed reply.
@@ -385,4 +417,18 @@ export class ConversationClient {
 			}
 		}
 	};
+}
+
+// reuseMessages keeps each message object that a reload left unchanged, so a UI that memoizes
+// messages by identity only renders what changed; it returns current itself when nothing did.
+export function reuseMessages(current: ChatMessage[], next: ChatMessage[]): ChatMessage[] {
+	const byId = new Map(current.map((m) => [m.id, m]));
+	let changed = current.length !== next.length;
+	const merged = next.map((message, index) => {
+		const previous = byId.get(message.id);
+		const kept = previous && JSON.stringify(previous) === JSON.stringify(message) ? previous : message;
+		if (kept !== current[index]) changed = true;
+		return kept;
+	});
+	return changed ? merged : current;
 }

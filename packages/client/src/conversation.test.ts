@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { ConversationClient, MobClient, type Snapshot } from './index';
+import { Changes, ConversationClient, MobClient, type Snapshot } from './index';
 
 const initial: Snapshot = { messages: [], active: false, model: 'demo/echo' };
 const connection = { url: 'http://localhost', token: 'first-token' };
@@ -571,4 +571,63 @@ it('keeps text typed while the service is down', async () => {
 	session.setInput('Newer draft');
 	await vi.advanceTimersByTimeAsync(4000);
 	expect(session.getSnapshot().input).toBe('Newer draft');
+});
+
+it('keeps unchanged messages as the same objects across reloads', async () => {
+	const { reuseMessages } = await import('./conversation');
+	const one = { id: 'one', role: 'user' as const, parts: [{ type: 'text' as const, text: 'hi' }] };
+	const two = { id: 'two', role: 'assistant' as const, parts: [{ type: 'text' as const, text: 'hello' }] };
+	const current = [one, two];
+	expect(reuseMessages(current, structuredClone(current))).toBe(current);
+	const edited = { ...two, parts: [{ type: 'text' as const, text: 'hello there' }] };
+	const next = reuseMessages(current, [structuredClone(one), edited]);
+	expect(next).not.toBe(current);
+	expect(next[0]).toBe(one);
+	expect(next[1]).toBe(edited);
+});
+
+it('reloads on changes instead of polling while the change stream is live, and polls again when it drops', async () => {
+	vi.useFakeTimers();
+	let push!: (text: string) => void;
+	let end!: () => void;
+	const reads: string[] = [];
+	const client = new MobClient(connection, {
+		fetch: async (input) => {
+			const url = String(input);
+			if (url.endsWith('/api/events')) {
+				const body = new ReadableStream<Uint8Array>({
+					start(controller) {
+						const encoder = new TextEncoder();
+						push = (text) => controller.enqueue(encoder.encode(text));
+						end = () => controller.close();
+					},
+				});
+				return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+			}
+			reads.push(url);
+			return Response.json(initial);
+		},
+	});
+	const changes = new Changes(client);
+	cleanups.push(changes.start());
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web', changes });
+	cleanups.push(session.start());
+	await vi.advanceTimersByTimeAsync(10);
+	push('retry: 2000\n: ready\n\n');
+	await vi.advanceTimersByTimeAsync(10);
+	expect(changes.live).toBe(true);
+	const settled = reads.length;
+	await vi.advanceTimersByTimeAsync(6000);
+	expect(reads.length).toBe(settled);
+	push('data: {"seq":1,"conversation":"other"}\n\n');
+	push('data: {"seq":2,"conversation":"one"}\n\n');
+	await vi.advanceTimersByTimeAsync(10);
+	expect(reads.length).toBe(settled + 1);
+	end();
+	await vi.advanceTimersByTimeAsync(10);
+	expect(changes.live).toBe(false);
+	// The drop itself reloads once, then polling resumes.
+	const dropped = reads.length;
+	await vi.advanceTimersByTimeAsync(4100);
+	expect(reads.length).toBeGreaterThanOrEqual(dropped + 2);
 });

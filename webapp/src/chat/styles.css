@@ -240,6 +240,11 @@
 	min-height: 100%;
 	gap: 28px;
 }
+/* The browser skips layout and paint for messages scrolled out of view, so long conversations stay smooth. */
+.conversation-content > .group:not(:nth-last-child(-n + 3)) {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 120px;
+}
 .conversation-content [data-streamdown] {
 	line-height: 1.75;
 	font-size: 15px;

@@ -54,13 +54,13 @@ it('signs in once with the link mob open prints and keeps the token across visit
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
     if (url.endsWith('/pairing/claim')) { claims++; expect(JSON.parse(String(options?.body))).toEqual({ code: 'code-1' }); return Response.json({ token: 'paired' }); }
     if (url.endsWith('/runtime')) return Response.json({ background: false });
-    if (url.endsWith('/conversations')) return Response.json([]);
+    if (url.endsWith('/conversations')) return Response.json(options?.method === 'POST' ? { id: 'new', title: 'New conversation' } : []);
     return Response.json({ messages: [], active: false, model: 'demo/echo' });
   });
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
   await screen.findByRole('button', { name: /disconnect/i });
-  expect(window.location.hash).toBe('');
+  expect(window.location.hash).toBe('#/c/new');
   expect(localStorage.getItem('mob-token')).toBe('paired');
   const authorized = fetchMock.mock.calls.filter(([url]) => !url.endsWith('/pairing/claim'));
   expect(authorized.every(([, options]) => new Headers(options?.headers).get('Authorization') === 'Bearer paired')).toBe(true);
@@ -150,14 +150,14 @@ it('signs the public web in to local Mob with a mob open --web link and remember
     expect(url.startsWith('http://127.0.0.1:9000/api/')).toBe(true);
     if (url.endsWith('/pairing/claim')) { expect(JSON.parse(String(options?.body))).toEqual({ code: 'code-1' }); return Response.json({ token: 'paired' }); }
     if (url.endsWith('/runtime')) return Response.json({ background: false });
-    if (url.endsWith('/conversations')) return Response.json([]);
+    if (url.endsWith('/conversations')) return Response.json(options?.method === 'POST' ? { id: 'new', title: 'New conversation' } : []);
     return Response.json({ messages: [], active: false, model: 'demo/echo' });
   });
   vi.stubGlobal('fetch', fetchMock);
   try {
     render(<App />);
     await screen.findByRole('button', { name: /disconnect/i });
-    expect(window.location.hash).toBe('');
+    expect(window.location.hash).toBe('#/c/new');
     expect(localStorage.getItem('mob-url')).toBe('http://127.0.0.1:9000');
     cleanup();
     render(<App />);
@@ -364,4 +364,56 @@ it('keeps Token usage closed while a submitted command is dispatched, so the com
   expect(screen.queryByRole('heading', { name: 'Usage' })).toBeNull();
   answer(Response.json({ handled: false }));
   await waitFor(() => expect(chat).toBeDefined());
+});
+
+it('opens the conversation the address names and returns to cached conversations at once', async () => {
+  localStorage.setItem('mob-token', 'current');
+  window.history.replaceState(null, '', '/#/c/two');
+  let hold = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'First' }, { id: 'two', title: 'Second' }]);
+    const id = url.match(/\/conversations\/(\w+)$/)?.[1];
+    if (id === 'two' && hold) return new Promise<Response>(() => {});
+    if (id) { return Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' }); }
+    return Response.json({});
+  }));
+  render(<App />);
+  await screen.findByText('reply in two');
+  expect(window.location.hash).toBe('#/c/two');
+  screen.getByRole('button', { name: 'First' }).click();
+  await screen.findByText('reply in one');
+  expect(window.location.hash).toBe('#/c/one');
+  // The cached conversation shows although its refresh never returns.
+  hold = true;
+  window.history.back();
+  await screen.findByText('reply in two');
+  expect(window.location.hash).toBe('#/c/two');
+});
+
+it('keeps the newest back or forward choice when an earlier one answers later', async () => {
+  localStorage.setItem('mob-token', 'current');
+  window.history.replaceState(null, '', '/#/c/three');
+  let releaseTwo!: () => void;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'First' }, { id: 'two', title: 'Second' }, { id: 'three', title: 'Third' }]);
+    const id = url.match(/\/conversations\/(\w+)$/)?.[1];
+    const snapshot = () => Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' });
+    if (id === 'two') return new Promise<Response>(resolve => { releaseTwo = () => resolve(snapshot()); });
+    if (id) return snapshot();
+    return Response.json({});
+  }));
+  render(<App />);
+  await screen.findByText('reply in three');
+  const go = (id: string) => { window.history.replaceState(null, '', `/#/c/${id}`); window.dispatchEvent(new PopStateEvent('popstate')); };
+  go('two');
+  await waitFor(() => expect(releaseTwo).toBeDefined());
+  go('one');
+  await screen.findByText('reply in one');
+  releaseTwo();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(window.location.hash).toBe('#/c/one');
+  expect(screen.queryByText('reply in two')).toBeNull();
+  expect(screen.getByText('reply in one')).toBeTruthy();
 });

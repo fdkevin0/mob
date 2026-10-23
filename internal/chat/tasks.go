@@ -70,7 +70,11 @@ func (s *Store) CreateTask(t *Task) error {
 	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,'',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, t.Parent, now, now); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err == nil {
+		s.Changes.conversation(t.ConversationID, true)
+		s.Changes.tasks()
+	}
+	return err
 }
 
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
@@ -115,6 +119,9 @@ func (s *Store) Tasks(project string) ([]Task, error) {
 // SetTaskStatus records what task id is doing.
 func (s *Store) SetTaskStatus(id, status string) error {
 	_, err := s.db.Exec("UPDATE tasks SET status=?,updated_at=? WHERE id=?", status, time.Now().UnixMilli(), id)
+	if err == nil {
+		s.Changes.tasks()
+	}
 	return err
 }
 
@@ -122,6 +129,9 @@ func (s *Store) SetTaskStatus(id, status string) error {
 // starts and no agent runs.
 func (s *Store) StopTasks() error {
 	_, err := s.db.Exec("UPDATE tasks SET status=? WHERE status IN (?,?)", TaskStopped, TaskRunning, TaskWaiting)
+	if err == nil {
+		s.Changes.tasks()
+	}
 	return err
 }
 
@@ -133,12 +143,18 @@ func (s *Store) Say(conversationID, text string) error {
 		return err
 	}
 	_, err = s.db.Exec("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", NewID(), conversationID, string(raw))
+	if err == nil {
+		s.Changes.conversation(conversationID, false)
+	}
 	return err
 }
 
 // SetTaskSession records the agent's session for task id.
 func (s *Store) SetTaskSession(id, session string) error {
 	_, err := s.db.Exec("UPDATE tasks SET session=?,updated_at=? WHERE id=?", session, time.Now().UnixMilli(), id)
+	if err == nil {
+		s.Changes.tasks()
+	}
 	return err
 }
 
@@ -149,6 +165,9 @@ func (s *Store) SetTaskPlan(id string, plan []PlanEntry) error {
 		return err
 	}
 	_, err = s.db.Exec("UPDATE tasks SET plan=?,updated_at=? WHERE id=?", string(raw), time.Now().UnixMilli(), id)
+	if err == nil {
+		s.Changes.tasks()
+	}
 	return err
 }
 

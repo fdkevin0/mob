@@ -35,6 +35,18 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   failures both advance this publication order. A later read that is merely
   pending does not block a completed result, so reads slower than the polling
   interval still update history and model rather than silently starving.
+- `GET /api/events` streams what each store write changed as SSE `data:` lines
+  (`{"seq","conversation","list","tasks"}`), with a heartbeat comment every 25
+  seconds. It keeps no history: a client reloads what it shows each time the
+  stream connects, and a subscriber more than 256 changes behind is dropped and
+  reconnects. While it is live, the web UI reloads a conversation, the list or
+  the agent tree only when they changed, instead of polling; a two-second tick
+  only retries a reload that had to wait for a stream to end. When the stream is
+  down, or the service predates it (404), polling resumes. Hidden pages skip
+  polling and reload when shown again.
+- A pending approval expires when its hour passes, on a timer the store arms
+  for each conversation's earliest pending approval (and again on start), so
+  clients following changes see the expiry without asking for a snapshot.
   Successful snapshot reconciliation clears transient polling/follow errors,
   but does not dismiss a failed command or approval decision.
   The original Go terminal follows the same service contract independently.

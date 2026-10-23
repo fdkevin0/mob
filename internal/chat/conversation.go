@@ -164,12 +164,15 @@ func (s *ConversationService) execute(parent context.Context, input ChatRequest,
 	s.active[input.ID] = run
 	s.wg.Add(1)
 	s.mu.Unlock()
+	// Whether a turn runs is part of what clients show.
+	s.Store.Changes.conversation(input.ID, false)
 	defer func() {
 		cancel()
 		run.finish(err)
 		s.mu.Lock()
 		delete(s.active, input.ID)
 		s.mu.Unlock()
+		s.Store.Changes.conversation(input.ID, false)
 		s.wg.Done()
 	}()
 	if admitted != nil {

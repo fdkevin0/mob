@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -55,10 +56,13 @@ type Server struct {
 	access access
 	// webOrigin is the public web UI's origin, which may call the API with a token.
 	webOrigin atomic.Value
+	// closed closes with the server, ending streams that would otherwise stay open.
+	closed    chan struct{}
+	closeOnce sync.Once
 }
 
 func NewServer(store *chat.Store, providers *provider.Registry, token string) *Server {
-	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}}
+	s := &Server{Configuration: &configuration.Service{Store: store}, Providers: providers, ConversationService: chat.NewConversation(store, providers), access: access{token: token, revoked: make(chan struct{})}, closed: make(chan struct{})}
 	s.MCP = &mcp.Hub{Transport: func() http.RoundTripper { return s.HTTPTransport }, Settings: store, Changed: func() error { return s.extensions.Reload("mcp") }}
 	s.Skills = &skills.Library{Workspace: func(conversationID string) (string, error) {
 		if box := s.box.Load(); box != nil {
@@ -77,6 +81,11 @@ func NewServer(store *chat.Store, providers *provider.Registry, token string) *S
 func (s *Server) defaultModel() (llm.Model, error) { return s.Providers.Resolve(s.Providers.Default()) }
 
 func (s *Server) Close() {
+	s.closeOnce.Do(func() {
+		if s.closed != nil {
+			close(s.closed)
+		}
+	})
 	s.closePlugins()
 	s.ConversationService.Close()
 	s.Agents.Close()
@@ -173,6 +182,7 @@ func (s *Server) Handler(assets fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/commands/run", s.runCommand)
 	mux.HandleFunc("POST /api/chat", s.chat)
 	mux.HandleFunc("GET /api/chat/{id}/stream", s.resume)
+	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("POST /api/pairing", s.pair)
 	mux.HandleFunc("POST /api/pairing/claim", s.claim)
 	mux.HandleFunc("POST /api/token/rotate", s.rotate)

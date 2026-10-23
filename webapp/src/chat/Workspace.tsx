@@ -1,16 +1,34 @@
-import { useEffect, useState } from 'react';
-import { api, isPublicWeb, type Connection, type Conversation, type Snapshot } from './api';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Changes } from '@mob/client';
+import { api, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
-import { AgentTree } from './AgentTree';
-import { Plugins } from './Plugins';
-import { Usage } from './Usage';
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+// Panels load on first use, so the chat opens without their code.
+const AgentTree = lazy(() => import('./AgentTree').then((m) => ({ default: m.AgentTree })));
+const Plugins = lazy(() => import('./Plugins').then((m) => ({ default: m.Plugins })));
+const Usage = lazy(() => import('./Usage').then((m) => ({ default: m.Usage })));
+const panel = <div className="loading" role="status">Loading…</div>;
+
+// The address names the open conversation, as #/c/<id>, so reloading or going back returns to it.
+const routePrefix = '#/c/';
+function routedID() {
+	return window.location.hash.startsWith(routePrefix) ? decodeURIComponent(window.location.hash.slice(routePrefix.length)) : undefined;
+}
+function route(id: string, replace: boolean) {
+	const hash = routePrefix + encodeURIComponent(id);
+	if (window.location.hash === hash) return;
+	if (replace) window.history.replaceState(window.history.state, '', hash);
+	else window.history.pushState(window.history.state, '', hash);
+}
+// Recently opened conversations are kept in memory, so switching back shows them at once while they refresh.
+const cacheSize = 20;
 
 export function Workspace({
 	connection,
@@ -34,21 +52,67 @@ export function Workspace({
 	const [switching, setSwitching] = useState(false);
 	const [background, setBackground] = useState(false);
 
+	// The service says what changed, so the list and the open views reload only then.
+	const changes = useMemo(() => new Changes(webClient(connection)), [connection]);
+	useEffect(changes.start, [changes]);
+	useEffect(() => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const unsubscribe = changes.subscribe((change) => {
+			if (change !== 'reset' && !change.list) return;
+			clearTimeout(timer);
+			timer = setTimeout(() => void refreshList().catch(() => { /* the next change or action refreshes it */ }), 200);
+		});
+		return () => {
+			unsubscribe();
+			clearTimeout(timer);
+		};
+	}, [changes]);
+	const cache = useRef(new Map<string, Snapshot>());
+	const remember = (id: string, snapshot: Snapshot) => {
+		cache.current.delete(id);
+		cache.current.set(id, snapshot);
+		if (cache.current.size > cacheSize) cache.current.delete(cache.current.keys().next().value!);
+	};
+	const fetching = useRef(new Map<string, Promise<Snapshot>>());
+	function load(id: string) {
+		let request = fetching.current.get(id);
+		if (!request) {
+			request = api<Snapshot>(connection, `/conversations/${id}`).finally(() => fetching.current.delete(id));
+			fetching.current.set(id, request);
+		}
+		return request;
+	}
+	// prefetch loads a conversation the pointer or focus is on, so opening it does not wait.
+	function prefetch(id: string) {
+		if (cache.current.has(id) || id === selected?.id) return;
+		load(id).then((snapshot) => remember(id, snapshot)).catch(() => { /* opening it reports the failure */ });
+	}
+
 	async function refreshList() {
 		setConversations(await api(connection, '/conversations'));
 	}
-	async function open(id: string) {
-		setSwitching(true);
+	function show(id: string, snapshot: Snapshot, replace = false) {
+		setSelected({ id, snapshot });
+		route(id, replace);
+		setNavigation(false);
+		setAgents(false);
+	}
+	// choice counts what was asked to show, so a slow response for an earlier choice is dropped.
+	const choice = useRef(0);
+	async function open(id: string, replace = false) {
+		const ticket = ++choice.current;
 		setError('');
+		// A cached conversation shows at once; its thread reloads the latest messages as it opens.
+		const cached = cache.current.get(id);
+		if (cached) return show(id, cached, replace);
+		setSwitching(true);
 		try {
-			const snapshot = await api<Snapshot>(connection, `/conversations/${id}`);
-			setSelected({ id, snapshot });
-			setNavigation(false);
-			setAgents(false);
+			const snapshot = await load(id);
+			if (ticket === choice.current) show(id, snapshot, replace);
 		} catch (e) {
-			setError(errorText(e));
+			if (ticket === choice.current) setError(errorText(e));
 		} finally {
-			setSwitching(false);
+			if (ticket === choice.current) setSwitching(false);
 		}
 	}
 	function act(action: Action) {
@@ -58,16 +122,19 @@ export function Workspace({
 				.catch((e) => setError(errorText(e)));
 		else if (action.kind === 'open-plugins' || action.kind === 'compose-mail') setPlugins(true);
 	}
-	async function create() {
+	// A new conversation opens as soon as the service names it; the list refreshes behind it.
+	async function create(replace = false) {
+		const ticket = ++choice.current;
 		setSwitching(true);
 		try {
 			const next = await api<Conversation>(connection, '/conversations', {});
-			await refreshList();
-			await open(next.id);
+			setConversations((list) => [next, ...list.filter((c) => c.id !== next.id)]);
+			if (ticket === choice.current) show(next.id, { messages: [], active: false, model: '' }, replace);
+			void refreshList().catch((e) => setError(errorText(e)));
 		} catch (e) {
-			setError(errorText(e));
+			if (ticket === choice.current) setError(errorText(e));
 		} finally {
-			setSwitching(false);
+			if (ticket === choice.current) setSwitching(false);
 		}
 	}
 	useEffect(() => {
@@ -82,8 +149,9 @@ export function Workspace({
 				setConversations(list);
 				setBackground(runtime.background);
 				// A draft typed before connecting starts a new conversation, as the lobby showed.
-				if (list.length && !draft) await open(list[0].id);
-				else await create();
+				const routed = routedID();
+				if (draft || !list.length) await create(true);
+				else await open(routed && list.some((c) => c.id === routed) ? routed : list[0].id, true);
 			} catch (e) {
 				if (live) setError(errorText(e));
 			}
@@ -92,6 +160,19 @@ export function Workspace({
 			live = false;
 		};
 	}, [connection]);
+	// Back and forward move between the conversations the address named.
+	const opener = useRef(open);
+	opener.current = open;
+	const current = useRef(selected?.id);
+	current.current = selected?.id;
+	useEffect(() => {
+		const follow = () => {
+			const id = routedID();
+			if (id && id !== current.current) void opener.current(id, true);
+		};
+		window.addEventListener('popstate', follow);
+		return () => window.removeEventListener('popstate', follow);
+	}, []);
 
 	const links = (
 		<>
@@ -107,6 +188,8 @@ export function Workspace({
 						aria-current={selected?.id === c.id ? 'page' : undefined}
 						disabled={busy || switching}
 						onClick={() => void open(c.id)}
+						onPointerEnter={() => prefetch(c.id)}
+						onFocus={() => prefetch(c.id)}
 					>
 						{c.title}
 					</Button>
@@ -168,19 +251,26 @@ export function Workspace({
 		</>
 	);
 
-	if (plugins) return <Plugins connection={connection} close={() => setPlugins(false)} />;
+	if (plugins)
+		return (
+			<Suspense fallback={panel}>
+				<Plugins connection={connection} close={() => setPlugins(false)} />
+			</Suspense>
+		);
 	if (usage)
 		return (
-			<Usage
-				connection={connection}
-				close={() => setUsage(false)}
-				open={(id) => {
-					setUsage(false);
-					void refreshList()
-						.then(() => open(id))
-						.catch((e) => setError(errorText(e)));
-				}}
-			/>
+			<Suspense fallback={panel}>
+				<Usage
+					connection={connection}
+					close={() => setUsage(false)}
+					open={(id) => {
+						setUsage(false);
+						void refreshList()
+							.then(() => open(id))
+							.catch((e) => setError(errorText(e)));
+					}}
+				/>
+			</Suspense>
 		);
 	return (
 		<div className="workspace">
@@ -218,11 +308,14 @@ export function Workspace({
 					</div>
 				)}
 				{agents ? (
-					<AgentTree
-						connection={connection}
-						open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
-						close={() => setAgents(false)}
-					/>
+					<Suspense fallback={panel}>
+						<AgentTree
+							connection={connection}
+							changes={changes}
+							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
+							close={() => setAgents(false)}
+						/>
+					</Suspense>
 				) : selected ? (
 					<Thread
 						key={selected.id}
@@ -231,6 +324,8 @@ export function Workspace({
 						initial={selected.snapshot}
 						title={conversations.find((c) => c.id === selected.id)?.title}
 						onBusy={setBusy}
+						onLeave={(snapshot) => remember(selected.id, snapshot)}
+						changes={changes}
 						onChanged={() => {
 							void refreshList().catch((e) => setError(errorText(e)));
 						}}
