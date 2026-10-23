@@ -78,8 +78,9 @@ const reviewPrompt = "Automatic task update from Mob, not written by the owner: 
 // reviewed reviewLimit times, or a busy conversation; the owner then gets the
 // agent's own words.
 func (s *Service) review(t chat.Task) bool {
-	// A task another task started is that agent's to check.
-	if t.Parent == "" || s.Owns(t.Parent) {
+	// A task another task started is that agent's to check, and a reader
+	// changed nothing to check.
+	if t.Parent == "" || s.Owns(t.Parent) || t.ReadOnly {
 		return false
 	}
 	s.mu.Lock()

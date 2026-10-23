@@ -66,7 +66,9 @@ Owner-only tools:
   approve, then creates the worktree and task and hands the prompt to the
   agent in a turn that runs on its own. Always allow covers the same project
   and agent. Its prompt tells the model to hand coding work to agents rather
-  than do it itself.
+  than do it itself. With `share` (a task's ID) the agent instead works
+  read-only in that task's worktree and branch (see Readers below); Always
+  allow then covers only that task.
 - `tasks` lists the projects and tasks with status, branch, plan, the end of
   each task's latest reply and what its agent used (see Usage below).
 - `task_message` passes instructions to a task's agent. While the agent is
@@ -185,6 +187,10 @@ take no HTTP servers start no sub-tasks. Its tools:
   the task's conversation as its parent, and the call shows the sub-task's ID
   and branch in the next turn. At most 3 sub-tasks of one task run, wait or are
   starting at once, and 10 in all, checked again when the owner approves.
+- With `workspace: shared`, the sub-task is a reader of the task's own
+  worktree instead (see Readers below), asked as "Start a read-only
+  sub-task"; with no agent named, the task's own, or Codex when the task's
+  agent cannot read.
 - `tasks` lists the task's sub-tasks: status, agent, title, branch, what they
   used and the end of their latest reply.
 - `task_message` and `task_stop` instruct or stop one of them; another
@@ -192,6 +198,19 @@ take no HTTP servers start no sub-tasks. Its tools:
 
 The agent may also ask its own permission to call these tools, as for any
 other MCP tool; that is an approval like any other.
+
+## Readers
+
+A read-only task (`readOnly`, `tasks.read_only`) works in another task's
+worktree and branch, seeing its uncommitted changes, without changing them,
+such as to review it. It gets no worktree or branch of its own, lends its
+worktree to no one, is never reviewed by Mob's model (it changed nothing),
+and its card on the Agents page says Read-only. Its agent starts in the
+preset's read-only mode: Codex's `read-only`, Claude Agent's and CodeBuddy
+Code's `default`, in which they ask before editing; a session that does not
+offer that mode fails to start. Mob refuses every edit, delete or move it asks
+for without asking the owner, even inside the worktree; its commands are
+approvals as usual. DeepSeek Harness has no such mode and cannot be a reader.
 
 ## Summaries
 

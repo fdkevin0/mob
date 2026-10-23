@@ -255,7 +255,43 @@ func (s *Service) StartTask(ctx context.Context, parent, project, agent, title, 
 	if err != nil {
 		return chat.Task{}, err
 	}
-	t := chat.Task{Project: p.Name, Agent: a.Name, Title: title, Worktree: dir, Branch: branch, Status: chat.TaskRunning, Parent: parent}
+	return s.launch(chat.Task{Project: p.Name, Agent: a.Name, Title: title, Worktree: dir, Branch: branch, Status: chat.TaskRunning, Parent: parent}, prompt)
+}
+
+// StartReader starts a read-only task in the worktree and branch of task
+// base, such as to review its work, and hands prompt to the agent. parent
+// is the conversation that started it.
+func (s *Service) StartReader(parent string, base chat.Task, agent, title, prompt string) (chat.Task, error) {
+	a, err := preset(agent)
+	if err != nil {
+		return chat.Task{}, err
+	}
+	if a.ReadOnly == "" {
+		return chat.Task{}, fmt.Errorf("%s cannot work read-only; use %s", a.Title, strings.Join(readers(), " or "))
+	}
+	if base.ReadOnly {
+		return chat.Task{}, errors.New("a read-only task's worktree is another task's; share that task's instead")
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = firstLine(prompt, 60)
+	}
+	return s.launch(chat.Task{Project: base.Project, Agent: a.Name, Title: title, Worktree: base.Worktree, Branch: base.Branch, Status: chat.TaskRunning, Parent: parent, ReadOnly: true}, prompt)
+}
+
+// readers names the agents that can work read-only.
+func readers() []string {
+	var names []string
+	for _, p := range Presets {
+		if p.ReadOnly != "" {
+			names = append(names, p.Name)
+		}
+	}
+	return names
+}
+
+// launch saves task t and hands prompt to its agent.
+func (s *Service) launch(t chat.Task, prompt string) (chat.Task, error) {
 	if err := s.Store.CreateTask(&t); err != nil {
 		return chat.Task{}, err
 	}

@@ -135,6 +135,8 @@ type startInput struct {
 	Title  string `json:"title" jsonschema:"A short title for the sub-task"`
 	Prompt string `json:"prompt" jsonschema:"What the sub-task's agent should do, with everything it needs to know"`
 	Agent  string `json:"agent,omitempty" jsonschema:"The coding agent to use, such as codex or claude; yours when empty"`
+	// Workspace is new, or shared to read the asking task's worktree.
+	Workspace string `json:"workspace,omitempty" jsonschema:"new (default): a new worktree and branch; shared: work read-only in your worktree and branch, seeing your uncommitted changes, such as to review your work. A shared sub-task's edits are refused."`
 }
 
 type taskInput struct {
@@ -151,7 +153,7 @@ func (s *Service) subtaskServer(id string) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: mcpName, Version: version.Current}, &mcp.ServerOptions{
 		Instructions: "Mob runs this coding task. Its tools hand parts of your work to other coding agents, each in its own worktree and branch of the same project. The owner approves every sub-task first; Mob tells you when all your sub-tasks have ended.",
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "task_start", Description: fmt.Sprintf("Ask the owner to approve handing part of your work to another coding agent, in a new worktree and branch of this project. Returns at once; the sub-task starts once the owner approves, and Mob sends you a summary when all your sub-tasks have ended. At most %d run at once and %d in all.", subtaskActive, subtaskTotal)},
+	mcp.AddTool(server, &mcp.Tool{Name: "task_start", Description: fmt.Sprintf("Ask the owner to approve handing part of your work to another coding agent, in a new worktree and branch of this project, or read-only in your own worktree (workspace shared), such as to review your work. Returns at once; the sub-task starts once the owner approves, and Mob sends you a summary when all your sub-tasks have ended. At most %d run at once and %d in all.", subtaskActive, subtaskTotal)},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in startInput) (*mcp.CallToolResult, any, error) {
 			text, err := s.askSubtask(id, in)
 			return result(text, err), nil, nil
@@ -235,12 +237,26 @@ func (s *Service) askSubtask(id string, in startInput) (string, error) {
 	if in.Prompt == "" {
 		return "", errors.New("prompt is empty")
 	}
+	shared := false
+	switch in.Workspace {
+	case "", "new":
+	case "shared":
+		shared = true
+	default:
+		return "", fmt.Errorf("workspace is new or shared, not %q", in.Workspace)
+	}
 	if in.Agent == "" {
 		in.Agent = t.Agent
+		if p, _ := preset(in.Agent); shared && p.ReadOnly == "" {
+			in.Agent = readers()[0]
+		}
 	}
 	a, err := preset(in.Agent)
 	if err != nil {
 		return "", err
+	}
+	if shared && a.ReadOnly == "" {
+		return "", fmt.Errorf("%s cannot work read-only; use %s", a.Title, strings.Join(readers(), " or "))
 	}
 	if in.Title == "" {
 		in.Title = firstLine(in.Prompt, 60)
@@ -255,7 +271,12 @@ func (s *Service) askSubtask(id string, in startInput) (string, error) {
 	}
 	call := acp.ToolCallId("mob-subtask-" + chat.NewID())
 	input := map[string]any{"agent": a.Name, "project": t.Project, "title": in.Title, "prompt": in.Prompt}
-	answer := session.askOwner(call, "Start a sub-task: "+in.Title, input)
+	ask := "Start a sub-task: " + in.Title
+	if shared {
+		input["workspace"] = "read-only in " + t.Worktree
+		ask = "Start a read-only sub-task: " + in.Title
+	}
+	answer := session.askOwner(call, ask, input)
 	go func() {
 		outcome := <-answer
 		if outcome.Selected == nil || !strings.HasPrefix(string(outcome.Selected.OptionId), "allow") {
@@ -265,7 +286,11 @@ func (s *Service) askSubtask(id string, in startInput) (string, error) {
 		var child chat.Task
 		err := s.reserve(t)
 		if err == nil {
-			child, err = s.StartTask(context.Background(), t.ConversationID, t.Project, a.Name, in.Title, in.Prompt)
+			if shared {
+				child, err = s.StartReader(t.ConversationID, t, a.Name, in.Title, in.Prompt)
+			} else {
+				child, err = s.StartTask(context.Background(), t.ConversationID, t.Project, a.Name, in.Title, in.Prompt)
+			}
 			s.release(t)
 		}
 		status, text := acp.ToolCallStatusCompleted, fmt.Sprintf("Started sub-task %s on branch %s.", child.ID, child.Branch)
@@ -418,20 +443,7 @@ func (s *Service) settle(id string) {
 		return
 	}
 	if parent, ok := s.task(t.Parent); ok {
-		prompt := fmt.Sprintf(summaryPrompt, text)
-		if session := s.running(parent.ID); session != nil && session.enqueue(prompt) {
-			// The agent at work reads it once its prompt ends.
-			_ = s.Store.Say(parent.ConversationID, prompt)
-			return
-		}
-		// An agent the owner stopped stays stopped, and one waiting for a
-		// decision keeps waiting: a message would answer no to it.
-		if parent.Status != chat.TaskReview {
-			return
-		}
-		if err := s.Message(parent.ID, prompt); err != nil {
-			slog.Warn("tell a task its sub-tasks ended", "task", parent.ID, "error", err)
-		}
+		go s.tell(parent.ID, fmt.Sprintf(summaryPrompt, text))
 		return
 	}
 	if len(siblings) < 2 {
@@ -444,4 +456,38 @@ func (s *Service) settle(id string) {
 		return
 	}
 	s.Conversations.Notify(chat.Notice{ConversationID: t.Parent, Text: summary})
+}
+
+// tellTries bounds how often tell finds the parent's conversation busy.
+const tellTries = 5
+
+// tell hands task id's agent the summary of its ended sub-tasks, once the
+// turn its conversation may still be finishing has ended.
+func (s *Service) tell(id, prompt string) {
+	for try := 0; try < tellTries; try++ {
+		parent, ok, err := s.Store.Task(id)
+		if err != nil || !ok {
+			return
+		}
+		if run := s.Conversations.Watch(parent.ConversationID); run != nil {
+			<-run.Done()
+		}
+		if session := s.running(parent.ID); session != nil && session.enqueue(prompt) {
+			// The agent at work reads it once its prompt ends.
+			_ = s.Store.Say(parent.ConversationID, prompt)
+			return
+		}
+		// An agent the owner stopped stays stopped, and one waiting for a
+		// decision keeps waiting: a message would answer no to it.
+		if parent, _, _ = s.Store.Task(id); parent.Status != chat.TaskReview {
+			return
+		}
+		var busy *chat.CommandError
+		if err = s.Message(parent.ID, prompt); err == nil || !errors.As(err, &busy) || busy.Status != 409 {
+			if err != nil {
+				slog.Warn("tell a task its sub-tasks ended", "task", parent.ID, "error", err)
+			}
+			return
+		}
+	}
 }

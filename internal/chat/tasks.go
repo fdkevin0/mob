@@ -24,6 +24,9 @@ type Task struct {
 	// Parent is the conversation that started the task: Mob's, or another
 	// task's; empty when none did.
 	Parent string `json:"parent,omitempty"`
+	// ReadOnly tasks work in another task's worktree and branch without
+	// changing them, such as to review it.
+	ReadOnly bool `json:"readOnly,omitempty"`
 	// Plan is the agent's latest plan, as it reported it.
 	Plan      []PlanEntry `json:"plan,omitempty"`
 	CreatedAt int64       `json:"createdAt"`
@@ -48,7 +51,7 @@ const (
 	TaskFailed  = "failed"
 )
 
-const taskColumns = "id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,plan,created_at,updated_at"
+const taskColumns = "id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,read_only,plan,created_at,updated_at"
 
 // CreateTask saves t with a new conversation titled after it, which the
 // agent's replies go into.
@@ -67,7 +70,7 @@ func (s *Store) CreateTask(t *Task) error {
 	if _, err = tx.Exec("INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)", t.ConversationID, string(title), now); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,'',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, t.Parent, now, now); err != nil {
+	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,'',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, t.Parent, t.ReadOnly, now, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err == nil {
@@ -80,7 +83,7 @@ func (s *Store) CreateTask(t *Task) error {
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	var t Task
 	var plan string
-	err := row.Scan(&t.ID, &t.ConversationID, &t.Project, &t.Agent, &t.Title, &t.Worktree, &t.Branch, &t.Session, &t.Status, &t.Parent, &plan, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.ID, &t.ConversationID, &t.Project, &t.Agent, &t.Title, &t.Worktree, &t.Branch, &t.Session, &t.Status, &t.Parent, &t.ReadOnly, &plan, &t.CreatedAt, &t.UpdatedAt)
 	if err == nil && plan != "" {
 		err = json.Unmarshal([]byte(plan), &t.Plan)
 	}

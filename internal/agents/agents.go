@@ -30,6 +30,10 @@ type Preset struct {
 	// Mode is the session mode that lets the agent edit its working
 	// directory and run commands there without asking.
 	Mode string
+	// ReadOnly is the session mode in which the agent asks before editing
+	// anything, for tasks that only read another task's worktree; Mob then
+	// refuses its edits. Agents without one cannot do such tasks.
+	ReadOnly string
 	// SignIn tells the owner how to sign the agent in.
 	SignIn string
 	// Tally, for agents whose prompt responses do not say what they used,
@@ -49,6 +53,7 @@ var Presets = []Preset{{
 	Title:    "Codex",
 	Commands: [][]string{{"codex-acp"}, {"npx", "-y", "@zed-industries/codex-acp@0.16.0"}},
 	Mode:     "auto",
+	ReadOnly: "read-only",
 	SignIn:   "run `codex login` on the computer Mob runs on (`codex login --device-auth` without a browser there), or set OPENAI_API_KEY or CODEX_API_KEY for the Mob service",
 	Tally:    codexTally,
 }, {
@@ -56,6 +61,7 @@ var Presets = []Preset{{
 	Title:    "Claude Agent",
 	Commands: [][]string{{"claude-agent-acp"}, {"npx", "-y", "@agentclientprotocol/claude-agent-acp@0.94.0"}},
 	Mode:     "acceptEdits",
+	ReadOnly: "default",
 	SignIn:   "run `claude` and sign in with your Claude subscription (/login) on the computer Mob runs on, or set ANTHROPIC_API_KEY for the Mob service",
 }, {
 	Name:  "dsh",
@@ -72,6 +78,7 @@ var Presets = []Preset{{
 	Title:    "CodeBuddy Code",
 	Commands: [][]string{{"codebuddy", "--acp"}, {"npx", "-y", "@tencent-ai/codebuddy-code@2.171.0", "--acp"}},
 	Mode:     "acceptEdits",
+	ReadOnly: "default",
 	SignIn:   "run `codebuddy` on the computer Mob runs on and log in with the Tencent account you use for WorkBuddy or CodeBuddy (WeChat for the China edition), or set CODEBUDDY_API_KEY for the Mob service, with CODEBUDDY_INTERNET_ENVIRONMENT=internal for the China edition",
 }}
 

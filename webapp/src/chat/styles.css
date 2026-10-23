@@ -1521,6 +1521,16 @@
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
+.agent-readonly {
+	margin-right: 6px;
+	padding: 0 5px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	font-family: var(--sans, inherit);
+	font-size: 10px;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
 .agent-actions {
 	display: inline-flex;
 	align-items: center;

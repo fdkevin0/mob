@@ -185,6 +185,7 @@ export type Task = {
   session?: string;
   status: string;
   parent?: string;
+  readOnly?: boolean;
   plan?: PlanEntry[];
   createdAt: number;
   updatedAt: number;

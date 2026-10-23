@@ -74,6 +74,8 @@ INSERT INTO usage(conversation_id,message_id,model,input,output,reasoning,cache_
 		{"20261020", `CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
  prompt TEXT NOT NULL, next INTEGER NOT NULL, repeat TEXT NOT NULL DEFAULT '', zone TEXT NOT NULL DEFAULT '', clock TEXT NOT NULL DEFAULT '',
  created_at INTEGER NOT NULL);`},
+		// Tasks that only read another task's worktree, such as reviewers.
+		{"20261023", `ALTER TABLE tasks ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0;`},
 	},
 }
 

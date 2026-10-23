@@ -43,15 +43,20 @@ func (s *Service) Tools() []chat.Tool {
 			"prompt":  text("What the agent should do, with everything it needs to know"),
 			"title":   text("A short title for the task"),
 			"agent":   map[string]any{"type": "string", "enum": agents, "description": "The coding agent; default " + agents[0]},
-		}, "project", "prompt")},
+			"share":   text("A task's ID: work read-only in that task's worktree and branch instead of a new one, seeing its uncommitted changes, such as to review it; project is then that task's. Only " + strings.Join(readers(), " and ") + " can"),
+		}, "prompt")},
 		Prompt:    managerPrompt,
 		OwnerOnly: true,
 		Available: s.offered,
 		Run:       s.askStart,
 		Approved:  s.start,
 		Scope: func(input json.RawMessage) string {
-			var in struct{ Project, Agent string }
+			var in struct{ Project, Agent, Share string }
 			_ = json.Unmarshal(input, &in)
+			if in.Share != "" {
+				// Reading a task's worktree is approved task by task.
+				return in.Project + " " + in.Agent + " read-only " + in.Share
+			}
 			return in.Project + " " + in.Agent
 		},
 	}, {
@@ -125,7 +130,7 @@ func (s *Service) busy() bool {
 
 // askStart checks a task_start call and asks the owner to approve it.
 func (s *Service) askStart(ctx context.Context, call chat.ToolCall) (any, error) {
-	var in struct{ Project, Prompt, Title, Agent string }
+	var in struct{ Project, Prompt, Title, Agent, Share string }
 	raw, _ := json.Marshal(call.Input)
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return nil, err
@@ -133,9 +138,30 @@ func (s *Service) askStart(ctx context.Context, call chat.ToolCall) (any, error)
 	if strings.TrimSpace(in.Prompt) == "" {
 		return nil, errors.New("prompt is empty")
 	}
+	if in.Share != "" && in.Agent == "" {
+		in.Agent = readers()[0]
+	}
 	a, err := preset(in.Agent)
 	if err != nil {
 		return nil, err
+	}
+	if in.Share != "" {
+		base, ok, err := s.Store.Task(in.Share)
+		switch {
+		case err != nil:
+			return nil, err
+		case !ok || base.ID != in.Share:
+			return nil, fmt.Errorf("no task %s", in.Share)
+		case base.ReadOnly:
+			return nil, errors.New("that task only reads another's worktree; share that one instead")
+		case a.ReadOnly == "":
+			return nil, fmt.Errorf("%s cannot work read-only; use %s", a.Title, strings.Join(readers(), " or "))
+		}
+		title := strings.TrimSpace(in.Title)
+		if title == "" {
+			title = firstLine(in.Prompt, 60)
+		}
+		return nil, call.RequestApproval(map[string]string{"project": base.Project, "agent": a.Name, "title": title, "prompt": in.Prompt, "share": base.ID, "workspace": "read-only in " + base.Worktree})
 	}
 	p, ok, err := s.project(in.Project)
 	if err != nil {
@@ -164,11 +190,21 @@ func (s *Service) askStart(ctx context.Context, call chat.ToolCall) (any, error)
 
 // start begins an approved task.
 func (s *Service) start(ctx context.Context, call chat.ApprovedCall) (any, error) {
-	var in struct{ Project, Agent, Title, Prompt string }
+	var in struct{ Project, Agent, Title, Prompt, Share string }
 	if err := json.Unmarshal(call.Input, &in); err != nil {
 		return nil, err
 	}
-	t, err := s.StartTask(ctx, call.ConversationID, in.Project, in.Agent, in.Title, in.Prompt)
+	var t chat.Task
+	var err error
+	if in.Share != "" {
+		base, ok, lookupErr := s.Store.Task(in.Share)
+		if lookupErr != nil || !ok {
+			return nil, fmt.Errorf("no task %s", in.Share)
+		}
+		t, err = s.StartReader(call.ConversationID, base, in.Agent, in.Title, in.Prompt)
+	} else {
+		t, err = s.StartTask(ctx, call.ConversationID, in.Project, in.Agent, in.Title, in.Prompt)
+	}
 	if err != nil {
 		return nil, err
 	}

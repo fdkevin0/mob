@@ -158,9 +158,14 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 		}
 		f.say(ctx, id, acp.UpdateToolCall("call1", acp.WithUpdateStatus(acp.ToolCallStatusCompleted), acp.WithUpdateContent([]acp.ToolCallContent{acp.ToolContent(acp.TextBlock("ok"))})))
 		f.say(ctx, id, acp.UpdateAgentMessageText("done "+string(answer.Outcome.Selected.OptionId)))
-	case strings.HasPrefix(text, "sub "):
-		// Hands the rest to a sub-task through Mob's MCP server.
-		out, err := f.callMob(ctx, "task_start", map[string]any{"title": strings.TrimPrefix(text, "sub "), "prompt": "hello"})
+	case strings.HasPrefix(text, "sub "), strings.HasPrefix(text, "subread "):
+		// Hands the rest to a sub-task through Mob's MCP server; subread
+		// has it try to edit this task's worktree.
+		args := map[string]any{"title": strings.TrimPrefix(text, "sub "), "prompt": "hello"}
+		if title, ok := strings.CutPrefix(text, "subread "); ok {
+			args = map[string]any{"title": title, "prompt": "edit", "workspace": "shared"}
+		}
+		out, err := f.callMob(ctx, "task_start", args)
 		if err != nil {
 			return acp.PromptResponse{}, err
 		}
@@ -1331,5 +1336,65 @@ func TestForgottenTokensReachNothing(t *testing.T) {
 	h.svc.forget(token)
 	if result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}}); err == nil && !result.IsError {
 		t.Fatalf("a forgotten token still works: %+v", result)
+	}
+}
+
+func TestReadersShareAWorktreeWithoutChangingIt(t *testing.T) {
+	h := newHarness(t)
+	mob, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lead, err := h.svc.StartTask(context.Background(), mob.ID, h.repo, "", "Lead", "subread Review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lead = h.wait(lead); lead.Status != chat.TaskWaiting {
+		t.Fatalf("lead = %+v", lead)
+	}
+	pending := h.conv.Pending(lead.ConversationID)
+	if len(pending) != 1 || !strings.Contains(fmtJSON(pending[0].Input), "Start a read-only sub-task: Review") || !strings.Contains(fmtJSON(pending[0].Input), "read-only in "+lead.Worktree) {
+		t.Fatalf("pending = %s", fmtJSON(pending))
+	}
+	h.decide(lead, chat.Answer{Approved: true})
+	var reader chat.Task
+	for deadline := time.Now().Add(10 * time.Second); reader.Status != chat.TaskReview; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("reader = %+v", reader)
+		}
+		list, _ := h.svc.Store.Tasks("")
+		for _, c := range list {
+			if c.Parent == lead.ConversationID {
+				reader = h.wait(c)
+			}
+		}
+	}
+	if !reader.ReadOnly || reader.Worktree != lead.Worktree || reader.Branch != lead.Branch {
+		t.Fatalf("reader = %+v", reader)
+	}
+	// It runs in the agent's read-only mode, and its edit inside the
+	// worktree is refused without asking, where a writer's is allowed.
+	var mode string
+	for _, f := range h.fakes.agents {
+		f.mu.Lock()
+		if len(f.prompts) > 0 && f.prompts[0] == "edit" {
+			mode = f.mode
+		}
+		f.mu.Unlock()
+	}
+	// The fake starts in its read-only mode; a writer is switched to auto.
+	if mode != "" && mode != "read-only" || h.reply(reader) != "skipped" {
+		t.Fatalf("mode %q, reply %q", mode, h.reply(reader))
+	}
+	if writer := h.start("edit"); h.reply(writer) != "done allow" {
+		t.Fatalf("writer reply %q", h.reply(writer))
+	}
+	// Agents with no read-only mode cannot read, and readers lend no
+	// worktree.
+	if _, err := h.svc.StartReader(mob.ID, lead, "dsh", "", "look"); err == nil || !strings.Contains(err.Error(), "cannot work read-only") {
+		t.Fatalf("dsh reader = %v", err)
+	}
+	if _, err := h.svc.StartReader(mob.ID, reader, "", "", "look"); err == nil {
+		t.Fatal("a reader lent its worktree")
 	}
 }
