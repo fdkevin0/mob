@@ -145,7 +145,8 @@ html:has(.demo-page) { scroll-snap-type: none; }
 
 /* The autopilot's pointer. */
 .demo-cursor { position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; filter: drop-shadow(2px 3px 0 #0008); transition: transform .8s cubic-bezier(.45, .05, .25, 1); }
-.demo-cursor.press { animation: d-press .22s ease-out; }
+.demo-cursor g { transform-origin: 1px 1px; }
+.demo-cursor.press g { animation: d-press .22s ease-out; }
 @keyframes d-press { 50% { scale: .8; } }
 
 
