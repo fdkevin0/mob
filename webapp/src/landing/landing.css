@@ -1,4 +1,4 @@
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-snap-type: y mandatory; }
 code { font-family: var(--mono); font-size: .92em; }
 .landing {
 	position: relative;
@@ -33,9 +33,10 @@ code { font-family: var(--mono); font-size: .92em; }
 
 
 /* The story: a tall block whose stage stays pinned while it scrolls past.
-   Story.tsx moves the pieces and pulls the scroll onto the marks of each page. */
+   Story.tsx moves the pieces; the marks are its pages, which the scroll
+   snaps to (snap.ts turns them for a wheel). */
 .story { position: relative; }
-.snaps i { position: absolute; left: 0; width: 1px; height: 1px; }
+.snaps i { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; scroll-snap-stop: always; }
 .stage { position: sticky; top: 0; height: 100svh; overflow: hidden; }
 .stage-field { position: absolute; inset: 0; opacity: .4; transform-origin: 50% 50%; will-change: transform, opacity; pointer-events: none; }
 .stage-field[data-live='true'] { pointer-events: auto; }
@@ -104,7 +105,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .feature-more .feature-look { margin-top: 8px; font-size: 13px; color: var(--muted-foreground); }
 
 /* Start */
-.start { display: flex; flex-direction: column; align-items: center; gap: 24px; max-width: 1240px; margin: 0 auto; padding: 120px 28px 110px; }
+.start { display: flex; flex-direction: column; align-items: center; gap: 24px; max-width: 1240px; margin: 0 auto; padding: 120px 28px 110px; scroll-snap-align: start; }
 .start h2 { font-size: clamp(30px, 3.6vw, 44px); letter-spacing: -0.035em; font-weight: 600; margin: 0; }
 .install { width: min(560px, 100%); }
 .install-tabs { display: flex; border: 1px solid var(--line); border-bottom: 0; }
@@ -119,7 +120,7 @@ code { font-family: var(--mono); font-size: .92em; }
 @keyframes blink { 50% { opacity: .15; } }
 
 /* Footer */
-.footer { display: flex; align-items: center; flex-wrap: wrap; gap: 18px 28px; max-width: 1240px; margin: 0 auto; padding: 28px 28px 40px; border-top: 1px solid var(--line); color: var(--faint); font-size: 14px; }
+.footer { display: flex; align-items: center; flex-wrap: wrap; gap: 18px 28px; max-width: 1240px; margin: 0 auto; padding: 28px 28px 40px; border-top: 1px solid var(--line); color: var(--faint); font-size: 14px; scroll-snap-align: end; }
 .footer-brand { display: flex; align-items: center; gap: 14px; }
 .footer .logo-word { font-size: 16px; }
 .footer nav { display: flex; gap: 22px; margin-left: auto; }
@@ -168,7 +169,10 @@ code { font-family: var(--mono); font-size: .92em; }
 	.footer nav { margin-left: 0; flex-wrap: wrap; gap: 14px 20px; }
 	.sign-in-dialog { padding: 30px 20px 22px; }
 }
-/* With motion reduced the pages simply stack. */
+/* With motion reduced the pages simply stack, with nothing to snap to. */
+@media (prefers-reduced-motion: reduce) {
+	html { scroll-snap-type: none; }
+}
 .story.still .stage { position: relative; height: auto; overflow: visible; }
 .story.still .stage-field { position: relative; height: 100svh; opacity: .4; }
 .story.still .hero-copy { inset: 0 0 auto; height: 100svh; }

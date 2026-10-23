@@ -120,14 +120,16 @@ export function Story({ hero }: { hero: ReactNode }) {
 		return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
 	}, [still]);
 
-	// Each page, then the section after the story, pulls the scroll onto it.
+	// A wheel turns the pages one at a time, up to the section after the story.
 	useEffect(() => {
 		if (still) return;
 		return magnet(() => {
 			const el = story.current;
 			if (!el) return [];
 			const tops = [...el.querySelectorAll<HTMLElement>('.snaps i')].map(i => i.getBoundingClientRect().top + window.scrollY);
-			return [...tops, el.getBoundingClientRect().bottom + window.scrollY].map(Math.round);
+			// The page may not scroll all the way to the section after the story.
+			const max = document.documentElement.scrollHeight - window.innerHeight;
+			return [...tops, el.getBoundingClientRect().bottom + window.scrollY].map(y => Math.round(Math.min(y, max)));
 		});
 	}, [still]);
 
