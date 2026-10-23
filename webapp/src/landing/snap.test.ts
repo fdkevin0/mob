@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest';
-import { adjacent, Gestures, spring } from './snap';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { adjacent, Gestures, magnet, spring } from './snap';
 
 const pages = [0, 800, 1280, 2400];
 
@@ -39,4 +39,54 @@ it('turns one page for a trackpad swipe and its momentum, and again for a new sw
   expect(turns).toBe(1);
   // A fresh swipe while the momentum is still dying away.
   expect([1, 20, 36].map((dy, i) => g.feed(dy, (swipe.length + i) * 16))).toContain(true);
+});
+
+// A window whose scroll and frames the test drives.
+let y = 0;
+let frames: (FrameRequestCallback | undefined)[] = [];
+const flush = (now: number) => { const run = frames; frames = []; run.forEach(f => f?.(now)); };
+const wheel = (deltaY: number, timeStamp: number) => {
+  const e = new WheelEvent('wheel', { deltaY, cancelable: true });
+  Object.defineProperty(e, 'timeStamp', { value: timeStamp });
+  window.dispatchEvent(e);
+  return e.defaultPrevented;
+};
+beforeEach(() => {
+  y = 0;
+  frames = [];
+  Object.defineProperty(window, 'scrollY', { get: () => y, configurable: true });
+  vi.spyOn(window, 'scrollTo').mockImplementation(((o: ScrollToOptions) => { y = o.top!; }) as typeof window.scrollTo);
+  vi.stubGlobal('requestAnimationFrame', (f: FrameRequestCallback) => frames.push(f));
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames[id - 1] = undefined; });
+});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it('leaves a whole wheel gesture alone below the story', () => {
+  const m = magnet(() => [0, 800, 3320]);
+  y = 3600;
+  expect([0, 50, 100, 150].map(t => wheel(-50, t))).toEqual([false, false, false, false]);
+  m.destroy();
+});
+
+it('swallows the rest of the gesture that turned onto the end of the story, then lets go', () => {
+  const m = magnet(() => [0, 800, 1600]);
+  y = 800;
+  expect(wheel(100, 0)).toBe(true);
+  for (let t = 0; t <= 2000; t += 16) flush(performance.now() + t);
+  expect(y).toBe(1600);
+  expect([16, 32, 48].map(t => wheel(20, t))).toEqual([true, true, true]);
+  expect(wheel(100, 400)).toBe(false);
+  m.destroy();
+});
+
+it('hands the scroll to a scrolling key mid-spring', () => {
+  const m = magnet(() => [0, 800, 1600]);
+  expect(wheel(100, 0)).toBe(true);
+  expect(document.documentElement.style.scrollSnapType).toBe('none');
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'End' }));
+  expect(document.documentElement.style.scrollSnapType).toBe('');
+  const calls = vi.mocked(window.scrollTo).mock.calls.length;
+  flush(performance.now() + 100);
+  expect(vi.mocked(window.scrollTo).mock.calls.length).toBe(calls);
+  m.destroy();
 });

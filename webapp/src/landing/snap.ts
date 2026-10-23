@@ -27,8 +27,9 @@ export class Gestures {
 	private size = 0;
 	private peak = 0;
 	private sum = 0;
-	// Whether the gesture going on has already turned its page.
-	spent = false;
+	private spent = false;
+	// Counts gestures, so a caller can tell whether one is still going on.
+	gesture = 0;
 
 	// Feeds one wheel event at time t (ms); true when it should turn the page.
 	feed(dy: number, t: number): boolean {
@@ -39,6 +40,7 @@ export class Gestures {
 			this.dir = dir;
 			this.sum = this.peak = 0;
 			this.spent = false;
+			this.gesture++;
 		}
 		this.last = t;
 		this.size = size;
@@ -49,6 +51,8 @@ export class Gestures {
 		return true;
 	}
 }
+
+const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 
 const OMEGA = 9; // settles in about half a second, whatever the distance
 
@@ -67,6 +71,7 @@ export function magnet(points: () => number[]): Magnet {
 	let target = 0;
 	let from = { x: 0, v: 0, t: 0 }; // the spring's start, relative to target
 	let then: (() => void) | undefined;
+	let held = -1; // the last gesture that turned a page, whose momentum is swallowed
 
 	// A frame can start a little before the call that set the spring off.
 	const at = (now: number) => spring(from.x, from.v, OMEGA, Math.max(0, now - from.t) / 1000);
@@ -112,17 +117,23 @@ export function magnet(points: () => number[]): Magnet {
 		const y = window.scrollY;
 		const turn = gestures.feed(dy, event.timeStamp);
 		// Past the story the page scrolls as usual, and comes back in from its
-		// end, once the gesture that brought it there is over.
-		if (!anim && !(gestures.spent && !turn) && (y > end + 1 || (y >= end - 1 && dy > 0))) return;
+		// end, once the gesture that turned onto the end is over.
+		if (!anim && held !== gestures.gesture && (y > end + 1 || (y >= end - 1 && dy > 0))) return;
 		event.preventDefault();
 		if (!turn) return;
 		const to = adjacent(pages, anim ? target : y, Math.sign(dy));
-		if (to !== undefined) go(to);
+		if (to === undefined) return;
+		held = gestures.gesture;
+		go(to);
 	};
+	// Keys that scroll take over from the spring, and the browser's snapping
+	// takes them from there.
+	const key = (event: KeyboardEvent) => { if (SCROLL_KEYS.has(event.key)) stop(); };
 
 	window.addEventListener('wheel', wheel, { passive: false });
 	window.addEventListener('mousedown', stop);
 	window.addEventListener('touchstart', stop, { passive: true });
+	window.addEventListener('keydown', key);
 	return {
 		go,
 		destroy() {
@@ -130,6 +141,7 @@ export function magnet(points: () => number[]): Magnet {
 			window.removeEventListener('wheel', wheel);
 			window.removeEventListener('mousedown', stop);
 			window.removeEventListener('touchstart', stop);
+			window.removeEventListener('keydown', key);
 		},
 	};
 }
