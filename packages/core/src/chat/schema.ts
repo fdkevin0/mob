@@ -1,0 +1,38 @@
+// The database schema. PRAGMA user_version records it; the meta table records
+// the release that last opened the database. Version 10 is the schema the Go
+// service left, so its databases open as they are.
+export const schemaVersion = 10;
+
+export const schema = `CREATE TABLE IF NOT EXISTS deliveries(id TEXT PRIMARY KEY, state TEXT NOT NULL, reply TEXT NOT NULL DEFAULT '',
+ error TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, title TEXT NOT NULL, updated_at INTEGER NOT NULL,
+ model TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', summary_through TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS messages(seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
+ conversation_id TEXT NOT NULL REFERENCES conversations(id), role TEXT NOT NULL, parts TEXT NOT NULL,
+ status TEXT NOT NULL, error TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', usage TEXT NOT NULL DEFAULT '',
+ kind TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, seq);
+CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
+ message_id TEXT NOT NULL REFERENCES messages(id), tool_call_id TEXT NOT NULL, input TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending', expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS memories(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), fact TEXT NOT NULL,
+ owner INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, tool TEXT NOT NULL,
+ scope TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(conversation_id, tool, scope));
+CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, conversation_id TEXT UNIQUE NOT NULL REFERENCES conversations(id),
+ project TEXT NOT NULL, agent TEXT NOT NULL, title TEXT NOT NULL, worktree TEXT NOT NULL, branch TEXT NOT NULL,
+ session TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+ parent_id TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS usage(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, message_id TEXT NOT NULL,
+ model TEXT NOT NULL, input INTEGER NOT NULL, output INTEGER NOT NULL, reasoning INTEGER NOT NULL, cache_read INTEGER NOT NULL,
+ cache_write INTEGER NOT NULL, cost REAL NOT NULL, duration_ms INTEGER NOT NULL, created_at INTEGER NOT NULL,
+ session TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS usage_conversation ON usage(conversation_id, model);
+CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
+ prompt TEXT NOT NULL, next INTEGER NOT NULL, repeat TEXT NOT NULL DEFAULT '', zone TEXT NOT NULL DEFAULT '', clock TEXT NOT NULL DEFAULT '',
+ created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);`;
+
+/** SchemaError explains why this release cannot open a database. */
+export class SchemaError extends Error {}
