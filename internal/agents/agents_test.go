@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	acp "github.com/coder/acp-go-sdk"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/fdkevin0/mob/internal/chat"
 	"github.com/fdkevin0/mob/internal/llm"
@@ -46,6 +48,8 @@ type fake struct {
 	// failLoad makes loading a session fail.
 	session  acp.SessionId
 	failLoad bool
+	// servers are the MCP servers its last session was given.
+	servers []acp.McpServer
 }
 
 func (f *fake) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
@@ -53,7 +57,7 @@ func (f *fake) Initialize(context.Context, acp.InitializeRequest) (acp.Initializ
 		// Like DeepSeek Harness: sessions are resumed, not loaded.
 		return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{SessionCapabilities: acp.SessionCapabilities{Resume: &acp.SessionResumeCapabilities{}}}}, nil
 	}
-	return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{LoadSession: true}}, nil
+	return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersionNumber, AgentCapabilities: acp.AgentCapabilities{LoadSession: true, McpCapabilities: acp.McpCapabilities{Http: true}}}, nil
 }
 func (f *fake) Authenticate(context.Context, acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {
 	return acp.AuthenticateResponse{}, nil
@@ -90,7 +94,7 @@ func (f *fake) NewSession(_ context.Context, r acp.NewSessionRequest) (acp.NewSe
 		return acp.NewSessionResponse{}, acp.NewAuthRequired(nil)
 	}
 	f.mu.Lock()
-	f.dir = r.Cwd
+	f.dir, f.servers = r.Cwd, r.McpServers
 	id := f.session
 	f.mu.Unlock()
 	if id == "" {
@@ -154,6 +158,13 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 		}
 		f.say(ctx, id, acp.UpdateToolCall("call1", acp.WithUpdateStatus(acp.ToolCallStatusCompleted), acp.WithUpdateContent([]acp.ToolCallContent{acp.ToolContent(acp.TextBlock("ok"))})))
 		f.say(ctx, id, acp.UpdateAgentMessageText("done "+string(answer.Outcome.Selected.OptionId)))
+	case strings.HasPrefix(text, "sub "):
+		// Hands the rest to a sub-task through Mob's MCP server.
+		out, err := f.callMob(ctx, "task_start", map[string]any{"title": strings.TrimPrefix(text, "sub "), "prompt": "hello"})
+		if err != nil {
+			return acp.PromptResponse{}, err
+		}
+		f.say(ctx, id, acp.UpdateAgentMessageText(out))
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
@@ -198,6 +209,47 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 		f.say(ctx, id, acp.UpdateAgentMessageText("got "+text))
 	}
 	return end, nil
+}
+
+// callMob calls a tool of the MCP server Mob gave the session.
+func (f *fake) callMob(ctx context.Context, name string, args map[string]any) (string, error) {
+	f.mu.Lock()
+	servers := f.servers
+	f.mu.Unlock()
+	if len(servers) != 1 || servers[0].Http == nil {
+		return "", errors.New("no MCP server")
+	}
+	server := servers[0].Http
+	header := http.Header{}
+	for _, h := range server.Headers {
+		header.Set(h.Name, h.Value)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "fake"}, nil)
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: server.Url, HTTPClient: &http.Client{Transport: headers{header}}, DisableStandaloneSSE: true}, nil)
+	if err != nil {
+		return "", err
+	}
+	defer session.Close()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		return "", err
+	}
+	text := result.Content[0].(*mcp.TextContent).Text
+	if result.IsError {
+		return "", errors.New(text)
+	}
+	return text, nil
+}
+
+// headers adds a header to each request.
+type headers struct{ http.Header }
+
+func (h headers) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	for k, v := range h.Header {
+		r.Header[k] = v
+	}
+	return http.DefaultTransport.RoundTrip(r)
 }
 
 // fakes starts a fake agent for every session; agents lists them.
@@ -1087,5 +1139,197 @@ func TestMessageUntilStops(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("the turn outlived its stop")
 		}
+	}
+}
+
+func TestAgentStartsSubtasks(t *testing.T) {
+	h := newHarness(t)
+	mob, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lead, err := h.svc.StartTask(context.Background(), mob.ID, h.repo, "", "Lead", "sub Child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The owner is asked first, in the lead task's conversation.
+	if lead = h.wait(lead); lead.Status != chat.TaskWaiting {
+		t.Fatalf("lead = %+v", lead)
+	}
+	nodes, err := h.svc.Tree("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var asked []AgentApproval
+	for _, n := range nodes {
+		if n.ConversationID == lead.ConversationID {
+			asked = n.Approvals
+		}
+	}
+	if len(asked) != 1 || !strings.Contains(asked[0].Text, "Start a sub-task: Child") || !strings.Contains(asked[0].Text, `"prompt":"hello"`) {
+		t.Fatalf("approvals = %+v", asked)
+	}
+	h.decide(lead, chat.Answer{Approved: true})
+	var child chat.Task
+	for deadline := time.Now().Add(10 * time.Second); child.ID == ""; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no sub-task started")
+		}
+		list, _ := h.svc.Store.Tasks("")
+		for _, c := range list {
+			if c.Parent == lead.ConversationID {
+				child = c
+			}
+		}
+	}
+	// The sub-task may be found before its first turn begins.
+	for deadline := time.Now().Add(10 * time.Second); child.Status != chat.TaskReview && time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		child = h.wait(child)
+	}
+	if child.Status != chat.TaskReview || child.Title != "Child" || child.Project != lead.Project {
+		t.Fatalf("child = %+v", child)
+	}
+	// A sub-task gets no server: the tree is two agents deep at most.
+	for _, f := range h.fakes.agents {
+		f.mu.Lock()
+		dir, servers := f.dir, f.servers
+		f.mu.Unlock()
+		if dir == child.Worktree && len(servers) != 0 {
+			t.Fatalf("sub-task servers = %+v", servers)
+		}
+	}
+	// Once its sub-tasks end, the lead agent hears how they went.
+	var summary string
+	for deadline := time.Now().Add(10 * time.Second); summary == ""; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the lead agent was not told its sub-tasks ended")
+		}
+		history, _ := h.svc.Store.History(lead.ConversationID)
+		for _, m := range history {
+			if text := chat.Text(m); m.Role == "user" && strings.HasPrefix(text, "Automatic update from Mob") {
+				summary = text
+			}
+		}
+	}
+	if !strings.Contains(summary, "Child") || !strings.Contains(summary, child.Branch) || !strings.Contains(summary, "Hi") {
+		t.Fatalf("summary = %q", summary)
+	}
+	// The start is reported in the turn after the decision, which may have
+	// ended before the sub-task began.
+	h.wait(lead)
+	history, _ := h.svc.Store.History(lead.ConversationID)
+	if !strings.Contains(fmtJSON(history), "Started sub-task "+child.ID) {
+		t.Fatalf("the approved call did not end: %s", fmtJSON(history))
+	}
+	// Another task's agent cannot reach this one's sub-tasks.
+	if _, err := h.svc.subtask(child.ID, child.ID); err == nil {
+		t.Fatal("a task reached a task it did not start")
+	}
+}
+
+func TestEndedTasksAreSummarized(t *testing.T) {
+	h := newHarness(t)
+	mob, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tasks []chat.Task
+	for _, title := range []string{"One", "Two"} {
+		task, err := h.svc.StartTask(context.Background(), mob.ID, h.repo, "", title, "hello")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tasks = append(tasks, task)
+	}
+	for _, task := range tasks {
+		h.wait(task)
+	}
+	var notes []string
+	for deadline := time.Now().Add(10 * time.Second); len(notes) == 0; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no summary")
+		}
+		history, _ := h.svc.Store.History(mob.ID)
+		for _, m := range history {
+			if m.Command && strings.Contains(chat.Text(m), "tasks started here have ended") {
+				notes = append(notes, chat.Text(m))
+			}
+		}
+	}
+	if len(notes) != 1 || !strings.Contains(notes[0], "All 2 tasks") || !strings.Contains(notes[0], "One") || !strings.Contains(notes[0], "Two") {
+		t.Fatalf("notes = %q", notes)
+	}
+	// Ending again reports nothing new.
+	h.svc.settle(tasks[0].ID)
+	history, _ := h.svc.Store.History(mob.ID)
+	count := 0
+	for _, m := range history {
+		if m.Command {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("%d notes", count)
+	}
+	// A task that ends again after more work is reported again.
+	h.say(tasks[0], "hello")
+	for deadline := time.Now().Add(10 * time.Second); count < 2; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the second end was not reported")
+		}
+		history, _ := h.svc.Store.History(mob.ID)
+		count = 0
+		for _, m := range history {
+			if m.Command {
+				count++
+			}
+		}
+	}
+}
+
+func TestSubtaskLimitsHoldAcrossApprovals(t *testing.T) {
+	h := newHarness(t)
+	lead := h.start("hello")
+	// Approvals decided together each take a place before they start.
+	for i := 0; i < subtaskActive; i++ {
+		if err := h.svc.reserve(lead); err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+	}
+	if err := h.svc.reserve(lead); err == nil || !strings.Contains(err.Error(), "the most at once") {
+		t.Fatalf("a start past the limit = %v", err)
+	}
+	h.svc.release(lead)
+	if err := h.svc.reserve(lead); err != nil {
+		t.Fatalf("a place given back was not reused: %v", err)
+	}
+}
+
+func TestForgottenTokensReachNothing(t *testing.T) {
+	h := newHarness(t)
+	lead := h.start("hello")
+	url, err := h.svc.listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "token-" + lead.ID
+	h.svc.mu.Lock()
+	h.svc.hub.tokens[token] = lead.ID
+	h.svc.mu.Unlock()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
+	header := http.Header{"Authorization": {"Bearer " + token}}
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: url, HTTPClient: &http.Client{Transport: headers{header}}, DisableStandaloneSSE: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}})
+	if err != nil || result.IsError || result.Content[0].(*mcp.TextContent).Text != "You started no sub-tasks." {
+		t.Fatalf("tasks = %+v, %v", result, err)
+	}
+	// The connection made with it stops working too.
+	h.svc.forget(token)
+	if result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}}); err == nil && !result.IsError {
+		t.Fatalf("a forgotten token still works: %+v", result)
 	}
 }
