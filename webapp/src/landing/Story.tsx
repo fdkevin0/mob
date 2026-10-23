@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { PixelIcon } from '../components/brand/PixelIcon';
 import type { IconName } from '../components/brand/pixels';
+import { magnet } from './snap';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
 import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
 
@@ -117,6 +118,17 @@ export function Story({ hero }: { hero: ReactNode }) {
 		window.addEventListener('scroll', schedule, { passive: true });
 		window.addEventListener('resize', schedule);
 		return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+	}, [still]);
+
+	// Each page, then the section after the story, pulls the scroll onto it.
+	useEffect(() => {
+		if (still) return;
+		return magnet(() => {
+			const el = story.current;
+			if (!el) return [];
+			const tops = [...el.querySelectorAll<HTMLElement>('.snaps i')].map(i => i.getBoundingClientRect().top + window.scrollY);
+			return [...tops, el.getBoundingClientRect().bottom + window.scrollY].map(Math.round);
+		});
 	}, [still]);
 
 	useEffect(() => { setStory(step < 0 ? undefined : step); }, [step]);

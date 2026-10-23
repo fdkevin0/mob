@@ -1,4 +1,4 @@
-html { scroll-behavior: smooth; scroll-snap-type: y proximity; }
+html { scroll-behavior: smooth; }
 code { font-family: var(--mono); font-size: .92em; }
 .landing {
 	position: relative;
@@ -33,9 +33,9 @@ code { font-family: var(--mono); font-size: .92em; }
 
 
 /* The story: a tall block whose stage stays pinned while it scrolls past.
-   Story.tsx moves the pieces; snap points mark each page. */
+   Story.tsx moves the pieces and pulls the scroll onto the marks of each page. */
 .story { position: relative; }
-.snaps i { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; scroll-margin-top: 0; }
+.snaps i { position: absolute; left: 0; width: 1px; height: 1px; }
 .stage { position: sticky; top: 0; height: 100svh; overflow: hidden; }
 .stage-field { position: absolute; inset: 0; opacity: .4; transform-origin: 50% 50%; will-change: transform, opacity; pointer-events: none; }
 .stage-field[data-live='true'] { pointer-events: auto; }
@@ -104,7 +104,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .feature-more .feature-look { margin-top: 8px; font-size: 13px; color: var(--muted-foreground); }
 
 /* Start */
-.start { display: flex; flex-direction: column; align-items: center; gap: 24px; max-width: 1240px; margin: 0 auto; padding: 120px 28px 110px; scroll-snap-align: start; }
+.start { display: flex; flex-direction: column; align-items: center; gap: 24px; max-width: 1240px; margin: 0 auto; padding: 120px 28px 110px; }
 .start h2 { font-size: clamp(30px, 3.6vw, 44px); letter-spacing: -0.035em; font-weight: 600; margin: 0; }
 .install { width: min(560px, 100%); }
 .install-tabs { display: flex; border: 1px solid var(--line); border-bottom: 0; }
@@ -175,7 +175,4 @@ code { font-family: var(--mono); font-size: .92em; }
 .story.still .flow, .story.still .feature-list { position: relative; inset: auto; transform: none; opacity: 1; pointer-events: auto; margin: 0 auto; padding: 40px 28px; }
 .story.still .feature-list { width: min(560px, calc(100% - 32px)); padding: 40px 0; }
 .story.still .flow-steps p { display: block; }
-@media (prefers-reduced-motion: reduce) {
-	html { scroll-snap-type: none; }
-}
 .story.still .feature-kicker, .story.still .scroll-hint { display: none; }
