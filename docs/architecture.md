@@ -44,6 +44,14 @@ change the single-Go-binary release.
 - Every client and channel goes through `ConversationService`; Telegram, WeChat
   iLink and email call it in-process, other clients over HTTP. Nothing else opens
   the database.
+- Model and delegated turns share reply recording in `internal/chat/reply.go`:
+  message parts, recording events, periodic saves and final persistence. The
+  model loop and ACP adapter keep their own step grouping, execution and
+  permission rules.
+- Per-turn tool availability lives in `internal/chat/turn_tools.go`, with search
+  in `search.go`. It restores loaded tools from history and commits newly found
+  tools, definitions and prompts only after the current step. The model loop
+  includes that prompt growth in its context budget.
 - `@mob/client` has no browser or terminal APIs. It uses the AI SDK's headless
   `Chat` state container (exported by `@ai-sdk/react`), `DefaultChatTransport` and
   `readUIMessageStream`, not a new message protocol. UIs subscribe to its stable

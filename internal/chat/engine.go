@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -84,34 +83,10 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	if agent.Prompt != "" {
 		turn.Request.System += "\n" + agent.Prompt
 	}
-	lastSave := time.Now()
-	send := func(e Event) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if time.Since(lastSave) > time.Second {
-			if err := store.Save(message, "streaming", ""); err != nil {
-				return err
-			}
-			lastSave = time.Now()
-		}
-		return emit(e)
-	}
+	record := newReply(ctx, store, &message, emit)
+	send := record.send
 	defer func() {
-		status, failure := "complete", ""
-		if runErr != nil {
-			status = "error"
-			failure = runErr.Error()
-			switch {
-			case errors.Is(runErr, context.Canceled):
-				status = "cancelled"
-			case errors.Is(runErr, ErrStepLimit):
-				status = "step-limit"
-			}
-		}
-		if err := store.Save(message, status, failure); err != nil {
-			runErr = errors.Join(runErr, err)
-		}
+		runErr = record.finish(runErr)
 		for _, after := range agent.Hooks.AfterTurn {
 			after(context.WithoutCancel(ctx), turn, message, runErr)
 		}
@@ -135,48 +110,11 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		reserve = info.Context / 4
 		req.MaxTokens = min(req.MaxTokens, reserve)
 	}
-	// offered are the tools declared to the model. Deferred tools wait until
-	// tool_search loads them, unless the conversation has loaded or called
-	// them before; loaded are those declared so far.
-	offered := map[string]Tool{}
-	// staged are the tools tool_search loaded in this step, declared once
-	// the step's calls have run, so a call made beside the search is refused.
-	var waiting, loaded, staged []Tool
+	tools := &turnTools{request: req}
 	if info.Tools {
-		used := usedTools(history)
-		names := map[string]bool{}
-		for _, t := range agent.Tools {
-			if names[t.Name] {
-				return fmt.Errorf("tool offered twice: %s", t.Name)
-			}
-			names[t.Name] = true
-			switch {
-			case t.Exposure == Hidden:
-				continue
-			case t.Exposure == Deferred && !used[t.Name]:
-				waiting = append(waiting, t)
-				continue
-			case t.Exposure == Deferred:
-				loaded = append(loaded, t)
-			}
-			offered[t.Name] = t
-			req.Tools = append(req.Tools, t.Tool)
-			if t.Prompt != "" {
-				req.System += " " + t.Prompt
-			}
-		}
-		if len(waiting) > 0 || len(agent.Entries) > 0 {
-			load := func(tools []Tool) {
-				for _, t := range tools {
-					waiting = slices.DeleteFunc(waiting, func(w Tool) bool { return w.Name == t.Name })
-					loaded = append(loaded, t)
-					staged = append(staged, t)
-				}
-			}
-			search := toolSearch(func() []Tool { return waiting }, func() []Tool { return loaded }, agent.Entries, load)
-			offered[searchName] = search
-			req.Tools = append(req.Tools, search.Tool)
-			req.System += " " + searchPrompt(waiting, agent.Entries)
+		tools, err = newTurnTools(req, agent.Tools, agent.Entries, history)
+		if err != nil {
+			return err
 		}
 	}
 	for _, before := range agent.Hooks.BeforeTurn {
@@ -255,9 +193,6 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 	// size is the prompt's tokens: estimated at first, then as the provider
 	// counted the last step, plus estimates for what was added since.
 	size := tokens(req.System) + toolTokens(req.Tools) + promptTokens(req.Messages)
-	// declared is what the tool definitions take of size; tool_search adds
-	// to them.
-	declared := toolTokens(req.Tools)
 	// read is how many of the messages the model has seen. groups are the
 	// tool outputs that can be cleared to make room, oldest first: history's
 	// estimated, then each step's, measured by the next step's usage.
@@ -319,43 +254,24 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		if err := send(Event{Kind: StepStarted}); err != nil {
 			return err
 		}
-		indices := map[string]int{}
-		ids := map[string]string{}
+		record.segments = map[string]segment{}
 		seen := read
 		read = len(req.Messages)
-		stream := func(kind, delta string) error {
-			index, ok := indices[kind]
-			if !ok {
-				index = len(message.Parts)
-				indices[kind] = index
-				ids[kind] = NewID()
-				message.Parts = append(message.Parts, Part{"type": kind, "text": ""})
-				if err := send(Event{Kind: SegmentStarted, Segment: kind, ID: ids[kind]}); err != nil {
-					return err
-				}
-			}
-			message.Parts[index]["text"] = message.Parts[index]["text"].(string) + delta
-			return send(Event{Kind: SegmentDelta, Segment: kind, ID: ids[kind], Text: delta})
-		}
 		began := time.Now()
-		result, err := model.Stream(ctx, *req, stream)
+		result, err := model.Stream(ctx, *req, record.stream)
 		// A refused prompt is made smaller and sent once more in the turn.
-		if errors.Is(err, llm.ErrContextOverflow) && !retried && len(ids) == 0 {
+		if errors.Is(err, llm.ErrContextOverflow) && !retried && len(record.segments) == 0 {
 			retried = true
 			if shrink(step, seen) {
 				read = len(req.Messages)
-				result, err = model.Stream(ctx, *req, stream)
+				result, err = model.Stream(ctx, *req, record.stream)
 			}
 		}
 		if errors.Is(err, llm.ErrContextOverflow) {
 			err = fmt.Errorf("%w; /compact summarizes the conversation to make room", err)
 		}
-		for _, kind := range []string{"reasoning", "text"} {
-			if id := ids[kind]; id != "" {
-				if e := send(Event{Kind: SegmentFinished, Segment: kind, ID: id}); e != nil && err == nil {
-					err = e
-				}
-			}
+		if e := record.endSegments(); e != nil && err == nil {
+			err = e
 		}
 		if result.Usage != nil {
 			u := result.Usage.Priced(info.Cost)
@@ -406,9 +322,8 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			if input == nil {
 				input = map[string]any{}
 			}
-			part := Part{"type": "tool-" + call.Name, "toolCallId": call.ID, "state": "input-available", "input": input}
-			message.Parts = append(message.Parts, part)
-			if err := send(Event{Kind: ToolInput, ToolCallID: call.ID, ToolName: call.Name, Input: input}); err != nil {
+			part, err := record.tool(call.ID, call.Name, input)
+			if err != nil {
 				return err
 			}
 			var output any
@@ -416,7 +331,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 			if parseErr != nil {
 				toolErr = errors.New("tool arguments must be a JSON object")
 			} else {
-				output, toolErr = runTool(ctx, agent, offered, ToolCall{ToolCall: call, ConversationID: conversationID, Input: input, Part: part, Message: &message, Store: store, Send: send})
+				output, toolErr = tools.run(ctx, agent, ToolCall{ToolCall: call, ConversationID: conversationID, Input: input, Part: part, Message: &message, Store: store, Send: send})
 				var stop abort
 				switch {
 				case errors.Is(toolErr, ErrAwaitingApproval):
@@ -428,22 +343,15 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 					return stop.err
 				}
 			}
+			failure := ""
 			if toolErr != nil {
-				part["state"] = "output-error"
-				part["errorText"] = toolErr.Error()
-				output = map[string]string{"error": toolErr.Error()}
-				if err := send(Event{Kind: ToolFailed, ToolCallID: call.ID, Error: toolErr.Error()}); err != nil {
-					return err
-				}
-			} else {
-				part["state"] = "output-available"
-				part["output"] = output
-				if file := save(agent.Saver, conversationID, output); file != "" {
-					part["outputFile"] = file
-				}
-				if err := send(Event{Kind: ToolOutput, ToolCallID: call.ID, Output: output}); err != nil {
-					return err
-				}
+				failure = toolErr.Error()
+				output = map[string]string{"error": failure}
+			} else if file := save(agent.Saver, conversationID, output); file != "" {
+				part["outputFile"] = file
+			}
+			if err := record.toolDone(call.ID, part, output, failure); err != nil {
+				return err
 			}
 			file, _ := part["outputFile"].(string)
 			out := llm.Message{Role: "tool", Text: modelOutput(output, file), ToolCallID: call.ID, ToolName: call.Name}
@@ -455,18 +363,7 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		if len(added.list) > 0 {
 			groups, latest = append(groups, added), added
 		}
-		for _, t := range staged {
-			offered[t.Name] = t
-			req.Tools = append(req.Tools, t.Tool)
-			if t.Prompt != "" {
-				req.System += " " + t.Prompt
-				size += tokens(" " + t.Prompt)
-			}
-		}
-		staged = nil
-		if n := toolTokens(req.Tools); n != declared {
-			size, declared = size+n-declared, n
-		}
+		size += tools.nextStep()
 		if err := send(Event{Kind: StepFinished}); err != nil {
 			return err
 		}
@@ -475,55 +372,6 @@ func Run(ctx context.Context, store *Store, model llm.Model, agent Agent, conver
 		}
 	}
 	return fmt.Errorf("%w (%d); send another message to continue", ErrStepLimit, steps)
-}
-
-// runTool runs an offered tool after the BeforeTool hooks allow it, and
-// carries out a call a remembered approval covers.
-func runTool(ctx context.Context, agent Agent, offered map[string]Tool, call ToolCall) (any, error) {
-	tool, ok := offered[call.Name]
-	if !ok {
-		return nil, fmt.Errorf("unsupported tool: %s", call.Name)
-	}
-	for _, before := range agent.Hooks.BeforeTool {
-		if err := before(ctx, call); err != nil {
-			return nil, err
-		}
-	}
-	if agent.Owner {
-		call.tool = &tool
-	}
-	output, err := tool.Run(ctx, call)
-	var g granted
-	if errors.As(err, &g) {
-		return tool.Approved(ctx, ApprovedCall{ConversationID: call.ConversationID, ApprovalID: NewID(), Input: g.input, Store: call.Store, Owner: agent.Owner})
-	}
-	return output, err
-}
-
-// usedTools are the tools the conversation has called, and those tool_search
-// loaded in it, which stay declared in its later turns.
-func usedTools(history []Message) map[string]bool {
-	used := map[string]bool{}
-	for _, m := range history {
-		for _, part := range m.Parts {
-			kind := fmt.Sprint(part["type"])
-			if !strings.HasPrefix(kind, "tool-") {
-				continue
-			}
-			used[kind[5:]] = true
-			if kind != "tool-"+searchName || part["state"] != "output-available" {
-				continue
-			}
-			var output searchResult
-			raw, _ := json.Marshal(part["output"])
-			if json.Unmarshal(raw, &output) == nil {
-				for _, name := range output.Loaded {
-					used[name] = true
-				}
-			}
-		}
-	}
-	return used
 }
 
 func add(total *llm.Usage, u llm.Usage) *llm.Usage {

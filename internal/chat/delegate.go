@@ -52,17 +52,9 @@ type DelegateTurn struct {
 	// Text is what the owner wrote; empty when the turn follows an approval.
 	Text string
 	// Channel is the messaging app the turn answers in, if any.
-	Channel  string
-	store    *Store
-	message  *Message
-	send     func(Event) error
-	segments map[string]segment
-	stepped  bool
-}
-
-type segment struct {
-	index int
-	id    string
+	Channel string
+	*reply
+	stepped bool
 }
 
 // MessageID is the reply being written.
@@ -98,17 +90,7 @@ func (t *DelegateTurn) Stream(kind, delta string) error {
 	if err := t.step(); err != nil {
 		return err
 	}
-	s, ok := t.segments[kind]
-	if !ok {
-		s = segment{len(t.message.Parts), NewID()}
-		t.segments[kind] = s
-		t.message.Parts = append(t.message.Parts, Part{"type": kind, "text": ""})
-		if err := t.send(Event{Kind: SegmentStarted, Segment: kind, ID: s.id}); err != nil {
-			return err
-		}
-	}
-	t.message.Parts[s.index]["text"] = t.message.Parts[s.index]["text"].(string) + delta
-	return t.send(Event{Kind: SegmentDelta, Segment: kind, ID: s.id, Text: delta})
+	return t.stream(kind, delta)
 }
 
 // endStep finishes the open text and reasoning, so what follows starts new
@@ -117,12 +99,8 @@ func (t *DelegateTurn) endStep() error {
 	if !t.stepped {
 		return nil
 	}
-	for _, kind := range []string{"reasoning", "text"} {
-		if s, ok := t.segments[kind]; ok {
-			if err := t.send(Event{Kind: SegmentFinished, Segment: kind, ID: s.id}); err != nil {
-				return err
-			}
-		}
+	if err := t.endSegments(); err != nil {
+		return err
 	}
 	t.segments = map[string]segment{}
 	t.stepped = false
@@ -162,8 +140,8 @@ func (t *DelegateTurn) Tool(id, name string, input any) error {
 	if err := t.step(); err != nil {
 		return err
 	}
-	t.message.Parts = append(t.message.Parts, Part{"type": "tool-" + name, "toolCallId": id, "state": "input-available", "input": input})
-	return t.send(Event{Kind: ToolInput, ToolCallID: id, ToolName: name, Input: input})
+	_, err := t.tool(id, name, input)
+	return err
 }
 
 // ToolDone records how a call shown with Tool ended; a call the reply does
@@ -173,14 +151,7 @@ func (t *DelegateTurn) ToolDone(id string, output any, failure string) error {
 	if part == nil || part["state"] == "output-available" || part["state"] == "output-error" {
 		return nil
 	}
-	if failure != "" {
-		part["state"] = "output-error"
-		part["errorText"] = failure
-		return t.send(Event{Kind: ToolFailed, ToolCallID: id, Error: failure})
-	}
-	part["state"] = "output-available"
-	part["output"] = output
-	return t.send(Event{Kind: ToolOutput, ToolCallID: id, Output: output})
+	return t.toolDone(id, part, output, failure)
 }
 
 // RequestApproval asks the owner to approve call id, shown with Tool, and
@@ -203,33 +174,10 @@ func (t *DelegateTurn) RequestApproval(id string, input any) (string, error) {
 // runDelegate is Run for a delegated conversation: the delegate writes the
 // reply, which is saved while it streams and once it ends.
 func runDelegate(ctx context.Context, store *Store, delegate Delegate, input ChatRequest, message Message, emit func(Event) error) (runErr error) {
-	lastSave := time.Now()
-	send := func(e Event) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if time.Since(lastSave) > time.Second {
-			if err := store.Save(message, "streaming", ""); err != nil {
-				return err
-			}
-			lastSave = time.Now()
-		}
-		return emit(e)
-	}
-	turn := &DelegateTurn{ConversationID: input.ID, Text: input.Text, Channel: input.Channel, store: store, message: &message, send: send, segments: map[string]segment{}}
-	defer func() {
-		status, failure := "complete", ""
-		if runErr != nil {
-			status, failure = "error", runErr.Error()
-			if errors.Is(runErr, context.Canceled) {
-				status = "cancelled"
-			}
-		}
-		if err := store.Save(message, status, failure); err != nil {
-			runErr = errors.Join(runErr, err)
-		}
-	}()
-	if err := send(Event{Kind: TurnStarted, MessageID: message.ID}); err != nil {
+	reply := newReply(ctx, store, &message, emit)
+	turn := &DelegateTurn{ConversationID: input.ID, Text: input.Text, Channel: input.Channel, reply: reply}
+	defer func() { runErr = reply.finish(runErr) }()
+	if err := reply.send(Event{Kind: TurnStarted, MessageID: message.ID}); err != nil {
 		return err
 	}
 	if err := delegate.Reply(ctx, turn); err != nil {

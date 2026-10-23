@@ -92,9 +92,8 @@ func searchPrompt(waiting []Tool, entries []Entry) string {
 	return "More tools and skills are available than are declared: " + strings.Join(parts, ", ") + ". Before saying you cannot do something, call tool_search with keywords for the task; the tools it finds can be called in your next step."
 }
 
-// toolSearch is the tool_search tool of one turn: it ranks tools not yet
-// declared, and entries, and loads the tools it finds through load.
-func toolSearch(waiting func() []Tool, loaded func() []Tool, entries []Entry, load func([]Tool)) Tool {
+// searchTool finds deferred tools and entries for this turn.
+func (t *turnTools) searchTool() Tool {
 	return Tool{
 		Tool: llm.Tool{
 			Name:        searchName,
@@ -113,7 +112,7 @@ func toolSearch(waiting func() []Tool, loaded func() []Tool, entries []Entry, lo
 			if n, ok := call.Input["limit"].(float64); ok && n >= 1 {
 				limit = min(int(n), searchMax)
 			}
-			return search(query, limit, waiting(), loaded(), entries, load), nil
+			return t.search(query, limit), nil
 		},
 	}
 }
@@ -135,7 +134,8 @@ type searchResult struct {
 	Note    string   `json:"note,omitempty"`
 }
 
-func search(query string, limit int, waiting, loaded []Tool, entries []Entry, load func([]Tool)) searchResult {
+func (t *turnTools) search(query string, limit int) searchResult {
+	waiting, loaded, entries := t.waiting, t.loaded, t.entries
 	type candidate struct {
 		tool   *Tool
 		entry  *Entry
@@ -173,7 +173,7 @@ func search(query string, limit int, waiting, loaded []Tool, entries []Entry, lo
 		result.Results = append(result.Results, found{Name: c.tool.Name, Kind: "tool", Description: brief(c.tool.Description), Namespace: c.tool.Namespace, Use: use})
 	}
 	if len(toLoad) > 0 {
-		load(toLoad)
+		t.stage(toLoad)
 	}
 	if len(result.Results) == 0 {
 		result.Note = "Nothing matched; try other keywords, such as the service or action the task needs."
