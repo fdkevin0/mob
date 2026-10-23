@@ -57,20 +57,6 @@ func TestCobraHelpAndConfigValidation(t *testing.T) {
 	}
 }
 
-func TestGatewayCommandHelp(t *testing.T) {
-	command := newRootCommand()
-	var output bytes.Buffer
-	command.SetOut(&output)
-	command.SetErr(&output)
-	command.SetArgs([]string{"gateway", "--help"})
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(output.String(), "Run the Cloud Gateway relay and signaling hub") || !strings.Contains(output.String(), "--gateway-addr") {
-		t.Fatalf("gateway command help missing flags: %s", output.String())
-	}
-}
-
 func TestInheritedFlagsSurviveBackgroundLaunch(t *testing.T) {
 	command := newRootCommand()
 	command.SetArgs([]string{"config", "check", "--config", "/tmp/mob-test.yaml", "--demo"})
@@ -104,41 +90,12 @@ func TestConfigurationFlagsThroughCobra(t *testing.T) {
 	command := newRootCommand()
 	var output bytes.Buffer
 	command.SetOut(&output)
-	command.SetArgs([]string{"config", "check", "--max-tool-steps=10", "--gateway-node-id=node", "--sandbox-image=alpine:3.20", "--web-url="})
+	command.SetArgs([]string{"config", "check", "--max-tool-steps=10", "--sandbox-image=alpine:3.20", "--web-url="})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "Configuration valid") {
 		t.Fatal("flags were not loaded")
-	}
-}
-
-func TestGatewayRejectsLocalFlagsBeforeStarting(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("gateway:\n  addr: 127.0.0.1:0\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("MOB_CONFIG", path)
-	for _, args := range [][]string{
-		{"gateway", "--token=" + strings.Repeat("x", 40)},
-		{"gateway", "--token=short"},
-		{"gateway", "--addr=127.0.0.1:0"},
-		{"--token=" + strings.Repeat("x", 40), "gateway"},
-	} {
-		command := newRootCommand()
-		var output bytes.Buffer
-		command.SetOut(&output)
-		command.SetErr(&output)
-		command.SetArgs(args)
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		err := command.ExecuteContext(ctx)
-		cancel()
-		if err == nil || !strings.Contains(err.Error(), "mob gateway uses --gateway-token and --gateway-addr") {
-			t.Fatalf("legacy gateway flags did not fail with migration guidance: %v", err)
-		}
-		if strings.Contains(output.String(), "listening") {
-			t.Fatal("gateway started before rejecting local flags")
-		}
 	}
 }
 

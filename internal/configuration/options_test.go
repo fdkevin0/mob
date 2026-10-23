@@ -18,7 +18,7 @@ func TestUnifiedSourcesAndDaemonForwarding(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	secret := strings.Repeat("s", 32)
-	body := "token: " + secret + "\ngateway:\n  addr: localhost:9000\n  url: https://file.example\n  node_id: file-node\n  token: file-secret\nweb_url: https://file.example\nsandbox:\n  image: alpine:3.20\nmcp_servers:\n  docs:\n    url: https://docs.example/mcp\n"
+	body := "token: " + secret + "\nmax_tool_steps: 5\nweb_url: https://file.example\nsandbox:\n  image: alpine:3.20\nmcp_servers:\n  docs:\n    url: https://docs.example/mcp\n"
 	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -31,23 +31,21 @@ func TestUnifiedSourcesAndDaemonForwarding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if file.Token != secret || file.Gateway.NodeID != "file-node" || file.Gateway.Addr != "localhost:9000" || file.Sandbox.Image != "alpine:3.20" || len(file.MCPServers) != 1 {
+	if file.Token != secret || file.MaxToolSteps != 5 || file.Sandbox.Image != "alpine:3.20" || len(file.MCPServers) != 1 {
 		t.Fatal("file values not loaded")
 	}
-	t.Setenv("MOB_GATEWAY_NODE_ID", "env-node")
-	t.Setenv("MOB_NODE_ID", "legacy-ignored")
+	t.Setenv("MOB_MAX_TOOL_STEPS", "6")
 	t.Setenv("MOB_SANDBOX_IMAGE", "alpine:3.21")
-	t.Setenv("MOB_GATEWAY_TOKEN", "environment-secret")
 	env, err := loader.Read()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env.Gateway.NodeID != "env-node" || env.Sandbox.Image != "alpine:3.21" || env.Gateway.Token != "environment-secret" {
+	if env.MaxToolSteps != 6 || env.Sandbox.Image != "alpine:3.21" {
 		t.Fatal("environment did not override file")
 	}
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	AddFlags(flags)
-	if err := flags.Parse([]string{"--gateway-node-id=flag-node", "--gateway-token=flag-secret", "--token=", "--web-url=", "--sandbox-image=alpine:3.22", `--mcp-servers={"other":{"url":"https://other.example/mcp"}}`}); err != nil {
+	if err := flags.Parse([]string{"--max-tool-steps=7", "--token=", "--web-url=", "--sandbox-image=alpine:3.22", `--mcp-servers={"other":{"url":"https://other.example/mcp"}}`}); err != nil {
 		t.Fatal(err)
 	}
 	loader, err = NewLoader(flags)
@@ -58,10 +56,10 @@ func TestUnifiedSourcesAndDaemonForwarding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Gateway.NodeID != "flag-node" || got.Gateway.Token != "flag-secret" || got.Token != "" || got.WebURL != "" || got.Sandbox.Image != "alpine:3.22" || len(got.MCPServers) != 1 || got.MCPServers["other"].URL != "https://other.example/mcp" {
+	if got.MaxToolSteps != 7 || got.Token != "" || got.WebURL != "" || got.Sandbox.Image != "alpine:3.22" || len(got.MCPServers) != 1 || got.MCPServers["other"].URL != "https://other.example/mcp" {
 		t.Fatal("flags did not override environment/file, or MCP maps were merged")
 	}
-	if strings.Contains(strings.Join(loader.Arguments(), " "), "flag-secret") || strings.Contains(strings.Join(loader.Arguments(), " "), "other.example") {
+	if strings.Contains(strings.Join(loader.Arguments(), " "), "other.example") {
 		t.Fatal("secret arguments forwarded in argv")
 	}
 	for _, entry := range loader.Environ() {
@@ -101,7 +99,7 @@ func TestUnifiedValidationAndReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, body := range []string{"token: secret-short", "gateway:\n  addr: bad-secret", "gateway:\n  url: secret-invalid", "mcp_servers: secret-invalid", "config: secret-path", "gateway:\n  unknown: secret-value"} {
+	for _, body := range []string{"token: secret-short", "gateway:\n  url: secret-invalid", "mcp_servers: secret-invalid", "config: secret-path"} {
 		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -141,5 +139,21 @@ func TestUnifiedValidationAndReference(t *testing.T) {
 	}
 	if string(saved) != reference {
 		t.Fatal("configuration reference is stale; run go run ./cmd/configdocs")
+	}
+}
+
+func TestRemovedGatewaySectionIsNamed(t *testing.T) {
+	cleanEnvironment(t)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("gateway:\n  url: https://relay.example\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MOB_CONFIG", path)
+	loader, err := NewLoader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loader.Read(); err == nil || !strings.Contains(err.Error(), "delete the gateway section") {
+		t.Fatalf("gateway section error = %v", err)
 	}
 }

@@ -2,20 +2,15 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/fdkevin0/mob/internal/configuration"
-	"github.com/fdkevin0/mob/internal/gateway"
 	"github.com/fdkevin0/mob/internal/local"
-	"github.com/fdkevin0/mob/internal/node"
 	"github.com/fdkevin0/mob/internal/provider"
 	"github.com/fdkevin0/mob/internal/version"
 	"github.com/fdkevin0/mob/webapp"
@@ -39,9 +34,6 @@ func newRootCommand() *cobra.Command {
 	root := &cobra.Command{Use: "mob", Short: "Local assistant with desktop, terminal and background service", Version: version.Current, Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true}
 	configuration.AddFlags(root.PersistentFlags())
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Name() == "gateway" && (cmd.Flags().Changed("token") || cmd.Flags().Changed("addr")) {
-			return errors.New("mob gateway uses --gateway-token and --gateway-addr; --token and --addr configure the local service")
-		}
 		loader, err := configuration.NewLoader(root.PersistentFlags())
 		if err != nil {
 			return err
@@ -66,24 +58,6 @@ func newRootCommand() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), "Access token: supplied through configuration")
 		}
 
-		gwURL := config.Gateway.URL
-		if gwURL != "" {
-			nID := config.Gateway.NodeID
-			if nID == "" {
-				hostname, _ := os.Hostname()
-				if hostname == "" {
-					hostname = "node-local"
-				}
-				nID = hostname
-			}
-			// The gateway never receives the local access token, which controls this Mob.
-			gwTok := config.Gateway.Token
-			nodeClient := node.NewClient(gwURL, nID, gwTok, app.Server.Handler(webapp.Assets()))
-			_ = nodeClient.Start(cmd.Context())
-			defer nodeClient.Close()
-			fmt.Fprintf(cmd.OutOrStdout(), "Gateway relay registered: %s (Node ID: %s)\n", gwURL, nID)
-		}
-
 		select {
 		case <-cmd.Context().Done():
 		case <-app.Done:
@@ -94,43 +68,8 @@ func newRootCommand() *cobra.Command {
 	serveCommand := &cobra.Command{Use: "serve", Short: "Run the service until interrupted", Args: cobra.NoArgs, RunE: serve}
 	serveCommand.Flags().BoolVar(&background, "background", false, "Mark this process as managed by mob start/stop")
 
-	gatewayCommand := &cobra.Command{
-		Use:   "gateway",
-		Short: "Run the Cloud Gateway relay and signaling hub",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			token := config.Gateway.Token
-			gw := gateway.New(gateway.Config{
-				Token:  token,
-				Assets: webapp.Assets(),
-			})
-			srv := &http.Server{
-				Addr:    config.Gateway.Addr,
-				Handler: gw.Handler(),
-			}
-			go func() {
-				<-cmd.Context().Done()
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = srv.Shutdown(ctx)
-			}()
-			fmt.Fprintf(cmd.OutOrStdout(), "Mob Gateway listening on %s\n", config.Gateway.Addr)
-			if token != "" {
-				fmt.Fprintln(cmd.OutOrStdout(), "Gateway authentication token: configured")
-			} else {
-				fmt.Fprintln(cmd.OutOrStdout(), "Warning: Gateway running without authentication token")
-			}
-			err := srv.ListenAndServe()
-			if errors.Is(err, http.ErrServerClosed) {
-				return nil
-			}
-			return err
-		},
-	}
-
 	root.AddCommand(serveCommand,
 		runnerCommand(&config),
-		gatewayCommand,
 		&cobra.Command{Use: "start", Short: "Start an independent background service", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			if err := local.StartBackground(config); err != nil {
 				return err

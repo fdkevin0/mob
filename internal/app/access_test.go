@@ -208,7 +208,7 @@ func TestRotationEndsRequestsOfTheOldToken(t *testing.T) {
 	}
 }
 
-// Requests built outside net/http.Server, such as the gateway relay's, are never
+// Requests built outside net/http.Server, such as the runner relay's, are never
 // cancelled by a server; finishing the handler must still release the revocation watch.
 func TestFinishedRequestsReleaseTheirRevocationWatch(t *testing.T) {
 	s, err := chat.OpenStore(filepath.Join(t.TempDir(), "chat.sqlite"))

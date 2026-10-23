@@ -22,7 +22,6 @@ import (
 type Environment struct {
 	Dir, StateDir, Addr string
 	Token               string
-	Gateway             GatewaySettings
 	// Demo makes the offline model the default.
 	Demo bool
 	// Sandbox is where Mob runs commands for the model, isolated from the host.
@@ -38,16 +37,8 @@ type Environment struct {
 	Loader *Loader
 }
 
-type GatewaySettings struct {
-	URL    string `mapstructure:"url"`
-	NodeID string `mapstructure:"node_id"`
-	Addr   string `mapstructure:"addr"`
-	Token  string `mapstructure:"token"`
-}
-
 type settings struct {
 	Token    string           `mapstructure:"token"`
-	Gateway  GatewaySettings  `mapstructure:"gateway"`
 	DataDir  string           `mapstructure:"data_dir"`
 	StateDir string           `mapstructure:"state_dir"`
 	Addr     string           `mapstructure:"addr"`
@@ -215,6 +206,9 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if v.InConfig("config") {
 		return fail("config is a file selector, not a configuration field")
 	}
+	if v.InConfig("gateway") {
+		return fail("the experimental gateway was removed; delete the gateway section (remote access uses mob runner)")
+	}
 	if value, ok := v.Get("mcp_servers").(string); ok {
 		var servers map[string]any
 		if json.Unmarshal([]byte(value), &servers) != nil || servers == nil {
@@ -244,19 +238,8 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if data.Token != "" && len(data.Token) < 32 {
 		return fail("token must contain at least 32 bytes")
 	}
-	if mode != 0 && runtime.GOOS != "windows" && mode.Perm()&0077 != 0 && (v.InConfig("token") || v.InConfig("gateway.token")) {
+	if mode != 0 && runtime.GOOS != "windows" && mode.Perm()&0077 != 0 && v.InConfig("token") {
 		return fail("configuration with tokens must be owner-only (chmod 600)")
-	}
-	if _, port, err := net.SplitHostPort(data.Gateway.Addr); err != nil {
-		return fail("gateway.addr must be a host and port")
-	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
-		return fail("gateway.addr must use a valid port")
-	}
-	if data.Gateway.URL != "" {
-		u, err := url.Parse(data.Gateway.URL)
-		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-			return fail("gateway.url must be an http or https URL")
-		}
 	}
 	if _, err := WebOrigin(data.WebURL); err != nil {
 		return Environment{}, err
@@ -278,7 +261,7 @@ func (l *Loader) read(required bool) (Environment, error) {
 	if err != nil {
 		return fail("invalid state_dir")
 	}
-	return Environment{Token: data.Token, Gateway: data.Gateway, Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, MCPRegistry: data.MCPRegistry.registry(), WebURL: data.WebURL, Loader: l}, nil
+	return Environment{Token: data.Token, Dir: data.DataDir, StateDir: data.StateDir, Addr: data.Addr, Demo: data.Demo, Sandbox: data.Sandbox, MaxToolSteps: data.MaxToolSteps, MCPServers: data.MCPServers, MCPRegistry: data.MCPRegistry.registry(), WebURL: data.WebURL, Loader: l}, nil
 }
 
 func readConfigFile(path string) ([]byte, os.FileMode, error) {

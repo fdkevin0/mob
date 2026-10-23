@@ -18,7 +18,7 @@ change the single-Go-binary release.
 | `internal/app` | wiring: the HTTP server, plugin list (`plugins()`), plugin-level commands |
 | `internal/local` | process ownership, the database lock and the background lifecycle |
 | `internal/chat` | conversations and turns: `ConversationService`, the model loop, tool registry, hooks, command registry, approvals, context fitting, the SQLite store and migrations |
-| `internal/protocol` | maps conversation events to AI SDK UI stream chunks; the gateway frame protocol |
+| `internal/protocol` | maps conversation events to AI SDK UI stream chunks |
 | `internal/llm` | the provider-neutral model interface and its drivers (`openai`, `anthropic`, `demo`) |
 | `internal/provider`, `internal/catalog` | `providers.json` and presets; the models.dev catalog |
 | `internal/configuration` | shared option definitions for Cobra/Viper/generated reference, XDG loading, live reload, plugin configuration sections and secrets |
@@ -28,7 +28,6 @@ change the single-Go-binary release.
 | `internal/plugins/*` | email, Cloudflare, Telegram, WeChat iLink, MCP, skills and schedules, each with its own tools, commands, routes and background run |
 | `internal/container`, `internal/sandbox` | the platform container runtimes and the model's `sandbox` tool |
 | `internal/runner`, `worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `worker/runners.ts` |
-| `internal/gateway`, `internal/node` | the experimental relay and edge-node client |
 | `internal/tui` | the Bubble Tea terminal UI |
 | `internal/version` | release versions |
 | `cmd/contracts` | generates `packages/client/src/contracts.ts` from Go types; Web keeps a compatibility re-export |

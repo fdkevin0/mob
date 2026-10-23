@@ -159,9 +159,6 @@ func start(c Config, assets fs.FS, background bool) (*App, error) {
 			if next.Dir != c.Dir || next.StateDir != c.StateDir || next.Addr != c.Addr || next.Token != c.Token {
 				return errors.New("data_dir, state_dir, addr and token changes require a restart; current configuration retained")
 			}
-			if next.Gateway.URL != c.Gateway.URL || c.Gateway.URL != "" && (next.Gateway.NodeID != c.Gateway.NodeID || next.Gateway.Token != c.Gateway.Token) {
-				return errors.New("active gateway connection changes require a restart; current configuration retained")
-			}
 			return server.ReloadConfiguration(next)
 		}, func(err error) {
 			a.configMu.Lock()

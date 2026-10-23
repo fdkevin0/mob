@@ -179,7 +179,7 @@ Mob API; the relay cannot call it without an authenticated encrypted request.
    arguments, tickets or messages: it contains the encryption key.
 3. Run `mob start` (or keep `mob serve` running), then `mob runner`. Keep the
    runner process running. It actively connects to the site over WebSocket
-   and reconnects after a disconnect. No gateway flags are needed.
+   and reconnects after a disconnect.
 4. When the runner appears online, choose **Open runner** in that browser.
    Use **Revoke access** to invalidate its cloud credential and disconnect it.
    Stopping `mob runner` also stops remote access, without stopping local Mob.
@@ -334,39 +334,3 @@ dialog yet.
   configuration would be reviewed and updated through pull requests. Linking
   that sync and copying the share link are a one-time step in the
   maintainer's account.
-
-## Gateway
-## Gateway
-
-Two experimental pieces let a client reach Mob through a gateway.
-
-- `mob gateway` runs a relay and signaling hub (`--gateway-addr`, default `:8788`;
-  `--gateway-token` or `MOB_GATEWAY_TOKEN`). It serves the web UI, accepts edge nodes
-  and clients over WebSocket, relays frames between them, and forwards WebRTC
-  signaling messages. It warns when started without a token.
-- `mob serve --gateway-url URL [--gateway-node-id ID]` registers the local service
-  with a gateway as an edge node.
-- HTTP relay streams preserve the node's response status, headers and SSE text,
-  including event IDs and the final `[DONE]` marker. Stream frames carry a JSON
-  response envelope, with status and headers on the first chunk; update the
-  gateway and node together when upgrading from the older stream format.
-- A replacement connection with the same node ID stays registered when its old
-  connection disconnects.
-- WebSocket requests receive their stream events and final response on the
-  originating connection, with the caller's original request ID. Different
-  clients can use the same request ID safely.
-- Relays allow six minutes without a response frame, covering a five-minute
-  sandbox command plus cleanup and transit. A disconnected node fails pending
-  requests.
-- If a reader falls behind the 64-frame response buffer, its request fails
-  explicitly. An HTTP stream already in progress is aborted, so clients see
-  an incomplete response; WebSocket clients receive a `slow_consumer` error.
-  Check saved history before repeating any action.
-
-The frame protocol is in `internal/protocol/mesh.go`; the gateway and node are
-in `internal/gateway` and `internal/node`. There is no WebRTC data channel yet:
-the gateway only forwards signaling, and traffic goes through the WebSocket
-relay.
-
-The gateway is not meant to be hosted as a public service. The planned
-direction is a content-blind, end-to-end encrypted relay.
