@@ -52,18 +52,31 @@ export class Gestures {
 
 const OMEGA = 9; // settles in about half a second, whatever the distance
 
+export type Magnet = {
+	// Springs the scroll to y; done runs once it gets there or is stopped.
+	go(y: number, done?: () => void): void;
+	destroy(): void;
+};
+
 // Takes over the wheel while the scroll is on the story's pages, points(),
 // whose last one is where the story ends and free scrolling starts again.
-export function magnet(points: () => number[]): () => void {
+export function magnet(points: () => number[]): Magnet {
 	const root = document.documentElement;
 	const gestures = new Gestures();
 	let anim = 0;
 	let target = 0;
 	let from = { x: 0, v: 0, t: 0 }; // the spring's start, relative to target
+	let then: (() => void) | undefined;
 
 	// A frame can start a little before the call that set the spring off.
 	const at = (now: number) => spring(from.x, from.v, OMEGA, Math.max(0, now - from.t) / 1000);
-	const done = () => { anim = 0; root.style.scrollSnapType = ''; };
+	const done = () => {
+		anim = 0;
+		root.style.scrollSnapType = '';
+		const was = then;
+		then = undefined;
+		was?.();
+	};
 	const stop = () => { if (anim) { cancelAnimationFrame(anim); done(); } };
 	const frame = (now: number) => {
 		const [x, v] = at(now);
@@ -72,7 +85,10 @@ export function magnet(points: () => number[]): () => void {
 		if (still) done();
 		else anim = requestAnimationFrame(frame);
 	};
-	const go = (to: number) => {
+	const go = (to: number, done?: () => void) => {
+		const was = then;
+		then = done;
+		was?.();
 		const now = performance.now();
 		const [x, v] = anim ? at(now) : [window.scrollY - target, 0];
 		const off = target + x - to, dist = Math.abs(off), toward = -Math.sign(off);
@@ -107,10 +123,13 @@ export function magnet(points: () => number[]): () => void {
 	window.addEventListener('wheel', wheel, { passive: false });
 	window.addEventListener('mousedown', stop);
 	window.addEventListener('touchstart', stop, { passive: true });
-	return () => {
-		stop();
-		window.removeEventListener('wheel', wheel);
-		window.removeEventListener('mousedown', stop);
-		window.removeEventListener('touchstart', stop);
+	return {
+		go,
+		destroy() {
+			stop();
+			window.removeEventListener('wheel', wheel);
+			window.removeEventListener('mousedown', stop);
+			window.removeEventListener('touchstart', stop);
+		},
 	};
 }

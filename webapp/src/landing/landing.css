@@ -93,14 +93,18 @@ code { font-family: var(--mono); font-size: .92em; }
 .feature-list { position: absolute; z-index: 2; top: 50%; right: max(28px, calc((100vw - 1240px) / 2 + 28px)); transform: translateY(-50%); width: min(420px, 38vw); opacity: 0; }
 .feature-kicker { margin: 0 0 14px; font-family: var(--mono); font-size: 12px; color: var(--muted-foreground); letter-spacing: .04em; }
 .feature-list ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
-.feature-list li { border-bottom: 1px solid var(--line); background: #07080ab3; }
+.feature-list li { border-bottom: 1px solid var(--line); background: #07080ab3; transition: background-color .2s, box-shadow .2s; }
 .feature-list li.on { background: #0b0d0fe6; box-shadow: inset 2px 0 0 var(--lime); }
 .feature-list button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; background: none; border: 0; cursor: pointer; text-align: left; color: var(--muted-foreground); }
 .feature-list li.on button, .feature-list button:hover { color: var(--text); }
 .feature-list li.on button svg { color: var(--lime); }
 .feature-title { font-size: 17px; font-weight: 560; letter-spacing: -0.01em; }
-.feature-more { display: none; padding: 0 16px 16px 46px; }
-.feature-list li.on .feature-more { display: block; animation: rise .25s steps(3); }
+/* The open feature's text slides open while the last one closes, so the
+   list changes height smoothly instead of jumping. */
+.feature-more { display: grid; grid-template-rows: 0fr; opacity: 0; padding: 0 16px 0 46px; transition: grid-template-rows .3s cubic-bezier(.2, .8, .2, 1), opacity .2s; }
+.feature-more > div { min-height: 0; overflow: hidden; }
+.feature-more > div::after { content: ''; display: block; height: 16px; }
+.feature-list li.on .feature-more { grid-template-rows: 1fr; opacity: 1; }
 .feature-more p { margin: 0; font-size: 15px; line-height: 1.5; color: #c4cac0; }
 .feature-more .feature-look { margin-top: 8px; font-size: 13px; color: var(--muted-foreground); }
 
@@ -161,7 +165,8 @@ code { font-family: var(--mono); font-size: .92em; }
 	.feature-list { inset: auto 16px 20px; top: auto; transform: none; width: auto; }
 	.feature-list button { padding: 10px 12px; }
 	.feature-title { font-size: 15px; }
-	.feature-more { padding: 0 12px 12px 42px; }
+	.feature-more { padding: 0 12px 0 42px; }
+	.feature-more > div::after { height: 12px; }
 	.feature-more p { font-size: 14px; }
 	.start { padding: 90px 16px 80px; }
 	.terminal { padding: 18px; font-size: 13px; }
@@ -172,6 +177,7 @@ code { font-family: var(--mono); font-size: .92em; }
 /* With motion reduced the pages simply stack, with nothing to snap to. */
 @media (prefers-reduced-motion: reduce) {
 	html { scroll-snap-type: none; }
+	.feature-more, .feature-list li { transition: none; }
 }
 .story.still .stage { position: relative; height: auto; overflow: visible; }
 .story.still .stage-field { position: relative; height: 100svh; opacity: .4; }
