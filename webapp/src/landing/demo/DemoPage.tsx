@@ -1,6 +1,7 @@
 import { Logo } from '../../components/brand/Logo';
 import { Icon, type IconName } from '../../components/brand/Icon';
 import { Button } from '../../components/ui/button';
+import { ThemePicker } from '../../theme/ThemePicker';
 import { Studio } from './Studio';
 
 // /demo: one task, replayed in the browser from the message to the report,
@@ -24,6 +25,7 @@ export function DemoPage() {
 					<a href="/docs/">Docs</a>
 					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
 				</nav>
+				<ThemePicker className="nav-theme" />
 				<div className="nav-account"><Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button></div>
 			</div></header>
 

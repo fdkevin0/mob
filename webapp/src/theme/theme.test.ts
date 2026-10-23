@@ -22,9 +22,9 @@ afterEach(() => {
 });
 
 describe('theme', () => {
-	it('runs the same boot script on both pages, and the Worker allows it by hash', () => {
+	it('runs the same boot script on every page, and the Worker allows it by hash', () => {
 		const boot = inline('index.html');
-		expect(inline('account.html')).toBe(boot);
+		for (const page of ['account.html', 'landing.html', 'demo.html']) expect(inline(page)).toBe(boot);
 		const hash = createHash('sha256').update(boot).digest('base64');
 		expect(readFileSync(path.join(root, '../worker/index.ts'), 'utf8')).toContain(`'sha256-${hash}'`);
 	});
@@ -40,13 +40,13 @@ describe('theme', () => {
 		expect(document.documentElement.dataset.theme).toBe('dark');
 		expect(document.documentElement.classList.contains('dark')).toBe(true);
 		saveTheme('system');
-		expect(localStorage.getItem('mob.theme')).toBeNull();
+		expect(localStorage.getItem('starlight-theme')).toBeNull();
 		expect(document.documentElement.dataset.theme).toBe('light');
 	});
 
 	it('boot script agrees with applyTheme', () => {
 		const boot = inline('index.html');
-		const meta = document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color', content: '#131210' }));
+		const meta = document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color', content: '#07080a' }));
 		for (const [saved, light, want] of [
 			[null, false, 'dark'],
 			[null, true, 'light'],
@@ -54,13 +54,13 @@ describe('theme', () => {
 			['light', false, 'light'],
 		] as const) {
 			prefersLight(light);
-			if (saved) localStorage.setItem('mob.theme', saved);
-			else localStorage.removeItem('mob.theme');
+			if (saved) localStorage.setItem('starlight-theme', saved);
+			else localStorage.removeItem('starlight-theme');
 			delete document.documentElement.dataset.theme;
 			new Function(boot)();
 			expect(document.documentElement.dataset.theme).toBe(want);
-			expect(meta.content).toBe(want === 'light' ? '#f7f4ee' : '#131210');
-			meta.content = '#131210';
+			expect(meta.content).toBe(want === 'light' ? '#f4f3ee' : '#07080a');
+			meta.content = '#07080a';
 		}
 		meta.remove();
 	});

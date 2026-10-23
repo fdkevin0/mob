@@ -29,7 +29,7 @@ describe('ThemePicker', () => {
 		fireEvent.click(view.getByTestId('drawer').querySelector('input[value=light]')!);
 		expect(checked('drawer')).toBe('light');
 		expect(checked('sidebar')).toBe('light');
-		expect(localStorage.getItem('mob.theme')).toBe('light');
+		expect(localStorage.getItem('starlight-theme')).toBe('light');
 		expect(document.documentElement.dataset.theme).toBe('light');
 		fireEvent.click(view.getByTestId('sidebar').querySelector('input[value=dark]')!);
 		expect(checked('drawer')).toBe('dark');

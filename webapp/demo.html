@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Watch Mob hand a goal to a team of coding agents, ask before anything risky, and report back on the web or in your chat app." />
     <meta name="theme-color" content="#07080a" />
+    <!-- Applies the saved or system colour scheme before the first paint; see src/theme/theme.ts. Its hash is in worker/index.ts. -->
+    <script>(function(){var t;try{t=localStorage.getItem('starlight-theme')}catch(e){}var l=t==='light'||t!=='dark'&&matchMedia('(prefers-color-scheme: light)').matches,r=document.documentElement;r.dataset.theme=l?'light':'dark';r.classList.toggle('dark',!l);if(l)document.querySelector('meta[name="theme-color"]').setAttribute('content','#f4f3ee')})()</script>
     <!-- Link previews in Telegram, Slack, X and other apps. /app and /account
          send visitors without a session here, so their links preview the same. -->
     <meta property="og:type" content="website" />

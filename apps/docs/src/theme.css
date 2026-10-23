@@ -1,4 +1,6 @@
-/* The landing page's dark palette, Geist fonts and lime accent. */
+/* The site's palette (webapp/src/styles/theme.css), Geist fonts and lime
+ * accent. Starlight's theme menu stores its choice under the key the app,
+ * account, landing and demo pages read, so one choice holds everywhere. */
 @import '@fontsource-variable/geist';
 @import '@fontsource/geist-mono';
 
@@ -22,6 +24,15 @@
 }
 
 :root[data-theme='light'] {
+	--sl-color-white: #1a1c15;
+	--sl-color-gray-1: #2c2f25;
+	--sl-color-gray-2: #43473b;
+	--sl-color-gray-3: #696c60;
+	--sl-color-gray-4: #9a9b8e;
+	--sl-color-gray-5: #d2d0c4;
+	--sl-color-gray-6: #e8e6de;
+	--sl-color-gray-7: #efede6;
+	--sl-color-black: #f6f5f0;
 	--sl-color-accent-low: #e6f5c4;
 	--sl-color-accent: #4f7a10;
 	--sl-color-accent-high: #2c4508;

@@ -2,10 +2,14 @@ import { configured, createAuth, type Env } from './auth';
 import { accountRunners, runnerTransport } from './runners';
 export { RunnerRelay } from './relay';
 
+// Every page runs one inline script, which applies the colour scheme before
+// the first paint (index.html, account.html, landing.html, demo.html).
+const themeScript = "'sha256-S6W4VqyCb8qKkLG/FDCsAHhGN7IBdaOVQRlaEQyTHX0='";
+
 // The landing page talks to this Worker (sign-in) and Turnstile.
 const landingPolicy = [
 	"default-src 'self'",
-	"script-src 'self' https://challenges.cloudflare.com",
+	`script-src 'self' ${themeScript} https://challenges.cloudflare.com`,
 	'frame-src https://challenges.cloudflare.com',
 	"connect-src 'self'",
 	"img-src 'self' data: https:",
@@ -20,6 +24,7 @@ const landingPolicy = [
 // The demo page replays recorded runs; it needs only its own files.
 const demoPolicy = [
 	"default-src 'self'",
+	`script-src 'self' ${themeScript}`,
 	"connect-src 'self'",
 	"img-src 'self' data:",
 	"style-src 'self' 'unsafe-inline'",
@@ -29,10 +34,6 @@ const demoPolicy = [
 	"form-action 'none'",
 	"frame-ancestors 'none'",
 ].join('; ');
-
-// The app and the account page run one inline script, which applies the
-// colour scheme before the first paint (index.html, account.html).
-const themeScript = "'sha256-cPgteixlb5tjI6bm8kJy89F8K9bIoJznZYF57/ez0/g='";
 
 // The account page talks only to this Worker's auth API.
 const accountPolicy = [

@@ -1,7 +1,25 @@
-/* The workspace is calmer than the landing page: soft surfaces and rounded controls.
- * Its colours are in ../styles/app-theme.css. */
+/* The workspace is calmer than the landing page: soft surfaces and rounded controls,
+ * with lime kept for the primary action and the current selection. */
 :root {
+	--bg: #0c0d0f;
+	--panel: #111316;
+	--surface: #16191c;
+	--surface-raised: #1c2024;
+	--line: #ffffff0d;
+	--line-strong: #ffffff1a;
+	--muted-foreground: #8f978e;
+	--accent: #ffffff0a;
 	--radius: 10px;
+}
+:root[data-theme='light'] {
+	--bg: #f4f3ee;
+	--panel: #faf9f5;
+	--surface: #fffffd;
+	--surface-raised: #ebe9e1;
+	--line: #1a1c150f;
+	--line-strong: #1a1c151c;
+	--muted-foreground: #696c60;
+	--accent: #1a1c150a;
 }
 .btn {
 	font-family: var(--sans);

@@ -8,9 +8,11 @@ export type Theme = 'system' | 'light' | 'dark';
 
 export const themes: Theme[] = ['system', 'light', 'dark'];
 
-const key = 'mob.theme';
+// The docs (Starlight) keep their choice under this key, as 'light', 'dark'
+// or '' for the system, so one choice holds on every page.
+const key = 'starlight-theme';
 const query = '(prefers-color-scheme: light)';
-const colors = { light: '#f7f4ee', dark: '#131210' };
+const colors = { light: '#f4f3ee', dark: '#07080a' };
 
 export function storedTheme(): Theme {
 	try {
