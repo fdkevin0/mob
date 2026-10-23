@@ -24,6 +24,13 @@ served by the Worker in `worker/`:
   With reduced motion the pages stack without animation. It is drawn with
   WebGPU (Canvas 2D where WebGPU is missing). The office and the conversation
   are idealised, not a picture of what Mob does today.
+- Links to the site show a preview card in Telegram, Slack, X and other apps:
+  the landing page and every docs page carry Open Graph and Twitter card tags
+  with the 1200×630 image `webapp/public/og.png` (served at `/og.png`, straight
+  from static assets). `/app` and `/account` send visitors without a session,
+  crawlers included, to the landing page, so their links preview the same.
+  Telegram caches a preview per URL; after changing the image or tags, send
+  the link to @WebpageBot to refresh it.
 - Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
   Turnstile check has to pass before the GitHub flow starts. Accounts and
   sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.

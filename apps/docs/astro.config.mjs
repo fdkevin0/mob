@@ -1,5 +1,5 @@
 // @ts-check
-// The documentation site at https://mob.fdkevin.cloud/docs. It builds into the
+// The documentation site at https://usemob.app/docs. It builds into the
 // public web build (webapp/dist-public/docs), and the Worker in worker/ serves
 // it beside the landing page and /app. Pages come from the repository's
 // Markdown through scripts/sync.ts; pages.ts lists them in sidebar order.
@@ -12,7 +12,7 @@ import { pages, repositoryUrl } from './pages.ts';
 const groups = ['Start', 'Features', 'Reference', 'Contributing'];
 
 export default defineConfig({
-	site: 'https://mob.fdkevin.cloud',
+	site: 'https://usemob.app',
 	base: '/docs',
 	trailingSlash: 'always',
 	outDir: '../../webapp/dist-public/docs',
@@ -34,6 +34,15 @@ export default defineConfig({
 			favicon: '/favicon.svg',
 			social: [{ icon: 'github', label: 'GitHub', href: repositoryUrl }],
 			customCss: ['./src/theme.css'],
+			// Starlight sets the other Open Graph and Twitter tags; links to the
+			// docs preview with the landing page's image (webapp/public/og.png).
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://usemob.app/og.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{ tag: 'meta', attrs: { property: 'og:image:alt', content: "Agents for you: calves at work in Mob's voxel office" } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://usemob.app/og.png' } },
+			],
 			sidebar: groups.map((label) => ({
 				label,
 				items: pages.filter((page) => page.group === label).map((page) => page.slug === '' ? { label: 'Introduction', link: '/' } : page.slug),
