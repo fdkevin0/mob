@@ -1,5 +1,5 @@
-// The orchestration demo: Mob splits a goal into tasks, hands them to coding
-// agents on their own branches, and those start agents of their own. One
+// The demo: you ask once, Mob splits the goal into tasks, hands them to
+// coding agents on their own branches, and those start agents of their own. One
 // task waits for an approval, one fails and Mob tries again with another
 // agent, and Mob checks every branch before it reports back. Times are in
 // seconds of the replay; a task after the approval counts from the moment
@@ -82,7 +82,11 @@ export const tasks: Task[] = [
 export type Decision = 'allow' | 'always' | 'deny';
 export type Run = { t: number; decided?: number; decision?: Decision; stopped: Record<string, number> };
 
-export const begin = (): Run => ({ t: 0, stopped: {} });
+/** COMPOSE is how long the prompt takes to type before it is sent at 0. */
+export const COMPOSE = 2.6;
+export const begin = (): Run => ({ t: -COMPOSE, stopped: {} });
+/** typed is how much of the goal is in the composer. */
+export const typed = (run: Run) => run.t >= 0 ? goal.length : Math.max(0, Math.round(((run.t + COMPOSE) / (COMPOSE - 0.5)) * goal.length));
 
 const byId = new Map(tasks.map(t => [t.id, t]));
 const ancestors = (task: Task): Task[] => task.parent ? [byId.get(task.parent)!, ...ancestors(byId.get(task.parent)!)] : [];

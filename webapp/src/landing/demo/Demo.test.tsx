@@ -1,66 +1,44 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { Demo } from './Demo';
-import { decide, finish, scenarios, shownAnswer, start, tick, visible, type State } from './script';
+import { DemoPage } from './DemoPage';
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 // Each act flushes one round of renders, so time passes in small steps.
 const wait = async (ms: number) => { for (let t = 0; t < ms; t += 100) await act(async () => { await vi.advanceTimersByTimeAsync(100); }); };
-const playTo = (s: State, until: (s: State) => boolean) => { while (!until(s)) s = tick(s); return s; };
 
-it('stops every task once for an approval', () => {
-	for (const [i, sc] of scenarios.entries()) {
-		expect(sc.steps.filter(s => s.kind === 'approve')).toHaveLength(1);
-		const s = playTo(start(i), s => s.phase === 'wait');
-		expect(tick(s)).toBe(s);
-		expect(visible(s).at(-1)?.status).toBe('waiting');
-	}
-});
-
-it('answers either way the approval goes', () => {
-	for (const i of scenarios.keys()) {
-		const allowed = finish(i, 'allow');
-		expect(shownAnswer(allowed)).toBe(scenarios[i].answer);
-		expect(visible(allowed).every(v => v.status === 'done')).toBe(true);
-		const denied = finish(i, 'deny');
-		expect(shownAnswer(denied)).toBe(scenarios[i].denied);
-		expect(visible(denied).at(-1)?.status).toBe('denied');
-		// Nothing after the denied step runs.
-		expect(visible(denied).length).toBeLessThanOrEqual(scenarios[i].steps.length);
-	}
-	const waiting = playTo(start(1), s => s.phase === 'wait');
-	expect(visible(decide(waiting, 'deny')).map(v => v.step.kind)).toEqual(['think', 'tool', 'tool', 'approve']);
-});
-
-it('lets the visitor pick a task and deny the approval', async () => {
+function play() {
 	vi.useFakeTimers();
 	// Without an observer the demo counts as on screen.
 	vi.stubGlobal('IntersectionObserver', undefined);
-	render(<Demo />);
-	fireEvent.click(within(screen.getByRole('group', { name: 'Tasks' })).getByRole('button', { name: 'Failing checkout tests' }));
-	await wait(20_000);
-	// Taking over stops the autopilot, so the approval waits for a click.
-	const deny = screen.getAllByRole('button', { name: 'Deny' });
-	expect(deny.length).toBeGreaterThan(0);
-	fireEvent.click(deny[0]);
-	await wait(10_000);
-	expect(screen.getAllByText(/Left your files alone/)).toHaveLength(2); // the app and the chat app
-	expect(screen.getByRole('button', { name: 'Replay' })).toBeTruthy();
+	render(<DemoPage />);
+}
+
+it('moves the conversation and the agents together, and takes an approval from the conversation', async () => {
+	play();
+	// Touching the demo stops the autopilot, so the approval waits for the visitor.
+	fireEvent.click(screen.getByRole('button', { name: 'Web app' }));
+	await wait(11_000);
+	const chat = within(screen.getByRole('region', { name: 'The conversation' }));
+	const agents = within(screen.getByRole('region', { name: 'Agents' }));
+	expect(chat.getByText(/wants to run a command in the sandbox/)).toBeTruthy();
+	expect(agents.getByText('Run command · in the sandbox')).toBeTruthy();
+	fireEvent.click(chat.getByRole('button', { name: 'Approve' }));
+	// The agent card stops asking as soon as the conversation answers.
+	expect(agents.queryByText('Run command · in the sandbox')).toBeNull();
+	await wait(14_000);
+	expect(agents.getByRole('status').textContent).toMatch(/Both branches are ready to merge/);
+	expect(chat.getByText(/Want me to open the pull requests/)).toBeTruthy();
 });
 
-it('lets the visitor approve an agent from its card, and switch demos', async () => {
-	vi.useFakeTimers();
-	vi.stubGlobal('IntersectionObserver', undefined);
-	const { DemoPage } = await import('./DemoPage');
-	render(<DemoPage />);
-	expect(screen.getByRole('tab', { name: 'Agent orchestration', selected: true })).toBeTruthy();
-	// Opening a card takes over from the autopilot.
-	fireEvent.click(screen.getByRole('button', { name: /^Open Mob:/ }));
-	await wait(9_000);
-	fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-	await wait(15_000);
-	expect(screen.getByRole('status').textContent).toMatch(/Both branches are ready to merge/);
-	fireEvent.click(screen.getByRole('tab', { name: 'Conversation' }));
-	expect(screen.getByRole('group', { name: 'Tasks' })).toBeTruthy();
+it('takes a denial from the agent card and from a chat app', async () => {
+	play();
+	fireEvent.click(screen.getByRole('button', { name: 'Chat app' }));
+	await wait(11_000);
+	const phone = within(screen.getByLabelText('Mob in a chat app'));
+	expect(phone.getByText(/Codex wants to run a command/)).toBeTruthy();
+	fireEvent.click(within(screen.getByRole('region', { name: 'Agents' })).getByRole('button', { name: 'Deny' }));
+	expect(phone.getByText('✗ Denied')).toBeTruthy();
+	await wait(14_000);
+	expect(phone.getByText(/run the 50-run check on mob\/flaky-t1/)).toBeTruthy();
 });
