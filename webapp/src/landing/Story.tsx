@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { PixelIcon } from '../components/brand/PixelIcon';
 import type { IconName } from '../components/brand/pixels';
+import { magnet, type Magnet } from './snap';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
 import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
 
@@ -81,6 +82,19 @@ export function Story({ hero }: { hero: ReactNode }) {
 	const [feature, setFeature] = useState(-1);
 	const [tip, setTip] = useState<{ x: number; y: number; text: string }>();
 	const [still] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+	const pull = useRef<Magnet>(undefined);
+	// The feature picked by a click, shown at once while the scroll catches up.
+	const picked = useRef<number>(undefined);
+
+	// The tops of the story's pages, then where the story ends.
+	const pages = useCallback(() => {
+		const el = story.current;
+		if (!el) return [];
+		const tops = [...el.querySelectorAll<HTMLElement>('.snaps i')].map(i => i.getBoundingClientRect().top + window.scrollY);
+		// The page may not scroll all the way to the section after the story.
+		const max = document.documentElement.scrollHeight - window.innerHeight;
+		return [...tops, el.getBoundingClientRect().bottom + window.scrollY].map(y => Math.round(Math.min(y, max)));
+	}, []);
 
 	// Scrolling moves the pieces directly; only the step and feature re-render.
 	useEffect(() => {
@@ -108,7 +122,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 				field.current.dataset.live = aside >= 1 ? 'true' : 'false';
 			}
 			const s = p > 0.45 && p < FEATURES - 0.6 ? clamp(Math.floor((p - WORKFLOW + STEP / 2) / STEP), 0, 3) : -1;
-			const f = p >= FEATURES - 0.8 ? clamp(Math.floor((p - FEATURES + FEATURE / 2) / FEATURE), 0, 5) : -1;
+			const f = picked.current ?? (p >= FEATURES - 0.8 ? clamp(Math.floor((p - FEATURES + FEATURE / 2) / FEATURE), 0, 5) : -1);
 			setStep(s);
 			setFeature(f);
 		};
@@ -119,14 +133,27 @@ export function Story({ hero }: { hero: ReactNode }) {
 		return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
 	}, [still]);
 
+	// A wheel turns the pages one at a time, up to the section after the story.
+	useEffect(() => {
+		if (still) return;
+		const m = pull.current = magnet(pages);
+		return () => { m.destroy(); pull.current = undefined; };
+	}, [still, pages]);
+
 	useEffect(() => { setStory(step < 0 ? undefined : step); }, [step]);
 	useEffect(() => { setHighlight(feature < 0 ? undefined : features[feature].doing); }, [feature]);
 	useEffect(() => () => { setStory(undefined); setHighlight(undefined); setFade(1, 1); }, []);
 
+	// Clicking a feature lights it up straight away and springs the scroll to
+	// its page, the same way a wheel turns pages.
 	const goTo = useCallback((i: number) => {
-		const top = story.current?.offsetTop ?? 0;
-		window.scrollTo({ top: top + (FEATURES + i * FEATURE) * window.innerHeight + 1, behavior: still ? 'auto' : 'smooth' });
-	}, [still]);
+		const to = pages()[1 + steps.length + i];
+		if (to === undefined) return;
+		if (!pull.current) { window.scrollTo({ top: to, behavior: 'auto' }); return; }
+		pull.current.go(to, () => { picked.current = undefined; });
+		picked.current = i;
+		setFeature(i);
+	}, [pages]);
 
 	// Which calf is under the pointer, on the canvas's own pixels.
 	const hit = (event: PointerEvent<HTMLDivElement>) => {
@@ -186,8 +213,10 @@ export function Story({ hero }: { hero: ReactNode }) {
 									<span className="feature-title">{f.title}</span>
 								</button>
 								<div className="feature-more">
-									<p>{f.text}</p>
-									<p className="feature-look">In the office: {f.look}</p>
+									<div>
+										<p>{f.text}</p>
+										<p className="feature-look">In the office: {f.look}</p>
+									</div>
 								</div>
 							</li>
 						))}
