@@ -27,6 +27,11 @@ type Task struct {
 	// ReadOnly tasks work in another task's worktree and branch without
 	// changing them, such as to review it.
 	ReadOnly bool `json:"readOnly,omitempty"`
+	// Outcome is how the agent said its latest work ended, one of the
+	// Outcome constants, with Result its account of it; both are empty
+	// until it says, and again once it is given more work.
+	Outcome string `json:"outcome,omitempty"`
+	Result  string `json:"result,omitempty"`
 	// Plan is the agent's latest plan, as it reported it.
 	Plan      []PlanEntry `json:"plan,omitempty"`
 	CreatedAt int64       `json:"createdAt"`
@@ -51,7 +56,20 @@ const (
 	TaskFailed  = "failed"
 )
 
-const taskColumns = "id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,read_only,plan,created_at,updated_at"
+// How an agent says its work ended.
+const (
+	// OutcomePassed work is done and holds up, or what was reviewed needs
+	// no changes.
+	OutcomePassed = "passed"
+	// OutcomeRework work, or what was reviewed, needs the changes the
+	// result lists.
+	OutcomeRework = "rework"
+	// OutcomeBlocked work cannot go on without a decision or something the
+	// agent lacks.
+	OutcomeBlocked = "blocked"
+)
+
+const taskColumns = "id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,read_only,outcome,result,plan,created_at,updated_at"
 
 // CreateTask saves t with a new conversation titled after it, which the
 // agent's replies go into.
@@ -70,7 +88,7 @@ func (s *Store) CreateTask(t *Task) error {
 	if _, err = tx.Exec("INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)", t.ConversationID, string(title), now); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,'',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, t.Parent, t.ReadOnly, now, now); err != nil {
+	if _, err = tx.Exec("INSERT INTO tasks("+taskColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,?,'','','',?,?)", t.ID, t.ConversationID, t.Project, t.Agent, t.Title, t.Worktree, t.Branch, t.Session, t.Status, t.Parent, t.ReadOnly, now, now); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err == nil {
@@ -83,7 +101,7 @@ func (s *Store) CreateTask(t *Task) error {
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	var t Task
 	var plan string
-	err := row.Scan(&t.ID, &t.ConversationID, &t.Project, &t.Agent, &t.Title, &t.Worktree, &t.Branch, &t.Session, &t.Status, &t.Parent, &t.ReadOnly, &plan, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.ID, &t.ConversationID, &t.Project, &t.Agent, &t.Title, &t.Worktree, &t.Branch, &t.Session, &t.Status, &t.Parent, &t.ReadOnly, &t.Outcome, &t.Result, &plan, &t.CreatedAt, &t.UpdatedAt)
 	if err == nil && plan != "" {
 		err = json.Unmarshal([]byte(plan), &t.Plan)
 	}
@@ -159,6 +177,19 @@ func (s *Store) SetTaskSession(id, session string) error {
 		s.Changes.tasks()
 	}
 	return err
+}
+
+// SetTaskResult records how task id's agent said its work ended; empty
+// outcome and result forget it, as when the agent is given more work.
+func (s *Store) SetTaskResult(id, outcome, result string) error {
+	res, err := s.db.Exec("UPDATE tasks SET outcome=?,result=?,updated_at=? WHERE id=? AND (outcome<>? OR result<>?)", outcome, result, time.Now().UnixMilli(), id, outcome, result)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		s.Changes.tasks()
+	}
+	return nil
 }
 
 // SetTaskPlan records the agent's latest plan for task id.

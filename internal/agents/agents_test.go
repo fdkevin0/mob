@@ -170,6 +170,14 @@ func (f *fake) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptRespo
 			return acp.PromptResponse{}, err
 		}
 		f.say(ctx, id, acp.UpdateAgentMessageText(out))
+	case strings.HasPrefix(text, "result "):
+		// Reports how its work ended through Mob's MCP server.
+		outcome := strings.TrimPrefix(text, "result ")
+		out, err := f.callMob(ctx, "task_result", map[string]any{"outcome": outcome, "summary": "found " + outcome})
+		if err != nil {
+			out = "error: " + err.Error()
+		}
+		f.say(ctx, id, acp.UpdateAgentMessageText(out))
 	case text == "hold":
 		f.say(ctx, id, acp.UpdateAgentMessageText("holding "))
 		<-f.release
@@ -1194,13 +1202,20 @@ func TestAgentStartsSubtasks(t *testing.T) {
 	if child.Status != chat.TaskReview || child.Title != "Child" || child.Project != lead.Project {
 		t.Fatalf("child = %+v", child)
 	}
-	// A sub-task gets no server: the tree is two agents deep at most.
+	// A sub-task's server only takes its result: the tree is two agents
+	// deep at most.
 	for _, f := range h.fakes.agents {
 		f.mu.Lock()
 		dir, servers := f.dir, f.servers
 		f.mu.Unlock()
-		if dir == child.Worktree && len(servers) != 0 {
+		if dir != child.Worktree {
+			continue
+		}
+		if len(servers) != 1 {
 			t.Fatalf("sub-task servers = %+v", servers)
+		}
+		if _, err := f.callMob(context.Background(), "task_start", map[string]any{"prompt": "more"}); err == nil {
+			t.Fatal("a sub-task started a sub-task")
 		}
 	}
 	// Once its sub-tasks end, the lead agent hears how they went.
@@ -1328,13 +1343,14 @@ func TestForgottenTokensReachNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}})
-	if err != nil || result.IsError || result.Content[0].(*mcp.TextContent).Text != "You started no sub-tasks." {
-		t.Fatalf("tasks = %+v, %v", result, err)
+	report := &mcp.CallToolParams{Name: "task_result", Arguments: map[string]any{"outcome": "passed", "summary": "ok"}}
+	result, err := session.CallTool(context.Background(), report)
+	if err != nil || result.IsError || result.Content[0].(*mcp.TextContent).Text != "Recorded." {
+		t.Fatalf("task_result = %+v, %v", result, err)
 	}
 	// The connection made with it stops working too.
 	h.svc.forget(token)
-	if result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}}); err == nil && !result.IsError {
+	if result, err := session.CallTool(context.Background(), report); err == nil && !result.IsError {
 		t.Fatalf("a forgotten token still works: %+v", result)
 	}
 }
@@ -1396,5 +1412,53 @@ func TestReadersShareAWorktreeWithoutChangingIt(t *testing.T) {
 	}
 	if _, err := h.svc.StartReader(mob.ID, reader, "", "", "look"); err == nil {
 		t.Fatal("a reader lent its worktree")
+	}
+}
+
+func TestTasksReportHowTheyEnded(t *testing.T) {
+	h := newHarness(t)
+	mob, err := h.svc.Store.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tasks []chat.Task
+	for _, prompt := range []string{"result passed", "result rework", "result maybe"} {
+		task, err := h.svc.StartTask(context.Background(), mob.ID, h.repo, "", prompt, prompt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tasks = append(tasks, task)
+	}
+	for i, task := range tasks {
+		tasks[i] = h.wait(task)
+	}
+	if tasks[0].Outcome != chat.OutcomePassed || tasks[0].Result != "found passed" || tasks[1].Outcome != chat.OutcomeRework {
+		t.Fatalf("tasks = %+v", tasks)
+	}
+	// An outcome Mob does not know is refused, and the agent is told why.
+	if tasks[2].Outcome != "" || !strings.Contains(h.reply(tasks[2]), "passed, rework or blocked") {
+		t.Fatalf("unknown outcome: %+v, reply %q", tasks[2], h.reply(tasks[2]))
+	}
+	var note string
+	for deadline := time.Now().Add(10 * time.Second); note == ""; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no summary")
+		}
+		history, _ := h.svc.Store.History(mob.ID)
+		for _, m := range history {
+			if m.Command {
+				note = chat.Text(m)
+			}
+		}
+	}
+	// The summary says how each ended, with what it reported in place of
+	// its last words.
+	if !strings.Contains(note, "**Done, passed**") || !strings.Contains(note, "**Done, needs rework**") || !strings.Contains(note, "found rework") || strings.Contains(note, "Recorded.") {
+		t.Fatalf("note = %q", note)
+	}
+	// More work forgets what the agent said of the last.
+	h.say(tasks[0], "hello")
+	if task := h.wait(tasks[0]); task.Outcome != "" || task.Result != "" {
+		t.Fatalf("after more work: %+v", task)
 	}
 }

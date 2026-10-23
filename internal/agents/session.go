@@ -262,6 +262,8 @@ func (s *session) prompt(text string) {
 // send starts a prompt; s.mu is held.
 func (s *session) send(text string) {
 	s.prompting = true
+	// What the agent said of its last work no longer holds once it has more.
+	_ = s.svc.Store.SetTaskResult(s.task.ID, "", "")
 	go func() {
 		began := time.Now()
 		response, err := s.conn.Prompt(context.Background(), acp.PromptRequest{SessionId: s.id, Prompt: []acp.ContentBlock{acp.TextBlock(text)}})

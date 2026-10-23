@@ -179,7 +179,11 @@ func outline(nodes []AgentNode) string {
 	var write func(parent string, depth int)
 	write = func(parent string, depth int) {
 		for _, n := range children[parent] {
-			fmt.Fprintf(&b, "%s- **%s** · %s · %s", strings.Repeat("  ", depth), statusLabels[n.Status], n.Label, n.Title)
+			status := statusLabels[n.Status]
+			if n.Task != nil && n.Task.Outcome != "" {
+				status += ", " + outcomeLabels[n.Task.Outcome]
+			}
+			fmt.Fprintf(&b, "%s- **%s** · %s · %s", strings.Repeat("  ", depth), status, n.Label, n.Title)
 			if n.Task != nil {
 				fmt.Fprintf(&b, " · %s `%s`", n.Task.Project, n.Task.Branch)
 			}

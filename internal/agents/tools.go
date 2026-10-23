@@ -60,7 +60,7 @@ func (s *Service) Tools() []chat.Tool {
 			return in.Project + " " + in.Agent
 		},
 	}, {
-		Tool:      llm.Tool{Name: "tasks", Description: "List coding agent tasks with their status (running, waiting for the owner's approval, review, stopped, failed), branch, plan, latest reply and the tokens, cache and cost their agent used by model, and the saved projects.", Parameters: object(map[string]any{"project": text("Only this project's tasks")})},
+		Tool:      llm.Tool{Name: "tasks", Description: "List coding agent tasks with their status (running, waiting for the owner's approval, review, stopped, failed), branch, plan, latest reply, how the agent said its work ended (outcome passed, rework or blocked, with its result) and the tokens, cache and cost their agent used by model, and the saved projects.", Parameters: object(map[string]any{"project": text("Only this project's tasks")})},
 		OwnerOnly: true,
 		Available: s.busy,
 		Run: func(_ context.Context, call chat.ToolCall) (any, error) {
@@ -234,6 +234,9 @@ func (s *Service) overview(project string) (any, error) {
 		entry := map[string]any{"id": t.ID, "project": t.Project, "agent": t.Agent, "title": t.Title, "status": t.Status, "branch": t.Branch, "worktree": t.Worktree, "conversation": t.ConversationID}
 		if reply != "" {
 			entry["latestReply"] = reply
+		}
+		if t.Outcome != "" {
+			entry["outcome"], entry["result"] = t.Outcome, t.Result
 		}
 		if len(t.Plan) > 0 {
 			entry["plan"] = t.Plan

@@ -1531,6 +1531,31 @@
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
 }
+.agent-outcome {
+	display: flex;
+	gap: 6px;
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: var(--muted-foreground);
+}
+.agent-outcome strong {
+	flex-shrink: 0;
+	font-weight: 600;
+}
+.agent-outcome span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.agent-outcome[data-outcome='passed'] strong {
+	color: var(--lime);
+}
+.agent-outcome[data-outcome='rework'] strong {
+	color: var(--amber);
+}
+.agent-outcome[data-outcome='blocked'] strong {
+	color: var(--destructive);
+}
 .agent-actions {
 	display: inline-flex;
 	align-items: center;
