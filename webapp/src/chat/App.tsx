@@ -28,6 +28,8 @@ export function App() {
   // The dialog first offers a choice of runner: the user's own one, or one deployed to their cloud account.
   const [choice, setChoice] = useState<'own' | 'cloud'>();
   const [draft, setDraft] = useState('');
+  // pending is a connection opened before its token was checked, which a rejection may arrive before it renders.
+  const pending = useRef<Connection | undefined>(undefined);
   useEffect(() => {
     const desktop = window.go?.main?.Desktop;
     if (desktop) {
@@ -46,7 +48,7 @@ export function App() {
       if (saved) {
         const next = { url, token: saved };
         if (!(await readList(cacheScope(next)))) return verify(next);
-        setConnection(next); setLoading(false);
+        pending.current = next; setConnection(next); setLoading(false);
         void verify(next).catch(() => { /* the workspace reports it */ });
         return undefined;
       }
@@ -67,8 +69,11 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
-      if (active.current) void forget(cacheScope(active.current));
-      if (active.current?.runner) forgetRunner();
+      const departing = active.current ?? pending.current;
+      if (departing && departing.token === rejected) {
+        void forget(cacheScope(departing));
+        if (departing.runner) forgetRunner();
+      }
       clearToken(rejected); setConnection(undefined); setPrompting(true); setChoice('own'); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
     };
     window.addEventListener(unauthorizedEvent, signOut);

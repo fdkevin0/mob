@@ -37,6 +37,15 @@ export async function setKeepsMessages(on: boolean) {
 	if (!on) await remove((entry) => entry.kind === 'snapshot');
 }
 
+// forgotten holds the Mobs this browser signed out of: writes still on their way, such as a closing
+// conversation handing over its messages, are dropped instead of putting back what was forgotten.
+const forgotten = new Set<string>();
+
+/** resume lets a Mob be kept again once this browser connects to it anew. */
+export function resume(scope: string) {
+	forgotten.delete(scope);
+}
+
 // stamp orders writes, even several within one millisecond, so the least recent are the ones dropped.
 let last = 0;
 const stamp = () => (last = Math.max(Date.now(), last + 1));
@@ -98,6 +107,7 @@ export async function readList(scope: string) {
 }
 
 export async function writeList(scope: string, list: Conversation[]) {
+	if (forgotten.has(scope)) return;
 	// Only what the list shows is kept.
 	const value = list.map(({ id, title, updatedAt }) => ({ id, title, updatedAt }));
 	await withStore('readwrite', async (store) => {
@@ -108,12 +118,14 @@ export async function writeList(scope: string, list: Conversation[]) {
 export async function readSnapshot(scope: string, id: string) {
 	if (!keepsMessages()) return undefined;
 	const entry = await withStore('readonly', (store) => done(store.get(`${scope}|snapshot|${id}`)));
-	return (entry as Entry | undefined)?.value as Snapshot | undefined;
+	const snapshot = (entry as Entry | undefined)?.value as Snapshot | undefined;
+	// Whether a turn runs is only known from Mob itself; a kept snapshot never claims one does.
+	return snapshot && { ...snapshot, active: false };
 }
 
 /** writeSnapshot keeps a conversation's messages, when this device keeps messages, dropping the least recent beyond the limit. */
 export async function writeSnapshot(scope: string, id: string, snapshot: Snapshot) {
-	if (!keepsMessages()) return;
+	if (!keepsMessages() || forgotten.has(scope)) return;
 	await withStore('readwrite', async (store) => {
 		store.put({ key: `${scope}|snapshot|${id}`, scope, kind: 'snapshot', id, at: stamp(), value: snapshot } satisfies Entry);
 		const kept = ((await done(store.index('scope').getAll(scope))) as Entry[])
@@ -125,5 +137,6 @@ export async function writeSnapshot(scope: string, id: string, snapshot: Snapsho
 
 /** forget removes everything kept for a Mob, as when this browser signs out of it. */
 export async function forget(scope: string) {
+	forgotten.add(scope);
 	await remove(() => true, scope);
 }

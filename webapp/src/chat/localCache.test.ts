@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
-import { afterEach, expect, it } from 'vitest';
-import { cacheScope, forget, keptConversations, readList, readSnapshot, setKeepsMessages, writeList, writeSnapshot } from './localCache';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { cacheScope, forget, keptConversations, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
 const local = cacheScope({ url: 'http://127.0.0.1:8787', token: 't' });
 const runner = cacheScope({ url: 'https://mob.example/api/runners/r1', token: '', runner: { id: 'r1', key: 'k' } });
@@ -8,6 +8,11 @@ const snapshot = (text: string) => ({
 	messages: [{ id: text, role: 'assistant' as const, parts: [{ type: 'text' as const, text }] }],
 	active: false,
 	model: 'demo/echo',
+});
+
+beforeEach(() => {
+	resume(local);
+	resume(runner);
 });
 
 afterEach(async () => {

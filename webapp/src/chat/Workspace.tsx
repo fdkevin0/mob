@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
-import { cacheScope, keepsMessages, readList, readSnapshot, setKeepsMessages, writeList, writeSnapshot } from './localCache';
+import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
 const errorText = (error: unknown) =>
 	error instanceof TypeError
@@ -59,6 +59,7 @@ export function Workspace({
 	const [background, setBackground] = useState(false);
 	const [keeping, setKeeping] = useState(keepsMessages);
 	const scope = cacheScope(connection);
+	useEffect(() => resume(scope), [scope]);
 
 	// The service says what changed, so the list and the open views reload only then.
 	const changes = useMemo(() => new Changes(webClient(connection)), [connection]);
@@ -76,7 +77,9 @@ export function Workspace({
 		};
 	}, [changes]);
 	const cache = useRef(new Map<string, Snapshot>());
-	const remember = (id: string, snapshot: Snapshot) => {
+	// A remembered snapshot is shown before Mob answers, so it never claims a turn is running: that comes from Mob.
+	const remember = (id: string, kept: Snapshot) => {
+		const snapshot = { ...kept, active: false };
 		cache.current.delete(id);
 		cache.current.set(id, snapshot);
 		if (cache.current.size > cacheSize) cache.current.delete(cache.current.keys().next().value!);
@@ -118,7 +121,8 @@ export function Workspace({
 		if (cached) return show(id, cached, replace);
 		setSwitching(true);
 		try {
-			const snapshot = await load(id);
+			// What this browser kept also shows at once, even while Mob cannot be reached.
+			const snapshot = (await readSnapshot(scope, id)) ?? (await load(id));
 			if (ticket === choice.current) show(id, snapshot, replace);
 		} catch (e) {
 			if (ticket === choice.current) setError(errorText(e));
