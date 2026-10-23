@@ -73,7 +73,7 @@ export class ConversationClient {
 		this.transport = new DefaultChatTransport<ChatMessage>({
 			api: `${client.connection.url}/api/chat`,
 			headers: { Authorization: `Bearer ${client.connection.token}` },
-			fetch: client.fetch,
+			fetch: client.fetch as typeof fetch,
 			prepareSendMessagesRequest: ({ messages, body }) => {
 				if (body?.approval) return { body: { id, approval: body.approval } };
 				const last = messages.at(-1);

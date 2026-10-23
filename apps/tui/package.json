@@ -13,5 +13,8 @@
 		"@opentui/react": "0.6.6",
 		"ai": "7.0.142",
 		"react": "^19.3.0"
+	},
+	"exports": {
+		"./run": "./src/run.tsx"
 	}
 }

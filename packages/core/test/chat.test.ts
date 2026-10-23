@@ -109,3 +109,16 @@ test('tool search ranks by BM25 and splits words', () => {
 	expect(rank(docs, 'github issue', 5)).toEqual([1]);
 	expect(rank(docs, 'send_email', 5)[0]).toBe(0);
 });
+
+test('a denial without a reason ends its stream', async () => {
+	const s = open();
+	const service = new ConversationService(s, demoModels);
+	const c = s.create();
+	let approval = '';
+	await service.execute({ id: c.id, text: '/remember x', requestId: newID() }, e => { if (e.approvalId) approval = e.approvalId; });
+	const running = await service.start({ id: c.id, text: '', requestId: '', approval: { id: approval, approved: false }, owner: true });
+	const chunks: unknown[] = [];
+	await running.follow(0, (_, e) => { chunks.push(encodeEvent(e)); });
+	expect(chunks).toEqual([{ type: 'finish', finishReason: 'stop' }]);
+	s.close();
+});

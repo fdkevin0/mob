@@ -1,4 +1,4 @@
-// End-to-end contract check: the real Go server consumed by the actual AI SDK UI parser.
+// End-to-end contract check: the real mob server consumed by the actual AI SDK UI parser.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -17,12 +17,12 @@ async function start() {
   const child = spawn(binary, ['serve'], { env: { ...process.env, MOB_CONFIG: join(dir, 'config.yaml'), MOB_STATE_DIR: dir, MOB_DEMO: '1', MOB_DATA_DIR: dir, MOB_ADDR: '127.0.0.1:0', MOB_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   processHandle = child;
   url = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Go server did not start')), 15_000);
+    const timer = setTimeout(() => reject(new Error('mob did not start')), 15_000);
     let stdout = '', stderr = '';
     child.stderr!.on('data', chunk => { stderr += chunk; });
     child.stdout!.on('data', chunk => { stdout += chunk; const match = stdout.match(/Mob: (http:\/\/[^\s]+)/); if (match) { clearTimeout(timer); resolve(match[1]); } });
     child.once('error', error => { clearTimeout(timer); reject(error); });
-    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Go exited ${code}: ${stderr}`)); });
+    child.once('exit', code => { clearTimeout(timer); reject(new Error(`mob exited ${code}: ${stderr}`)); });
   });
   token = (await readFile(join(dir, 'token'), 'utf8')).trim();
 }
@@ -134,7 +134,7 @@ async function sharedClients() {
     assert.equal(web.getSnapshot().input, 'Continue must keep this unsent 草稿');
     const continued = await client.openConversation(id);
     assert.equal(textOf(continued.messages.filter(m => m.role === 'user').slice(-1)), 'Continue');
-    console.log('Shared client ↔ Go: web/tui commands, Chinese multiline text, concurrent readers, reconnect/detach, history, approval scope, stale decision, denial and cross-client Stop passed.');
+    console.log('Shared client ↔ mob: web/tui commands, Chinese multiline text, concurrent readers, reconnect/detach, history, approval scope, stale decision, denial and cross-client Stop passed.');
   } finally {
     detachWeb(); detachTui?.();
   }
@@ -168,7 +168,7 @@ async function detachedSends() {
     let detach = session.start();
     try {
       const sending = session.submit(text);
-      await until(() => !!release, 'real Go response is held before SDK receives it');
+      await until(() => !!release, 'real mob response is held before SDK receives it');
       assert.equal(status, accepted ? 200 : 409);
       session.setInput('新草稿不能被覆盖');
       detach();
@@ -196,13 +196,13 @@ async function detachedSends() {
       }
     } finally { detach(); }
   }
-  console.log('Detached sends ↔ Go: real 409 refusal with identical text under another ID, late accepted completed turn, same-instance reattach, original request IDs, preserved newer drafts, no automatic resend passed.');
+  console.log('Detached sends ↔ mob: real 409 refusal with identical text under another ID, late accepted completed turn, same-instance reattach, original request IDs, preserved newer drafts, no automatic resend passed.');
 }
 
 try {
   await writeFile(join(dir, 'config.yaml'), '{}\n', { mode: 0o600 });
-  const build = spawnSync('go', ['build', '-o', binary, './cmd/mob'], { stdio: 'inherit' });
-  assert.equal(build.status, 0, 'Go build failed');
+  const build = spawnSync('bun', ['apps/mob/scripts/build.ts', '--outfile', binary], { stdio: 'inherit' });
+  assert.equal(build.status, 0, 'mob build failed');
   await start();
   assert.equal((await fetch(`${url}/api/conversations`)).status, 401);
   const conversation = await (await request('/conversations', {})).json() as { id: string };
@@ -234,7 +234,7 @@ try {
   await stop(); await start();
   const restored = await (await request(`/conversations/${id}`)).json();
   assert.deepEqual(restored.messages, snapshot.messages, 'history changed across restart');
-  console.log('Go ↔ AI SDK UI: text, /models, approvals, denial, deduplication, validation and restart passed.');
+  console.log('mob ↔ AI SDK UI: text, /models, approvals, denial, deduplication, validation and restart passed.');
   await sharedClients();
   await detachedSends();
 } finally {

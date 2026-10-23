@@ -12,12 +12,15 @@ export function timeoutFor(path: string) {
 	return path.startsWith('/plugins') || path === '/commands/run' ? 60_000 : 10_000;
 }
 
+/** Fetch is the part of fetch the client calls. */
+export type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 export class MobClient {
-	readonly fetch: typeof fetch;
+	readonly fetch: Fetch;
 
 	constructor(
 		readonly connection: Connection,
-		options: { fetch?: typeof fetch; onUnauthorized?: (token: string) => void } = {},
+		options: { fetch?: Fetch; onUnauthorized?: (token: string) => void } = {},
 	) {
 		this.fetch = async (input, init) => {
 			const response = await (options.fetch ?? globalThis.fetch)(input, init);

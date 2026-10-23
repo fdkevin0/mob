@@ -1,0 +1,22 @@
+{
+	"name": "@mob/mob",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"mob": "src/main.ts"
+	},
+	"scripts": {
+		"start": "bun src/main.ts",
+		"build": "bun scripts/build.ts",
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@mob/core": "workspace:*",
+		"commander": "14.0.1",
+		"@mob/tui": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "1.4.3"
+	}
+}

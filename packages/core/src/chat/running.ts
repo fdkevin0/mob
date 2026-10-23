@@ -9,6 +9,7 @@ export class StepLimit extends Error {
 }
 
 export class Aborted extends Error {
+	override name = 'Aborted';
 	constructor(message = 'the turn was stopped') { super(message); }
 }
 
@@ -73,7 +74,8 @@ export class Running {
 			after += events.length;
 			if (ended) return this.error;
 			if (signal?.aborted) throw signal.reason;
-			if (after < this.events.length) continue;
+			// The turn may have moved on while fn ran.
+			if (after < this.events.length || this.ended) continue;
 			await new Promise<void>(resolve => {
 				const abort = () => resolve();
 				signal?.addEventListener('abort', abort, { once: true });
