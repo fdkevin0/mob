@@ -229,10 +229,11 @@ approvals as usual. DeepSeek Harness has no such mode and cannot be a reader.
 Mob keeps the latest (`tasks.outcome`, `tasks.result`, up to 4000
 characters of summary) and forgets it when the agent is given more work, so
 an outcome always describes the latest work. Any other outcome is refused
-with the reason. Summaries and `/tasks` name it after the status ("Done,
-needs rework") and show the reported summary in place of the end of the
-agent's last reply; Mob's `tasks` tool returns both; the task's card on the
-Agents page shows it under the branch.
+with the reason. Summaries and `/tasks` name the outcome after the status
+("Done, needs rework"). Summaries also show the reported summary in place of
+the end of the agent's last reply; `/tasks` shows only the label. Mob's
+`tasks` tool returns both, and the task's card on the Agents page shows them
+under the branch.
 
 ## Summaries
 
