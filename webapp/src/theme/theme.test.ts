@@ -59,7 +59,7 @@ describe('theme', () => {
 			delete document.documentElement.dataset.theme;
 			new Function(boot)();
 			expect(document.documentElement.dataset.theme).toBe(want);
-			expect(meta.content).toBe(want === 'light' ? '#f6f7f4' : '#07080a');
+			expect(meta.content).toBe(want === 'light' ? '#f4f3ee' : '#07080a');
 			meta.content = '#07080a';
 		}
 		meta.remove();

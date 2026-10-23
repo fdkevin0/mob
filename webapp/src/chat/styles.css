@@ -12,14 +12,14 @@
 	--radius: 10px;
 }
 :root[data-theme='light'] {
-	--bg: #f6f7f4;
-	--panel: #fbfbf9;
-	--surface: #ffffff;
-	--surface-raised: #eceee8;
-	--line: #0000000f;
-	--line-strong: #0000001c;
-	--muted-foreground: #5f675e;
-	--accent: #0000000a;
+	--bg: #f4f3ee;
+	--panel: #faf9f5;
+	--surface: #fffffd;
+	--surface-raised: #ebe9e1;
+	--line: #1a1c150f;
+	--line-strong: #1a1c151c;
+	--muted-foreground: #696c60;
+	--accent: #1a1c150a;
 }
 .btn {
 	font-family: var(--sans);
@@ -1375,7 +1375,7 @@
 .agent-plan span {
 	display: block;
 	height: 100%;
-	background: var(--lime);
+	background: var(--primary);
 }
 .agent-card footer {
 	display: flex;
@@ -1697,7 +1697,7 @@
 }
 .agent-button.approve {
 	border-color: transparent;
-	background: var(--lime);
+	background: var(--primary);
 	color: var(--primary-foreground);
 	font-weight: 550;
 }

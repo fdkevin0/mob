@@ -79,12 +79,12 @@ a {
 	width: 100%;
 }
 .btn-primary {
-	background: var(--lime);
+	background: var(--primary);
 	color: var(--primary-foreground);
 	box-shadow: 3px 3px 0 color-mix(in srgb, var(--lime) 20%, transparent);
 }
 .btn-primary:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--lime) 85%, var(--text));
+	background: color-mix(in srgb, var(--primary) 85%, var(--text));
 }
 .btn-outline {
 	background: transparent;

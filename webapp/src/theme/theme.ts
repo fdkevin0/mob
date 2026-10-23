@@ -10,7 +10,7 @@ export const themes: Theme[] = ['system', 'light', 'dark'];
 
 const key = 'mob.theme';
 const query = '(prefers-color-scheme: light)';
-const colors = { light: '#f6f7f4', dark: '#07080a' };
+const colors = { light: '#f4f3ee', dark: '#07080a' };
 
 export function storedTheme(): Theme {
 	try {

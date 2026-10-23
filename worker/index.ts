@@ -32,7 +32,7 @@ const demoPolicy = [
 
 // The app and the account page run one inline script, which applies the
 // colour scheme before the first paint (index.html, account.html).
-const themeScript = "'sha256-uNgPoKM8z8x5Lj3kbYr21gdxZEzzl5HEeXtZhPZR//0='";
+const themeScript = "'sha256-AS7mCbBGgcK0J0WmR4FqFt5bydVXzMXlFd5OvPQngis='";
 
 // The account page talks only to this Worker's auth API.
 const accountPolicy = [
