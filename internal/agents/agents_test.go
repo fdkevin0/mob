@@ -1271,4 +1271,65 @@ func TestEndedTasksAreSummarized(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("%d notes", count)
 	}
+	// A task that ends again after more work is reported again.
+	h.say(tasks[0], "hello")
+	for deadline := time.Now().Add(10 * time.Second); count < 2; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the second end was not reported")
+		}
+		history, _ := h.svc.Store.History(mob.ID)
+		count = 0
+		for _, m := range history {
+			if m.Command {
+				count++
+			}
+		}
+	}
+}
+
+func TestSubtaskLimitsHoldAcrossApprovals(t *testing.T) {
+	h := newHarness(t)
+	lead := h.start("hello")
+	// Approvals decided together each take a place before they start.
+	for i := 0; i < subtaskActive; i++ {
+		if err := h.svc.reserve(lead); err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+	}
+	if err := h.svc.reserve(lead); err == nil || !strings.Contains(err.Error(), "the most at once") {
+		t.Fatalf("a start past the limit = %v", err)
+	}
+	h.svc.release(lead)
+	if err := h.svc.reserve(lead); err != nil {
+		t.Fatalf("a place given back was not reused: %v", err)
+	}
+}
+
+func TestForgottenTokensReachNothing(t *testing.T) {
+	h := newHarness(t)
+	lead := h.start("hello")
+	url, err := h.svc.listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "token-" + lead.ID
+	h.svc.mu.Lock()
+	h.svc.hub.tokens[token] = lead.ID
+	h.svc.mu.Unlock()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
+	header := http.Header{"Authorization": {"Bearer " + token}}
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: url, HTTPClient: &http.Client{Transport: headers{header}}, DisableStandaloneSSE: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}})
+	if err != nil || result.IsError || result.Content[0].(*mcp.TextContent).Text != "You started no sub-tasks." {
+		t.Fatalf("tasks = %+v, %v", result, err)
+	}
+	// The connection made with it stops working too.
+	h.svc.forget(token)
+	if result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "tasks", Arguments: map[string]any{}}); err == nil && !result.IsError {
+		t.Fatalf("a forgotten token still works: %+v", result)
+	}
 }

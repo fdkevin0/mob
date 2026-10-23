@@ -32,6 +32,10 @@ type Service struct {
 	reviews map[string]int
 	// hub is the MCP server for sub-tasks, once one is offered.
 	hub *hub
+	// startMu guards starting, the sub-tasks being started, by the ID of
+	// the task starting them.
+	startMu  sync.Mutex
+	starting map[string]int
 	// settled is the ended tasks last reported to the conversation that
 	// started them, by its ID.
 	settled map[string]string

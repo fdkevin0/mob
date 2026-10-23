@@ -94,22 +94,41 @@ func (s *Service) listen() (string, error) {
 		return "", err
 	}
 	h := &hub{url: "http://" + l.Addr().String() + "/mcp", tokens: map[string]string{}}
+	// Stateless: every request is checked against the tokens as they are
+	// now, so a token forgotten when its session ends reaches nothing,
+	// and no MCP session outlives it.
 	handler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		s.mu.Lock()
-		id, known := h.tokens[token]
-		s.mu.Unlock()
-		if !ok || !known {
+		id, ok := s.bearer(r)
+		if !ok {
 			return nil
 		}
 		return s.subtaskServer(id)
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{Stateless: true})
+	auth := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := s.bearer(r); !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", handler)
+	mux.Handle("/mcp", auth)
 	h.server = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = h.server.Serve(l) }()
 	s.hub = h
 	return h.url, nil
+}
+
+// bearer is the task whose token r carries, if the token is known.
+func (s *Service) bearer(r *http.Request) (string, bool) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !ok || s.hub == nil {
+		return "", false
+	}
+	id, known := s.hub.tokens[token]
+	return id, known
 }
 
 type startInput struct {
@@ -226,21 +245,9 @@ func (s *Service) askSubtask(id string, in startInput) (string, error) {
 	if in.Title == "" {
 		in.Title = firstLine(in.Prompt, 60)
 	}
-	kids, err := s.children(t)
-	if err != nil {
+	// Checked again when the owner approves, which may be much later.
+	if err := s.room(t, 0); err != nil {
 		return "", err
-	}
-	active := 0
-	for _, c := range kids {
-		if c.Status == chat.TaskRunning || c.Status == chat.TaskWaiting {
-			active++
-		}
-	}
-	switch {
-	case len(kids) >= subtaskTotal:
-		return "", fmt.Errorf("you started %d sub-tasks, the most a task may", subtaskTotal)
-	case active >= subtaskActive:
-		return "", fmt.Errorf("%d of your sub-tasks are still at work, the most at once; wait for one to end", active)
 	}
 	session := s.running(t.ID)
 	if session == nil {
@@ -255,7 +262,12 @@ func (s *Service) askSubtask(id string, in startInput) (string, error) {
 			session.deliver(item{update: &acp.SessionUpdate{ToolCallUpdate: &acp.SessionToolCallUpdate{ToolCallId: call, Status: acp.Ptr(acp.ToolCallStatusFailed), Content: []acp.ToolCallContent{acp.ToolContent(acp.TextBlock("The owner did not approve this sub-task."))}}}})
 			return
 		}
-		child, err := s.StartTask(context.Background(), t.ConversationID, t.Project, a.Name, in.Title, in.Prompt)
+		var child chat.Task
+		err := s.reserve(t)
+		if err == nil {
+			child, err = s.StartTask(context.Background(), t.ConversationID, t.Project, a.Name, in.Title, in.Prompt)
+			s.release(t)
+		}
 		status, text := acp.ToolCallStatusCompleted, fmt.Sprintf("Started sub-task %s on branch %s.", child.ID, child.Branch)
 		if err != nil {
 			status, text = acp.ToolCallStatusFailed, "The sub-task did not start: "+err.Error()
@@ -263,6 +275,52 @@ func (s *Service) askSubtask(id string, in startInput) (string, error) {
 		session.deliver(item{update: &acp.SessionUpdate{ToolCallUpdate: &acp.SessionToolCallUpdate{ToolCallId: call, Status: &status, Content: []acp.ToolCallContent{acp.ToolContent(acp.TextBlock(text))}}}})
 	}()
 	return fmt.Sprintf("Asked the owner to approve sub-task %q (%s). It starts once they approve; Mob sends you a summary when all your sub-tasks have ended, and tasks lists them meanwhile.", in.Title, a.Title), nil
+}
+
+// room reports why task t may not start another sub-task, counting the
+// starting ones too, if it may not.
+func (s *Service) room(t chat.Task, starting int) error {
+	kids, err := s.children(t)
+	if err != nil {
+		return err
+	}
+	active := starting
+	for _, c := range kids {
+		if c.Status == chat.TaskRunning || c.Status == chat.TaskWaiting {
+			active++
+		}
+	}
+	switch {
+	case len(kids)+starting >= subtaskTotal:
+		return fmt.Errorf("you started %d sub-tasks, the most a task may", subtaskTotal)
+	case active >= subtaskActive:
+		return fmt.Errorf("%d of your sub-tasks are at work or starting, the most at once; wait for one to end", active)
+	}
+	return nil
+}
+
+// reserve holds a place for a sub-task of t that is about to start, so that
+// approvals decided together cannot pass the limits; release gives it back
+// once the sub-task has started or failed to.
+func (s *Service) reserve(t chat.Task) error {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if err := s.room(t, s.starting[t.ID]); err != nil {
+		return err
+	}
+	if s.starting == nil {
+		s.starting = map[string]int{}
+	}
+	s.starting[t.ID]++
+	return nil
+}
+
+func (s *Service) release(t chat.Task) {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
+	if s.starting[t.ID]--; s.starting[t.ID] <= 0 {
+		delete(s.starting, t.ID)
+	}
 }
 
 // listSubtasks is what tasks tells task id's agent.
@@ -342,7 +400,8 @@ func (s *Service) settle(id string) {
 	sort.Slice(siblings, func(i, j int) bool { return siblings[i].CreatedAt < siblings[j].CreatedAt })
 	var key strings.Builder
 	for _, c := range siblings {
-		key.WriteString(c.ID + ":" + c.Status + " ")
+		// A task that ends again, after more work, is news again.
+		fmt.Fprintf(&key, "%s:%s:%d ", c.ID, c.Status, c.UpdatedAt)
 	}
 	s.mu.Lock()
 	if s.settled == nil {
