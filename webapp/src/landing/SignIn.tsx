@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type RefObject } from 'react';
 import { authClient, errorCode, openApp, signedInURL, type Site } from './auth';
 import { Turnstile, type TurnstileHandle } from './Turnstile';
-import { PixelIcon } from '../components/brand/PixelIcon';
+import { Icon } from '../components/brand/Icon';
 import { DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 
@@ -75,7 +75,7 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 			if (returnFocus?.current) { event.preventDefault(); returnFocus.current.focus(); }
 		}}>
 			<span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
-			<PixelIcon name="lock" size={28} className="dialog-icon" />
+			<Icon name="lock" size={28} className="dialog-icon" />
 			<DialogTitle className="dialog-title">Sign in to Mob</DialogTitle>
 			<DialogDescription className="dialog-description">{reason ?? 'Use your GitHub account to open Mob on the web. Your conversations stay on your computer.'}</DialogDescription>
 			{siteError ? <p className="form-error" role="alert">{siteError}</p> : null}
@@ -89,7 +89,7 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 					</Button>
 					{passkeys() ? (
 						<Button type="button" variant="outline" className="wide" onClick={passkey} disabled={!!busy}>
-							<PixelIcon name="key" size={12} />{busy === 'passkey' ? 'Waiting for your passkey…' : 'Sign in with a passkey'}
+							<Icon name="key" size={14} />{busy === 'passkey' ? 'Waiting for your passkey…' : 'Sign in with a passkey'}
 						</Button>
 					) : null}
 					<p className="fine-print">Mob asks GitHub only for your name, email and avatar. Add a passkey from your account page after signing in with GitHub.</p>

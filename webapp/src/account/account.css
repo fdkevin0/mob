@@ -8,7 +8,7 @@
 .account-profile { flex-direction: row; align-items: center; }
 .account-profile div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .account-profile span:not(.avatar) { color: var(--muted-foreground); font-size: 14px; overflow-wrap: anywhere; }
-.avatar { width: 32px; height: 32px; flex: none; border: 1px solid var(--line-strong); background: var(--bg); font-family: var(--pixel); font-size: 12px; overflow: hidden; display: grid; place-items: center; }
+.avatar { width: 32px; height: 32px; flex: none; border: 1px solid var(--line-strong); background: var(--bg); font-family: var(--mono); font-size: 12px; overflow: hidden; display: grid; place-items: center; }
 .avatar.large { width: 52px; height: 52px; font-size: 18px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
 .account-muted { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
