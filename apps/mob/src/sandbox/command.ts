@@ -14,7 +14,7 @@ export function containerCommand(environment: () => Environment): Command {
 	});
 	root.command('pull <image>').description('Fetch an image').action((image: string) => open().pull(image));
 	const collect = (v: string, all: string[] = []) => [...all, v];
-	root.command('run <image> [command...]').description('Run a command in a new container, removed when it exits').passThroughOptions()
+	root.command('run <image> [command...]').description('Run a command in a new container, removed when it exits; put -- before a command that takes options')
 		.option('-e, --env <KEY=VALUE>', 'Set an environment variable (repeatable)', collect)
 		.option('-v, --volume <SOURCE:TARGET>', 'Bind a host path (repeatable)', collect)
 		.option('-w, --workdir <dir>', 'Working directory inside the container')
