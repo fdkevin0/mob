@@ -19,7 +19,7 @@ const result = await Bun.build({
 	plugins: [{ name: 'web', setup(b) {
 		b.onLoad({ filter: /apps[\\/]mob[\\/]src[\\/]web\.ts$/ }, () => ({ contents: web, loader: 'ts' }));
 	} }],
-	compile: { outfile, ...(values.target ? { target: values.target as Bun.Build.Target } : {}) },
+	compile: { outfile, ...(values.target ? { target: values.target as any } : {}) },
 	define: { 'process.env.MOB_BUILD_VERSION': JSON.stringify(values.version ?? process.env.MOB_BUILD_VERSION ?? 'dev') },
 	minify: true,
 	sourcemap: 'linked',
