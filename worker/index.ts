@@ -17,6 +17,19 @@ const landingPolicy = [
 	"frame-ancestors 'none'",
 ].join('; ');
 
+// The demo page replays recorded runs; it needs only its own files.
+const demoPolicy = [
+	"default-src 'self'",
+	"connect-src 'self'",
+	"img-src 'self' data:",
+	"style-src 'self' 'unsafe-inline'",
+	"font-src 'self' data:",
+	"object-src 'none'",
+	"base-uri 'none'",
+	"form-action 'none'",
+	"frame-ancestors 'none'",
+].join('; ');
+
 // The account page talks only to this Worker's auth API.
 const accountPolicy = [
 	"default-src 'self'",
@@ -82,6 +95,7 @@ export default {
 			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env) }, { headers: { 'Cache-Control': 'no-store' } });
 		}
 		if (pathname === '/') return page(env, request, '/landing', landingPolicy);
+		if (pathname === '/demo' || pathname === '/demo/') return page(env, request, '/demo', demoPolicy);
 		if (pathname === '/app' || pathname === '/app/') {
 			const session = await createAuth(env, url.origin).api.getSession({ headers: request.headers });
 			// The browser keeps a #offer= fragment across the redirect, and the

@@ -53,6 +53,7 @@ export function Landing() {
 				<nav className="nav-links" aria-label="Sections">
 					<a href="#how">How it works</a>
 					<a href="#features">Features</a>
+					<a href="/demo">Demo</a>
 					<a href="#start">Start</a>
 					<a href="/docs/">Docs</a>
 					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
@@ -114,6 +115,7 @@ export function Landing() {
 			<footer className="footer">
 				<div className="footer-brand"><Logo size={20} /><span>MIT licensed</span></div>
 				<nav aria-label="Project links">
+					<a href="/demo">Demo</a>
 					<a href="/docs/">Docs</a>
 					<a href="https://github.com/fdkevin0/mob/blob/main/CHANGELOG.md" rel="noreferrer">Changelog</a>
 					<a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Releases</a>
