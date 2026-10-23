@@ -83,7 +83,7 @@ export function Landing() {
 				<Story hero={(
 					<>
 						<h1>Agents <em>for you</em>.</h1>
-						<p className="hero-sub">A local-first assistant you can reach from every channel. Open source.</p>
+						<p className="hero-sub">A local-first assistant that runs your coding agents for you. Ask from any channel. Open source.</p>
 						<div className="cta">
 							{user
 								? <Button onClick={openApp}>Open Mob</Button>
