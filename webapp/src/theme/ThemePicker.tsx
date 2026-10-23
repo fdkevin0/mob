@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { themes, useTheme, type Theme } from './theme';
 
 const labels: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' };
@@ -19,25 +19,20 @@ const icons: Record<Theme, ReactNode> = {
 	dark: <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />,
 };
 
-// Three small buttons that pick the colour scheme: follow the system, light or dark.
+// Three small radio buttons that pick the colour scheme: follow the system, light or dark.
+// They are native radios, so arrow keys move the choice and the group is one tab stop.
 export function ThemePicker({ className }: { className?: string }) {
 	const [theme, setTheme] = useTheme();
+	const name = useId();
 	return (
 		<div role="radiogroup" aria-label="Theme" className={className ? `theme-picker ${className}` : 'theme-picker'}>
 			{themes.map((t) => (
-				<button
-					key={t}
-					type="button"
-					role="radio"
-					aria-checked={theme === t}
-					aria-label={labels[t]}
-					title={labels[t]}
-					onClick={() => setTheme(t)}
-				>
+				<label key={t} title={labels[t]}>
+					<input type="radio" name={name} value={t} aria-label={labels[t]} checked={theme === t} onChange={() => setTheme(t)} />
 					<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 						{icons[t]}
 					</svg>
-				</button>
+				</label>
 			))}
 		</div>
 	);

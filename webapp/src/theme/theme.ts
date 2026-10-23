@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 // The app and the account page follow the system colour scheme unless the
 // viewer picked light or dark. The choice lives in this browser only; the
@@ -37,6 +37,15 @@ export function applyTheme(theme: Theme) {
 	document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? colors.light : colors.dark);
 }
 
+// Every picker on the page (the sidebar and the mobile drawer can both be
+// mounted) reads the same choice and hears when it changes.
+let current: Theme | undefined;
+const listeners = new Set<() => void>();
+function setCurrent(theme: Theme) {
+	current = theme;
+	listeners.forEach((listener) => listener());
+}
+
 export function saveTheme(theme: Theme) {
 	try {
 		if (theme === 'system') localStorage.removeItem(key);
@@ -45,32 +54,27 @@ export function saveTheme(theme: Theme) {
 		// The choice then lasts until the page closes.
 	}
 	applyTheme(theme);
+	setCurrent(theme);
 }
 
 // startTheme keeps the page in step with the system colour scheme and with a
 // choice made in another tab (the app or the account page).
 export function startTheme() {
 	applyTheme(storedTheme());
-	if (typeof matchMedia === 'function') matchMedia(query).addEventListener('change', () => applyTheme(storedTheme()));
+	if (typeof matchMedia === 'function') matchMedia(query).addEventListener('change', () => applyTheme(current ?? storedTheme()));
 	window.addEventListener('storage', (e) => {
-		if (e.key === key || e.key === null) applyTheme(storedTheme());
+		if (e.key !== key && e.key !== null) return;
+		applyTheme(storedTheme());
+		setCurrent(storedTheme());
 	});
 }
 
+function subscribe(listener: () => void) {
+	listeners.add(listener);
+	return () => listeners.delete(listener);
+}
+const snapshot = () => (current ??= storedTheme());
+
 export function useTheme(): [Theme, (theme: Theme) => void] {
-	const [theme, setTheme] = useState(storedTheme);
-	useEffect(() => {
-		const follow = (e: StorageEvent) => {
-			if (e.key === key || e.key === null) setTheme(storedTheme());
-		};
-		window.addEventListener('storage', follow);
-		return () => window.removeEventListener('storage', follow);
-	}, []);
-	return [
-		theme,
-		(next) => {
-			saveTheme(next);
-			setTheme(next);
-		},
-	];
+	return [useSyncExternalStore(subscribe, snapshot), saveTheme];
 }
