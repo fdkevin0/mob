@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { authClient, keepOffer, loadSite, openApp, pendingOffer, returnAfterSignIn, type Site } from './auth';
 import { Logo } from '../components/brand/Logo';
-import { PixelIcon } from '../components/brand/PixelIcon';
+import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
@@ -73,7 +73,7 @@ export function Landing() {
 							</DropdownMenu>
 						</div>
 					) : (
-						<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><PixelIcon name="lock" size={12} /> Sign in</Button>
+						<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><Icon name="lock" size={14} /> Sign in</Button>
 					)}
 				</div>
 			</div></header>

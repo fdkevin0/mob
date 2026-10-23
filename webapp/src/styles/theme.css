@@ -1,7 +1,6 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/geist';
 @import '@fontsource/geist-mono/400.css';
-@import '@fontsource/silkscreen/400.css';
 @source '../../../node_modules/streamdown/dist';
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -22,7 +21,6 @@
 	--white: #f4f6ef;
 	--sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-	--pixel: 'Silkscreen', var(--mono);
 	--background: var(--bg);
 	--foreground: var(--text);
 	--card: var(--panel);

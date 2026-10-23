@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { PixelIcon } from '../components/brand/PixelIcon';
-import type { IconName } from '../components/brand/pixels';
+import { Icon } from '../components/brand/Icon';
+import type { IconName } from '../components/brand/Icon';
 import { magnet, type Magnet } from './snap';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
 import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
@@ -28,7 +28,7 @@ export const features: { title: string; text: string; look: string; icon: IconNa
 	{ title: 'Asks first', text: 'Tools with side effects wait for your approval, and you can remember a grant for next time.', look: 'hands up, and the gold leader', icon: 'shield', doing: ['ask', 'lead'] },
 	{ title: 'Sandboxed', text: 'Commands run in a container, with optional network, CPU and memory limits.', look: 'the glass booth at the front', icon: 'box', doing: ['sandbox'] },
 	{ title: 'Remembers', text: 'Every conversation stays on your machine, so you can pick it up again from any client.', look: 'notes going up on the whiteboard', icon: 'memory', doing: ['memo'] },
-	{ title: 'Plugs in', text: 'MCP servers, Agent Skills and plugins add tools without changing Mob.', look: 'the milk tea bar and coffee machine', icon: 'spark', doing: ['drink'] },
+	{ title: 'Plugs in', text: 'MCP servers, Agent Skills and plugins add tools without changing Mob.', look: 'the milk tea bar and coffee machine', icon: 'plug', doing: ['drink'] },
 ];
 
 const doing: Record<Activity, string> = {
@@ -209,7 +209,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 						{features.map((f, i) => (
 							<li key={f.title} className={feature === i || still ? 'on' : undefined}>
 								<button type="button" onClick={() => goTo(i)} aria-current={feature === i}>
-									<PixelIcon name={f.icon} size={18} />
+									<Icon name={f.icon} size={20} />
 									<span className="feature-title">{f.title}</span>
 								</button>
 								<div className="feature-more">

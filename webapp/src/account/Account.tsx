@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { authClient, errorCode } from '../landing/auth';
 import { Logo } from '../components/brand/Logo';
-import { PixelIcon } from '../components/brand/PixelIcon';
+import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 
@@ -141,7 +141,7 @@ function Passkeys() {
 			)}
 			{supported() ? (
 				<div className="account-add">
-					<Button type="button" onClick={() => void add()} disabled={busy}><PixelIcon name="key" size={12} />{busy ? 'Waiting for your device…' : 'Add a passkey'}</Button>
+					<Button type="button" onClick={() => void add()} disabled={busy}><Icon name="key" size={14} />{busy ? 'Waiting for your device…' : 'Add a passkey'}</Button>
 				</div>
 			) : <p className="form-error">This browser does not support passkeys.</p>}
 			{stale ? (
