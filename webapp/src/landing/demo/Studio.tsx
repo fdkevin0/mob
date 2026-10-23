@@ -3,7 +3,7 @@ import { Calf } from '../../components/brand/Logo';
 import { BrandIcon, runtimeBrand } from '../../chat/brandIcons';
 import { AlertIcon, ArrowUpIcon, CheckIcon, ChevronIcon, HandIcon, MessageIcon, SparkIcon, StopIcon } from '../../chat/icons';
 import { aimAt, Cursor, type Aim } from './Cursor';
-import { begin, clock, count, decide, finish, goal, money, project, reported, stop, tasks, typed, view, waitingFor, type Decision, type Run, type Status, type Task, type View } from './orchestra';
+import { begin, branches, clock, count, decide, finish, goal, money, project, report, reported, stop, tasks, typed, view, waitingFor, type Decision, type Run, type Status, type Task, type View } from './orchestra';
 import './demo.css';
 
 // One replay, two views of it: the conversation where you asked, on the web
@@ -57,7 +57,6 @@ function Markdown({ text }: { text: string }) {
 	return <>{blocks}</>;
 }
 
-const top = tasks.filter(t => t.parent === 'mob');
 const asker = tasks.find(t => t.waits)!;
 const flop = tasks.find(t => t.failed)!;
 const fixer = tasks.find(t => t.parent === flop.parent && t.start > flop.end)!;
@@ -66,33 +65,33 @@ const THINK = 0.9;
 // What Mob says back, on the web and in a chat app.
 function answer(run: Run, views: Map<string, View | undefined>) {
 	const total = [...views.values()].reduce((sum, v) => sum + (v?.cost ?? 0), 0);
-	const rows = top.map(t => {
-		const v = views.get(t.id)!;
-		const result = v.status === 'stopped' ? 'Stopped by you' : t === asker && run.decision === 'deny' ? 'Fixed, not run 50 times' : t === asker ? '50 of 50 runs pass' : 'Retries timeouts, not declines';
-		return `| \`${t.branch}\` | ${t.label} | ${result} | ${money(v.cost)} |`;
-	});
-	const lead = run.decision === 'deny' ? 'Done, with one thing left for you. You skipped the 50-run check, so run it before you merge `mob/flaky-t1`.' : 'Both are ready to merge, and **task_check** passes on each branch.';
-	return {
-		web: [lead, '| Branch | Agent | Result | Cost |', ...rows, `${tasks.length} agents in all, **${money(total)}** and ${clock(reported(run))}. Want me to open the pull requests?`].join('\n'),
-		brief: run.decision === 'deny'
-			? `Done. mob/retry-t2 is ready; run the 50-run check on mob/flaky-t1 before merging. ${money(total)}, ${clock(reported(run))}.`
-			: `Done. Both branches are ready to merge and the checks pass. ${tasks.length} agents, ${money(total)}, ${clock(reported(run))}.`,
-	};
+	const r = report(run, total);
+	const rows = branches.map((t, i) => `| \`${t.branch}\` | ${t.label} | ${r.results[i]} | ${money(views.get(t.id)?.cost ?? 0)} |`);
+	return { web: [r.lead, '| Branch | Agent | Result | Cost |', ...rows, r.closing].join('\n'), brief: r.brief };
+}
+
+// Follows new messages only while the reader is at the bottom, so scrolling
+// up to read stays put.
+function useFollow(...deps: unknown[]) {
+	const ref = useRef<HTMLDivElement>(null);
+	const pinned = useRef(true);
+	useLayoutEffect(() => { const el = ref.current; if (el && pinned.current) el.scrollTop = el.scrollHeight; }, deps);
+	const onScroll = () => { const el = ref.current; if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; };
+	return { ref, onScroll };
 }
 
 type Acts = { decide: (d: Decision) => void; select: (id: string) => void };
 
 function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run; views: Map<string, View | undefined>; channel: Channel; acts: Acts; approveRef: RefObject<HTMLButtonElement | null>; sendRef: RefObject<HTMLButtonElement | null> }) {
-	const scroll = useRef<HTMLDivElement>(null);
+	const follow = useFollow(run.t, run.decided);
 	const { t } = run;
 	const end = reported(run);
 	const asking = views.get(asker.id)?.asking;
 	const composing = t < 0 && channel === 'web';
-	useLayoutEffect(() => { const el = scroll.current; if (el) el.scrollTop = el.scrollHeight; }, [run.t, run.decided]);
 	return (
 		<section className="s-chat" aria-label="The conversation">
 			<header className="d-head">{t < 0 ? 'New conversation' : goal}</header>
-			<div className="d-scroll" ref={scroll}>
+			<div className="d-scroll" ref={follow.ref} onScroll={follow.onScroll}>
 				{t < 0 ? (
 					<div className="d-empty"><Calf size={40} /><h3>What should the calves do?</h3></div>
 				) : (
@@ -106,7 +105,7 @@ function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run;
 								<details className="d-reasoning"><summary><ChevronIcon /> Thought for 2s</summary><p>Two independent changes, so two agents on two branches. Both need tests before I call them done.</p></details>
 							)}
 							{t >= THINK ? <p className="s-say">On it. I've split this into two tasks:</p> : null}
-							{top.filter(task => views.get(task.id) && t >= THINK).map(task => {
+							{branches.filter(task => views.get(task.id) && t >= THINK).map(task => {
 								const v = views.get(task.id)!;
 								const kind = v.status === 'review' ? 'done' : v.status === 'failed' || v.status === 'stopped' ? 'failed' : v.status === 'waiting' ? 'waiting' : 'running';
 								return (
@@ -133,8 +132,8 @@ function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run;
 									</div>
 								);
 							})}
-							{t >= flop.end + 0.3 ? <p className="s-say">The retry tests caught a declined card being retried. {fixer.label} is fixing it.</p> : null}
-							{t >= end - 3 && t < end ? <p className="d-thinking">Checking both branches with task_diff and task_check…</p> : null}
+							{views.get(flop.id)?.status === 'failed' && t >= flop.end + 0.3 ? <p className="s-say">The retry tests caught a declined card being retried. {fixer.label} is fixing it.</p> : null}
+							{t >= end - 3 && t < end ? <p className="d-thinking">Checking the branches with task_diff and task_check…</p> : null}
 							{t >= end ? <div className="d-answer"><Markdown text={answer(run, views).web} /></div> : null}
 						</div>
 					</div>
@@ -154,12 +153,12 @@ function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run;
 }
 
 function Phone({ run, views, channel, acts, approveRef, sendRef }: { run: Run; views: Map<string, View | undefined>; channel: Channel; acts: Acts; approveRef: RefObject<HTMLButtonElement | null>; sendRef: RefObject<HTMLButtonElement | null> }) {
-	const scroll = useRef<HTMLDivElement>(null);
+	const follow = useFollow(run.t, run.decided);
 	const { t } = run;
 	const end = reported(run);
 	const v = views.get(asker.id);
+	const failed = views.get(flop.id)?.status === 'failed';
 	const composing = t < 0 && channel === 'chat';
-	useLayoutEffect(() => { const el = scroll.current; if (el) el.scrollTop = el.scrollHeight; }, [run.t, run.decided]);
 	return (
 		<div className="d-phone" aria-label="Mob in a chat app">
 			<div className="im-head">
@@ -167,7 +166,7 @@ function Phone({ run, views, channel, acts, approveRef, sendRef }: { run: Run; v
 				<span className="im-avatar"><Calf size={22} /></span>
 				<div><b>Mob</b><small>{t >= 0 && t < end ? 'typing…' : 'bot'}</small></div>
 			</div>
-			<div className="im-chat" ref={scroll}>
+			<div className="im-chat" ref={follow.ref} onScroll={follow.onScroll}>
 				<p className="im-day">Today</p>
 				<div className="im-msg in"><p>Hi! Ask me anything, and I will check with you before I change something.</p><time>08:58</time></div>
 				{t >= 0 ? <div className="im-msg out"><p>{goal}</p><time>09:02 ✓✓</time></div> : null}
@@ -185,7 +184,7 @@ function Phone({ run, views, channel, acts, approveRef, sendRef }: { run: Run; v
 						) : run.decision ? <p className={`im-decided${run.decision === 'deny' ? ' no' : ''}`}>{run.decision === 'deny' ? '✗ Denied' : run.decision === 'always' ? '✓ Always allowed' : '✓ Approved'}</p> : null}
 					</div>
 				) : null}
-				{t >= flop.end + 0.3 ? <div className="im-msg in"><p>Heads up: a retry test failed. {fixer.label} is fixing it.</p><time>09:06</time></div> : null}
+				{failed && t >= flop.end + 0.3 ? <div className="im-msg in"><p>Heads up: a retry test failed. {fixer.label} is fixing it.</p><time>09:06</time></div> : null}
 				{t >= end ? <div className="im-msg in"><p>{answer(run, views).brief}</p><time>09:09</time></div> : null}
 			</div>
 			<div className="im-compose">
@@ -328,6 +327,8 @@ export function Studio() {
 	const shown = [...views.values()].filter((v): v is View => !!v);
 	const n = (s: Status) => shown.filter(v => v.status === s).length;
 	const total = shown.reduce((sum, v) => sum + v.cost, 0);
+	const done = over ? report(run, total) : undefined;
+	const all = done?.ready === branches.length;
 	const depth = (t: Task): number => t.parent ? 1 + depth(tasks.find(p => p.id === t.parent)!) : 0;
 	// Depth-first, so each agent sits under the one that started it.
 	const ordered: Task[] = [];
@@ -375,7 +376,7 @@ export function Studio() {
 									</ul>
 								) : <p className="s-idle">No agents yet. Ask for something and Mob will hand out the work here, in <code>{project}</code>.</p>}
 							</div>
-							{over ? <p className="s-report" role="status"><CheckIcon /> {run.decision === 'deny' ? 'One branch ready, one waits for your check' : 'Both branches are ready to merge'} · {money(total)}</p> : null}
+							{done ? <p className="s-report" role="status" data-partial={!all || undefined}>{all ? <CheckIcon /> : <AlertIcon />} {done.banner} · {money(total)}</p> : null}
 						</section>
 					</div>
 				</div>

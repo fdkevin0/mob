@@ -40,5 +40,33 @@ it('takes a denial from the agent card and from a chat app', async () => {
 	fireEvent.click(within(screen.getByRole('region', { name: 'Agents' })).getByRole('button', { name: 'Deny' }));
 	expect(phone.getByText('✗ Denied')).toBeTruthy();
 	await wait(14_000);
-	expect(phone.getByText(/run the 50-run check on mob\/flaky-t1/)).toBeTruthy();
+	expect(phone.getByText(/run it before you merge mob\/flaky-t1/)).toBeTruthy();
+});
+
+it('reports a stopped agent as stopped, not ready to merge', async () => {
+	play();
+	fireEvent.click(screen.getByRole('button', { name: 'Web app' }));
+	await wait(11_000);
+	const agents = within(screen.getByRole('region', { name: 'Agents' }));
+	fireEvent.click(agents.getByRole('button', { name: /Codex/ }));
+	fireEvent.click(agents.getByRole('button', { name: 'Stop Codex' }));
+	await wait(14_000);
+	expect(agents.getByRole('status').textContent).toMatch(/1 of 2 branches ready to merge/);
+	const chat = within(screen.getByRole('region', { name: 'The conversation' }));
+	expect(chat.getByText(/You stopped/)).toBeTruthy();
+	expect(chat.queryByText(/Both are ready/)).toBeNull();
+});
+
+it('leaves the conversation where the visitor scrolled it', async () => {
+	play();
+	fireEvent.click(screen.getByRole('button', { name: 'Web app' }));
+	await wait(4_000);
+	const box = screen.getByRole('region', { name: 'The conversation' }).querySelector<HTMLElement>('.d-scroll')!;
+	// happy-dom has no layout, so give the box one.
+	Object.defineProperty(box, 'scrollHeight', { configurable: true, get: () => 1000 });
+	Object.defineProperty(box, 'clientHeight', { configurable: true, get: () => 300 });
+	box.scrollTop = 0;
+	fireEvent.scroll(box);
+	await wait(1_000);
+	expect(box.scrollTop).toBe(0);
 });

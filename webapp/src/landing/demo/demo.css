@@ -236,6 +236,8 @@ html:has(.demo-page) { scroll-snap-type: none; }
 .o-typing { color: var(--muted-foreground); animation: d-pulse 1.2s ease-in-out infinite !important; }
 .s-report { position: absolute; left: 14px; right: 14px; bottom: 12px; display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 12px; border: 1px solid #c8f56066; border-radius: 10px; background: #16191cf5; color: var(--text); font-size: 13px; box-shadow: 0 12px 30px #000a; animation: d-in .35s ease-out; }
 .s-report svg { color: var(--lime); }
+.s-report[data-partial] { border-color: #ffb64866; }
+.s-report[data-partial] svg { color: var(--amber); }
 
 @media (max-width: 1100px) {
 	.demo-points { grid-template-columns: repeat(2, minmax(0, 1fr)); }
