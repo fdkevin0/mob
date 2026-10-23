@@ -7,8 +7,14 @@ import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
+import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const errorText = (error: unknown) =>
+	error instanceof TypeError
+		? 'Mob cannot be reached right now; this shows what this browser kept. Start Mob, then refresh.'
+		: error instanceof Error
+			? error.message
+			: String(error);
 
 // Panels load on first use, so the chat opens without their code.
 const AgentTree = lazy(() => import('./AgentTree').then((m) => ({ default: m.AgentTree })));
@@ -51,6 +57,9 @@ export function Workspace({
 	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const [background, setBackground] = useState(false);
+	const [keeping, setKeeping] = useState(keepsMessages);
+	const scope = cacheScope(connection);
+	useEffect(() => resume(scope), [scope]);
 
 	// The service says what changed, so the list and the open views reload only then.
 	const changes = useMemo(() => new Changes(webClient(connection)), [connection]);
@@ -68,10 +77,13 @@ export function Workspace({
 		};
 	}, [changes]);
 	const cache = useRef(new Map<string, Snapshot>());
-	const remember = (id: string, snapshot: Snapshot) => {
+	// A remembered snapshot is shown before Mob answers, so it never claims a turn is running: that comes from Mob.
+	const remember = (id: string, kept: Snapshot) => {
+		const snapshot = { ...kept, active: false };
 		cache.current.delete(id);
 		cache.current.set(id, snapshot);
 		if (cache.current.size > cacheSize) cache.current.delete(cache.current.keys().next().value!);
+		void writeSnapshot(scope, id, snapshot);
 	};
 	const fetching = useRef(new Map<string, Promise<Snapshot>>());
 	function load(id: string) {
@@ -89,7 +101,9 @@ export function Workspace({
 	}
 
 	async function refreshList() {
-		setConversations(await api(connection, '/conversations'));
+		const list = await api<Conversation[]>(connection, '/conversations');
+		setConversations(list);
+		void writeList(scope, list);
 	}
 	function show(id: string, snapshot: Snapshot, replace = false) {
 		setSelected({ id, snapshot });
@@ -107,7 +121,8 @@ export function Workspace({
 		if (cached) return show(id, cached, replace);
 		setSwitching(true);
 		try {
-			const snapshot = await load(id);
+			// What this browser kept also shows at once, even while Mob cannot be reached.
+			const snapshot = (await readSnapshot(scope, id)) ?? (await load(id));
 			if (ticket === choice.current) show(id, snapshot, replace);
 		} catch (e) {
 			if (ticket === choice.current) setError(errorText(e));
@@ -139,19 +154,38 @@ export function Workspace({
 	}
 	useEffect(() => {
 		let live = true;
+		const start = choice.current;
+		const pick = (list: Conversation[]) => {
+			const routed = routedID();
+			return routed && list.some((c) => c.id === routed) ? routed : list[0].id;
+		};
+		// What this browser kept shows first, while the service is asked for the latest.
+		const kept = (async () => {
+			const list = await readList(scope);
+			if (!live || !list?.length || draft) return;
+			setConversations((current) => (current.length ? current : list));
+			const id = pick(list);
+			const snapshot = await readSnapshot(scope, id);
+			if (!live || !snapshot || current.current) return;
+			cache.current.set(id, snapshot);
+			show(id, snapshot, true);
+		})();
 		void (async () => {
 			try {
 				const [list, runtime] = await Promise.all([
 					api<Conversation[]>(connection, '/conversations'),
 					api<{ background: boolean }>(connection, '/runtime'),
 				]);
+				await kept;
 				if (!live) return;
 				setConversations(list);
+				void writeList(scope, list);
 				setBackground(runtime.background);
+				// A conversation the owner picked meanwhile stays open.
+				if (choice.current !== start) return;
 				// A draft typed before connecting starts a new conversation, as the lobby showed.
-				const routed = routedID();
 				if (draft || !list.length) await create(true);
-				else await open(routed && list.some((c) => c.id === routed) ? routed : list[0].id, true);
+				else await open(pick(list), true);
 			} catch (e) {
 				if (live) setError(errorText(e));
 			}
@@ -234,6 +268,21 @@ export function Workspace({
 					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'} ·{' '}
 					{background ? 'keeps running' : 'stops with its process'}
 				</p>
+				<label
+					className="keep-messages"
+					title="Conversation titles are always kept in this browser so Mob opens at once. Messages are kept only when this is on; turning it off forgets them."
+				>
+					<input
+						type="checkbox"
+						checked={keeping}
+						onChange={(e) => {
+							const on = e.target.checked;
+							setKeeping(on);
+							void setKeepsMessages(on);
+						}}
+					/>
+					Keep messages on this device
+				</label>
 				{isPublicWeb() && (
 					<>
 						<Button variant="ghost" asChild>

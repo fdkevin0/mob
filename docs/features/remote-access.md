@@ -67,6 +67,14 @@ served by the Worker in `worker/`:
   composer of the first conversation that opens after connecting; it is not
   sent automatically. A `mob open --web` link opens the dialog to show its
   progress, and a replaced token reopens it with the reason.
+- The browser keeps what each Mob showed last in IndexedDB, separately for
+  each runner and local address, so a Mob it has shown before opens at once
+  and then catches up; the public web also reopens the runner it last opened.
+  Only the conversation list (titles) is kept by default. Messages of the 20
+  most recently opened conversations are kept only after **Keep messages on
+  this device** is turned on in the sidebar; turning it off forgets them.
+  **Disconnect** or a rejected token forgets everything kept for that Mob.
+  While Mob is unreachable, the workspace shows what was kept and says so.
 
 - `/docs` is the documentation, built with Starlight from `apps/docs`. Its
   pages are this repository's Markdown (`README.md`, `CONTRIBUTING.md` and

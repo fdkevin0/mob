@@ -19,7 +19,7 @@ export function useConversation({
 	onBusy: (busy: boolean) => void;
 	onChanged: () => void;
 	onAction?: (action: Action) => void;
-	/** onLeave receives what the conversation showed when it closes, so reopening it can show that at once. */
+	/** onLeave receives what the conversation showed when it closes or the page is hidden, so reopening it can show that at once. */
 	onLeave?: (snapshot: Snapshot) => void;
 	changes?: Changes;
 }) {
@@ -43,10 +43,19 @@ export function useConversation({
 	const state = useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
 	useEffect(() => {
 		const stop = conversation.start();
-		return () => {
-			stop();
+		const leave = () => {
 			const { messages, model, remoteBusy } = conversation.getSnapshot();
 			callbacks.current.onLeave?.({ messages, model, active: remoteBusy });
+		};
+		// A page being hidden may be closing, so what it shows is handed over then too.
+		const hidden = () => {
+			if (document.hidden) leave();
+		};
+		document.addEventListener('visibilitychange', hidden);
+		return () => {
+			document.removeEventListener('visibilitychange', hidden);
+			stop();
+			leave();
 		};
 	}, [conversation]);
 	useEffect(() => {

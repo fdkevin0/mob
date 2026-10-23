@@ -127,6 +127,19 @@
 	margin: 0 0 4px;
 	padding: 0 10px;
 }
+.keep-messages {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 4px;
+	padding: 4px 10px;
+	cursor: pointer;
+}
+.keep-messages input {
+	accent-color: var(--lime);
+	margin: 0;
+}
 .sidebar-footer .btn {
 	padding: 6px 10px;
 	min-height: 32px;

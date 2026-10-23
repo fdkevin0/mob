@@ -9,6 +9,12 @@ import { hostGuideURL, hosts } from './hosts';
 type Runner = { id: string; session: string | null };
 const storageKey = (id: string) => `mob-runner-key:${id}`;
 
+/** runnerConnection reaches runner id through the relay with the key this browser paired it with, if it has one. */
+export function runnerConnection(id: string): Connection | undefined {
+	const key = localStorage.getItem(storageKey(id));
+	return key ? { url: `${location.origin}/api/runners/${id}`, token: '', runner: { id, key } } : undefined;
+}
+
 /** Runners lists the account's runners and pairs new ones; deploy pairs one that a cloud host runs instead of the user's computer. */
 export function Runners({ connect, deploy }: { connect: (connection: Connection) => void; deploy?: boolean }) {
 	const [runners, setRunners] = useState<Runner[]>([]);
@@ -79,9 +85,9 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 	}
 	function open(id: string) {
 		try {
-			const key = localStorage.getItem(storageKey(id));
-			if (!key) throw new Error('This browser has no key for this runner. Pair a new runner from this browser.');
-			connect({ url: `${location.origin}/api/runners/${id}`, token: '', runner: { id, key } });
+			const connection = runnerConnection(id);
+			if (!connection) throw new Error('This browser has no key for this runner. Pair a new runner from this browser.');
+			connect(connection);
 		} catch (e) {
 			setError(String(e));
 		}
