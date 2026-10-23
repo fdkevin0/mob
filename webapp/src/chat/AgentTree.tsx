@@ -191,6 +191,9 @@ function Instruct({ send, busy, done }: { send: (text: string) => Promise<boolea
 	);
 }
 
+// How an agent said its work ended.
+const outcomes: Record<string, string> = { passed: 'Passed', rework: 'Needs rework', blocked: 'Blocked' };
+
 function Card({
 	branch,
 	open,
@@ -274,6 +277,12 @@ function Card({
 				<p className="agent-branch-name" title={node.task.readOnly ? `Reads ${node.task.worktree} without changing it` : node.task.worktree}>
 					{node.task.readOnly && <span className="agent-readonly">Read-only</span>}
 					{node.task.project} · {node.task.branch}
+				</p>
+			)}
+			{node.task?.outcome && (
+				<p className="agent-outcome" data-outcome={node.task.outcome} title={node.task.result}>
+					<strong>{outcomes[node.task.outcome] ?? node.task.outcome}</strong>
+					{node.task.result && <span>{node.task.result.split('\n')[0]}</span>}
 				</p>
 			)}
 			{plan.length > 0 && (

@@ -196,3 +196,16 @@ it('marks agents that only read another task’s worktree', async () => {
 	const card = (await screen.findByText('Read-only')).closest('article') as HTMLElement;
 	expect(within(card).getByText(/mob · mob\/build/).getAttribute('title')).toContain('without changing it');
 });
+
+it('shows how an agent said its work ended', async () => {
+	const reviewer = node({ ...task('review', 'review', 1000, 2000, 'c-build'), outcome: 'rework', result: 'Retries never stop\nand more' });
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json([...nodes, reviewer])),
+	);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	const outcome = (await screen.findByText('Needs rework')).closest('p') as HTMLElement;
+	expect(outcome.dataset.outcome).toBe('rework');
+	expect(within(outcome).getByText('Retries never stop')).toBeTruthy();
+	expect(outcome.getAttribute('title')).toContain('and more');
+});

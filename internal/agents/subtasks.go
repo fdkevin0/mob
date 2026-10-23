@@ -44,10 +44,11 @@ func (s *Service) mayDelegate(t chat.Task) bool {
 }
 
 // mcpServers are the MCP servers a session of task t gets: Mob's, when the
-// task may start sub-tasks and the agent takes MCP servers over HTTP.
+// agent takes MCP servers over HTTP, through which it reports how its work
+// ended and, if it may, starts sub-tasks.
 func (s *Service) mcpServers(t chat.Task, caps acp.AgentCapabilities) (servers []acp.McpServer, token string) {
 	servers = []acp.McpServer{}
-	if !caps.McpCapabilities.Http || !s.mayDelegate(t) {
+	if !caps.McpCapabilities.Http {
 		return servers, ""
 	}
 	url, err := s.listen()
@@ -139,6 +140,11 @@ type startInput struct {
 	Workspace string `json:"workspace,omitempty" jsonschema:"new (default): a new worktree and branch; shared: work read-only in your worktree and branch, seeing your uncommitted changes, such as to review your work. A shared sub-task's edits are refused."`
 }
 
+type resultInput struct {
+	Outcome string `json:"outcome" jsonschema:"passed: your work is done and holds up, or what you reviewed needs no changes; rework: your work, or what you reviewed, needs the changes you list; blocked: you cannot go on without a decision or something you lack"`
+	Summary string `json:"summary" jsonschema:"What you did or found, in a few lines: for rework the changes needed, most important first; for blocked what you need"`
+}
+
 type taskInput struct {
 	Task string `json:"task" jsonschema:"The sub-task's ID"`
 }
@@ -150,15 +156,26 @@ type messageInput struct {
 
 // subtaskServer is the MCP server task id's agent sees.
 func (s *Service) subtaskServer(id string) *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: mcpName, Version: version.Current}, &mcp.ServerOptions{
-		Instructions: "Mob runs this coding task. Its tools hand parts of your work to other coding agents, each in its own worktree and branch of the same project. The owner approves every sub-task first; Mob tells you when all your sub-tasks have ended.",
-	})
+	t, _, _ := s.Store.Task(id)
+	delegate := s.mayDelegate(t)
+	instructions := "Mob runs this coding task. When you finish what you were asked, report how it ended with task_result; whoever gave you the task reads it."
+	if delegate {
+		instructions += " The other tools hand parts of your work to other coding agents, each in its own worktree and branch of the same project. The owner approves every sub-task first; Mob tells you when all your sub-tasks have ended, with how each said it ended."
+	}
+	server := mcp.NewServer(&mcp.Implementation{Name: mcpName, Version: version.Current}, &mcp.ServerOptions{Instructions: instructions})
+	mcp.AddTool(server, &mcp.Tool{Name: "task_result", Description: "Report how your task ended: passed, rework or blocked, with a short summary. Call it once you finish what you were asked, as your last step; calling it again replaces what you said."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in resultInput) (*mcp.CallToolResult, any, error) {
+			return result("Recorded.", s.recordResult(id, in)), nil, nil
+		})
+	if !delegate {
+		return server
+	}
 	mcp.AddTool(server, &mcp.Tool{Name: "task_start", Description: fmt.Sprintf("Ask the owner to approve handing part of your work to another coding agent, in a new worktree and branch of this project, or read-only in your own worktree (workspace shared), such as to review your work. Returns at once; the sub-task starts once the owner approves, and Mob sends you a summary when all your sub-tasks have ended. At most %d run at once and %d in all.", subtaskActive, subtaskTotal)},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in startInput) (*mcp.CallToolResult, any, error) {
 			text, err := s.askSubtask(id, in)
 			return result(text, err), nil, nil
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "tasks", Description: "List the sub-tasks you started, with their status (running, waiting for the owner, review when done, stopped, failed), branch, latest reply and what they used."},
+	mcp.AddTool(server, &mcp.Tool{Name: "tasks", Description: "List the sub-tasks you started, with their status (running, waiting for the owner, review when done, stopped, failed), how each said its work ended (passed, needs rework, blocked), branch, its result or latest reply and what they used."},
 		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 			text, err := s.listSubtasks(id)
 			return result(text, err), nil, nil
@@ -187,6 +204,23 @@ func (s *Service) subtaskServer(id string) *mcp.Server {
 		})
 	return server
 }
+
+// recordResult saves how task id's agent said its work ended.
+func (s *Service) recordResult(id string, in resultInput) error {
+	in.Outcome, in.Summary = strings.ToLower(strings.TrimSpace(in.Outcome)), strings.TrimSpace(in.Summary)
+	switch in.Outcome {
+	case chat.OutcomePassed, chat.OutcomeRework, chat.OutcomeBlocked:
+	default:
+		return fmt.Errorf("outcome is passed, rework or blocked, not %q", in.Outcome)
+	}
+	if r := []rune(in.Summary); len(r) > resultLimit {
+		in.Summary = string(r[:resultLimit]) + "…"
+	}
+	return s.Store.SetTaskResult(id, in.Outcome, in.Summary)
+}
+
+// resultLimit bounds the summary an agent reports with its outcome, in runes.
+const resultLimit = 4000
 
 func result(text string, err error) *mcp.CallToolResult {
 	if err != nil {
@@ -377,27 +411,49 @@ func (s *Service) report(list []chat.Task) (string, error) {
 	}
 	var b strings.Builder
 	for _, t := range list {
-		fmt.Fprintf(&b, "- **%s** · %s · %s (task %s, branch `%s`)", statusLabels[t.Status], t.Agent, t.Title, t.ID, t.Branch)
+		fmt.Fprintf(&b, "- **%s** · %s · %s (task %s, branch `%s`)", label(t), t.Agent, t.Title, t.ID, t.Branch)
 		if u, ok := used[t.ConversationID]; ok {
 			b.WriteString(" · " + u.Brief())
 		}
 		b.WriteString("\n")
-		if said, _ := s.Store.LastReply(t.ConversationID); strings.TrimSpace(said) != "" {
+		// What the agent reported is its account; otherwise the end of what
+		// it last said.
+		said := t.Result
+		if said == "" {
+			said, _ = s.Store.LastReply(t.ConversationID)
 			said = strings.TrimSpace(said)
 			if r := []rune(said); len(r) > reportReply {
 				said = "…" + string(r[len(r)-reportReply:])
 			}
+		}
+		if said != "" {
 			b.WriteString("  " + strings.ReplaceAll(said, "\n", "\n  ") + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
+// label is how a report names what task t is doing and, once it said, how
+// its work ended.
+func label(t chat.Task) string {
+	if t.Outcome == "" {
+		return statusLabels[t.Status]
+	}
+	return statusLabels[t.Status] + ", " + outcomeLabels[t.Outcome]
+}
+
+// outcomeLabels are how reports name outcomes.
+var outcomeLabels = map[string]string{
+	chat.OutcomePassed:  "passed",
+	chat.OutcomeRework:  "needs rework",
+	chat.OutcomeBlocked: "blocked",
+}
+
 // reportReply bounds the agent's words a summary repeats per task, in runes.
 const reportReply = 600
 
 // summaryPrompt tells an agent its sub-tasks ended.
-const summaryPrompt = "Automatic update from Mob, not written by the owner: all the sub-tasks you started have ended. Their branches are in this project; review and bring in what you need, then finish your own work.\n\n%s"
+const summaryPrompt = "Automatic update from Mob, not written by the owner: all the sub-tasks you started have ended, each with how it said its work ended (passed, needs rework or blocked) when it did. Their branches are in this project; review and bring in what you need, act on what they found, then finish your own work.\n\n%s"
 
 // settle tells the conversation that started task id when every task it
 // started has ended: the agent of a task, which then goes on; or, for Mob's

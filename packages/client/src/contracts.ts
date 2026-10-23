@@ -186,6 +186,8 @@ export type Task = {
   status: string;
   parent?: string;
   readOnly?: boolean;
+  outcome?: string;
+  result?: string;
   plan?: PlanEntry[];
   createdAt: number;
   updatedAt: number;

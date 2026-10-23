@@ -76,6 +76,8 @@ INSERT INTO usage(conversation_id,message_id,model,input,output,reasoning,cache_
  created_at INTEGER NOT NULL);`},
 		// Tasks that only read another task's worktree, such as reviewers.
 		{"20261023", `ALTER TABLE tasks ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0;`},
+		{"20261023", `ALTER TABLE tasks ADD COLUMN outcome TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN result TEXT NOT NULL DEFAULT '';`},
 	},
 }
 

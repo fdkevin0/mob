@@ -70,7 +70,8 @@ Owner-only tools:
   read-only in that task's worktree and branch (see Readers below); Always
   allow then covers only that task.
 - `tasks` lists the projects and tasks with status, branch, plan, the end of
-  each task's latest reply and what its agent used (see Usage below).
+  each task's latest reply, the outcome and result its agent reported (see
+  Results below) and what its agent used (see Usage below).
 - `task_message` passes instructions to a task's agent. While the agent is
   at work they are added to its conversation and sent once its current
   prompt ends. `task_stop` stops its turn and ends the agent.
@@ -173,10 +174,13 @@ notice as before. Failed tasks are not reviewed.
 A task Mob's conversation started may hand parts of its work to other coding
 agents, so the tree grows a second level; a sub-task cannot start sub-tasks
 of its own. Mob runs an MCP server on loopback (`127.0.0.1`, a random port)
-once an agent may use it, and gives each such session, when the agent takes
-MCP servers over HTTP (`mcpCapabilities.http`), a server named `mob` with a
-bearer token of its own that only reaches that task's sub-tasks. The server is stateless and checks the token on every request, and the token stops working when the session ends. Agents that
-take no HTTP servers start no sub-tasks. Its tools:
+and gives every task's session, when the agent takes MCP servers over HTTP
+(`mcpCapabilities.http`), a server named `mob` with a bearer token of its own
+that only reaches that task and its sub-tasks. The server is stateless and
+checks the token on every request, and the token stops working when the
+session ends. Every task gets `task_result` (see Results below); a task that
+may start sub-tasks also gets the tools below. Agents that take no HTTP
+servers start no sub-tasks and report no result. Its tools:
 
 - `task_start` (title, prompt, optional agent, else the task's own) asks the
   owner to approve, in the task's conversation, as one of the agent's own
@@ -212,6 +216,24 @@ offer that mode fails to start. Mob refuses every edit, delete or move it asks
 for without asking the owner, even inside the worktree; its commands are
 approvals as usual. DeepSeek Harness has no such mode and cannot be a reader.
 
+## Results
+
+`task_result` (outcome, summary) lets a task's agent say how its work ended:
+
+- `passed`: the work is done and holds up, or what it reviewed needs no
+  changes;
+- `rework`: the work, or what it reviewed, needs the changes the summary
+  lists, most important first;
+- `blocked`: it cannot go on without a decision or something it lacks.
+
+Mob keeps the latest (`tasks.outcome`, `tasks.result`, up to 4000
+characters of summary) and forgets it when the agent is given more work, so
+an outcome always describes the latest work. Any other outcome is refused
+with the reason. Summaries and `/tasks` name it after the status ("Done,
+needs rework") and show the reported summary in place of the end of the
+agent's last reply; Mob's `tasks` tool returns both; the task's card on the
+Agents page shows it under the branch.
+
 ## Summaries
 
 Once every task a conversation started has ended (done, stopped or failed),
@@ -219,8 +241,9 @@ Mob says so in that conversation, once for each set of ended tasks (a task
 that ends again after more work makes a new set):
 
 - A task's conversation gets an automatic message listing its sub-tasks with
-  their status, branch, usage and the end of their latest reply, so the agent
-  can bring their work in and finish its own. An agent at work reads it once
+  their status and outcome, branch, usage and their result or the end of
+  their latest reply, so the agent can bring their work in, act on what they
+  found and finish its own. An agent at work reads it once
   its prompt ends; one in review gets it as a new prompt; one stopped, failed
   or waiting for a decision is left alone.
 - Mob's own conversation, when it started more than one task, gets a note
