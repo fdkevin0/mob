@@ -185,3 +185,14 @@ it('keeps refreshing while changes arrive faster than a second apart', async () 
 		vi.useRealTimers();
 	}
 });
+
+it('marks agents that only read another task’s worktree', async () => {
+	const reader = node({ ...task('review', 'running', 1000, 2000, 'c-build'), readOnly: true, branch: 'mob/build' });
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json([...nodes, reader])),
+	);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	const card = (await screen.findByText('Read-only')).closest('article') as HTMLElement;
+	expect(within(card).getByText(/mob · mob\/build/).getAttribute('title')).toContain('without changing it');
+});

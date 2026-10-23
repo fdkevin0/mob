@@ -160,8 +160,16 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 			return nil, err
 		}
 	}
-	if p.Mode != "" && modes != nil && modes.CurrentModeId != acp.SessionModeId(p.Mode) && slices.ContainsFunc(modes.AvailableModes, func(m acp.SessionMode) bool { return m.Id == acp.SessionModeId(p.Mode) }) {
-		if _, err := s.conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: s.id, ModeId: acp.SessionModeId(p.Mode)}); err != nil {
+	mode := p.Mode
+	if t.ReadOnly {
+		// A reader that cannot be kept from editing does not start.
+		mode = p.ReadOnly
+		if mode == "" || modes == nil || !slices.ContainsFunc(modes.AvailableModes, func(m acp.SessionMode) bool { return m.Id == acp.SessionModeId(mode) }) {
+			return nil, s.failed("work read-only", fmt.Errorf("it offers no %q mode", mode))
+		}
+	}
+	if mode != "" && modes != nil && modes.CurrentModeId != acp.SessionModeId(mode) && slices.ContainsFunc(modes.AvailableModes, func(m acp.SessionMode) bool { return m.Id == acp.SessionModeId(mode) }) {
+		if _, err := s.conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: s.id, ModeId: acp.SessionModeId(mode)}); err != nil {
 			return nil, s.failed("set its mode", err)
 		}
 	}
@@ -543,6 +551,11 @@ func (s *session) ask(turn *chat.DelegateTurn, p *permission) (asked bool, err e
 	if p.once {
 		p.scope = ""
 	}
+	if s.task.ReadOnly && changes(kind) {
+		// A reader never changes the worktree it shares.
+		p.choose(acp.PermissionOptionKindRejectOnce, acp.PermissionOptionKindRejectAlways)
+		return false, nil
+	}
 	if s.inWorktree(kind, locations) || s.granted(p) {
 		p.choose(acp.PermissionOptionKindAllowOnce, acp.PermissionOptionKindAllowAlways)
 		return false, nil
@@ -571,10 +584,16 @@ func (s *session) ask(turn *chat.DelegateTurn, p *permission) (asked bool, err e
 	return true, nil
 }
 
+// changes reports whether a call of kind edits, deletes or moves files.
+func changes(kind *acp.ToolKind) bool {
+	return kind != nil && (*kind == acp.ToolKindEdit || *kind == acp.ToolKindDelete || *kind == acp.ToolKindMove)
+}
+
 // inWorktree reports whether a call is an edit, delete or move of files all
-// inside the task's worktree, which the agent may make without asking.
+// inside the task's worktree, which the agent may make without asking, unless
+// the task only reads it.
 func (s *session) inWorktree(kind *acp.ToolKind, locations []acp.ToolCallLocation) bool {
-	if kind == nil || (*kind != acp.ToolKindEdit && *kind != acp.ToolKindDelete && *kind != acp.ToolKindMove) || len(locations) == 0 {
+	if s.task.ReadOnly || !changes(kind) || len(locations) == 0 {
 		return false
 	}
 	return !slices.ContainsFunc(locations, func(l acp.ToolCallLocation) bool { return !inside(s.task.Worktree, l.Path) })

@@ -271,7 +271,8 @@ function Card({
 				{node.title}
 			</p>
 			{node.task && (
-				<p className="agent-branch-name" title={node.task.worktree}>
+				<p className="agent-branch-name" title={node.task.readOnly ? `Reads ${node.task.worktree} without changing it` : node.task.worktree}>
+					{node.task.readOnly && <span className="agent-readonly">Read-only</span>}
 					{node.task.project} · {node.task.branch}
 				</p>
 			)}
