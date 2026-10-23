@@ -80,6 +80,19 @@ code { font-family: var(--mono); font-size: .92em; }
 .tools li { padding: 7px 10px; border: 1px dashed var(--line-strong); }
 .tools li::before { content: '▸ '; color: var(--cyan); }
 .tools b { color: var(--text); font-weight: 500; margin-right: 6px; }
+.team { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.team li { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px 6px 0; border: 1px dashed var(--line-strong); position: relative; }
+.team li::before { content: ''; flex: none; width: 6px; height: 6px; margin-left: 4px; background: var(--cyan); align-self: center; }
+.team b { flex: none; font-weight: 500; }
+.team-title { flex: 1; min-width: 0; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.team-status { flex: none; font-family: var(--mono); font-size: 11px; color: var(--cyan); }
+.team li.team-needs-you::before { background: var(--amber); }
+.team-needs-you .team-status { color: var(--amber); }
+.team li.team-ready::before, .team li.team-done::before { background: var(--lime); }
+.team-ready .team-status, .team-done .team-status { color: var(--lime); }
+.flow-demo a, .feature-demo a { color: var(--lime); text-decoration: none; pointer-events: auto; }
+.flow-demo a:hover, .feature-demo a:hover { text-decoration: underline; }
+.feature-more .feature-demo { margin-top: 8px; font-size: 13px; }
 .approve { padding: 12px; border: 1px solid #ffb64866; background: #ffb6480d; }
 .approve p { margin: 0 0 10px; line-height: 1.45; }
 .approve b { color: var(--amber); font-weight: 560; }

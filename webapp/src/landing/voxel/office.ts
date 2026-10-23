@@ -211,10 +211,13 @@ type Agent = {
 
 const NOTE_COLORS = [colors.lime, colors.amber, colors.cyan, colors.violet];
 
-// The scripted task the landing page plays across the floor: a message comes
-// in to the leader, it hands out the work, one calf asks first, and the result
-// goes back out. The crew are the three working calves nearest the leader.
-type Story = { step: number; since: number; crew: Agent[] };
+// The scripted task the landing page plays across the floor, as Mob runs a
+// team of coding agents: a message comes in to the leader, it hands the work
+// to two desks and one of them passes a piece on to a colleague, one asks
+// first, and the leader checks each desk's work before the result goes back
+// out. The crew are the two working calves nearest the leader; the helper is
+// the working calf nearest the second of them.
+type Story = { step: number; since: number; crew: Agent[]; helper: Agent };
 let story: Story | undefined;
 
 class Office {
@@ -513,31 +516,72 @@ function marker([x, , z]: Vec, t: number): Voxel[] {
 	return [[x, 19 + bob, z, ...colors.lime, 1, 1.1], [x, 18 + bob, z, ...colors.lime, 1, 0.5]];
 }
 
+// The lines of the agent tree, drawn on the floor along the lanes: from the
+// leader to each desk it handed work to, and from that desk to the helper.
+// Light runs along a line while its work is under way; `grown` is how many
+// voxels of it are drawn so far.
+function trail(points: P[], grown: number, color: RGB, flowing: boolean, t: number, v: Voxel[]) {
+	let walked = 0;
+	for (let i = 1; i < points.length; i++) {
+		const [ax, az] = points[i - 1], [bx, bz] = points[i];
+		const length = Math.abs(bx - ax) + Math.abs(bz - az);
+		for (let d = 0; d < length; d++, walked++) {
+			if (walked >= grown) return;
+			const lit = flowing && ((walked - t * 14) % 7 + 7) % 7 < 2;
+			v.push([ax + (bx - ax) * d / length, -0.3, az + (bz - az) * d / length, ...color, lit ? 1 : 0.55, lit ? 0.9 : 0.6]);
+		}
+	}
+}
+
 // Plays one step of the story; returns the calves it is about.
 function playStory(s: Story, t: number, v: Voxel[]): Agent[] {
 	const boss = office.agents.find(a => a.leader)!;
-	const [asker] = s.crew;
-	const p = (t - s.since) % 3.6;
+	const { crew, helper } = s;
+	const [asker, passer] = crew;
+	const since = t - s.since;
+	const p = since % 3.6;
+	// Each line's colour, as the agent tree colours its status.
+	const lines: { from: Agent; to: Agent; grown: number; color: RGB; flowing: boolean }[] = [];
+	if (s.step >= 1) {
+		const after = s.step > 1 ? Infinity : 0;
+		crew.forEach((c, i) => lines.push({ from: boss, to: c, grown: after || (since - i * 0.5) * 80, color: colors.cyan, flowing: true }));
+		lines.push({ from: passer, to: helper, grown: after || (since - 2.4) * 40, color: colors.cyan, flowing: true });
+	}
 	switch (s.step) {
 		case 0: // a message flies in over the wall to the leader
 			v.push(block(arc(OUTSIDE, hands(boss), p / 1.4, 10), colors.lime, 1.6, 1));
 			return [boss];
-		case 1: // the leader hands the work out to the crew's desks
-			s.crew.forEach((c, i) => {
+		case 1: // the leader hands the work out, and one desk passes a piece on
+			crew.forEach((c, i) => {
 				const q = (p - i * 0.5) / 1.1;
-				if (q > 0 && q < 1) v.push(block(arc(hands(boss), deskTop(c), q, 8), [colors.cyan, colors.amber, colors.violet][i], 1.4, 1));
+				if (q > 0 && q < 1) v.push(block(arc(hands(boss), deskTop(c), q, 8), [colors.cyan, colors.violet][i], 1.4, 1));
 				if (q >= 1) c.deskBlock = Math.max(c.deskBlock, t + 1);
 			});
-			return [boss, ...s.crew];
+			if (p > 1.9 && p < 2.9) v.push(block(arc(deskTop(passer), deskTop(helper), (p - 1.9) / 1, 5), colors.amber, 1.2, 1));
+			if (p >= 2.9) helper.deskBlock = Math.max(helper.deskBlock, t + 1);
+			break;
 		case 2: // one of them asks before doing something with side effects
 			if (asker.state === 'work') { asker.pose = 'catch'; asker.poseFacing = asker.home.facing; asker.poseUntil = t + 0.2; }
 			v.push(...glyph(p < 2.4 ? QUESTION : TICK_MARK, add(hands(asker), [0, 10, 0]), p < 2.4 ? colors.amber : colors.lime));
-			return [asker];
-		default: // the result goes back to the leader and out
-			if (p < 1.2) v.push(block(arc(deskTop(asker), hands(boss), p / 1.2, 8), colors.lime, 1.6, 1));
-			else if (p > 1.6 && p < 2.8) v.push(block(arc(hands(boss), OUTSIDE, (p - 1.6) / 1.2, 10), colors.lime, 1.6, 1));
-			return [asker, boss];
+			if (p < 2.4) Object.assign(lines[0], { color: colors.amber, flowing: false });
+			break;
+		default: { // the leader checks each desk's work, then the result goes out
+			const q = since % 4.4;
+			crew.forEach((c, i) => {
+				const from = i * 1.2;
+				if (q > from && q < from + 1) v.push(block(arc(deskTop(c), hands(boss), q - from, 8), colors.lime, 1.4, 1));
+				if (q >= from + 1 && q < from + 2.2) v.push(...glyph(TICK_MARK, add(hands(c), [0, 10, 0]), colors.lime));
+				// Once checked, a line stays green.
+				if (since >= from + 1) {
+					Object.assign(lines[i], { color: colors.lime, flowing: false });
+					if (c === passer) Object.assign(lines[2], { color: colors.lime, flowing: false });
+				}
+			});
+			if (q > 2.8 && q < 4) v.push(block(arc(hands(boss), OUTSIDE, (q - 2.8) / 1.2, 10), colors.lime, 1.6, 1));
+		}
 	}
+	for (const l of lines) trail(route(l.from.home, l.to.home), l.grown, l.color, l.flowing, t, v);
+	return s.step === 2 ? [asker] : [boss, ...crew, helper];
 }
 
 let highlight: Activity[] | undefined;
@@ -593,11 +637,12 @@ export function setStory(step: number | undefined) {
 	if (step === undefined) { story = undefined; return; }
 	if (story?.step === step) return;
 	const boss = office.agents.find(a => a.leader)!;
-	const crew = story?.crew ?? office.agents
-		.filter(a => !a.leader && a.state === 'work')
-		.sort((a, b) => Math.hypot(a.at[0] - boss.at[0], a.at[1] - boss.at[1]) - Math.hypot(b.at[0] - boss.at[0], b.at[1] - boss.at[1]))
-		.slice(0, 3);
-	story = { step, since: office.time, crew };
+	const nearest = (to: Agent, but: Agent[]) => office.agents
+		.filter(a => !a.leader && a.state === 'work' && !but.includes(a))
+		.sort((a, b) => Math.hypot(a.at[0] - to.at[0], a.at[1] - to.at[1]) - Math.hypot(b.at[0] - to.at[0], b.at[1] - to.at[1]));
+	const crew = story?.crew ?? nearest(boss, []).slice(0, 2);
+	const helper = story?.helper ?? nearest(crew[1], crew)[0];
+	story = { step, since: office.time, crew, helper };
 }
 
 // Sets how far the spotlight (story) and the highlight have faded in.

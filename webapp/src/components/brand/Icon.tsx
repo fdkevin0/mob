@@ -40,6 +40,20 @@ const icons = {
 			<path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
 		</>
 	),
+	tree: (
+		<>
+			<rect x="16" y="16" width="6" height="6" rx="1" />
+			<rect x="2" y="16" width="6" height="6" rx="1" />
+			<rect x="9" y="2" width="6" height="6" rx="1" />
+			<path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8" />
+		</>
+	),
+	clock: (
+		<>
+			<circle cx="12" cy="12" r="10" />
+			<path d="M12 6v6l4 2" />
+		</>
+	),
 	code: <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />,
 	search: (
 		<>

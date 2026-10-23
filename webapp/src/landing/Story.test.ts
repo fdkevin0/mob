@@ -31,6 +31,14 @@ it('plays each step of the task without losing the office', () => {
   setStory(undefined);
 });
 
+it('draws the agent tree on the floor once the work is handed out', () => {
+  const lines = (step: number, t: number) => { setStory(step); return officeVoxels(t).filter(v => v[1] === -0.3).length; };
+  expect(lines(0, 420)).toBe(0);
+  // Three lines: the leader to both desks, and one desk to its helper.
+  for (const step of [2, 3]) expect(lines(step, 430 + step)).toBeGreaterThan(30);
+  setStory(undefined);
+});
+
 it('keeps most calves at their desks, with only a few up at a time', () => {
   let desk = 0, all = 0;
   for (let t = 500; t < 800; t += 1) {

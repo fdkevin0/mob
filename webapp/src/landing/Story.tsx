@@ -6,28 +6,30 @@ import { VoxelCanvas } from './voxel/VoxelCanvas';
 import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
 
 // The top of the landing page is one pinned stage over the calves' office,
-// scrolled through in pages: the title, a task played out step by step, then
-// the features, with the office moved aside. Positions along the way are in
-// viewport heights from the top of the story.
+// scrolled through in pages: the title, a task handed out to a team of coding
+// agents step by step, then the features, with the office moved aside. In the
+// office the gold leader is Mob, the calves at their desks are the agents and
+// a desk is a task's branch. Positions along the way are in viewport heights
+// from the top of the story.
 const WORKFLOW = 1; // the first step
 const STEP = 0.6;
 const FEATURES = 4.2; // the first feature
 const FEATURE = 0.5;
-const LENGTH = FEATURES + 5 * FEATURE + 0.6;
 
 const steps = [
-	{ title: 'You ask', text: 'From the web, the terminal, Telegram or email. The leader takes it in.' },
-	{ title: 'The calves get to work', text: 'Mob plans the task and calls tools to search, read and run things.' },
-	{ title: 'It asks first', text: 'Anything that changes your files or sends something waits for your nod.' },
-	{ title: 'You get the answer', text: 'Only the conclusion comes back, wherever you asked.' },
+	{ title: 'You ask', text: 'From the web, the terminal or your chat app. The leader takes it in.' },
+	{ title: 'Mob hands it out', text: 'Each piece goes to a coding agent, such as Codex or Claude Agent, on its own branch. Agents can call in help.' },
+	{ title: 'It asks first', text: 'Anything risky waits for your nod, from the agent tree or your phone.' },
+	{ title: 'Checked, then reported', text: 'Mob reads the diffs and runs the tests, then tells you what is ready to merge.' },
 ];
 
-export const features: { title: string; text: string; look: string; icon: IconName; doing: Activity[] }[] = [
-	{ title: 'Runs at home', text: 'Mob runs on your computer with your own model keys, and keeps conversations in a local database.', look: 'calves typing at their desks', icon: 'terminal', doing: ['work', 'back'] },
-	{ title: 'Every channel', text: 'Talk to the same assistant from the web, the desktop app, the terminal, Telegram or email.', look: 'calves carrying blocks of work', icon: 'channels', doing: ['deliver'] },
-	{ title: 'Asks first', text: 'Tools with side effects wait for your approval, and you can remember a grant for next time.', look: 'hands up, and the gold leader', icon: 'shield', doing: ['ask', 'lead'] },
+export const features: { title: string; text: string; look: string; icon: IconName; doing: Activity[]; demo?: boolean }[] = [
+	{ title: 'A team of agents', text: 'Mob hands coding work to Codex, Claude Agent, DeepSeek Harness or CodeBuddy, each on its own branch, and shows who started what in one tree.', look: 'calves typing at their desks', icon: 'tree', doing: ['work', 'back'], demo: true },
+	{ title: 'Every channel', text: 'Talk to the same assistant from the web, the desktop app, the terminal, chat apps or email.', look: 'calves carrying blocks of work', icon: 'channels', doing: ['deliver'] },
+	{ title: 'Asks first', text: 'Tools and agents with side effects wait for your approval, and you can remember a grant for next time.', look: 'hands up at the desks', icon: 'shield', doing: ['ask'] },
+	{ title: 'Keeps going', text: 'Finished work is reviewed before you hear about it, and schedules let Mob check in on its own, like a summary at 9:00.', look: 'the gold leader making its rounds', icon: 'clock', doing: ['lead'] },
 	{ title: 'Sandboxed', text: 'Commands run in a container, with optional network, CPU and memory limits.', look: 'the glass booth at the front', icon: 'box', doing: ['sandbox'] },
-	{ title: 'Remembers', text: 'Every conversation stays on your machine, so you can pick it up again from any client.', look: 'notes going up on the whiteboard', icon: 'memory', doing: ['memo'] },
+	{ title: 'Runs at home', text: 'Mob runs on your computer with your own keys and subscriptions, and every conversation stays in a local database for any client to pick up.', look: 'notes going up on the whiteboard', icon: 'memory', doing: ['memo'] },
 	{ title: 'Plugs in', text: 'MCP servers, Agent Skills and plugins add tools without changing Mob.', look: 'the milk tea bar and coffee machine', icon: 'plug', doing: ['drink'] },
 ];
 
@@ -36,13 +38,15 @@ const doing: Record<Activity, string> = {
 	back: 'Heading back to its desk',
 	deliver: 'Passing work to a colleague',
 	ask: 'Waiting for a nod',
-	lead: 'The leader',
+	lead: 'The leader, checking on the team',
 	sandbox: 'Trying something in the glass booth',
 	memo: 'Pinning a note on the board',
 	drink: 'Getting a drink',
 	nap: 'Napping. The leader will be along',
 	'high-five': 'High-fiving a colleague',
 };
+
+const LENGTH = FEATURES + (features.length - 1) * FEATURE + 0.6;
 
 export const featureFor = (a: Activity) => {
 	const i = features.findIndex(f => f.doing.includes(a));
@@ -52,21 +56,40 @@ export const featureFor = (a: Activity) => {
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 const ramp = (p: number, from: number, to: number) => clamp((p - from) / (to - from));
 
+// The tasks in the conversation's little agent tree, and how each stands at
+// a step of the story; the same task the demo plays out in full.
+const team = [
+	{ agent: 'Codex', title: 'Fix the flaky checkout test', depth: 1, status: ['Running', 'Needs you', 'Ready'] },
+	{ agent: 'Claude Agent', title: 'Add retries to the payment client', depth: 1, status: ['Running', 'Running', 'Ready'] },
+	{ agent: 'DeepSeek Harness', title: 'Write the retry tests', depth: 2, status: ['Running', 'Running', 'Done'] },
+];
+
 function Chat({ step }: { step: number }) {
 	const shown = (n: number, item: ReactNode) => step >= n ? <div className={`chat-item${step === n ? ' fresh' : ''}`}>{item}</div> : null;
 	return (
 		<div className="chat" aria-label="A conversation with Mob">
-			<div className="chat-bar"><span className="chat-dots" aria-hidden="true"><i /><i /><i /></span>Mob<span className="chat-channel">via Telegram</span></div>
+			<div className="chat-bar"><span className="chat-dots" aria-hidden="true"><i /><i /><i /></span>Mob<span className="chat-channel">on your phone</span></div>
 			<div className="chat-body">
-				{shown(0, <p className="bubble you">Find last month's invoices in my email and put the totals in a sheet.</p>)}
-				{shown(1, <ul className="tools"><li><b>Searched email</b> 4 invoices</li><li><b>Read attachments</b> 4 PDFs</li></ul>)}
+				{shown(0, <p className="bubble you">Fix the flaky checkout test in shop-api and add retries to the payment client. Tell me when it's ready.</p>)}
+				{shown(1, (
+					<ul className="team" aria-label="Agents working on it">
+						{team.map(t => {
+							const status = t.status[clamp(step - 1, 0, 2)];
+							return (
+								<li key={t.agent} className={`team-${status.toLowerCase().replace(' ', '-')}`} style={{ paddingLeft: t.depth * 14 - 4 }}>
+									<b>{t.agent}</b><span className="team-title">{t.title}</span><span className="team-status">{status}</span>
+								</li>
+							);
+						})}
+					</ul>
+				))}
 				{shown(2, (
 					<div className="approve">
-						<p><b>Write a file?</b><code>~/Documents/invoices-october.csv</code></p>
-						<div className="approve-actions"><span className="approve-deny">Deny</span><span className="approve-allow">Allow</span></div>
+						<p><b>Codex wants to run a command</b><code>go test ./checkout/... -count=50 -race</code></p>
+						<div className="approve-actions"><span className="approve-deny">Deny</span><span>Always allow</span><span className="approve-allow">Approve</span></div>
 					</div>
 				))}
-				{shown(3, <p className="bubble mob">Filed 4 October invoices, €1,284.50 in total, in <code>invoices-october.csv</code>.</p>)}
+				{shown(3, <p className="bubble mob">Both are ready to merge. The checkout test passes 50 runs of 50, and the retries come with 9 new tests. Branches <code>mob/flaky-checkout</code> and <code>mob/payment-retries</code>.</p>)}
 			</div>
 		</div>
 	);
@@ -122,7 +145,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 				field.current.dataset.live = aside >= 1 ? 'true' : 'false';
 			}
 			const s = p > 0.45 && p < FEATURES - 0.6 ? clamp(Math.floor((p - WORKFLOW + STEP / 2) / STEP), 0, 3) : -1;
-			const f = picked.current ?? (p >= FEATURES - 0.8 ? clamp(Math.floor((p - FEATURES + FEATURE / 2) / FEATURE), 0, 5) : -1);
+			const f = picked.current ?? (p >= FEATURES - 0.8 ? clamp(Math.floor((p - FEATURES + FEATURE / 2) / FEATURE), 0, features.length - 1) : -1);
 			setStep(s);
 			setFeature(f);
 		};
@@ -196,7 +219,10 @@ export function Story({ hero }: { hero: ReactNode }) {
 						{steps.map((s, i) => (
 							<li key={s.title} className={step === i || still ? 'on' : undefined}>
 								<span className="flow-n">{i + 1}</span>
-								<div><h3>{s.title}</h3><p>{s.text}</p></div>
+								<div>
+									<h3>{s.title}</h3><p>{s.text}</p>
+									{i === steps.length - 1 ? <p className="flow-demo"><a href="/demo">Watch the agent tree in the demo →</a></p> : null}
+								</div>
 							</li>
 						))}
 					</ol>
@@ -216,6 +242,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 									<div>
 										<p>{f.text}</p>
 										<p className="feature-look">In the office: {f.look}</p>
+										{f.demo ? <p className="feature-demo"><a href="/demo">Try it in the demo →</a></p> : null}
 									</div>
 								</div>
 							</li>
