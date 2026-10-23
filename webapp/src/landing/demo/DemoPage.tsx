@@ -1,6 +1,5 @@
 import { Logo } from '../../components/brand/Logo';
-import { PixelIcon } from '../../components/brand/PixelIcon';
-import type { IconName } from '../../components/brand/pixels';
+import { Icon, type IconName } from '../../components/brand/Icon';
 import { Button } from '../../components/ui/button';
 import { Studio } from './Studio';
 
@@ -37,7 +36,7 @@ export function DemoPage() {
 				<Studio />
 				<ul className="demo-points">
 					{points.map(p => (
-						<li key={p.title}><PixelIcon name={p.icon} size={18} /><div><h2>{p.title}</h2><p>{p.text}</p></div></li>
+						<li key={p.title}><Icon name={p.icon} size={20} /><div><h2>{p.title}</h2><p>{p.text}</p></div></li>
 					))}
 				</ul>
 				<div className="demo-next">
