@@ -45,6 +45,22 @@ it('lets the visitor pick a task and deny the approval', async () => {
 	expect(deny.length).toBeGreaterThan(0);
 	fireEvent.click(deny[0]);
 	await wait(10_000);
-	expect(screen.getAllByText(/Left your files alone/)).toHaveLength(2); // the app and Telegram
+	expect(screen.getAllByText(/Left your files alone/)).toHaveLength(2); // the app and the chat app
 	expect(screen.getByRole('button', { name: 'Replay' })).toBeTruthy();
+});
+
+it('lets the visitor approve an agent from its card, and switch demos', async () => {
+	vi.useFakeTimers();
+	vi.stubGlobal('IntersectionObserver', undefined);
+	const { DemoPage } = await import('./DemoPage');
+	render(<DemoPage />);
+	expect(screen.getByRole('tab', { name: 'Agent orchestration', selected: true })).toBeTruthy();
+	// Opening a card takes over from the autopilot.
+	fireEvent.click(screen.getByRole('button', { name: /^Open Mob:/ }));
+	await wait(9_000);
+	fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+	await wait(15_000);
+	expect(screen.getByRole('status').textContent).toMatch(/Both branches are ready to merge/);
+	fireEvent.click(screen.getByRole('tab', { name: 'Conversation' }));
+	expect(screen.getByRole('group', { name: 'Tasks' })).toBeTruthy();
 });

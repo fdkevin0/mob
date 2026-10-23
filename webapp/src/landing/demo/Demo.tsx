@@ -2,9 +2,11 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, ty
 import { Calf } from '../../components/brand/Logo';
 import { ArrowUpIcon, CheckIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, PlusIcon } from '../../chat/icons';
 import './demo.css';
+import { aimAt, Cursor, type Aim } from './Cursor';
 import { briefOf, decide, delay, finish, scenarios, shownAnswer, start, tick, visible, type Channel, type Decision, type State, type Step, type StepStatus } from './script';
 
-// A replica of the Mob app, and of Mob on Telegram, playing recorded tasks.
+// A replica of the Mob app, and of Mob in a chat app, playing recorded tasks.
+// The chat app is generic on purpose: Mob talks to more than one.
 // Until the visitor touches it an autopilot cursor drives it; after that it
 // waits for them, approvals included. Nothing here calls a model.
 
@@ -94,9 +96,9 @@ function WebStep({ step, status, onDecide, approveRef }: { step: Step; status: S
 	);
 }
 
-type Aim = 'send' | 'approve';
+type Target = 'send' | 'approve';
 
-function WebApp({ state, onPick, onDecide, refs }: { state: State; onPick: (i: number) => void; onDecide: (d: Decision) => void; refs: Record<Aim, RefObject<HTMLButtonElement | null>> }) {
+function WebApp({ state, onPick, onDecide, refs }: { state: State; onPick: (i: number) => void; onDecide: (d: Decision) => void; refs: Record<Target, RefObject<HTMLButtonElement | null>> }) {
 	const sc = scenarios[state.scenario];
 	const scroll = useRef<HTMLDivElement>(null);
 	const typing = state.phase === 'compose' && state.channel === 'web' && state.typed > 0;
@@ -119,7 +121,7 @@ function WebApp({ state, onPick, onDecide, refs }: { state: State; onPick: (i: n
 					<nav aria-label="Demo conversations">
 						{scenarios.map((s, i) => (
 							<button type="button" key={s.title} aria-current={i === state.scenario} onClick={() => onPick(i)}>
-								{s.title}{i === state.scenario && state.channel === 'telegram' ? <small>Telegram</small> : null}
+								{s.title}{i === state.scenario && state.channel === 'chat' ? <small>Chat app</small> : null}
 							</button>
 						))}
 					</nav>
@@ -142,7 +144,7 @@ function WebApp({ state, onPick, onDecide, refs }: { state: State; onPick: (i: n
 						) : (
 							<div className="d-thread">
 								<div className="d-user">
-									{state.channel === 'telegram' ? <span className="d-via">via Telegram</span> : null}
+									{state.channel === 'chat' ? <span className="d-via">via chat app</span> : null}
 									<p className="d-bubble">{sc.prompt}</p>
 								</div>
 								<div className="d-assistant">
@@ -172,45 +174,45 @@ function WebApp({ state, onPick, onDecide, refs }: { state: State; onPick: (i: n
 	);
 }
 
-function Telegram({ state, onDecide, refs }: { state: State; onDecide: (d: Decision) => void; refs: Record<Aim, RefObject<HTMLButtonElement | null>> }) {
+function ChatApp({ state, onDecide, refs }: { state: State; onDecide: (d: Decision) => void; refs: Record<Target, RefObject<HTMLButtonElement | null>> }) {
 	const sc = scenarios[state.scenario];
 	const scroll = useRef<HTMLDivElement>(null);
 	const approval = visible(state).find(v => v.step.kind === 'approve');
 	const step = approval?.step.kind === 'approve' ? approval.step : undefined;
 	const busy = state.phase === 'run' || state.phase === 'answer';
-	const typing = state.phase === 'compose' && state.channel === 'telegram' && state.typed > 0;
+	const typing = state.phase === 'compose' && state.channel === 'chat' && state.typed > 0;
 	useLayoutEffect(() => {
 		const el = scroll.current;
 		if (el) el.scrollTop = el.scrollHeight;
 	}, [state]);
 	return (
-		<div className="d-phone" aria-label="Mob on Telegram">
-			<div className="tg-head">
-				<span className="tg-back" aria-hidden="true">‹</span>
-				<span className="tg-avatar"><Calf size={22} /></span>
+		<div className="d-phone" aria-label="Mob in a chat app">
+			<div className="im-head">
+				<span className="im-back" aria-hidden="true">‹</span>
+				<span className="im-avatar"><Calf size={22} /></span>
 				<div><b>Mob</b><small>{busy ? 'typing…' : 'bot'}</small></div>
 			</div>
-			<div className="tg-chat" ref={scroll}>
-				<p className="tg-day">Today</p>
-				<div className="tg-msg in"><p>Hi! Ask me anything, and I will check with you before I change something.</p><time>08:58</time></div>
-				{state.phase !== 'compose' ? <div className="tg-msg out"><p>{sc.prompt}</p><time>09:02 ✓✓</time></div> : null}
+			<div className="im-chat" ref={scroll}>
+				<p className="im-day">Today</p>
+				<div className="im-msg in"><p>Hi! Ask me anything, and I will check with you before I change something.</p><time>08:58</time></div>
+				{state.phase !== 'compose' ? <div className="im-msg out"><p>{sc.prompt}</p><time>09:02 ✓✓</time></div> : null}
 				{step ? (
-					<div className="tg-msg in">
-						<p className="tg-pre">{step.telegram}</p>
+					<div className="im-msg in">
+						<p className="im-pre">{step.chat}</p>
 						<time>09:02</time>
 						{approval!.status === 'waiting' ? (
-							<div className="tg-keys">
+							<div className="im-keys">
 								<button type="button" ref={refs.approve} onClick={() => onDecide('allow')}>Approve</button>
 								<button type="button" onClick={() => onDecide('always')}>Always</button>
 								<button type="button" onClick={() => onDecide('deny')}>Deny</button>
 							</div>
-						) : <p className={`tg-decided${state.decision === 'deny' ? ' no' : ''}`}>{state.decision === 'deny' ? '✗ Denied' : state.decision === 'always' ? '✓ Always allowed' : '✓ Approved'}</p>}
+						) : <p className={`im-decided${state.decision === 'deny' ? ' no' : ''}`}>{state.decision === 'deny' ? '✗ Denied' : state.decision === 'always' ? '✓ Always allowed' : '✓ Approved'}</p>}
 					</div>
 				) : null}
-				{state.phase === 'done' ? <div className="tg-msg in fresh"><p>{briefOf(state)}</p><time>09:03</time></div> : null}
+				{state.phase === 'done' ? <div className="im-msg in fresh"><p>{briefOf(state)}</p><time>09:03</time></div> : null}
 			</div>
-			<div className="tg-compose">
-				<span className={typing ? 'tg-typed' : 'tg-placeholder'}>{typing ? <>{sc.prompt.slice(0, state.typed)}<i className="d-caret" /></> : 'Message'}</span>
+			<div className="im-compose">
+				<span className={typing ? 'im-typed' : 'im-placeholder'}>{typing ? <>{sc.prompt.slice(0, state.typed)}<i className="d-caret" /></> : 'Message'}</span>
 				<button type="button" ref={refs.send} aria-label="Send" disabled={!typing} tabIndex={-1}><ArrowUpIcon /></button>
 			</div>
 		</div>
@@ -223,10 +225,10 @@ export function Demo() {
 	// The autopilot drives until the visitor touches the demo.
 	const [pilot, setPilot] = useState(!still);
 	const [seen, setSeen] = useState(false);
-	const [cursor, setCursor] = useState<{ x: number; y: number; press: boolean }>();
+	const [cursor, setCursor] = useState<Aim>();
 	const stage = useRef<HTMLDivElement>(null);
 	const web = { send: useRef<HTMLButtonElement>(null), approve: useRef<HTMLButtonElement>(null) };
-	const tg = { send: useRef<HTMLButtonElement>(null), approve: useRef<HTMLButtonElement>(null) };
+	const im = { send: useRef<HTMLButtonElement>(null), approve: useRef<HTMLButtonElement>(null) };
 
 	useEffect(() => {
 		const el = stage.current;
@@ -245,12 +247,10 @@ export function Demo() {
 		return () => clearTimeout(t);
 	}, [state, seen, still]);
 
-	const aim = useCallback((target: Aim, press: boolean) => {
-		const refs = state.channel === 'telegram' ? tg : web;
-		const el = refs[target].current, box = stage.current;
-		if (!el || !box) return;
-		const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
-		setCursor({ x: r.left - b.left + r.width * 0.55, y: r.top - b.top + r.height * 0.6, press });
+	const aim = useCallback((target: Target, press: boolean) => {
+		const refs = state.channel === 'chat' ? im : web;
+		const at = aimAt(refs[target].current, stage.current, press);
+		if (at) setCursor(at);
 	}, [state.channel]);
 
 	// The autopilot reaches for Send once the prompt is typed, Approve when
@@ -281,32 +281,22 @@ export function Demo() {
 	const channel = (c: Channel) => pick(state.scenario, c);
 
 	return (
-		<section className="demo" id="demo" aria-labelledby="demo-title">
-			<div className="demo-copy">
-				<p className="demo-kicker">Live demo · nothing here calls a model</p>
-				<h2 id="demo-title">Watch it run, then take over.</h2>
-				<p>Recorded tasks, replayed in a copy of the app. Pick one, open a tool call to see what it did, and decide the approval yourself.</p>
-			</div>
+		<section className="demo" aria-label="A conversation with Mob">
 			<div className="demo-controls">
 				<div className="demo-tasks" role="group" aria-label="Tasks">
 					{scenarios.map((s, i) => <button type="button" key={s.title} aria-pressed={i === state.scenario} onClick={() => pick(i)}>{s.title}</button>)}
 				</div>
 				<div className="demo-channels" role="group" aria-label="Ask from">
 					<span>Ask from</span>
-					{(['web', 'telegram'] as Channel[]).map(c => (
-						<button type="button" key={c} aria-pressed={state.channel === c} onClick={() => channel(c)}>{c === 'web' ? 'Web app' : 'Telegram'}</button>
+					{(['web', 'chat'] as Channel[]).map(c => (
+						<button type="button" key={c} aria-pressed={state.channel === c} onClick={() => channel(c)}>{c === 'web' ? 'Web app' : 'Chat app'}</button>
 					))}
 				</div>
 			</div>
 			<div className="demo-stage" ref={stage} data-channel={state.channel} onClickCapture={takeOver}>
 				<WebApp state={state} onPick={i => pick(i)} onDecide={choose} refs={web} />
-				<Telegram state={state} onDecide={choose} refs={tg} />
-				{pilot && cursor ? (
-					<svg className={`demo-cursor${cursor.press ? ' press' : ''}`} style={{ transform: `translate(${cursor.x}px, ${cursor.y}px)` }} width="22" height="22" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden="true">
-						<path d="M1 1h1v1h1v1h1v1h1v1h1v1h1v1h1v1h1v1h1v1H8v1h1v2h1v2H8v-2H7v-2H6v1H5v1H4v1H1z" fill="#0a0d05" />
-						<path d="M2 3h1v1h1v1h1v1h1v1h1v1h1v1h1v1H7v1h1v2H8v-1H7v-2H6v1H5v1H4v1H2z" fill="#f4f6ef" />
-					</svg>
-				) : null}
+				<ChatApp state={state} onDecide={choose} refs={im} />
+				{pilot && cursor ? <Cursor at={cursor} /> : null}
 				{state.phase === 'done' && !pilot ? (
 					<div className="demo-again">
 						<button type="button" onClick={() => pick(state.scenario, state.channel)}>Replay</button>

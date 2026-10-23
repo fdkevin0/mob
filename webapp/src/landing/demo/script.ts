@@ -3,13 +3,13 @@
 // player below is a pure state machine so the page, the autopilot and the
 // tests all drive it the same way.
 
-export type Channel = 'web' | 'telegram';
+export type Channel = 'web' | 'chat';
 export type Decision = 'allow' | 'always' | 'deny';
 
 export type Step =
 	| { kind: 'think'; text: string; ms: number }
 	| { kind: 'tool'; title: string; detail: string; result: string; ms: number }
-	| { kind: 'approve'; title: string; detail: string; question: string; preview?: string; result: string; telegram: string; ms: number };
+	| { kind: 'approve'; title: string; detail: string; question: string; preview?: string; result: string; chat: string; ms: number };
 
 export type Scenario = {
 	title: string;
@@ -33,7 +33,7 @@ export const scenarios: Scenario[] = [
 			{ kind: 'think', text: 'Search the mailbox for September invoices, read the PDF totals, then write a CSV the user can open in any spreadsheet.', ms: 1300 },
 			{ kind: 'tool', title: 'Search email', detail: 'invoice after:2026/09/01 before:2026/10/01', result: '4 messages\nHetzner Online · Sep 3\nFigma · Sep 12\nNotion Labs · Sep 18\nFastmail · Sep 28', ms: 1500 },
 			{ kind: 'tool', title: 'Read attachments', detail: '4 PDFs', result: 'hetzner-R0021.pdf   €412.80\nfigma-6631.pdf      €540.00\nnotion-INV-0918.pdf €288.00\nfastmail-2209.pdf   €43.70', ms: 1700 },
-			{ kind: 'approve', title: 'Write file', detail: '~/Documents/invoices-september.csv', question: 'Mob wants to write a file.', preview: 'vendor,date,total\nHetzner Online,2026-09-03,412.80\nFigma,2026-09-12,540.00\nNotion Labs,2026-09-18,288.00\nFastmail,2026-09-28,43.70', result: 'Wrote 5 lines (162 bytes)', telegram: 'Write a file?\n~/Documents/invoices-september.csv', ms: 900 },
+			{ kind: 'approve', title: 'Write file', detail: '~/Documents/invoices-september.csv', question: 'Mob wants to write a file.', preview: 'vendor,date,total\nHetzner Online,2026-09-03,412.80\nFigma,2026-09-12,540.00\nNotion Labs,2026-09-18,288.00\nFastmail,2026-09-28,43.70', result: 'Wrote 5 lines (162 bytes)', chat: 'Write a file?\n~/Documents/invoices-september.csv', ms: 900 },
 		],
 		answer: 'Filed **4** September invoices, **€1,284.50** in total.\n| Vendor | Date | Total |\n| Hetzner Online | Sep 3 | €412.80 |\n| Figma | Sep 12 | €540.00 |\n| Notion Labs | Sep 18 | €288.00 |\n| Fastmail | Sep 28 | €43.70 |\nThe sheet is in `~/Documents/invoices-september.csv`.',
 		denied: "I didn't write anything. Here are the **€1,284.50** of September invoices to paste wherever you like.\n| Vendor | Date | Total |\n| Hetzner Online | Sep 3 | €412.80 |\n| Figma | Sep 12 | €540.00 |\n| Notion Labs | Sep 18 | €288.00 |\n| Fastmail | Sep 28 | €43.70 |",
@@ -42,13 +42,13 @@ export const scenarios: Scenario[] = [
 	},
 	{
 		title: 'Failing checkout tests',
-		channel: 'telegram',
+		channel: 'chat',
 		prompt: 'The checkout tests are failing on main, can you fix them?',
 		steps: [
 			{ kind: 'think', text: 'Run the tests in the sandbox first to see the failure, then read the code it points at.', ms: 1100 },
 			{ kind: 'tool', title: 'Run command', detail: 'go test ./internal/checkout/...', result: '--- FAIL: TestTotal (0.00s)\n    total_test.go:24: got 1284.49, want 1284.50\nFAIL\tmob.dev/shop/internal/checkout\t0.21s', ms: 1800 },
 			{ kind: 'tool', title: 'Read file', detail: 'internal/checkout/total.go', result: '17  for _, l := range lines {\n18  \tsum += l.Price * float64(l.Qty)\n19  }\n20  return math.Floor(sum*100) / 100', ms: 1200 },
-			{ kind: 'approve', title: 'Edit file', detail: 'internal/checkout/total.go', question: 'Mob wants to edit a file.', preview: '-\tsum += l.Price * float64(l.Qty)\n+\tcents += l.Cents * int64(l.Qty)\n-\treturn math.Floor(sum*100) / 100\n+\treturn Money(cents)', result: '1 file changed, 2 insertions(+), 2 deletions(-)', telegram: 'Edit a file?\ninternal/checkout/total.go', ms: 900 },
+			{ kind: 'approve', title: 'Edit file', detail: 'internal/checkout/total.go', question: 'Mob wants to edit a file.', preview: '-\tsum += l.Price * float64(l.Qty)\n+\tcents += l.Cents * int64(l.Qty)\n-\treturn math.Floor(sum*100) / 100\n+\treturn Money(cents)', result: '1 file changed, 2 insertions(+), 2 deletions(-)', chat: 'Edit a file?\ninternal/checkout/total.go', ms: 900 },
 			{ kind: 'tool', title: 'Run command', detail: 'go test ./...', result: 'ok  \tmob.dev/shop/internal/checkout\t0.19s\nok  \tmob.dev/shop/internal/cart\t0.11s\n42 tests passed', ms: 1900 },
 		],
 		answer: 'Fixed. The totals were added up as `float64` and rounded down, so €1,284.50 came out as €1,284.49.\n- Line items now add up in whole cents\n- `go test ./...` passes, 42 tests\nThe change is one file in your working tree, ready for you to review and commit.',
@@ -64,9 +64,9 @@ export const scenarios: Scenario[] = [
 			{ kind: 'think', text: 'There is no GitHub tool loaded yet. Look one up, check it works, then set up the schedule.', ms: 1100 },
 			{ kind: 'tool', title: 'Search tools', detail: 'github pull requests review', result: 'github · search_pull_requests  (MCP, signed in)\ngithub · list_notifications    (MCP, signed in)', ms: 1300 },
 			{ kind: 'tool', title: 'Search pull requests', detail: 'is:open review-requested:@me', result: '#92  Smoother web UI           mob\n#89  Calf pasture in the TUI   mob\n#61  Exposure levels           mob', ms: 1500 },
-			{ kind: 'approve', title: 'Create schedule', detail: 'weekdays 09:00 · Telegram', question: 'Mob wants to create a schedule.', preview: 'every: mon-fri 09:00 Europe/London\ndeliver: telegram\ntask: list pull requests waiting on my review', result: 'Scheduled, next run Mon 09:00', telegram: 'Create a schedule?\nweekdays 09:00', ms: 900 },
+			{ kind: 'approve', title: 'Create schedule', detail: 'weekdays 09:00 · chat app', question: 'Mob wants to create a schedule.', preview: 'every: mon-fri 09:00 Europe/London\ndeliver: chat\ntask: list pull requests waiting on my review', result: 'Scheduled, next run Mon 09:00', chat: 'Create a schedule?\nweekdays 09:00', ms: 900 },
 		],
-		answer: "Done. Every weekday at **09:00** you'll get the list on Telegram. Three are waiting right now:\n- **#92** Smoother web UI\n- **#89** Calf pasture in the TUI\n- **#61** Exposure levels\nSay `/schedules` to see or stop it.",
+		answer: "Done. Every weekday at **09:00** you'll get the list in your chat app. Three are waiting right now:\n- **#92** Smoother web UI\n- **#89** Calf pasture in the TUI\n- **#61** Exposure levels\nSay `/schedules` to see or stop it.",
 		denied: 'No schedule then. Three pull requests are waiting on you right now:\n- **#92** Smoother web UI\n- **#89** Calf pasture in the TUI\n- **#61** Exposure levels',
 		brief: 'Scheduled for weekdays at 09:00. Waiting now: #92 Smoother web UI, #89 Calf pasture in the TUI, #61 Exposure levels.',
 		briefDenied: 'No schedule. Waiting now: #92, #89 and #61.',
