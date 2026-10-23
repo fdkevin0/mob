@@ -3,12 +3,6 @@ node_modules/
 .amp/portals/*
 dist/
 /build/*
-!/build/darwin/
-/build/darwin/*
-!/build/darwin/Info.plist
-webapp/wailsjs/
-wailsjs/
-package.json.md5
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

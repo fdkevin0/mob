@@ -76,6 +76,7 @@ jobs:
           bun run test:webapp
           bun run test:tui
           bun run test:docs
+          bun run test:desktop
       - name: Build
         run: bun run build
       # Workers Builds deploys this; building it here checks the documentation's

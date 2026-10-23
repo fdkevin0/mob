@@ -23,7 +23,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -247,14 +246,8 @@ func (s *Server) SetWebURL(raw string) {
 }
 
 func allowedOrigin(origin, host string) bool {
-	if origin == "" || origin == "wails://wails" || origin == "http://wails.localhost" {
-		return true
-	}
-	// Wails adds a dynamic asset-server port to the macOS development origin.
-	if u, err := url.Parse(origin); err == nil && u.Port() != "" && origin == "wails://wails.localhost:"+u.Port() {
-		return true
-	}
-	if origin == "http://"+host {
+	// The desktop window loads the service itself, so it is same-origin.
+	if origin == "" || origin == "http://"+host {
 		return true
 	}
 	return origin == "http://localhost:5173" || origin == "http://127.0.0.1:5173"

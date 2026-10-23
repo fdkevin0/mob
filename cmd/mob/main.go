@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -94,6 +95,19 @@ func newRootCommand() *cobra.Command {
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "Mob stopped.")
 			return nil
+		}},
+		&cobra.Command{Use: "connection", Short: "Start the background service if needed and print its URL and token as JSON", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+			// The desktop app reads this; it never parses Mob's files itself.
+			connection, err := local.Credentials(config)
+			if err != nil || !local.Reachable(connection) {
+				if err := local.StartBackground(config); err != nil {
+					return err
+				}
+				if connection, err = local.Credentials(config); err != nil {
+					return err
+				}
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(connection)
 		}},
 		&cobra.Command{Use: "tui", Short: "Open the terminal UI", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 			return runTUI(cmd, config)

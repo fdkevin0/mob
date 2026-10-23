@@ -82,7 +82,7 @@ served by the Worker in `worker/`:
   It needs no sign-in and has local search.
 
 The landing page and workspace share the dark theme, Geist fonts and pixel
-logo. The workspace uses calmer, rounded controls in the local browser, Wails
+logo. The workspace uses calmer, rounded controls in the local browser, the
 desktop app and `/app`: one rounded message box holds the text, the model
 picker and a round send (or stop) button; replies have no role labels; each
 tool call is one line with its status that opens to show input and output,

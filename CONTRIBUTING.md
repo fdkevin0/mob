@@ -2,17 +2,15 @@
 
 ## Setup
 
-You need Go (version in `go.mod`), Bun (version in `package.json`), and for the
-desktop app the platform prerequisites for
-[Wails v2](https://wails.io/docs/gettingstarted/installation). Desktop packaging
-has been checked on macOS arm64 only; the app is signed locally, not notarized.
+You need Go (version in `go.mod`) and Bun (version in `package.json`). The
+desktop app is Electron in `apps/desktop`; it downloads its own runtime.
 
 ```bash
 bun install --frozen-lockfile
 bun run build:cli                 # web UI + build/mob
 ./build/mob serve --demo          # offline model, no keys needed
 bun run dev                       # Vite, alongside a running service
-bun run desktop                   # Wails development
+bun run desktop                   # Electron window around the running service
 ```
 
 `just` lists the same recipes (`just build`, `just test`, `just desktop`,
@@ -37,7 +35,7 @@ terminal rendering are intentionally not shared.
 ### Amp orbs
 
 `.agents/setup` prepares a Debian orb with the toolchain versions above, `just`
-and the Linux Wails prerequisites, installs locked dependencies and builds the
+installs locked dependencies and builds the
 CLI. Stale snapshots rerun it without reinstalling unchanged tools.
 `.agents/resume` only checks that the tools are there. Both scripts must reach
 `main` before new orbs use them. The container sandbox runtime is not installed.

@@ -31,6 +31,7 @@ const features = [
 	'schedules',
 	'skills',
 	'extensions',
+	'desktop',
 	'releases',
 	'remote-access',
 ];

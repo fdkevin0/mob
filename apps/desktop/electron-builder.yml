@@ -1,0 +1,23 @@
+# Packages the window with the mob binary that scripts/stage.ts put in bin/.
+appId: app.usemob.desktop
+productName: Mob
+executableName: mob-desktop
+artifactName: mob-desktop-${version}-${os}-${arch}.${ext}
+copyright: Mob contributors
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: bin
+    to: bin
+mac:
+  category: public.app-category.developer-tools
+  target: [dmg, zip]
+win:
+  target: [nsis]
+linux:
+  category: Development
+  maintainer: Mob contributors <mob@usemob.app>
+  target: [AppImage, deb]

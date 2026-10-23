@@ -4,10 +4,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('./Runners', () => ({ Runners: () => null }));
 import { App } from './App';
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.go; localStorage.clear(); sessionStorage.clear(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.mobDesktop; localStorage.clear(); sessionStorage.clear(); });
 
 it('opens chat without key setup and shows the conversation model', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   const fetchMock = vi.fn(async (url: string, _options?: RequestInit) => {
     if (url.endsWith('/config')) return Response.json({ defaultModel: 'opencode/mimo-v2.6-flash-free', demo: false });
     if (url.endsWith('/runtime')) return Response.json({ background: false });
@@ -23,7 +23,7 @@ it('opens chat without key setup and shows the conversation model', async () => 
 });
 
 it('promises no model calls only when the conversation uses the demo model', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   let model = 'demo/echo';
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/runtime')) return Response.json({ background: false });
@@ -41,7 +41,7 @@ it('promises no model calls only when the conversation uses the demo model', asy
 
 it('shows why the desktop could not start instead of asking for a token', async () => {
   const reason = 'This database has schema 1, last opened by an unknown release. Install Mob 20261011.bbbbbbb from https://github.com/fdkevin0/mob/releases/tag/20261011.bbbbbbb, start it once to upgrade the database, then start Mob 20261101.ddddddd again.';
-  window.go = { main: { Desktop: { Connection: async () => { throw reason; } } } };
+  window.mobDesktop = { connection: async () => { throw reason; } };
   render(<App />);
   expect((await screen.findByRole('alert')).textContent).toBe(reason);
   expect(screen.getByText('Mob could not start.')).toBeTruthy();
@@ -244,7 +244,7 @@ it('opens the public web workspace without a runner and asks for one only when s
 });
 
 it('offers to continue a reply that stopped at the tool step limit', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   const chats: string[] = [];
   const messages = [
     { id: 'u', role: 'user', parts: [{ type: 'text', text: 'fix it' }] },
@@ -266,7 +266,7 @@ it('offers to continue a reply that stopped at the tool step limit', async () =>
 });
 
 it('ends a streamed turn that reached the step limit with Continue, not an error', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   let sent = false;
   const saved = [
     { id: 'u', role: 'user', parts: [{ type: 'text', text: 'fix it' }] },
@@ -290,7 +290,7 @@ it('ends a streamed turn that reached the step limit with Continue, not an error
 });
 
 it('switches the conversation model from the header picker', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   let run: Record<string, unknown> | undefined;
   const fetchMock = vi.fn((url: string, options?: RequestInit) => {
     if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
@@ -320,7 +320,7 @@ it('switches the conversation model from the header picker', async () => {
 });
 
 it('opens the conversation sheet and closes it after selecting a conversation', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   const fetchMock = vi.fn(async (url: string) => {
     if (url.endsWith('/config')) return Response.json({});
     if (url.endsWith('/runtime')) return Response.json({ background: false });
@@ -342,7 +342,7 @@ it('opens the conversation sheet and closes it after selecting a conversation', 
 });
 
 it('keeps Token usage closed while a submitted command is dispatched, so the command still reaches chat', async () => {
-  window.go = { main: { Desktop: { Connection: async () => ({ url: 'http://localhost', token: 'token' }) } } };
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   let answer: (r: Response) => void = () => {};
   let chat: Record<string, unknown> | undefined;
   vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {

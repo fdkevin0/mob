@@ -8,7 +8,7 @@ export type { Config } from './contracts';
 
 declare global {
 	interface Window {
-		go?: { main?: { Desktop?: { Connection: () => Promise<Connection> } } };
+		mobDesktop?: { connection: () => Promise<Connection> };
 	}
 }
 

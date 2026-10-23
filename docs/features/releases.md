@@ -8,7 +8,7 @@ migration window, so old schema code does not stay in the tree forever.
 - A nightly build is named `{date}.{sha}`: the UTC date of its commit and the
   commit's short hash, e.g. `20261011.c0502b6`. `internal/version` reads both
   from the VCS stamp Go adds to builds made in a Git checkout, so `go build`,
-  `bun run build:cli` and Wails need no linker flags. A build with uncommitted
+  and `bun run build:cli` need no linker flags. A build with uncommitted
   changes gets `-dirty`; `go run` and tests report `dev`.
 - A stable build gets its `vX.Y.Z` tag through `-X internal/version.release`.
   `go install …@vX.Y.Z` reports the tag from the module version.
@@ -34,8 +34,8 @@ minor version. Other commit types are left out of the changelog.
 
 - `.goreleaser.yaml` builds both channels with the web UI embedded: archives for
   Linux and macOS (amd64, arm64) and Windows (amd64), plus `SHA256SUMS`. CI
-  checks that the binary reports the expected version. The Wails desktop app is
-  not built in CI.
+  checks that the binary reports the expected version. The desktop app is built by
+  the `desktop` job (see [Desktop app](desktop.md)).
 - Both channels attest their archives with `actions/attest-build-provenance`,
   verified with `gh attestation verify`.
 - Each stable release updates the `mob` cask in `fdkevin0/homebrew-tap`

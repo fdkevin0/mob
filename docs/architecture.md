@@ -1,7 +1,7 @@
 # Architecture
 
 Mob is one Go binary. The service owns a SQLite database and serves an
-authenticated loopback HTTP API; the desktop app (Wails), the browser UI, the
+authenticated loopback HTTP API; the desktop app (Electron, `apps/desktop`), the browser UI, the
 TUI and messaging channels are its clients. How each feature behaves is in
 [features/](features/README.md).
 

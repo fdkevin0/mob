@@ -13,7 +13,7 @@ step() {
 }
 
 # Check first: stale snapshots should not refresh apt or reinstall packages.
-packages=(ca-certificates curl unzip build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev)
+packages=(ca-certificates curl unzip build-essential)
 missing=()
 for package in "${packages[@]}"; do
 	if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then
@@ -22,7 +22,7 @@ for package in "${packages[@]}"; do
 done
 if ((${#missing[@]})); then
 	step 'Refresh system package index' sudo -n apt-get update -qq
-	step 'Install build and Wails prerequisites' sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+	step 'Install build prerequisites' sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
 fi
 
 case "$(uname -m)" in
