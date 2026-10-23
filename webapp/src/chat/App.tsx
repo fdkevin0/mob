@@ -5,9 +5,10 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
-import { Runners } from './Runners';
+import { Runners, runnerConnection } from './Runners';
 import { Lobby } from './Lobby';
 import { hosts } from './hosts';
+import { cacheScope, forget, readList } from './localCache';
 
 // The workspace and its chat renderer load in parallel with signing in, so the lobby and the connect form
 // paint without waiting for them.
@@ -40,7 +41,19 @@ export function App() {
     const restore = async () => {
       const link = signInLink();
       if (link) { url = link.url; return claimPairing(link); }
-      return saved ? verify({ url, token: saved }) : undefined;
+      // A Mob this browser showed before opens at once with what it showed. Its token is checked meanwhile:
+      // a rejected one signs out, and an unreachable Mob is reported in the workspace.
+      if (saved) {
+        const next = { url, token: saved };
+        if (!(await readList(cacheScope(next)))) return verify(next);
+        setConnection(next); setLoading(false);
+        void verify(next).catch(() => { /* the workspace reports it */ });
+        return undefined;
+      }
+      // A runner's connection is its pairing key, not a saved token, so it is opened rather than saved.
+      const runner = lastRunner();
+      if (runner && (await readList(cacheScope(runner)))) setConnection(runner);
+      return undefined;
     };
     restore().then(next => { if (next) { saveConnection(next); setConnection(next); setPrompting(false); } })
       .catch(e => setError(current => current || reachText(url, e))).finally(() => setLoading(false));
@@ -54,6 +67,8 @@ export function App() {
       if (current !== null && current !== rejected) return;
       const desktop = window.go?.main?.Desktop;
       if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
+      if (active.current) void forget(cacheScope(active.current));
+      if (active.current?.runner) forgetRunner();
       clearToken(rejected); setConnection(undefined); setPrompting(true); setChoice('own'); setError(active.current?.runner ? 'The runner’s local access token changed. Restart mob runner on that computer.' : `The access token was replaced. Run ${openCommand()} to sign in again.`);
     };
     window.addEventListener(unauthorizedEvent, signOut);
@@ -66,8 +81,8 @@ export function App() {
     try { await api(next, '/config'); saveConnection(next); setConnection(next); setPrompting(false); }
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
-  const open = (next: Connection) => { setConnection(next); setPrompting(false); };
-  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { if (!connection.runner) clearToken(); setConnection(undefined); }} /></Suspense>;
+  const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); };
+  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { void forget(cacheScope(connection)); if (connection.runner) forgetRunner(); else clearToken(); setConnection(undefined); }} /></Suspense>;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.go?.main?.Desktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   const panel = <>
@@ -112,6 +127,21 @@ function serviceURL() {
   return saved && isLocalMob(saved) ? saved : 'http://127.0.0.1:8787';
 }
 const urlKey = 'mob-url';
+// The public web reopens the runner it last opened, using the key this browser paired it with.
+const runnerKey = 'mob-last-runner';
+function lastRunner(): Connection | undefined {
+  if (!isPublicWeb()) return undefined;
+  try {
+    const id = localStorage.getItem(runnerKey);
+    return id ? runnerConnection(id) : undefined;
+  } catch { return undefined; }
+}
+function rememberRunner(id: string) {
+  try { localStorage.setItem(runnerKey, id); } catch { /* it is chosen again next time */ }
+}
+function forgetRunner() {
+  try { localStorage.removeItem(runnerKey); } catch { /* nothing stored */ }
+}
 function saveConnection(connection: Connection) {
   saveToken(connection.token);
   if (isPublicWeb()) try { localStorage.setItem(urlKey, connection.url); } catch { /* the address field keeps its default */ }
