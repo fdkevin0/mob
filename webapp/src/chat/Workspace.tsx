@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
+import { ThemePicker } from '../theme/ThemePicker';
 import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
 const errorText = (error: unknown) =>
@@ -283,6 +284,9 @@ export function Workspace({
 					/>
 					Keep messages on this device
 				</label>
+				<div className="sidebar-theme">
+					Theme <ThemePicker />
+				</div>
 				{isPublicWeb() && (
 					<>
 						<Button variant="ghost" asChild>

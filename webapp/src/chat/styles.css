@@ -11,6 +11,16 @@
 	--accent: #ffffff0a;
 	--radius: 10px;
 }
+:root[data-theme='light'] {
+	--bg: #f6f7f4;
+	--panel: #fbfbf9;
+	--surface: #ffffff;
+	--surface-raised: #eceee8;
+	--line: #0000000f;
+	--line-strong: #0000001c;
+	--muted-foreground: #5f675e;
+	--accent: #0000000a;
+}
 .btn {
 	font-family: var(--sans);
 	font-size: 13px;
@@ -21,7 +31,7 @@
 	box-shadow: none;
 }
 .btn-outline:hover:not(:disabled) {
-	border-color: #ffffff33;
+	border-color: var(--line-hover);
 	color: var(--text);
 	background: var(--accent);
 }
@@ -33,7 +43,7 @@
 .ui-input:focus-visible,
 .ui-textarea:focus-visible {
 	outline: none;
-	border-color: #ffffff38;
+	border-color: var(--line-hover);
 }
 .dialog-panel {
 	border-radius: 16px;
@@ -100,7 +110,7 @@
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	margin-bottom: 2px;
-	color: #c5cbc3;
+	color: var(--text-dim);
 	font-weight: 400;
 }
 .conversation-link[aria-current] {
@@ -140,6 +150,14 @@
 	accent-color: var(--lime);
 	margin: 0;
 }
+.sidebar-theme {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 0 0 4px;
+	padding: 0 10px;
+}
 .sidebar-footer .btn {
 	padding: 6px 10px;
 	min-height: 32px;
@@ -152,7 +170,7 @@
 	margin-right: 6px;
 	border-radius: 50%;
 	background: var(--lime);
-	box-shadow: 0 0 0 3px #c8f5601f;
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 12%, transparent);
 }
 .chat-main {
 	display: flex;
@@ -174,7 +192,7 @@
 	margin: 0;
 	font-size: 14px;
 	font-weight: 500;
-	color: #c5cbc3;
+	color: var(--text-dim);
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
@@ -383,12 +401,12 @@
 	padding: 10px 12px;
 	border-radius: 8px;
 	background: var(--surface);
-	color: #c5cbc3;
+	color: var(--text-dim);
 }
 .tool-call.waiting {
 	padding: 10px 16px 16px;
 	background: var(--surface);
-	border: 1px solid #ffb64833;
+	border: 1px solid color-mix(in srgb, var(--amber) 20%, transparent);
 }
 .tool-call.waiting summary {
 	margin: 0 0 4px;
@@ -501,16 +519,16 @@
 	border: 1px solid var(--line-strong);
 	border-radius: 22px;
 	background: var(--surface);
-	box-shadow: 0 8px 30px #0000004d;
+	box-shadow: 0 8px 30px rgb(0 0 0 / calc(0.3 * var(--shadow)));
 	transition:
 		border-color 0.15s,
 		box-shadow 0.15s;
 }
 .composer:focus-within {
-	border-color: #ffffff2e;
+	border-color: var(--line-hover);
 	box-shadow:
-		0 8px 30px #0000004d,
-		0 0 0 4px #ffffff08;
+		0 8px 30px rgb(0 0 0 / calc(0.3 * var(--shadow))),
+		0 0 0 4px color-mix(in srgb, var(--text) 3%, transparent);
 }
 .composer .ui-textarea {
 	background: transparent;
@@ -572,7 +590,7 @@
 	border: 1px solid var(--line-strong);
 	border-radius: 14px;
 	background: var(--surface);
-	box-shadow: 0 12px 40px #00000066;
+	box-shadow: 0 12px 40px rgb(0 0 0 / calc(0.4 * var(--shadow)));
 	max-height: 260px;
 	overflow: auto;
 }
@@ -1024,7 +1042,7 @@
 }
 .usage-plot g:hover .usage-hit,
 .usage-plot g:focus .usage-hit {
-	fill: #ffffff0d;
+	fill: var(--line);
 }
 .usage-plot g:focus {
 	outline: none;
@@ -1202,11 +1220,11 @@
 }
 .agents-filter[data-status='waiting'] {
 	color: var(--amber);
-	background: #ffb6481a;
+	background: color-mix(in srgb, var(--amber) 10%, transparent);
 }
 .agents-filter[data-status='failed'] {
 	color: var(--destructive);
-	background: #ff96961a;
+	background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
 .agents-filter[aria-pressed='true'] {
 	border-color: currentColor;
@@ -1241,10 +1259,10 @@
 	font-size: 13px;
 }
 .agent-card[data-status='waiting'] {
-	border-color: #ffb64866;
+	border-color: color-mix(in srgb, var(--amber) 40%, transparent);
 }
 .agent-card[data-status='failed'] {
-	border-color: #ff969666;
+	border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
 }
 .agent-card header {
 	display: flex;
@@ -1308,19 +1326,19 @@
 }
 .agent-status[data-status='running'] {
 	color: var(--cyan);
-	background: #62e0ea14;
+	background: color-mix(in srgb, var(--cyan) 8%, transparent);
 }
 .agent-status[data-status='waiting'] {
 	color: var(--amber);
-	background: #ffb6481a;
+	background: color-mix(in srgb, var(--amber) 10%, transparent);
 }
 .agent-status[data-status='review'] {
 	color: var(--lime);
-	background: #c8f56014;
+	background: color-mix(in srgb, var(--lime) 8%, transparent);
 }
 .agent-status[data-status='failed'] {
 	color: var(--destructive);
-	background: #ff96961a;
+	background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
 .agent-status .spinner {
 	width: 10px;
@@ -1329,7 +1347,7 @@
 .agent-task {
 	margin: 10px 0 0;
 	line-height: 1.5;
-	color: #d7dcd4;
+	color: var(--text-soft);
 	overflow-wrap: anywhere;
 }
 .agent-tools {
@@ -1396,20 +1414,20 @@
 	overflow: visible;
 }
 .agent-link {
-	--link: #8f978e66;
+	--link: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
 	color: var(--link);
 }
 .agent-link[data-status='running'] {
-	--link: #62e0eacc;
+	--link: color-mix(in srgb, var(--cyan) 80%, transparent);
 }
 .agent-link[data-status='waiting'] {
-	--link: #ffb648cc;
+	--link: color-mix(in srgb, var(--amber) 80%, transparent);
 }
 .agent-link[data-status='failed'] {
-	--link: #ff9696b3;
+	--link: color-mix(in srgb, var(--destructive) 70%, transparent);
 }
 .agent-link[data-status='review'] {
-	--link: #c8f56099;
+	--link: color-mix(in srgb, var(--lime) 60%, transparent);
 }
 .agent-link path {
 	fill: none;
@@ -1439,19 +1457,19 @@
 	}
 }
 .agent-arrow path {
-	fill: #8f978e99;
+	fill: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 .agent-arrow[data-status='running'] path {
-	fill: #62e0eacc;
+	fill: color-mix(in srgb, var(--cyan) 80%, transparent);
 }
 .agent-arrow[data-status='waiting'] path {
-	fill: #ffb648cc;
+	fill: color-mix(in srgb, var(--amber) 80%, transparent);
 }
 .agent-arrow[data-status='failed'] path {
-	fill: #ff9696b3;
+	fill: color-mix(in srgb, var(--destructive) 70%, transparent);
 }
 .agent-arrow[data-status='review'] path {
-	fill: #c8f56099;
+	fill: color-mix(in srgb, var(--lime) 60%, transparent);
 }
 .agents-tree {
 	position: relative;
@@ -1483,7 +1501,7 @@
 	cursor: pointer;
 }
 .agent-card[data-folds]:hover {
-	border-color: #ffffff33;
+	border-color: var(--line-hover);
 }
 /* A folded card shows the agents under it as a stack behind it. */
 .agent-card[data-collapsed] {
@@ -1617,9 +1635,9 @@
 .agent-approval {
 	margin-top: 10px;
 	padding: 8px 10px;
-	border: 1px solid #ffb64840;
+	border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
 	border-radius: 8px;
-	background: #ffb6480d;
+	background: color-mix(in srgb, var(--amber) 5%, transparent);
 	cursor: default;
 }
 .agent-approval p {
@@ -1633,7 +1651,7 @@
 	font-family: var(--mono);
 	font-size: 11px;
 	line-height: 1.5;
-	color: #d7dcd4;
+	color: var(--text-soft);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
@@ -1662,7 +1680,7 @@
 }
 .agent-inline input:focus-visible {
 	outline: none;
-	border-color: #ffffff38;
+	border-color: var(--line-hover);
 }
 .agent-button {
 	padding: 4px 10px;
@@ -1675,7 +1693,7 @@
 	cursor: pointer;
 }
 .agent-button:hover:not(:disabled) {
-	border-color: #ffffff33;
+	border-color: var(--line-hover);
 }
 .agent-button.approve {
 	border-color: transparent;

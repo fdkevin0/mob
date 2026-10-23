@@ -4,6 +4,7 @@ import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { ThemePicker } from '../theme/ThemePicker';
 import { ArrowUpIcon, ChevronDownIcon, PlusIcon } from './icons';
 
 /**
@@ -51,6 +52,9 @@ export function Lobby({
 						<span className="status-dot offline" /> {status}
 					</p>
 					{notice && !connecting && <p className="lobby-notice">{notice}</p>}
+					<div className="sidebar-theme">
+						Theme <ThemePicker />
+					</div>
 					<Button variant="ghost" asChild>
 						<a href="/">Mob home</a>
 					</Button>

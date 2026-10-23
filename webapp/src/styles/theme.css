@@ -19,6 +19,11 @@
 	--amber: #ffb648;
 	--violet: #a894ff;
 	--white: #f4f6ef;
+	--text-soft: #d7dcd4;
+	--text-dim: #c5cbc3;
+	--line-hover: #ffffff33;
+	--overlay: #050607cc;
+	--shadow: 1;
 	--sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 	--background: var(--bg);
@@ -38,6 +43,34 @@
 	--input: var(--line-strong);
 	--ring: var(--lime);
 	--radius: 0px;
+}
+
+/* The app and the account page can be light (see src/theme). The landing page,
+ * the demo and the docs never set data-theme, so they stay dark. */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #f6f7f4;
+	--panel: #ffffff;
+	--line: #e3e6df;
+	--line-strong: #d3d7ce;
+	--text: #171a14;
+	--muted: #e9ece5;
+	--muted-foreground: #5f675e;
+	--faint: #5f675e;
+	--lime: #457300;
+	--cyan: #00737e;
+	--amber: #9a5600;
+	--violet: #5b3fd0;
+	--white: #171a14;
+	--text-soft: #2b3028;
+	--text-dim: #3a4038;
+	--line-hover: #00000033;
+	--overlay: #1a1d1659;
+	--shadow: 0.35;
+	--primary-foreground: #ffffff;
+	--secondary: #edf0e9;
+	--accent: #4573000f;
+	--destructive: #c4302b;
 }
 
 @theme inline {
