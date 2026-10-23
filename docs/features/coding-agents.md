@@ -166,6 +166,48 @@ task started (its agent checks it), one past its three reviews, or one whose
 conversation is busy or has no model gets the agent's words in a "Task done"
 notice as before. Failed tasks are not reviewed.
 
+## Sub-tasks
+
+A task Mob's conversation started may hand parts of its work to other coding
+agents, so the tree grows a second level; a sub-task cannot start sub-tasks
+of its own. Mob runs an MCP server on loopback (`127.0.0.1`, a random port)
+once an agent may use it, and gives each such session, when the agent takes
+MCP servers over HTTP (`mcpCapabilities.http`), a server named `mob` with a
+bearer token of its own that only reaches that task's sub-tasks. Agents that
+take no HTTP servers start no sub-tasks. Its tools:
+
+- `task_start` (title, prompt, optional agent, else the task's own) asks the
+  owner to approve, in the task's conversation, as one of the agent's own
+  calls: "Start a sub-task: TITLE" with the agent, project and prompt. Such a
+  request is never remembered, so Always allow approves it once. The tool
+  returns at once, since agents give a tool call little time; once approved,
+  the sub-task starts in a new worktree and branch of the same project, with
+  the task's conversation as its parent, and the call shows the sub-task's ID
+  and branch in the next turn. At most 3 sub-tasks of one task run or wait at
+  once, and 10 in all.
+- `tasks` lists the task's sub-tasks: status, agent, title, branch, what they
+  used and the end of their latest reply.
+- `task_message` and `task_stop` instruct or stop one of them; another
+  task's sub-tasks are out of reach.
+
+The agent may also ask its own permission to call these tools, as for any
+other MCP tool; that is an approval like any other.
+
+## Summaries
+
+Once every task a conversation started has ended (done, stopped or failed),
+Mob says so in that conversation, once for each set of ended tasks:
+
+- A task's conversation gets an automatic message listing its sub-tasks with
+  their status, branch, usage and the end of their latest reply, so the agent
+  can bring their work in and finish its own. An agent at work reads it once
+  its prompt ends; one in review gets it as a new prompt; one stopped, failed
+  or waiting for a decision is left alone.
+- Mob's own conversation, when it started more than one task, gets a note
+  "All N tasks started here have ended" with the same list, which is shown
+  but never sent to a model (`Store.Note`), and the owner gets it as a
+  notice.
+
 ## Approvals
 
 - Codex starts each session in its `auto` mode: it edits files and runs

@@ -225,3 +225,21 @@ func (s *Store) ToolsUsed(conversationID string) ([]string, error) {
 	}
 	return list, rows.Err()
 }
+
+// Note adds Mob's own news to a conversation, such as that the tasks it
+// started ended. Like a command's reply, it is shown but never sent to a
+// model.
+func (s *Store) Note(conversationID, text string) error {
+	raw, err := json.Marshal([]Part{{"type": "text", "text": text}})
+	if err != nil {
+		return err
+	}
+	if _, err = s.db.Exec("INSERT INTO messages(id,conversation_id,role,parts,status,kind) VALUES(?,?,'assistant',?,'complete','command')", NewID(), conversationID, string(raw)); err != nil {
+		return err
+	}
+	_, err = s.db.Exec("UPDATE conversations SET updated_at=? WHERE id=?", time.Now().UnixMilli(), conversationID)
+	if err == nil {
+		s.Changes.conversation(conversationID, true)
+	}
+	return err
+}

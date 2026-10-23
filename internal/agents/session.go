@@ -62,6 +62,9 @@ type session struct {
 	// recorded yet.
 	model          string
 	cost, unpriced float64
+	// token lets the agent reach Mob's MCP server, when it may start
+	// sub-tasks.
+	token string
 }
 
 type call struct {
@@ -98,8 +101,10 @@ type permission struct {
 	request acp.RequestPermissionRequest
 	// tool and scope are what remembering an approval of it covers.
 	tool, scope string
-	answer      chan acp.RequestPermissionOutcome
-	timer       *time.Timer
+	// once is set for Mob's own requests, which are never remembered.
+	once   bool
+	answer chan acp.RequestPermissionOutcome
+	timer  *time.Timer
 }
 
 // open starts an ACP session with the agent on conn: the task's own, loaded
@@ -124,6 +129,8 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 	if err != nil {
 		return nil, s.failed("start", err)
 	}
+	servers, token := svc.mcpServers(t, init.AgentCapabilities)
+	s.token = token
 	var modes *acp.SessionModeState
 	switch {
 	case t.Session == "":
@@ -131,20 +138,20 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 		// The agent replays the session while loading it; the
 		// conversation already shows it.
 		s.loading.Store(true)
-		loaded, err := s.conn.LoadSession(ctx, acp.LoadSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: []acp.McpServer{}})
+		loaded, err := s.conn.LoadSession(ctx, acp.LoadSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: servers})
 		s.loading.Store(false)
 		if err == nil {
 			s.id, modes, s.model = acp.SessionId(t.Session), loaded.Modes, modelOption(loaded.ConfigOptions)
 		}
 	case init.AgentCapabilities.SessionCapabilities.Resume != nil:
 		// Resuming restores the session without replaying it.
-		resumed, err := s.conn.ResumeSession(ctx, acp.ResumeSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: []acp.McpServer{}})
+		resumed, err := s.conn.ResumeSession(ctx, acp.ResumeSessionRequest{SessionId: acp.SessionId(t.Session), Cwd: t.Worktree, McpServers: servers})
 		if err == nil {
 			s.id, modes, s.model = acp.SessionId(t.Session), resumed.Modes, modelOption(resumed.ConfigOptions)
 		}
 	}
 	if s.id == "" {
-		created, err := s.newSession(ctx, init.AuthMethods)
+		created, err := s.newSession(ctx, init.AuthMethods, servers)
 		if err != nil {
 			return nil, err
 		}
@@ -164,8 +171,8 @@ func open(ctx context.Context, svc *Service, p Preset, t chat.Task, conn Conn) (
 // newSession creates a session in the task's worktree, signing in first
 // with the environment variables an agent accepts, when it asks to and they
 // are set.
-func (s *session) newSession(ctx context.Context, methods []acp.AuthMethod) (acp.NewSessionResponse, error) {
-	request := acp.NewSessionRequest{Cwd: s.task.Worktree, McpServers: []acp.McpServer{}}
+func (s *session) newSession(ctx context.Context, methods []acp.AuthMethod, servers []acp.McpServer) (acp.NewSessionResponse, error) {
+	request := acp.NewSessionRequest{Cwd: s.task.Worktree, McpServers: servers}
 	created, err := s.conn.NewSession(ctx, request)
 	if !authRequired(err) {
 		if err != nil {
@@ -214,6 +221,7 @@ func (s *session) failed(what string, err error) error {
 
 func (s *session) close() {
 	s.once.Do(func() {
+		s.svc.forget(s.token)
 		close(s.closed)
 		if s.stop != nil {
 			s.stop()
@@ -532,6 +540,9 @@ func (s *session) ask(turn *chat.DelegateTurn, p *permission) (asked bool, err e
 		}
 	}
 	p.tool, p.scope = s.toolName(kind), scope(tc.Title, title, raw)
+	if p.once {
+		p.scope = ""
+	}
 	if s.inWorktree(kind, locations) || s.granted(p) {
 		p.choose(acp.PermissionOptionKindAllowOnce, acp.PermissionOptionKindAllowAlways)
 		return false, nil
@@ -799,6 +810,22 @@ func (c client) RequestPermission(ctx context.Context, request acp.RequestPermis
 	case <-s.closed:
 		return acp.RequestPermissionResponse{Outcome: acp.RequestPermissionOutcome{Cancelled: &acp.RequestPermissionOutcomeCancelled{}}}, nil
 	}
+}
+
+// askOwner shows a call of Mob's own in the turn that follows the agent and
+// asks the owner to approve it, as the agent's requests are. The answer
+// arrives on the channel; Mob reports how the call ends with an update.
+func (s *session) askOwner(id acp.ToolCallId, title string, input map[string]any) <-chan acp.RequestPermissionOutcome {
+	kind := acp.ToolKindOther
+	p := &permission{once: true, answer: make(chan acp.RequestPermissionOutcome, 1), request: acp.RequestPermissionRequest{SessionId: s.id, ToolCall: acp.ToolCallUpdate{ToolCallId: id}, Options: []acp.PermissionOption{
+		{Kind: acp.PermissionOptionKindAllowOnce, Name: "Allow", OptionId: "allow"},
+		{Kind: acp.PermissionOptionKindRejectOnce, Name: "Reject", OptionId: "reject"},
+	}}}
+	start := acp.StartToolCall(id, title, acp.WithStartKind(kind), acp.WithStartStatus(acp.ToolCallStatusPending), acp.WithStartRawInput(input))
+	if !s.deliver(item{update: &start}) || !s.deliver(item{permission: p}) {
+		p.cancel()
+	}
+	return p.answer
 }
 
 // Mob offers agents no file system or terminal of its own: they use their

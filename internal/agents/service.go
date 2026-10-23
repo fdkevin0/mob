@@ -30,6 +30,11 @@ type Service struct {
 	found   bool
 	// reviews counts the reviews started on their own, by task ID.
 	reviews map[string]int
+	// hub is the MCP server for sub-tasks, once one is offered.
+	hub *hub
+	// settled is the ended tasks last reported to the conversation that
+	// started them, by its ID.
+	settled map[string]string
 }
 
 var _ chat.Delegate = (*Service)(nil)
@@ -79,6 +84,13 @@ func (s *Service) Reply(ctx context.Context, turn *chat.DelegateTurn) error {
 		// Stopping a task is the owner's doing; it raises no notice.
 		s.notify(t.ID, turn, err)
 	}
+	go func() {
+		// The summary repeats the reply this turn saves once it ends.
+		if run := s.Conversations.Watch(t.ConversationID); run != nil {
+			<-run.Done()
+		}
+		s.settle(t.ID)
+	}()
 	return err
 }
 
@@ -204,7 +216,11 @@ func (s *Service) Close() {
 	s.closed = true
 	sessions := s.sessions
 	s.sessions = nil
+	h := s.hub
 	s.mu.Unlock()
+	if h != nil {
+		_ = h.server.Close()
+	}
 	for _, running := range sessions {
 		running.close()
 	}
@@ -298,7 +314,11 @@ func (s *Service) StopTask(id string) error {
 	if running := s.running(t.ID); running != nil {
 		s.drop(t.ID, running)
 	}
-	return s.Store.SetTaskStatus(t.ID, chat.TaskStopped)
+	if err := s.Store.SetTaskStatus(t.ID, chat.TaskStopped); err != nil {
+		return err
+	}
+	s.settle(t.ID)
+	return nil
 }
 
 // firstLine is the first line of text, cut to n runes.
