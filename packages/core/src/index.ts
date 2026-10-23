@@ -27,3 +27,4 @@ export * from './app/server';
 export * from './app/configuration';
 export * from './app/extension';
 export * from './app/http';
+export * from './app/schedule';
