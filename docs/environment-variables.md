@@ -18,7 +18,7 @@ The config selector chooses the file before loading it and cannot appear inside 
 | `addr` | `--addr` | `MOB_ADDR` | `127.0.0.1:8787` | Local service loopback IP and port; restart required |
 | `demo` | `--demo` | `MOB_DEMO` | `false` | Use offline model simulation; restart required |
 | `max_tool_steps` | `--max-tool-steps` | `MOB_MAX_TOOL_STEPS` | `20` | Model calls per turn (1-100) |
-| `web_url` | `--web-url` | `MOB_WEB_URL` | `https://mob.fdkevin.cloud` | Public web UI URL; an empty flag or file value disables it |
+| `web_url` | `--web-url` | `MOB_WEB_URL` | `https://usemob.app` | Public web UI URL; an empty flag or file value disables it |
 | `token` | `--token` | `MOB_TOKEN` | `""` | Local access token (at least 32 bytes); empty uses the managed token file; restart required; sensitive: prefer a protected file or environment over argv |
 | `gateway.url` | `--gateway-url` | `MOB_GATEWAY_URL` | `""` | Gateway URL for this service to register with; restart required |
 | `gateway.node_id` | `--gateway-node-id` | `MOB_GATEWAY_NODE_ID` | `""` | Gateway node ID; empty uses hostname or node-local; restart required |

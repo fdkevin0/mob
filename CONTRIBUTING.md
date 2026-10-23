@@ -76,7 +76,7 @@ Edit the source and regenerate the affected artifact. Go tests reject stale outp
 
 ### Documentation site
 
-`apps/docs` builds the site at https://mob.fdkevin.cloud/docs with Starlight. It
+`apps/docs` builds the site at https://usemob.app/docs with Starlight. It
 copies `README.md`, `CONTRIBUTING.md` and `docs/` in at build time, so write the
 Markdown as usual; links between those files become site links and links to
 other repository files point at GitHub. A new page under `docs/` needs an

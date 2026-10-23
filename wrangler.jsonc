@@ -19,7 +19,7 @@
 	"assets": {
 		"directory": "./webapp/dist-public",
 		"binding": "ASSETS",
-		"run_worker_first": ["/*", "!/assets/*", "!/docs/_astro/*", "!/docs/pagefind/*"]
+		"run_worker_first": ["/*", "!/assets/*", "!/og.png", "!/docs/_astro/*", "!/docs/pagefind/*"]
 	},
 	"durable_objects": { "bindings": [{ "name": "RUNNERS", "class_name": "RunnerRelay" }] },
 	"migrations": [{ "tag": "runner-v1", "new_sqlite_classes": ["RunnerRelay"] }],

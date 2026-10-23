@@ -1,7 +1,7 @@
 # Mob documentation
 
 These pages, with the repository's README and CONTRIBUTING, are published at
-https://mob.fdkevin.cloud/docs.
+https://usemob.app/docs.
 
 - [Features](features/README.md): how each part of Mob behaves today. Start here
   to use or change a feature.

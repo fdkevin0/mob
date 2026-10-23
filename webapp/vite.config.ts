@@ -5,12 +5,13 @@ import path from 'node:path';
 
 // The public mode builds the site deployed to Cloudflare Workers (wrangler.jsonc):
 // the landing page, the account page and the web UI. The Worker in worker/ serves both and sets
-// their content security policies.
+// their content security policies. Its files in public/ (the link preview image)
+// are copied to the site's root; the embedded app has none.
 export default defineConfig(({ mode }) => ({
 	root: path.resolve(__dirname),
 	base: '/',
 	resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-	publicDir: false,
+	publicDir: mode === 'public' ? path.resolve(__dirname, 'public') : false,
 	plugins: [react(), tailwindcss(), mode === 'public' ? null : {
 		name: 'go-embed-placeholder',
 		generateBundle() { this.emitFile({ type: 'asset', fileName: '.gitkeep', source: '\n' }); },

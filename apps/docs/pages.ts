@@ -1,4 +1,4 @@
-// The pages of https://mob.fdkevin.cloud/docs, in sidebar order. Each comes
+// The pages of https://usemob.app/docs, in sidebar order. Each comes
 // from a Markdown file in the repository (scripts/sync.ts copies it in), so a
 // new page under docs/ needs an entry here to appear on the site.
 export const repositoryUrl = 'https://github.com/fdkevin0/mob';

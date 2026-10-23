@@ -22,6 +22,6 @@ it('reads only offers for Mob on this computer', () => {
 it('treats only http origins on 127.0.0.1 or localhost as local Mob', () => {
   expect(isLocalMob('http://127.0.0.1:8787')).toBe(true);
   expect(isLocalMob('http://localhost:9000')).toBe(true);
-  for (const url of ['https://mob.fdkevin.cloud', 'http://127.0.0.1:8787/', 'http://192.168.1.2:8787', 'not a url', ''])
+  for (const url of ['https://usemob.app', 'http://127.0.0.1:8787/', 'http://192.168.1.2:8787', 'not a url', ''])
     expect(isLocalMob(url)).toBe(false);
 });
