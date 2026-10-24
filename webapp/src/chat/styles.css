@@ -1804,10 +1804,125 @@
 .agents-filter[aria-pressed='true'] {
 	border-color: currentColor;
 }
+/* Before any agent ran: a faint sketch of the tree, what will show here, and ways to start. */
 .agents-empty {
-	color: var(--muted-foreground);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
 	max-width: 520px;
+	margin: min(10vh, 80px) auto 0;
+	text-align: center;
+}
+.agents-empty h2 {
+	margin: 28px 0 8px;
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--text);
+}
+.agents-empty p {
+	margin: 0;
+	color: var(--muted-foreground);
+	font-size: 14px;
 	line-height: 1.6;
+}
+.agents-empty-sketch {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 100%;
+	max-width: 340px;
+}
+.agents-empty-root {
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 14px;
+	border: 1px solid var(--line-strong);
+	background: var(--surface-raised);
+	box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand) 8%, transparent);
+}
+.agents-empty-links {
+	width: 72%;
+	height: 28px;
+	overflow: visible;
+}
+.agents-empty-links path {
+	fill: none;
+	stroke: var(--line-strong);
+	stroke-width: 1.5;
+	stroke-dasharray: 4 4;
+	vector-effect: non-scaling-stroke;
+}
+.agents-empty-children {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	width: 100%;
+}
+.agents-empty-agent {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-width: 0;
+	padding: 8px 6px;
+	border: 1px dashed var(--line-strong);
+	border-radius: 10px;
+	background: var(--surface);
+	color: var(--muted-foreground);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.agents-empty-sketch[data-locked] .agents-empty-agent {
+	opacity: 0.55;
+	filter: grayscale(1);
+}
+.agents-empty-actions {
+	margin-top: 20px;
+}
+.agents-empty-examples {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 100%;
+	margin: 24px 0 0;
+	padding: 0;
+}
+.agents-empty-examples button {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 11px 14px;
+	border: 1px solid var(--line-strong);
+	border-radius: 12px;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+.agents-empty-examples button span {
+	flex: 1;
+}
+.agents-empty-examples button svg {
+	flex-shrink: 0;
+	color: var(--muted-foreground);
+	transition: transform 0.15s, color 0.15s;
+}
+.agents-empty-examples button:hover,
+.agents-empty-examples button:focus-visible {
+	border-color: color-mix(in srgb, var(--brand) 50%, var(--line-strong));
+	background: var(--surface-raised);
+}
+.agents-empty-examples button:hover svg,
+.agents-empty-examples button:focus-visible svg {
+	color: var(--brand);
+	transform: translateX(2px);
 }
 .agents-tree,
 .agent-children {

@@ -24,6 +24,11 @@ export const ArrowUpIcon = () => (
 		<path d="M12 19V5M5 12l7-7 7 7" />
 	</Icon>
 );
+export const ArrowRightIcon = () => (
+	<Icon size={14}>
+		<path d="M5 12h14M12 5l7 7-7 7" />
+	</Icon>
+);
 export const StopIcon = () => (
 	<Icon size={14}>
 		<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />

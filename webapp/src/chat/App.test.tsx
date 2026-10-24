@@ -654,3 +654,24 @@ it('uses the shared highlighter for message text, reasoning and tool data', asyn
   });
   expect(view.container.querySelector('.reasoning [data-streamdown="strong"]')?.textContent).toBe('Checking');
 });
+
+it('keeps the empty Agents page the address names, and starts a conversation from an example', async () => {
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  window.history.replaceState(null, '', '/#/agents');
+  const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([]);
+    if (url.includes('/tasks')) return Response.json([]);
+    return Response.json({ messages: [], active: false, model: '' });
+  });
+  vi.stubGlobal('fetch', fetch);
+  render(<App />);
+  await screen.findByRole('heading', { name: 'No agents yet' });
+  expect(window.location.hash).toBe('#/agents');
+  fireEvent.click(screen.getByRole('button', { name: /Have Claude Agent review/ }));
+  await waitFor(() => expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/));
+  await waitFor(() => expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Have Claude Agent review the last commit in my project'));
+  // Nothing is sent until the owner sends it.
+  expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  window.history.replaceState(null, '', '/');
+});

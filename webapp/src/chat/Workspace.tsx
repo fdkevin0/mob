@@ -69,6 +69,8 @@ export function Workspace({
 	const [signIn] = useState(() => (connection.browser ? pendingOpenRouterSignIn() : undefined));
 	const [provider, setProvider] = useState(!!signIn);
 	const [limits, setLimits] = useState(false);
+	// A message chosen on another page, such as an example on the empty Agents page, waits in the new conversation's composer.
+	const [prompt, setPrompt] = useState('');
 	const [moving, setMoving] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -264,7 +266,9 @@ export function Workspace({
 				// A conversation the owner picked meanwhile stays open.
 				if (choice.current !== start) return;
 				// A draft typed before connecting starts a new conversation, as the lobby showed.
-				if ((draft && !current.current) || !list.length) create(true);
+				if (draft && !current.current) create(true);
+				// With none yet, a new conversation waits behind the page the address names.
+				else if (!list.length) showBehind(newConversationID(), { messages: [], active: false, model: '' });
 				else if (routedView() !== 'chat') {
 					const id = pick(list);
 					showBehind(id, cache.current.get(id) ?? (await load(id)));
@@ -405,6 +409,11 @@ export function Workspace({
 							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
 							held={held}
+							start={(text) => {
+								setPrompt(text);
+								create();
+							}}
+							connect={connection.browser ? disconnect : undefined}
 						/>
 					</Suspense>
 				)}
@@ -443,8 +452,11 @@ export function Workspace({
 								void refreshList().catch((e) => setError(errorText(e)));
 							}}
 							onAction={act}
-							draft={draft}
-							clearDraft={clearDraft}
+							draft={prompt || draft}
+							clearDraft={() => {
+								setPrompt('');
+								clearDraft?.();
+							}}
 							addProvider={() => setProvider(true)}
 						/>
 					</div>

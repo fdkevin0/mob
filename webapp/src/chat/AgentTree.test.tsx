@@ -105,6 +105,25 @@ it('shows cards, filters what needs the owner and opens a conversation', async (
 	expect(screen.getAllByRole('img', { name: 'OpenAI' }).length).toBe(4);
 });
 
+it('offers ways to start before any agent ran, and a runner in the browser', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([])));
+	const start = vi.fn();
+	const { unmount } = render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={vi.fn()} start={start} />);
+	expect(await screen.findByRole('heading', { name: 'No agents yet' })).toBeTruthy();
+	// An empty page has no count to show.
+	expect(screen.queryByText('0 agents')).toBeNull();
+	fireEvent.click(screen.getByRole('button', { name: /Ask Codex to find and fix/ }));
+	expect(start).toHaveBeenCalledWith('Ask Codex to find and fix the failing tests in my project');
+	unmount();
+
+	const connect = vi.fn();
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} browser open={vi.fn()} start={start} connect={connect} />);
+	expect(await screen.findByRole('heading', { name: 'Coding agents need a runner' })).toBeTruthy();
+	expect(screen.queryByRole('list', { name: 'Try asking' })).toBeNull();
+	fireEvent.click(screen.getByRole('button', { name: 'Connect a runner' }));
+	expect(connect).toHaveBeenCalled();
+});
+
 it('decides, stops and instructs from the cards', async () => {
 	const calls: [string, unknown][] = [];
 	vi.stubGlobal(
