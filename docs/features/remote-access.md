@@ -64,8 +64,9 @@ served by the Worker in `worker/`:
   browser (see [Mob in the browser](#mob-in-the-browser)), so a signed-in
   visitor can start talking at once. **Connect a runner** in the runner menu
   leaves the browser runner for the workspace without one, where visitors can
-  look around and type a message, and the **Connect a runner** dialog opens
-  when they do something that needs Mob, such as sending, starting a
+  look around and type a message. This view keeps the workspace sidebar and
+  header layout, with connection and account controls below the conversation
+  list. The **Connect a runner** dialog opens when they do something that needs Mob, such as sending, starting a
   conversation or opening plugins. The choice is remembered until **This
   browser** is picked again. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's

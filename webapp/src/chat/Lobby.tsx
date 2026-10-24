@@ -35,33 +35,33 @@ export function Lobby({
 		<div className="workspace">
 			<aside className="sidebar">
 				<div className="sidebar-brand">
-					<Logo />
-					<span>{connecting ? 'Connecting…' : 'Not connected'}</span>
+					<Logo size={26} />
+					<span className="muted">{connecting ? 'Connecting…' : 'Not connected'}</span>
 				</div>
-				<Button variant="outline" className="new-chat" disabled={connecting} onClick={connect}>
+				<Button variant="ghost" className="sidebar-link" disabled={connecting} onClick={connect}>
 					<PlusIcon /> New conversation
 				</Button>
-				<nav aria-label="Conversations">
+				<nav aria-label="Conversations" className="conversation-list">
 					<p className="muted lobby-note">Your conversations appear here once a runner is connected.</p>
 				</nav>
-				<Button variant="ghost" className="sidebar-plugins" disabled={connecting} onClick={connect}>
+				<Button variant="ghost" className="sidebar-link" disabled={connecting} onClick={connect}>
 					Plugins & cloud services
 				</Button>
-				<div className="sidebar-footer">
-					<p>
+				<div className="sidebar-pages">
+					<p className="muted lobby-note">
 						<span className="status-dot offline" /> {status}
 					</p>
 					{notice && !connecting && <p className="lobby-notice">{notice}</p>}
-					<div className="sidebar-theme">
+					<div className="menu-row">
 						Theme <ThemePicker />
 					</div>
-					<Button variant="ghost" asChild>
+					<Button variant="ghost" className="sidebar-link" asChild>
 						<a href="/">Mob home</a>
 					</Button>
-					<Button variant="ghost" asChild>
+					<Button variant="ghost" className="sidebar-link" asChild>
 						<a href="/account">Account</a>
 					</Button>
-					<Button variant="ghost" disabled={connecting} onClick={connect}>
+					<Button variant="ghost" className="sidebar-link" disabled={connecting} onClick={connect}>
 						Connect a runner
 					</Button>
 				</div>
@@ -73,8 +73,10 @@ export function Lobby({
 						Connect a runner
 					</Button>
 				</div>
-				<header className="thread-header">
-					<h1 className="thread-title">New conversation</h1>
+				<header className="view-header">
+					<div className="view-header-inner">
+						<h1>New conversation</h1>
+					</div>
 				</header>
 				<div className="conversation lobby-conversation">
 					<ConversationEmptyState
