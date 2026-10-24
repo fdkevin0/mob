@@ -2,7 +2,7 @@
 // tasks, usage, schedules, deliveries and settings, in one SQLite database.
 import type { Usage as ModelUsage } from '../llm/llm';
 import { Changes } from './changes';
-import { schema, schemaVersion, SchemaError } from './schema';
+import { schema, schemaVersion, SchemaError, upgrades } from './schema';
 import { newID, NotFound, type SQL } from './sql';
 
 export type Part = Record<string, any>;
@@ -53,11 +53,18 @@ export type Task = {
 	session?: string;
 	status: string;
 	parent?: string;
+	/** readOnly tasks work in another task's worktree and branch without changing them, such as to review it. */
+	readOnly?: boolean;
+	/** outcome is how the agent said its latest work ended, with result its account of it; both unset until it says, and again once it is given more work. */
+	outcome?: string;
+	result?: string;
 	plan?: PlanEntry[];
 	createdAt: number;
 	updatedAt: number;
 };
 export const taskRunning = 'running', taskWaiting = 'waiting', taskReview = 'review', taskStopped = 'stopped', taskFailed = 'failed';
+/** How an agent says its work ended: done and holds up; needs the changes its result lists; cannot go on without a decision or something it lacks. */
+export const outcomePassed = 'passed', outcomeRework = 'rework', outcomeBlocked = 'blocked';
 
 export type Schedule = { id: string; conversationId: string; prompt: string; next: number; repeat?: string; zone?: string; clock?: string; createdAt: number };
 export type Delivery = { id: string; state: string; reply: string; error: string; updatedAt: number };
@@ -95,12 +102,14 @@ const usageOf = (row: UsageRow): Usage => ({
 	cacheReadTokens: row.cr ?? 0, cacheWriteTokens: row.cw ?? 0, cost: row.c ?? 0, durationMs: row.d ?? 0, requests: row.n ?? 0,
 });
 
-const taskColumns = 'id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,plan,created_at,updated_at';
-type TaskRow = { id: string; conversation_id: string; project: string; agent: string; title: string; worktree: string; branch: string; session: string; status: string; parent_id: string; plan: string; created_at: number; updated_at: number };
+const taskColumns = 'id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,read_only,outcome,result,plan,created_at,updated_at';
+type TaskRow = { id: string; conversation_id: string; project: string; agent: string; title: string; worktree: string; branch: string; session: string; status: string; parent_id: string; read_only: number; outcome: string; result: string; plan: string; created_at: number; updated_at: number };
 function taskOf(r: TaskRow): Task {
 	const t: Task = { id: r.id, conversationId: r.conversation_id, project: r.project, agent: r.agent, title: r.title, worktree: r.worktree, branch: r.branch, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at };
 	if (r.session) t.session = r.session;
 	if (r.parent_id) t.parent = r.parent_id;
+	if (r.read_only) t.readOnly = true;
+	if (r.outcome) { t.outcome = r.outcome; t.result = r.result; }
 	if (r.plan) t.plan = JSON.parse(r.plan);
 	return t;
 }
@@ -138,8 +147,9 @@ export class Store {
 		const tables = db.get<{ n: number }>("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT IN ('meta','sqlite_sequence')")!.n;
 		const opened = tables ? (() => { try { return db.get<{ value: string }>("SELECT value FROM meta WHERE key='service_version'")?.value ?? ''; } catch { return ''; } })() : '';
 		if (version > schemaVersion) throw new SchemaError(`This database has schema ${version}, last opened by ${opened ? 'Mob ' + opened : 'an unknown release'}. Mob ${this.release} reads schema ${schemaVersion} and older; install ${opened ? 'Mob ' + opened + ' or newer' : 'a newer release'}.`);
-		if (tables && version < schemaVersion) throw new SchemaError(`This database has schema ${version}, which Mob ${this.release} does not upgrade. Start it with a Go release of Mob once to upgrade it.`);
+		if (tables && version < 10) throw new SchemaError(`This database has schema ${version}, which Mob ${this.release} does not upgrade. Start it with a Go release of Mob once to upgrade it.`);
 		db.transaction(() => {
+			if (tables) for (let v = version + 1; v <= schemaVersion; v++) db.exec(upgrades[v]!);
 			db.exec(schema);
 			db.exec(`PRAGMA user_version=${schemaVersion}`);
 			db.run("INSERT INTO meta(key,value) VALUES('service_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", this.release);
@@ -468,7 +478,7 @@ export class Store {
 		const task: Task = { ...t, id: newID(), conversationId: newID(), createdAt: now, updatedAt: now };
 		this.db.transaction(() => {
 			this.db.run('INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)', task.conversationId, title60(task.agent + ': ' + task.title), now);
-			this.db.run(`INSERT INTO tasks(${taskColumns}) VALUES(?,?,?,?,?,?,?,?,?,?,'',?,?)`, task.id, task.conversationId, task.project, task.agent, task.title, task.worktree, task.branch, task.session ?? '', task.status, task.parent ?? '', now, now);
+			this.db.run(`INSERT INTO tasks(${taskColumns}) VALUES(?,?,?,?,?,?,?,?,?,?,?,'','','',?,?)`, task.id, task.conversationId, task.project, task.agent, task.title, task.worktree, task.branch, task.session ?? '', task.status, task.parent ?? '', task.readOnly ? 1 : 0, now, now);
 		});
 		this.changes.conversation(task.conversationId, true);
 		this.changes.tasks();
@@ -492,6 +502,16 @@ export class Store {
 		this.changes.conversation(conversationID, false);
 	}
 	setTaskSession(id: string, session: string) { this.db.run('UPDATE tasks SET session=?,updated_at=? WHERE id=?', session, Date.now(), id); this.changes.tasks(); }
+	/** setTaskResult records how task id's agent said its work ended; empty outcome and result forget it, as when the agent is given more work. */
+	setTaskResult(id: string, outcome: string, result: string) {
+		if (this.db.run('UPDATE tasks SET outcome=?,result=?,updated_at=? WHERE id=? AND (outcome<>? OR result<>?)', outcome, result, Date.now(), id, outcome, result).changes > 0) this.changes.tasks();
+	}
+	/** note adds Mob's own news to a conversation, such as that the tasks it started ended. Like a command's reply, it is shown but never sent to a model. */
+	note(conversationID: string, text: string) {
+		this.db.run("INSERT INTO messages(id,conversation_id,role,parts,status,kind) VALUES(?,?,'assistant',?,'complete','command')", newID(), conversationID, JSON.stringify([{ type: 'text', text }]));
+		this.db.run('UPDATE conversations SET updated_at=? WHERE id=?', Date.now(), conversationID);
+		this.changes.conversation(conversationID, true);
+	}
 	setTaskPlan(id: string, plan: PlanEntry[]) { this.db.run('UPDATE tasks SET plan=?,updated_at=? WHERE id=?', JSON.stringify(plan), Date.now(), id); this.changes.tasks(); }
 	/** lastReply is the last text of the conversation's latest reply. */
 	lastReply(conversationID: string) { return this.lastText(this.db.get<{ parts: string }>("SELECT parts FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY seq DESC LIMIT 1", conversationID)); }
