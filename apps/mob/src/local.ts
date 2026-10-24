@@ -28,6 +28,20 @@ export function credentials(c: Environment): Connection {
 }
 
 const storePath = (c: Environment) => join(c.dir, 'mob.sqlite');
+
+/**
+ * openStore opens the database owner-only: it holds chats and plugin
+ * credentials, and a data directory chosen with --data-dir may already be
+ * readable by others. SQLite gives its journals the database file's mode, so
+ * the file exists with mode 0600 before SQLite opens it.
+ */
+export function openStore(path: string) {
+	if (!windows) {
+		closeSync(openSync(path, 'a', 0o600));
+		for (const file of [path, path + '-wal', path + '-shm']) if (existsSync(file)) chmodSync(file, 0o600);
+	}
+	return new Store(openBun(path), version).open();
+}
 const tokenLock = (c: Environment) => { mkdirSync(c.dir, { recursive: true, mode: 0o700 }); return Lock.acquire(join(c.dir, 'token.lock')); };
 
 /** writeToken replaces the token file atomically so readers never see a partial token. */
@@ -47,7 +61,7 @@ export async function start(c: Environment, background = false): Promise<App> {
 	let connection: Connection;
 	const unlock = tokenLock(c);
 	try {
-		store = new Store(openBun(storePath(c)), version).open();
+		store = openStore(storePath(c));
 		if (!c.token) {
 			const path = join(c.dir, 'token');
 			try {
