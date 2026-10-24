@@ -672,6 +672,19 @@ test('an agent starts sub-tasks', async () => {
 	expect([child.status, h.reply(child), h.fakes.last().loaded]).toEqual(['review', 'Hi', 's1']);
 });
 
+test('sub-tasks that end after their lead stopped are reaped', async () => {
+	const h = harness();
+	const lead = await h.start('hello');
+	const child = await h.wait(await h.svc.startTask(lead.conversationId, h.repo, '', 'Child', 'run'));
+	expect(child.status).toBe('waiting');
+	// The lead stops while its sub-task waits for the owner, so nothing is reaped yet.
+	h.svc.stopTask(lead.id);
+	expect(h.svc.running(child.id)).toBeDefined();
+	// No turn of the stopped lead follows, so the sub-task's own end reaps it.
+	await h.decide(child, { approved: true });
+	await h.until("the sub-task's agent was not reaped", () => !h.svc.running(child.id));
+});
+
 test('ended tasks are summarized', async () => {
 	const h = harness();
 	const root = h.store.create();

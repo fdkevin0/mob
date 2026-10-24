@@ -371,7 +371,8 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
   agent's prompt; an agent that does not end it within ten seconds is ended.
 - Sub-task agents are reaped once their reports are delivered: when a task
   and all its sub-tasks have ended (after it hears how they went and ends its
-  own turn, or is stopped), the agents of its ended sub-tasks end; a squad's
+  own turn, or is stopped, or its last sub-task ends after it stopped or
+  failed), the agents of its ended sub-tasks end; a squad's
   reviewers end once all of them have ended and their reports are gathered.
   The task's own agent stays, and so do the sub-tasks' worktrees, branches
   and conversations. A message to a reaped sub-task starts its agent again,

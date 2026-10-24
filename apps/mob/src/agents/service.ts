@@ -81,7 +81,7 @@ export class Service implements Delegate, Tasks {
 			// The summary repeats the reply this turn saves once it ends.
 			await this.conversations.watch(t.conversationId)?.whenDone();
 			settle(this, t.id);
-			this.retire(t.id);
+			this.ended(t.id);
 		})();
 		if (err) throw err;
 	}
@@ -164,6 +164,14 @@ export class Service implements Delegate, Tasks {
 		const kids = children(this, t).filter(c => !this.reviewers.has(c.id));
 		if (kids.some(c => c.status === taskRunning || c.status === taskWaiting)) return;
 		this.reap(kids);
+	}
+
+	/** ended reaps what task id's end lets go: its sub-tasks' agents, and its own and its siblings' when the task that started them stopped or failed, since no turn of that task's follows to do it. */
+	private ended(id: string) {
+		this.retire(id);
+		const t = this.store.task(id);
+		const lead = t?.parent ? this.store.task(t.parent) : undefined;
+		if (lead && lead.conversationId === t!.parent && (lead.status === taskStopped || lead.status === taskFailed)) this.retire(lead.id);
 	}
 
 	/** close ends every agent. */
@@ -295,7 +303,7 @@ export class Service implements Delegate, Tasks {
 		if (s) this.drop(t.id, s);
 		this.store.setTaskStatus(t.id, taskStopped);
 		settle(this, t.id);
-		this.retire(t.id);
+		this.ended(t.id);
 	}
 
 	/** offered reports whether task_start is offered: once there are projects or tasks, or while a coding agent can be started. */
