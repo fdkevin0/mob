@@ -1,4 +1,5 @@
 // WeChat iLink: Mob answers the allowed users' messages to a WeChat bot.
+import { sleep } from '@mob/core/sleep';
 import { Bridge, clientWeChat, CommandError, describeApproval, isAbort, rememberAlways, rememberConversation, ReplyError, useText, type Answer, type ChannelMessage, type ConversationService, type PendingApproval, type Reply, type Store, type Texts } from '@mob/core';
 import { allowed, Client, isOwner, type Config, type Inbound } from './client';
 
@@ -103,7 +104,7 @@ export class Service {
 			try { res = await client.updates(cursor, signal); } catch (err) {
 				if (signal.aborted) return;
 				status('Polling error: ' + (err as Error).message);
-				await new Promise(resolve => { const t = setTimeout(resolve, 5000); signal.addEventListener('abort', () => { clearTimeout(t); resolve(undefined); }, { once: true }); });
+				await sleep(5000, signal).catch(() => {});
 				continue;
 			}
 			status('Active · Polling WeChat messages');

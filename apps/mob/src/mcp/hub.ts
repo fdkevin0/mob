@@ -1,5 +1,6 @@
 // The hub keeps Mob connected to the configured MCP servers and knows the
 // tools each one offers.
+import { sleep } from '@mob/core/sleep';
 import { cell, type Entry, type Tool } from '@mob/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
@@ -105,12 +106,6 @@ function environment(extra: string[] = []) {
 	return env;
 }
 
-const sleep = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
-	const done = () => { clearTimeout(t); signal.removeEventListener('abort', done); resolve(); };
-	const t = setTimeout(done, ms);
-	signal.addEventListener('abort', done, { once: true });
-});
-
 export class Hub {
 	readonly grants: Grants;
 	/** changed reconnects after an install or removal changed the servers. */
@@ -162,7 +157,7 @@ export class Hub {
 			if (signal.aborted) return;
 			this.set(name, s => { s.status = 'reconnecting after: ' + oneLine((err as Error)?.message ?? String(err)); });
 			report();
-			await sleep(backoff, signal);
+			await sleep(backoff, signal).catch(() => {});
 			backoff = Math.min(2 * backoff, maxBackoff);
 		}
 	}

@@ -1,5 +1,6 @@
 // The Telegram channel: Mob answers its owner's private messages to a bot,
 // polling the Bot API, with buttons standing in for typed commands.
+import { sleep as wait } from '@mob/core/sleep';
 import { Bridge, clientTelegram, ReplyError, describeApproval, NotFound, type ChannelMessage, type CommandSpec, type ConversationService, type Notice, type PendingApproval, type Reply, type Store, type Suggestion, type Texts, useText } from '@mob/core';
 import { Bot, buttons, decided, type Button, type Config, type Keyboard, type Shown, type Update } from './api';
 
@@ -75,12 +76,7 @@ export function picked(text: string, k: Keyboard) {
 	return text === '/new' && k.inline_keyboard.some(row => row.some(b => b.callback_data.startsWith('/open ')));
 }
 
-const sleep = (ms: number, signal: AbortSignal) => new Promise<boolean>(resolve => {
-	if (signal.aborted) return resolve(false);
-	const done = () => { clearTimeout(t); resolve(!signal.aborted); };
-	const t = setTimeout(done, ms);
-	signal.addEventListener('abort', done, { once: true });
-});
+const sleep = (ms: number, signal: AbortSignal) => wait(ms, signal).then(() => true, () => false);
 
 const messageId = (botId: string, u: Update) => `tg:${botId}:${u.update_id}`;
 const conversationKey = (botId: string, c: Config) => `telegram-conversation:${botId}:${c.userId}`;

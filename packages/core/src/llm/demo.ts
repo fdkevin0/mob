@@ -1,6 +1,7 @@
 // An offline model: it echoes the prompt, turns "/remember fact" into a
 // remember tool call, exercising approvals, and "/sandbox command" into a
 // sandbox call when that tool is offered.
+import { sleep } from '../sleep';
 import { emptyResult, type Emit, type Info, type Model, type Ref, type Request, type Result } from './llm';
 
 /** The reserved provider of the offline model. */
@@ -10,11 +11,6 @@ export const demoInfo: Info = { id: 'echo', name: 'Demo (offline)', tools: true,
 
 let calls = 0;
 const callID = () => `demo_${Date.now()}${++calls}`;
-const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
-	if (signal?.aborted) return reject(signal.reason);
-	const timer = setTimeout(resolve, ms);
-	signal?.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
-});
 
 export class DemoModel implements Model {
 	readonly ref = demoRef;
