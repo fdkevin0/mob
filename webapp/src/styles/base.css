@@ -128,7 +128,6 @@ a {
 }
 .ui-input:focus-visible,
 .ui-textarea:focus-visible {
-	outline: none;
 	border-color: var(--line-hover);
 }
 .ui-input::placeholder,
