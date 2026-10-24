@@ -30,7 +30,8 @@ In the web workspace, **Add a model provider** in the model picker, or **Model
 provider** in the runner menu, does the same for the common presets, Ollama and
 LM Studio, or a custom base URL: `POST /api/providers` with
 `{preset, url?, protocol?, key, model?}` lists the provider's models and saves
-it as the default model, replacing a provider with the same ID. The browser
+it as the default model, replacing a provider with the same ID. Without a
+named model, OpenRouter starts on one of its free models that takes tools. The browser
 runner saves through its own plugin route instead, which only offers vendors a
 browser can call.
 
