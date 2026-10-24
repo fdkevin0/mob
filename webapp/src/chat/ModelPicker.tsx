@@ -12,6 +12,8 @@ export type ModelInfo = {
 	reasoning?: boolean;
 	tools: boolean;
 	vision?: boolean;
+	/** free is set for a model that costs nothing to call, such as OpenRouter's `:free` variants. */
+	free?: boolean;
 };
 
 export type ModelGroup = {
@@ -54,6 +56,7 @@ export function ModelPicker({
 	const [groups, setGroups] = useState<ModelGroup[]>();
 	const [error, setError] = useState('');
 	const [query, setQuery] = useState('');
+	const [freeOnly, setFreeOnly] = useState(false);
 	useEffect(() => {
 		let live = true;
 		api<ModelGroup[]>(connection, '/models')
@@ -73,11 +76,12 @@ export function ModelPicker({
 			...group,
 			models: group.models.filter(
 				model =>
-					!needle ||
+					(!freeOnly || model.free) &&
+					(!needle ||
 					group.name.toLowerCase().includes(needle) ||
 					group.provider.toLowerCase().includes(needle) ||
 					model.id.toLowerCase().includes(needle) ||
-					(model.name ?? '').toLowerCase().includes(needle),
+					(model.name ?? '').toLowerCase().includes(needle)),
 			),
 		}))
 		.filter(group => group.models.length > 0);
@@ -85,14 +89,19 @@ export function ModelPicker({
 		<DialogContent className="model-picker">
 			<DialogTitle className="dialog-title">Choose a model</DialogTitle>
 			<DialogDescription className="dialog-description">Switch the model for this conversation, or follow your default.</DialogDescription>
-			<Input
-				className="model-search"
-				aria-label="Search models"
-				placeholder="Search providers and models…"
-				autoFocus
-				value={query}
-				onChange={event => setQuery(event.target.value)}
-			/>
+			<div className="model-filters">
+				<Input
+					className="model-search"
+					aria-label="Search models"
+					placeholder="Search providers and models…"
+					autoFocus
+					value={query}
+					onChange={event => setQuery(event.target.value)}
+				/>
+				<Button variant="outline" className="model-free-filter" aria-pressed={freeOnly} onClick={() => setFreeOnly(on => !on)}>
+					Free only{groups ? ` (${groups.reduce((n, g) => n + g.models.filter(m => m.free).length, 0)})` : ''}
+				</Button>
+			</div>
 			{error && <p role="alert">{error}</p>}
 			{!groups && !error && <p className="muted" role="status">Loading models…</p>}
 			{groups && (
@@ -109,7 +118,10 @@ export function ModelPicker({
 						{group.models.map(model => (
 							<li key={model.id}>
 								<Button variant="ghost" className="model-choice" aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
-									<span>{model.name || model.id}</span>
+									<span>
+										{model.name || model.id}
+										{model.free && <small className="model-free">Free</small>}
+									</span>
 									<span className="model-id">{model.id}</span>
 									<span className="model-meta">{capabilities(model)}</span>
 								</Button>
@@ -118,7 +130,9 @@ export function ModelPicker({
 					</ul>
 				</section>
 			))}
-			{visible && visible.length === 0 && <p className="muted">No models match “{query.trim()}”.</p>}
+			{visible && visible.length === 0 && (
+				<p className="muted">{freeOnly && !needle ? 'No free models. OpenRouter lists free ones with names ending in :free.' : `No ${freeOnly ? 'free ' : ''}models match “${query.trim()}”.`}</p>
+			)}
 		</DialogContent>
 	);
 }

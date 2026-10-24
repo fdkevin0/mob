@@ -55,3 +55,20 @@ it('surfaces a model list failure instead of an empty picker', async () => {
 	render(<Dialog defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
 	await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('provider list unavailable'));
 });
+
+it('marks free models and shows only them when asked', async () => {
+	const withFree = [...models, { provider: 'openrouter', name: 'OpenRouter', models: [{ id: 'meta/llama:free', tools: true, free: true }, { id: 'openai/gpt-x', tools: true }] }];
+	withFree[1] = { ...withFree[1], models: [{ ...withFree[1].models[0], free: true }] };
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json(withFree)));
+	render(<Dialog defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
+	await screen.findByText('DeepSeek Chat');
+	expect(screen.getAllByText('Free')).toHaveLength(2);
+	const filter = screen.getByRole('button', { name: 'Free only (2)' });
+	fireEvent.click(filter);
+	expect(filter.getAttribute('aria-pressed')).toBe('true');
+	expect(screen.queryByText('DeepSeek Chat')).toBeNull();
+	expect(screen.queryByText('openai/gpt-x')).toBeNull();
+	expect(screen.getByText('meta/llama:free', { selector: '.model-id' })).toBeDefined();
+	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'gpt' } });
+	expect(screen.getByText('No free models match “gpt”.')).toBeDefined();
+});

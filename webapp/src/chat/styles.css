@@ -210,8 +210,32 @@
 .model-button:hover:not(:disabled) {
 	color: var(--text);
 }
-.model-search {
+.model-filters {
+	display: flex;
+	gap: 8px;
+	align-items: center;
 	margin-bottom: 16px;
+}
+.model-filters .model-search {
+	flex: 1;
+	min-width: 0;
+}
+.model-free-filter {
+	flex: none;
+}
+.model-free-filter[aria-pressed='true'] {
+	border-color: var(--brand);
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+.model-free {
+	margin-left: 8px;
+	padding: 1px 6px;
+	border: 1px solid var(--brand);
+	border-radius: 999px;
+	color: var(--accent-foreground);
+	font-size: 10px;
+	vertical-align: 1px;
 }
 .model-group h3 {
 	font-size: 13px;

@@ -40,6 +40,13 @@ type List = { ids: string[]; at: number; error?: string; of: string };
 /** fingerprint identifies what a model list depends on, so a provider whose endpoint or key changes is asked again. */
 const fingerprint = (p: Provider) => destination(p) + '\x00' + (p.key ?? '') + '\x00' + Object.keys(p.headers ?? {}).sort().map(k => k + '\x00' + p.headers![k]).join('\x00');
 
+/**
+ * isFree tells a model that costs nothing to call: priced at zero, OpenCode
+ * Zen's free tier, or a `:free` variant, which is how OpenRouter names them.
+ */
+const isFree = (p: Provider, i: Info) =>
+	(i.cost?.input === 0 && i.cost.output === 0) || (p.preset === 'opencode' && openCodeFree(i.id)) || i.id.endsWith(':free');
+
 /** nonChat are fragments of model IDs that do not converse. */
 const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'transcribe', 'rerank', 'audio', 'realtime', 'sora'];
 
@@ -130,6 +137,7 @@ export class ProviderRegistry implements Models {
 		if (pref.vision !== undefined) i.vision = pref.vision;
 		if (pref.efforts?.length) i.efforts = pref.efforts;
 		if (pref.cost) i.cost = pref.cost;
+		if (isFree(p, i)) i.free = true; else delete i.free;
 		return i;
 	}
 
