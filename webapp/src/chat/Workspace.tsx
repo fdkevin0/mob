@@ -342,7 +342,7 @@ export function Workspace({
 				setKeeping(on);
 				void setKeepsMessages(on);
 			}}
-			disconnect={disconnect}
+			disconnect={() => { setNavigation(false); disconnect(); }}
 		/>
 	);
 	const title = selected ? conversations.find((c) => c.id === selected.id)?.title || 'New conversation' : '';

@@ -63,12 +63,11 @@ served by the Worker in `worker/`:
   `/?signin=app`. With no local Mob or runner saved, `/app` runs Mob in the
   browser (see [Mob in the browser](#mob-in-the-browser)), so a signed-in
   visitor can start talking at once. **Connect a runner** in the runner menu
-  leaves the browser runner for the workspace without one, where visitors can
-  look around and type a message. This view keeps the workspace sidebar and
-  header layout, with connection and account controls below the conversation
-  list. The **Connect a runner** dialog opens when they do something that needs Mob, such as sending, starting a
-  conversation or opening plugins. The choice is remembered until **This
-  browser** is picked again. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
+  opens a dialog over the current workspace. The sidebar, selected conversation
+  and draft stay in place when it is closed or a connection fails. The browser
+  runner remains selected until another runner connects successfully.
+  Visitors without a connection can still look around and type a message;
+  actions that need Mob open the same dialog. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's
   account at Render or another host (see
   [Runners in the cloud](#runners-in-the-cloud)), and **Cloud runner**, which is

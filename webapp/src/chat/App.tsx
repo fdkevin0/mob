@@ -95,13 +95,14 @@ export function App() {
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
   const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
-  // Leaving the browser runner asks where Mob runs instead; its conversations stay in this browser.
+  // Keep the browser workspace mounted while choosing a runner; switch only after connecting.
   const leave = (from: Connection) => {
-    if (from.browser) { chooseBrowser(false); setChoice(undefined); setPrompting(true); }
+    if (from.browser) { setChoice(undefined); setError(''); setPrompting(true); return; }
     else { void forget(cacheScope(from)); if (from.runner) forgetRunner(); else clearToken(); }
     setConnection(undefined);
   };
-  if (connection) return <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
+  const workspaceView = connection && <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
+  if (connection && !isPublicWeb()) return workspaceView;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.mobDesktop) return <Splash label="Mob could not start."><h1 className="splash-title">Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></Splash>;
   // Connecting shows the calf rather than a form that is about to go away; the public web shows its lobby meanwhile.
@@ -112,7 +113,7 @@ export function App() {
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
     {error && <p role="alert">{error}</p>}</>;
   if (isPublicWeb()) return <>
-    <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setChoice(undefined); setPrompting(true); }} />
+    {connection ? workspaceView : <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setChoice(undefined); setPrompting(true); }} />}
     <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
       <DialogDescription className="dialog-description">Choose where Mob runs.</DialogDescription>
