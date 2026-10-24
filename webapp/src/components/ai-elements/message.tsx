@@ -2,7 +2,8 @@
 import type { UIMessage } from "ai";
 import type { ComponentProps, HTMLAttributes } from "react";
 import { memo } from "react";
-import { Streamdown } from "streamdown";
+import { CodeBlockCopyButton, Streamdown } from "streamdown";
+import { code } from "@streamdown/code";
 import { cn } from "./utils";
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -41,11 +42,12 @@ export const MessageContent = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-
+const plugins = { code };
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
+      plugins={plugins}
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
@@ -56,3 +58,25 @@ export const MessageResponse = memo(
 );
 
 MessageResponse.displayName = "MessageResponse";
+
+export const JsonResponse = memo(({ value }: { value: unknown }) => {
+  const json = JSON.stringify(value, null, 2);
+  if (json === undefined) return null;
+  // Bound parsing and token DOM work, including inside collapsed tool details.
+  if (json.length > 20_000 || json.split("\n", 301).length > 300) {
+    return (
+      <div className="my-4 min-w-0 rounded-xl border border-border bg-sidebar p-2">
+        <div className="flex justify-end"><CodeBlockCopyButton code={json} /></div>
+        <pre
+          aria-label="Tool JSON"
+          tabIndex={0}
+          className="max-h-[400px] overflow-auto whitespace-pre rounded-md border border-border bg-background p-4 font-mono text-sm"
+        >{json}</pre>
+      </div>
+    );
+  }
+  // JSON escapes newlines inside strings, so embedded fences cannot close this block.
+  return <MessageResponse mode="static">{"```json\n" + json + "\n```"}</MessageResponse>;
+});
+
+JsonResponse.displayName = "JsonResponse";
