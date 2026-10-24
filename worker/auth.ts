@@ -53,7 +53,9 @@ export function createAuth(env: Env, origin: string) {
 			// Provider tokens are kept encrypted: the Cloudflare one spends the visitor's account.
 			encryptOAuthTokens: true,
 			// Connecting happens only from a signed-in account page, never by matching emails.
-			accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: true, trustedProviders: [] },
+			// Cloudflare never says the email is verified, so connecting it from there must
+			// trust it; with implicit linking off, that trust applies to nothing else.
+			accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: true, trustedProviders: ['github', 'cloudflare'] },
 		},
 		advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] } },
 		telemetry: { enabled: false },
