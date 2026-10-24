@@ -162,10 +162,10 @@ export function Workspace({
 		const since = viewing.current;
 		setError('');
 		// A cached conversation shows at once; its thread reloads the latest messages as it opens.
-		const cached = cache.current.get(id);
+		// Either way it supersedes a conversation still loading, so switching ends here.
+		const cached = cache.current.get(id) ?? (id === selected?.id ? selected.snapshot : undefined);
+		setSwitching(!cached);
 		if (cached) return show(id, cached, replace);
-		if (id === selected?.id) return show(id, selected.snapshot, replace);
-		setSwitching(true);
 		try {
 			// What this browser kept also shows at once, even while Mob cannot be reached.
 			const snapshot = (await readSnapshot(scope, id)) ?? (await load(id));

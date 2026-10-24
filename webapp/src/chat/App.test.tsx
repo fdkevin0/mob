@@ -420,6 +420,35 @@ it('opens Token usage while a command is on its way, and holds other conversatio
   expect(window.location.hash).toBe('#/usage');
 });
 
+it('frees the sidebar when the open conversation is chosen again while another is still loading', async () => {
+  window.history.replaceState(null, '', '/');
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  let releaseTwo!: () => void;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }, { id: 'two', title: 'Other' }, { id: 'three', title: 'Third' }]);
+    const id = url.match(/\/conversations\/(\w+)$/)?.[1];
+    const snapshot = () => Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' });
+    if (id === 'two') return new Promise<Response>(resolve => { releaseTwo = () => resolve(snapshot()); });
+    if (id) return snapshot();
+    return Response.json({});
+  }));
+  render(<App />);
+  await screen.findByText('reply in one');
+  const button = (name: string) => within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', { name }) as HTMLButtonElement;
+  fireEvent.click(button('Other'));
+  await waitFor(() => expect(releaseTwo).toBeDefined());
+  await waitFor(() => expect(button('Third').disabled).toBe(true));
+  fireEvent.click(button('Existing'));
+  releaseTwo();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(window.location.hash).toBe('#/c/one');
+  expect(button('Third').disabled).toBe(false);
+  expect(button('Other').disabled).toBe(false);
+  expect((screen.getAllByRole('button', { name: 'New conversation' })[0] as HTMLButtonElement).disabled).toBe(false);
+  window.history.replaceState(null, '', '/');
+});
+
 it('keeps a page open that was chosen while a conversation was still loading, and opens the conversation behind it', async () => {
   window.history.replaceState(null, '', '/');
   window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
