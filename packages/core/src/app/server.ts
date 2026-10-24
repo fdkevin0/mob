@@ -10,7 +10,7 @@ import { encode, type Event } from '../chat/events';
 import type { Running } from '../chat/running';
 import type { Entry } from '../chat/search';
 import { newID } from '../chat/sql';
-import { TransferError, type Store, type Transfer } from '../chat/store';
+import { isConversationID, TransferError, type Store, type Transfer } from '../chat/store';
 import type { Tool } from '../chat/tools';
 import { publicProvider } from '../provider/provider';
 import type { ProviderRegistry } from '../provider/registry';
@@ -61,6 +61,8 @@ export type ServerOptions = {
 const pairingLifetime = 5 * 60_000;
 const chatBody = 8 << 20;
 const transferBody = 64 << 20;
+// titleLimit is how long a title an owner gives a conversation may be.
+const titleLimit = 200;
 const eventsHeartbeat = 25_000;
 
 const bearer = (header: string | null, token: string) => {
@@ -265,9 +267,23 @@ export class Server extends ConversationService {
 		});
 		r.handle('POST /api/conversations', () => json(200, s.store.create()));
 		r.handle('GET /api/conversations/{id}', (_, p) => {
+			// A conversation a client named but has not said anything in yet is empty until its first message.
+			if (!s.store.exists(p.id) && isConversationID(p.id)) return json(200, { messages: [], active: false, model: s.providers.default() });
 			// A client showing the snapshot must not offer a decision on an approval that has expired.
 			s.store.expireApprovals(p.id);
 			return json(200, { messages: s.store.history(p.id).map(m => ({ id: m.id, role: m.role, parts: m.parts, metadata: m.metadata })), active: s.isActive(p.id), model: s.model(p.id) });
+		});
+		r.handle('POST /api/conversations/{id}/rename', async (req, p) => {
+			const input = await body<{ title?: unknown }>(req, 4 << 10, ['title']);
+			const title = typeof input.title === 'string' ? input.title.replace(/\s+/g, ' ').trim() : '';
+			if (!title || [...title].length > titleLimit) throw new HTTPError(400, `A title has 1 to ${titleLimit} characters.`);
+			s.store.rename(p.id, title);
+			return json(200, { id: p.id, title });
+		});
+		r.handle('POST /api/conversations/{id}/delete', (_, p) => {
+			if (s.isActive(p.id)) throw new HTTPError(409, 'Mob is still replying in this conversation; stop it before deleting the conversation.');
+			s.store.remove(p.id);
+			return json(200, { deleted: true });
 		});
 		r.handle('GET /api/usage', (_, __, url) => {
 			// days limits the report to the last whole days, today included; 0 or none covers everything.

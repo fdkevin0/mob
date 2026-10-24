@@ -135,6 +135,11 @@ export async function writeSnapshot(scope: string, id: string, snapshot: Snapsho
 	});
 }
 
+/** forgetSnapshot removes the messages kept for a conversation, as when it was deleted. */
+export async function forgetSnapshot(scope: string, id: string) {
+	await remove((entry) => entry.kind === 'snapshot' && entry.id === id, scope);
+}
+
 /** forget removes everything kept for a Mob, as when this browser signs out of it. */
 export async function forget(scope: string) {
 	forgotten.add(scope);

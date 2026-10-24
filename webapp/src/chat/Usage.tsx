@@ -176,9 +176,13 @@ function Report({ report, open, held }: { report: UsageReport; open: (id: string
 					{report.top.map((c) => (
 						<tr key={c.id}>
 							<th scope="row">
-								<button type="button" className="usage-link" disabled={held?.(c.id)} onClick={() => open(c.id)}>
-									{c.title || 'Untitled'}
-								</button>
+								{c.deleted ? (
+									<span className="usage-deleted">Deleted conversation</span>
+								) : (
+									<button type="button" className="usage-link" disabled={held?.(c.id)} onClick={() => open(c.id)}>
+										{c.title || 'Untitled'}
+									</button>
+								)}
 								{c.agent && <span className="usage-agent">task · {c.agent}</span>}
 							</th>
 							<td>{tokens(c.totalTokens)}</td>

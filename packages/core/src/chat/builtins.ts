@@ -64,7 +64,10 @@ export function builtins(s: ConversationService): Command[] {
 			name: 'list', usage: '/list', summary: 'List conversations', clients: browsing,
 			run: async call => {
 				let b = '| Conversation | ID |\n| --- | --- |\n';
-				for (const c of s.store.list()) {
+				// The conversation the command came from is listed, even before anything was said in it.
+				const list = s.store.list();
+				if (!list.some(c => c.id === call.conversationId)) list.unshift(...s.store.list(true).filter(c => c.id === call.conversationId));
+				for (const c of list) {
 					let title = cell(c.title);
 					if (c.id === call.conversationId) title = '**' + title + '** (current)';
 					b += `| ${title} | \`${c.id}\` |\n`;

@@ -54,6 +54,13 @@ export class StaleApproval extends Error {
 }
 export const isStaleApproval = (e: unknown) => e instanceof StaleApproval;
 
+/** Conflict is a change the conversation's state does not allow now. */
+export class Conflict extends Error {}
+
+/** conversationID is the form of the IDs Mob gives conversations, which a client may also choose for a new one. */
+const conversationID = /^[0-9a-f]{32}$/;
+export const isConversationID = (id: string) => conversationID.test(id);
+
 export type Fact = { id: string; conversationId: string; text: string; owner: boolean };
 export type Grant = { id: string; conversationId: string; tool: string; scope: string; created: number };
 
@@ -97,7 +104,7 @@ export type Usage = {
 export type ModelUsageRow = { model: string } & Usage;
 export type UsageSummary = Usage & { turns: number; models: ModelUsageRow[] };
 export type DayUsage = { date: string } & Usage;
-export type TopConversation = { id: string; title: string; agent?: string } & Usage & { turns: number };
+export type TopConversation = { id: string; title: string; agent?: string; deleted?: boolean } & Usage & { turns: number };
 export type UsageReport = UsageSummary & { since: number; firstDay: string; lastDay: string; conversations: number; days: DayUsage[]; top: TopConversation[] };
 
 export const zeroUsage = (): Usage => ({ totalTokens: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, durationMs: 0, requests: 0 });
@@ -194,8 +201,45 @@ export class Store {
 		return c;
 	}
 
-	list(): Conversation[] {
-		return this.db.all<{ id: string; title: string; updated_at: number }>('SELECT id,title,updated_at FROM conversations ORDER BY updated_at DESC,id').map(r => ({ id: r.id, title: r.title, updatedAt: r.updated_at }));
+	/** list is the conversations, most recent first; unless all is set, one nothing was said in yet is left out, as it has nothing to show. */
+	list(all = false): Conversation[] {
+		return this.db.all<{ id: string; title: string; updated_at: number }>(`SELECT id,title,updated_at FROM conversations c${all ? '' : ' WHERE EXISTS(SELECT 1 FROM messages m WHERE m.conversation_id=c.id)'} ORDER BY updated_at DESC,id`).map(r => ({ id: r.id, title: r.title, updatedAt: r.updated_at }));
+	}
+
+	/**
+	 * ensure makes sure conversation id exists, creating it when a client named a new one: a client
+	 * starts a conversation by sending its first message under an ID it chose, so none is left empty.
+	 */
+	ensure(id: string) {
+		if (this.exists(id)) return;
+		if (!isConversationID(id)) throw new NotFound();
+		this.db.run("INSERT OR IGNORE INTO conversations(id,title,updated_at) VALUES(?,'New conversation',?)", id, Date.now());
+	}
+
+	/** rename gives conversation id a title of its owner's choosing. */
+	rename(id: string, title: string) {
+		if (!this.db.run('UPDATE conversations SET title=? WHERE id=?', title, id).changes) throw new NotFound();
+		this.changes.conversation(id, true);
+	}
+
+	/**
+	 * remove deletes conversation id and what was said in it: messages, decisions, schedules and remembered approvals.
+	 * Facts the owner approved apply to every conversation, so they stay; the usage ledger keeps the tokens spent.
+	 * A conversation of a coding agent's task, or one that started tasks, stays with the agent tree.
+	 */
+	remove(id: string) {
+		if (!this.exists(id)) throw new NotFound();
+		if (this.db.get('SELECT 1 FROM tasks WHERE conversation_id=? OR parent_id=?', id, id)) throw new Conflict('This conversation belongs to coding agents’ work, which Agents shows; it stays with them.');
+		this.db.transaction(() => {
+			for (const table of ['approvals', 'messages', 'schedules', 'grants']) this.db.run(`DELETE FROM ${table} WHERE conversation_id=?`, id);
+			this.db.run('DELETE FROM memories WHERE conversation_id=? AND NOT owner', id);
+			// Owner-approved facts keep applying; they say where they were saved as the conversation that saved them did.
+			if (this.db.get('SELECT 1 FROM memories WHERE conversation_id=?', id)) this.db.run("UPDATE conversations SET title='',model='',summary='',summary_through='' WHERE id=?", id);
+			else this.db.run('DELETE FROM conversations WHERE id=?', id);
+		});
+		const timer = this.timers.get(id);
+		if (timer) { clearTimeout(timer); this.timers.delete(id); }
+		this.changes.conversation(id, true);
 	}
 
 	/** waiting lists the conversations with a tool call awaiting the owner's decision. */
@@ -545,6 +589,8 @@ export class Store {
  LEFT JOIN conversations c ON c.id=u.conversation_id LEFT JOIN tasks t ON t.conversation_id=u.conversation_id
  WHERE u.created_at>=? GROUP BY u.conversation_id ORDER BY SUM(u.input+u.output) DESC LIMIT ?`, since, top)) {
 			const c: TopConversation = { id: row.id, title: row.title, ...usageOf(row), turns: row.turns };
+			// A deleted conversation's tokens stay counted, though it no longer opens.
+			if (!row.title) c.deleted = true;
 			if (row.agent) c.agent = row.agent;
 			report.top.push(c);
 		}

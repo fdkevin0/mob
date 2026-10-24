@@ -175,6 +175,71 @@
 	display: flex;
 	flex-shrink: 0;
 }
+/* Each row carries a menu to rename or delete it, shown where the pointer or focus is, on the open one, and always on touch. */
+.conversation-row {
+	position: relative;
+}
+.conversation-more {
+	position: absolute;
+	top: 50%;
+	right: 3px;
+	width: 28px;
+	height: 28px;
+	min-height: 28px;
+	transform: translateY(-50%);
+	opacity: 0;
+}
+.conversation-row:is(:hover, :focus-within, [data-current]) .conversation-more,
+.conversation-more[data-state='open'] {
+	opacity: 1;
+}
+.conversation-row:is(:hover, :focus-within, [data-current]) .conversation-link,
+.conversation-row:has(.conversation-more[data-state='open']) .conversation-link {
+	padding-right: 36px;
+}
+@media (hover: none) {
+	.conversation-more {
+		opacity: 1;
+	}
+	.conversation-link {
+		padding-right: 36px;
+	}
+}
+.conversation-rename {
+	width: 100%;
+	height: 34px;
+	padding: 0 9px;
+	border: 1px solid var(--line-hover);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	font-size: 13.5px;
+	outline: none;
+}
+.runner-menu .ui-menu-item.danger {
+	color: var(--destructive);
+}
+.runner-menu .ui-menu-item.danger[data-highlighted] {
+	background: color-mix(in srgb, var(--destructive) 12%, transparent);
+}
+.runner-menu .ui-menu-item.danger[data-disabled] {
+	opacity: 0.45;
+}
+.btn.danger,
+.btn.danger:hover:not(:disabled) {
+	color: var(--destructive);
+	background: color-mix(in srgb, var(--destructive) 12%, transparent);
+	border-color: color-mix(in srgb, var(--destructive) 40%, transparent);
+	box-shadow: none;
+}
+.btn.danger:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--destructive) 20%, transparent);
+}
+.usage-deleted {
+	color: var(--muted-foreground);
+	font-style: italic;
+}
 .conversation-mark.waiting {
 	color: var(--wait);
 }

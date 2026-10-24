@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { isPublicWeb, type Connection, type Conversation } from './api';
 import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
@@ -21,12 +21,15 @@ import {
 	HomeIcon,
 	InfoIcon,
 	KeyIcon,
+	MoreIcon,
 	MoveIcon,
 	PlugIcon,
 	RaisedHandIcon,
+	RenameIcon,
 	RunnerIcon,
 	SearchIcon,
 	SwitchIcon,
+	TrashIcon,
 	UserIcon,
 } from './icons';
 
@@ -72,6 +75,8 @@ export function Sidebar({
 	open,
 	prefetch,
 	show,
+	rename,
+	remove,
 	provider,
 	move,
 	limits,
@@ -91,6 +96,9 @@ export function Sidebar({
 	open: (id: string) => void;
 	prefetch: (id: string) => void;
 	show: (view: View) => void;
+	/** rename gives a conversation a title; remove asks to delete one. */
+	rename: (id: string, title: string) => void;
+	remove: (conversation: Conversation) => void;
 	/** provider, move and limits open their dialogs; each is offered only where the Mob has it. */
 	provider?: () => void;
 	move?: () => void;
@@ -145,31 +153,16 @@ export function Sidebar({
 					<section key={g.label} aria-label={g.label}>
 						<h2 className="conversation-group">{g.label}</h2>
 						{g.conversations.map((c) => (
-							<Button
-								variant="ghost"
-								className="conversation-link"
+							<Row
 								key={c.id}
-								aria-current={view === 'chat' && selected === c.id ? 'page' : undefined}
+								conversation={c}
+								current={view === 'chat' && selected === c.id}
 								disabled={locked && selected !== c.id}
-								onClick={() => open(c.id)}
-								onPointerEnter={() => prefetch(c.id)}
-								onFocus={() => prefetch(c.id)}
-							>
-								<span className="conversation-title">{c.title}</span>
-								{c.waiting ? (
-									<span className="conversation-mark waiting" title="Waiting for your approval">
-										<RaisedHandIcon />
-										<span className="sr-only">Waiting for your approval</span>
-									</span>
-								) : (
-									c.active && (
-										<span className="conversation-mark running" title="Replying">
-											<span className="run-dot" />
-											<span className="sr-only">Replying</span>
-										</span>
-									)
-								)}
-							</Button>
+								open={() => open(c.id)}
+								prefetch={() => prefetch(c.id)}
+								rename={(title) => rename(c.id, title)}
+								remove={() => remove(c)}
+							/>
 						))}
 					</section>
 				))}
@@ -238,6 +231,102 @@ export function Sidebar({
 				</DropdownMenuContent>
 			</DropdownMenu>
 		</>
+	);
+}
+
+/** Row is one conversation in the list, with a menu to rename or delete it; renaming edits the title in place. */
+function Row({
+	conversation: c,
+	current,
+	disabled,
+	open,
+	prefetch,
+	rename,
+	remove,
+}: {
+	conversation: Conversation;
+	current: boolean;
+	disabled: boolean;
+	open: () => void;
+	prefetch: () => void;
+	rename: (title: string) => void;
+	remove: () => void;
+}) {
+	const [editing, setEditing] = useState(false);
+	const field = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		if (editing) field.current?.select();
+	}, [editing]);
+	if (editing) {
+		const save = () => {
+			const title = field.current?.value.replace(/\s+/g, ' ').trim() ?? '';
+			setEditing(false);
+			if (title && title !== c.title) rename(title);
+		};
+		return (
+			<form
+				className="conversation-row editing"
+				onSubmit={(e) => {
+					e.preventDefault();
+					save();
+				}}
+			>
+				<input
+					ref={field}
+					className="conversation-rename"
+					aria-label="Conversation title"
+					defaultValue={c.title}
+					maxLength={200}
+					onBlur={save}
+					onKeyDown={(e) => {
+						if (e.key === 'Escape') setEditing(false);
+					}}
+				/>
+			</form>
+		);
+	}
+	return (
+		<div className="conversation-row" data-current={current || undefined}>
+			<Button
+				variant="ghost"
+				className="conversation-link"
+				aria-current={current ? 'page' : undefined}
+				disabled={disabled}
+				onClick={open}
+				onPointerEnter={prefetch}
+				onFocus={prefetch}
+			>
+				<span className="conversation-title">{c.title}</span>
+				{c.waiting ? (
+					<span className="conversation-mark waiting" title="Waiting for your approval">
+						<RaisedHandIcon />
+						<span className="sr-only">Waiting for your approval</span>
+					</span>
+				) : (
+					c.active && (
+						<span className="conversation-mark running" title="Replying">
+							<span className="run-dot" />
+							<span className="sr-only">Replying</span>
+						</span>
+					)
+				)}
+			</Button>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button variant="ghost" className="icon-button conversation-more" aria-label={`More for ${c.title}`} title="Rename or delete">
+						<MoreIcon />
+					</Button>
+				</DropdownMenuTrigger>
+				{/* The title field takes the focus a closing menu would give back to this button. */}
+				<DropdownMenuContent className="runner-menu conversation-menu" align="start" sideOffset={4} onCloseAutoFocus={(e) => e.preventDefault()}>
+					<Item icon={<RenameIcon />} label="Rename" onSelect={() => setEditing(true)} />
+					{/* Mob refuses to delete a conversation while it replies there. */}
+					<DropdownMenuItem className="ui-menu-item danger" disabled={c.active} onSelect={remove}>
+						<TrashIcon /> Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		</div>
 	);
 }
 

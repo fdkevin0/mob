@@ -108,7 +108,9 @@ export class ConversationService {
 			throw new CommandError(400, 'invalid conversation, text, request ID, or approval');
 		}
 		if (a?.remember && !input.owner) throw new CommandError(403, 'only the owner of this Mob can remember approvals');
-		this.store.history(input.id);
+		// A first message starts the conversation it names; a decision is only ever made in one that exists.
+		if (a) this.store.history(input.id);
+		else this.store.ensure(input.id);
 		this.store.expireApprovals(input.id);
 		const delegate = this.delegated(input.id);
 		if (delegate && !input.owner) throw new CommandError(403, 'only the owner of this Mob can work with its coding agents');

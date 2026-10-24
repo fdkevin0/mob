@@ -57,6 +57,13 @@ export class MobClient {
 	openConversation(id: string) {
 		return this.request<Snapshot>(`/conversations/${id}`);
 	}
+	/** renameConversation gives a conversation the owner's title; deleteConversation deletes it and what was said in it. */
+	renameConversation(id: string, title: string) {
+		return this.request<{ id: string; title: string }>(`/conversations/${id}/rename`, { title });
+	}
+	deleteConversation(id: string) {
+		return this.request<{ deleted: boolean }>(`/conversations/${id}/delete`, {});
+	}
 	/** exportConversation and importConversation copy a conversation from one Mob to another. */
 	async exportConversation(id: string) {
 		return this.request<Transfer>(`/conversations/${id}/export`);

@@ -127,6 +127,8 @@ export type TopConversation = {
   id: string;
   title: string;
   agent?: string;
+  /** deleted is set for a conversation that was deleted; its tokens stay counted. */
+  deleted?: boolean;
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;

@@ -205,10 +205,12 @@ try {
 		'request',
 		{ v: 1, session, id: crypto.randomUUID(), seq: 0, final: true },
 		{
+			// An import makes a conversation the list shows, which an empty new one is not.
 			method: 'POST',
-			path: '/api/conversations',
+			path: '/api/conversations/import',
 			headers: {},
-			body: '{}',
+			body: JSON.stringify({ v: 1, title: 'Replayed', model: '', summary: '', summaryThrough: '', facts: [], usage: [],
+				messages: [{ id: 'replayed', role: 'user', parts: JSON.stringify([{ type: 'text', text: 'once' }]), status: 'complete', error: '', model: '', usage: '', kind: '' }] }),
 			expires: Date.now() + 30000,
 		},
 	);
