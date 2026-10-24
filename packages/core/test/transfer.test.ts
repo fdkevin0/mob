@@ -28,6 +28,18 @@ test('a conversation moves to another Mob and back with its transcript, facts an
 	a.close(); b.close();
 });
 
+test('a moved tool result keeps its output but not the workspace file it was saved to', () => {
+	const s = open();
+	const output = 'x'.repeat(30_000);
+	const parts = [{ type: 'tool-read', toolCallId: 't1', state: 'output-available', input: {}, output, outputFile: '/workspace/.mob/outputs/source.txt' }];
+	const moved = s.importConversation({ v: 1, title: 'read', model: '', summary: '', summaryThrough: '', facts: [], usage: [],
+		messages: [{ id: newID(), role: 'assistant', parts: JSON.stringify(parts), status: 'complete', error: '', model: 'demo/echo', usage: '', kind: '' }] });
+	const [part] = s.history(moved.id)[0].parts as Record<string, unknown>[];
+	expect(part.output).toBe(output);
+	expect('outputFile' in part).toBe(false);
+	s.close();
+});
+
 test('a conversation waiting on an approval or a reply does not move', async () => {
 	const s = open();
 	const c = s.create();

@@ -20,6 +20,10 @@ const bind = (params: Value[]): Bind => params.map(v => typeof v === 'boolean' ?
 export function openWasm(db: OO1): SQL {
 	const all = <T>(sql: string, params: Value[]) => db.exec(sql, { bind: bind(params), rowMode: 'object', returnValue: 'resultRows' }) as T[];
 	let depth = 0;
+	// rollback undoes a failed transaction; an error of its own must not hide the one that caused it.
+	const rollback = (level: number, name: string) => {
+		try { db.exec(level ? `ROLLBACK TO ${name}; RELEASE ${name}` : 'ROLLBACK'); } catch { /* SQLite may have rolled back already */ }
+	};
 	return {
 		exec: sql => { db.exec(sql); },
 		run: (sql, ...params) => { db.exec(sql, { bind: bind(params) }); return { changes: db.changes() }; },
@@ -27,18 +31,17 @@ export function openWasm(db: OO1): SQL {
 		all: <T>(sql: string, ...params: Value[]) => all<T>(sql, params),
 		// As bun:sqlite does, a transaction inside another is a savepoint.
 		transaction: fn => {
-			const name = 'mob_' + depth;
-			db.exec(depth ? `SAVEPOINT ${name}` : 'BEGIN');
-			depth++;
+			const level = depth, name = 'mob_' + level;
+			db.exec(level ? `SAVEPOINT ${name}` : 'BEGIN');
+			depth = level + 1;
 			try {
-				const result = fn();
-				depth--;
-				db.exec(depth ? `RELEASE ${name}` : 'COMMIT');
+				let result;
+				try { result = fn(); } catch (e) { rollback(level, name); throw e; }
+				// A failed COMMIT or RELEASE leaves the transaction open, so it is rolled back too.
+				try { db.exec(level ? `RELEASE ${name}` : 'COMMIT'); } catch (e) { rollback(level, name); throw e; }
 				return result;
-			} catch (e) {
-				depth--;
-				db.exec(depth ? `ROLLBACK TO ${name}; RELEASE ${name}` : 'ROLLBACK');
-				throw e;
+			} finally {
+				depth = level;
 			}
 		},
 		close: () => db.close(),

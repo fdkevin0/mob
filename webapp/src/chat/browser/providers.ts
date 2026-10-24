@@ -30,7 +30,9 @@ export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch
 		let listError = '';
 		try { listed = await registry.fetch(p, AbortSignal.timeout(20_000)); } catch (e) { listError = (e as Error).message; }
 		const fallback = [preferred[p.id], preset?.default].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
-		const model = named?.trim().replace(new RegExp('^' + p.id + '/'), '') || fallback;
+		// A vendor's own ID wins, as OpenRouter's openrouter/auto does; otherwise a Mob reference loses its provider prefix.
+		const typed = named?.trim() ?? '';
+		const model = (listed.includes(typed) ? typed : typed.startsWith(p.id + '/') ? typed.slice(p.id.length + 1) : typed) || fallback;
 		// A vendor that lists nothing may still answer, so a named model saves without its list.
 		if (!model) throw new HTTPError(502, `Could not list ${preset?.name ?? 'the provider'}’s models${listError ? ': ' + listError : ''}. Check the key and URL, or name a model.`);
 		registry.update(f => {

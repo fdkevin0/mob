@@ -50,3 +50,11 @@ it('turns an OpenRouter sign-in into a key and routes to openrouter/auto', async
 	expect(registry.providers().providers[0]).toEqual({ id: 'openrouter', preset: 'openrouter', key: 'sk-or-1' });
 	expect((await post('openrouter', { code: 'c2' })).status).toBe(400);
 });
+
+it('keeps a model ID the vendor lists even when it starts with the provider name', async () => {
+	const { registry, save } = setup(Response.json({ data: [{ id: 'anthropic/claude-x' }, { id: 'openrouter/auto' }] }));
+	await save({ preset: 'openrouter', key: 'sk-or', model: 'openrouter/auto' });
+	expect(registry.default()).toBe('openrouter/openrouter/auto');
+	await save({ preset: 'openrouter', key: 'sk-or', model: 'openrouter/anthropic/claude-x' });
+	expect(registry.default()).toBe('openrouter/anthropic/claude-x');
+});

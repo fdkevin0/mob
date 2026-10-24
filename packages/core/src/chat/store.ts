@@ -278,7 +278,7 @@ export class Store {
 				const id = this.hasRequest(m.id) || ids.has(m.id) ? newID() : m.id;
 				ids.set(m.id, id);
 				const [status, error] = m.status === 'streaming' ? ['interrupted', 'The reply was still being written when the conversation moved.'] : [m.status, m.error];
-				this.db.run('INSERT INTO messages(id,conversation_id,role,parts,status,error,model,usage,kind) VALUES(?,?,?,?,?,?,?,?,?)', id, c.id, m.role, m.parts, status, error, m.model, m.usage, m.kind);
+				this.db.run('INSERT INTO messages(id,conversation_id,role,parts,status,error,model,usage,kind) VALUES(?,?,?,?,?,?,?,?,?)', id, c.id, m.role, withoutFiles(m.parts), status, error, m.model, m.usage, m.kind);
 			}
 			// A summary is kept only while the message it runs through came along.
 			if (t.summary && ids.has(t.summaryThrough)) this.db.run('UPDATE conversations SET summary=?,summary_through=? WHERE id=?', t.summary, ids.get(t.summaryThrough)!, c.id);
@@ -632,4 +632,17 @@ export class Store {
 	}
 	/** deliveryAccepted: a receipt is durable even when processing or sending fails. */
 	deliveryAccepted(id: string) { return !!this.delivery(id); }
+}
+
+// A tool result saved to a file names it in the conversation's workspace,
+// which does not move with the conversation. The full output does, so an
+// imported part drops the file and the model reads the output itself.
+function withoutFiles(parts: string): string {
+	const list = JSON.parse(parts) as Record<string, unknown>[];
+	if (!list.some(p => p && typeof p === 'object' && 'outputFile' in p)) return parts;
+	return JSON.stringify(list.map(p => {
+		if (!p || typeof p !== 'object' || !('outputFile' in p)) return p;
+		const { outputFile: _, ...rest } = p;
+		return rest;
+	}));
 }

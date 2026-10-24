@@ -32,3 +32,12 @@ test('the API answers a turn on sqlite-wasm', async () => {
 	await server.close();
 	store.close();
 });
+
+test('a failed commit rolls back and the next transaction still works', () => {
+	const db = memory();
+	db.exec('PRAGMA foreign_keys=ON; CREATE TABLE p(id PRIMARY KEY); CREATE TABLE c(p REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED)');
+	expect(() => db.transaction(() => { db.run('INSERT INTO c VALUES(?)', 1); })).toThrow('FOREIGN KEY');
+	expect(db.all('SELECT * FROM c')).toEqual([]);
+	db.transaction(() => db.transaction(() => { db.run('INSERT INTO p VALUES(?)', 1); db.run('INSERT INTO c VALUES(?)', 1); }));
+	expect(db.all('SELECT * FROM c')).toEqual([{ p: 1 }]);
+});
