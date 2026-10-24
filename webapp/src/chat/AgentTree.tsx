@@ -3,7 +3,6 @@ import type { Changes } from '@mob/client';
 import { api, type Connection } from './api';
 import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '../components/brand/Logo';
-import { Button } from '../components/ui/button';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
 import { tokens } from './Usage';
 import {
@@ -494,7 +493,6 @@ export function AgentTree({
 	connection,
 	changes,
 	open,
-	close,
 	browser,
 }: {
 	connection: Connection;
@@ -503,7 +501,6 @@ export function AgentTree({
 	/** changes, while live, replaces refreshing on a timer: the tree reloads when something changed. */
 	changes?: Changes;
 	open: (conversationId: string) => void;
-	close: () => void;
 }) {
 	const [nodes, setNodes] = useState<AgentNode[]>();
 	const [error, setError] = useState('');
@@ -596,11 +593,10 @@ export function AgentTree({
 		});
 
 	return (
-		<section className="agents" aria-label="Agents">
-			<header className="agents-header">
-				<h1>
-					<SparkIcon /> Agents
-				</h1>
+		<section className="page" aria-label="Agents">
+			<header className="view-header">
+				<div className="view-header-inner wide agents-header">
+				<h1>Agents</h1>
 				<div className="agents-summary">
 					<span>
 						{all.length} {all.length === 1 ? 'agent' : 'agents'}
@@ -614,10 +610,9 @@ export function AgentTree({
 						</strong>
 					)}
 				</div>
-				<Button variant="outline" className="small agents-back" onClick={close}>
-					Back to chat
-				</Button>
+				</div>
 			</header>
+			<div className="agents">
 			{error && (
 				<div className="error" role="alert">
 					{error}
@@ -642,6 +637,7 @@ export function AgentTree({
 						<Subtree key={b.node.conversationId} branch={b} depth={0} open={open} collapsed={collapsed} toggle={toggle} act={act} />
 					))}
 				</ul>
+			</div>
 			</div>
 		</section>
 	);

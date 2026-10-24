@@ -258,7 +258,11 @@ export class Server extends ConversationService {
 			const f = s.providers.providers();
 			return json(200, { default: f.default ?? '', providers: f.providers.map(publicProvider) });
 		});
-		r.handle('GET /api/conversations', () => json(200, s.store.list()));
+		r.handle('GET /api/conversations', () => {
+			// The list says which conversations are replying or waiting for a decision, so a client can mark them.
+			const waiting = s.store.waiting();
+			return json(200, s.store.list().map(c => ({ ...c, active: s.isActive(c.id), waiting: waiting.has(c.id) })));
+		});
 		r.handle('POST /api/conversations', () => json(200, s.store.create()));
 		r.handle('GET /api/conversations/{id}', (_, p) => {
 			// A client showing the snapshot must not offer a decision on an approval that has expired.

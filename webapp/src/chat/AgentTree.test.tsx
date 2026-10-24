@@ -80,7 +80,7 @@ it('nests tasks under who started them and times each branch', () => {
 it('shows cards, filters what needs the owner and opens a conversation', async () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json(nodes)));
 	const open = vi.fn();
-	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={open} close={() => {}} />);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={open} />);
 	expect(await screen.findByText('5 agents')).toBeTruthy();
 	// What the agents used shows on their cards and adds up in the header.
 	expect(screen.getByText('$0.290 · 12k tokens')).toBeTruthy();
@@ -117,7 +117,7 @@ it('decides, stops and instructs from the cards', async () => {
 			return Response.json(nodes);
 		}),
 	);
-	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
 	const copy = (await screen.findByText('input: {"command":"npm test"}')).closest('article')!;
 	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Always allow' }));
 	await waitFor(() => expect(calls[0]).toEqual(['/api/conversations/c-copy/decide', { id: 'a1', approved: true, remember: 'always' }]));
@@ -145,7 +145,7 @@ it('keeps an instruction that failed to send, and approves only what it shows wh
 			init?.method === 'POST' ? Response.json({ error: 'the agent is still starting; try again shortly' }, { status: 409 }) : Response.json(long),
 		),
 	);
-	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
 	const copy = (await screen.findByText('input: {"command":"npm test"}')).closest('article') as HTMLElement;
 	expect(within(copy).queryByRole('button', { name: 'Approve' })).toBeNull();
 	expect(within(copy).queryByRole('button', { name: 'Always allow' })).toBeNull();
@@ -173,7 +173,7 @@ it('keeps refreshing while changes arrive faster than a second apart', async () 
 				return () => {};
 			},
 		} as unknown as import('@mob/client').Changes;
-		render(<AgentTree connection={{ url: 'http://localhost', token: 't' }} changes={changes} open={() => {}} close={() => {}} />);
+		render(<AgentTree connection={{ url: 'http://localhost', token: 't' }} changes={changes} open={() => {}} />);
 		await vi.advanceTimersByTimeAsync(10);
 		const first = reads.length;
 		for (let i = 0; i < 20; i++) {
@@ -192,7 +192,7 @@ it('marks agents that only read another task’s worktree', async () => {
 		'fetch',
 		vi.fn(async () => Response.json([...nodes, reader])),
 	);
-	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
 	const card = (await screen.findByText('Read-only')).closest('article') as HTMLElement;
 	expect(within(card).getByText(/mob · mob\/build/).getAttribute('title')).toContain('without changing it');
 });
@@ -203,7 +203,7 @@ it('shows how an agent said its work ended', async () => {
 		'fetch',
 		vi.fn(async () => Response.json([...nodes, reviewer])),
 	);
-	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} close={() => {}} />);
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
 	const outcome = (await screen.findByText('Needs rework')).closest('p') as HTMLElement;
 	expect(outcome.dataset.outcome).toBe('rework');
 	expect(within(outcome).getByText('Retries never stop')).toBeTruthy();

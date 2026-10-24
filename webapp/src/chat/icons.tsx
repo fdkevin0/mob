@@ -124,3 +124,90 @@ export const MessageIcon = () => (
 		<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 	</Icon>
 );
+export const ComposeIcon = () => (
+	<Icon>
+		<path d="M12 20h9" />
+		<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+	</Icon>
+);
+export const MenuIcon = () => (
+	<Icon size={20}>
+		<path d="M4 6h16M4 12h16M4 18h10" />
+	</Icon>
+);
+export const AgentsIcon = () => (
+	<Icon>
+		<rect x="3" y="3" width="7" height="7" rx="1.5" />
+		<rect x="14" y="3" width="7" height="7" rx="1.5" />
+		<rect x="3" y="14" width="7" height="7" rx="1.5" />
+		<path d="M17.5 14v7M14 17.5h7" />
+	</Icon>
+);
+export const ChartIcon = () => (
+	<Icon>
+		<path d="M3 3v18h18" />
+		<path d="m7 15 4-4 3 3 5-6" />
+	</Icon>
+);
+export const KeyIcon = () => (
+	<Icon>
+		<circle cx="7.5" cy="15.5" r="4.5" />
+		<path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l2 2" />
+	</Icon>
+);
+export const PlugIcon = () => (
+	<Icon>
+		<path d="M12 22v-5M9 8V2M15 8V2" />
+		<path d="M18 8H6v4a6 6 0 0 0 12 0Z" />
+	</Icon>
+);
+export const MoveIcon = () => (
+	<Icon>
+		<path d="M5 12h14M13 6l6 6-6 6" />
+	</Icon>
+);
+export const InfoIcon = () => (
+	<Icon>
+		<circle cx="12" cy="12" r="9" />
+		<path d="M12 16v-4M12 8h.01" />
+	</Icon>
+);
+export const HomeIcon = () => (
+	<Icon>
+		<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" />
+	</Icon>
+);
+export const UserIcon = () => (
+	<Icon>
+		<circle cx="12" cy="8" r="4" />
+		<path d="M4 21a8 8 0 0 1 16 0" />
+	</Icon>
+);
+export const RunnerIcon = () => (
+	<Icon>
+		<rect x="2" y="3" width="20" height="14" rx="2" />
+		<path d="M8 21h8M12 17v4" />
+	</Icon>
+);
+export const BrowserIcon = () => (
+	<Icon>
+		<circle cx="12" cy="12" r="9" />
+		<path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+	</Icon>
+);
+export const SwitchIcon = () => (
+	<Icon>
+		<path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16" />
+	</Icon>
+);
+export const ChevronsIcon = () => (
+	<Icon size={14}>
+		<path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+	</Icon>
+);
+export const RaisedHandIcon = () => (
+	<Icon size={14}>
+		<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" />
+		<path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+	</Icon>
+);

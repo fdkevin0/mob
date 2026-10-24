@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Connection } from './api';
 import type { DayUsage, UsageReport } from './contracts';
-import { Logo } from '../components/brand/Logo';
-import { Button } from '../components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -53,7 +51,7 @@ export function fillDays(days: DayUsage[], first: string, last: string): DayUsag
 	return list;
 }
 
-export function Usage({ connection, close, open }: { connection: Connection; close: () => void; open: (id: string) => void }) {
+export function Usage({ connection, open }: { connection: Connection; open: (id: string) => void }) {
 	const [period, setPeriod] = useState<number>(30);
 	const [report, setReport] = useState<UsageReport>();
 	const [error, setError] = useState('');
@@ -70,16 +68,13 @@ export function Usage({ connection, close, open }: { connection: Connection; clo
 	}, [connection, period]);
 
 	return (
-		<main className="plugins usage">
-			<header className="plugins-header">
-				<div>
-					<Logo size={24} />
-					<h1>Usage</h1>
+		<section className="page" aria-label="Token usage">
+			<header className="view-header">
+				<div className="view-header-inner wide">
+					<h1>Token usage</h1>
 				</div>
-				<Button variant="outline" onClick={close}>
-					Back to chat
-				</Button>
 			</header>
+			<div className="plugins usage">
 			<Tabs value={String(period)} onValueChange={(v) => setPeriod(Number(v))}>
 				<TabsList aria-label="Period">
 					{periods.map((p) => (
@@ -101,7 +96,8 @@ export function Usage({ connection, close, open }: { connection: Connection; clo
 			) : (
 				<Report report={report} open={open} />
 			)}
-		</main>
+			</div>
+		</section>
 	);
 }
 

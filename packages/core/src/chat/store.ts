@@ -198,6 +198,11 @@ export class Store {
 		return this.db.all<{ id: string; title: string; updated_at: number }>('SELECT id,title,updated_at FROM conversations ORDER BY updated_at DESC,id').map(r => ({ id: r.id, title: r.title, updatedAt: r.updated_at }));
 	}
 
+	/** waiting lists the conversations with a tool call awaiting the owner's decision. */
+	waiting(): Set<string> {
+		return new Set(this.db.all<{ conversation_id: string }>("SELECT DISTINCT conversation_id FROM approvals WHERE status='pending' AND expires_at>=?", Date.now()).map(r => r.conversation_id));
+	}
+
 	exists(id: string) { return !!this.db.get('SELECT id FROM conversations WHERE id=?', id); }
 
 	history(id: string): Message[] {
@@ -324,7 +329,8 @@ export class Store {
 			this.db.run('INSERT INTO approvals(id,conversation_id,message_id,tool_call_id,input,expires_at) VALUES(?,?,?,?,?,?)', id, conversationID, m.id, callID, JSON.stringify(input ?? null), Date.now() + 3600_000);
 			this.db.run('UPDATE messages SET parts=? WHERE id=?', JSON.stringify(m.parts), m.id);
 		});
-		this.changes.conversation(conversationID, false);
+		// Whether a conversation waits for a decision is part of the list.
+		this.changes.conversation(conversationID, true);
 		this.scheduleExpiry(conversationID);
 		return id;
 	}
@@ -363,7 +369,7 @@ export class Store {
 			}
 			return d;
 		});
-		this.changes.conversation(conversationID, false);
+		this.changes.conversation(conversationID, true);
 		return d;
 	}
 
@@ -414,7 +420,7 @@ export class Store {
 			}
 			return rows.length;
 		});
-		if (expired) this.changes.conversation(conversationID, false);
+		if (expired) this.changes.conversation(conversationID, true);
 	}
 
 	// scheduleExpiry arms the conversation's timer for its earliest pending

@@ -18,14 +18,14 @@ import { Dialog, DialogTrigger } from '../components/ui/dialog';
 import { api, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, SpinnerIcon, StopIcon } from './icons';
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, SpinnerIcon, StopIcon } from './icons';
 
 export function Thread({
 	connection,
 	id,
 	initial,
 	title,
-	onBusy,
+	onDispatching,
 	onChanged,
 	onAction,
 	onLeave,
@@ -37,7 +37,8 @@ export function Thread({
 	id: string;
 	initial: Snapshot;
 	title?: string;
-	onBusy: (busy: boolean) => void;
+	/** onDispatching hears whether a message, command or decision is still on its way to Mob. */
+	onDispatching?: (dispatching: boolean) => void;
 	onChanged: () => void;
 	onAction: (action: Action) => void;
 	onLeave?: (snapshot: Snapshot) => void;
@@ -64,7 +65,14 @@ export function Thread({
 		cancel,
 		commandResult,
 		dismissCommand,
-	} = useConversation({ connection, id, initial, onBusy, onChanged, onAction, onLeave, changes });
+		dispatching,
+	} = useConversation({ connection, id, initial, onChanged, onAction, onLeave, changes });
+	useEffect(() => {
+		onDispatching?.(dispatching);
+		return () => onDispatching?.(false);
+	}, [dispatching, onDispatching]);
+	// The header says when Mob replies here or waits for a decision, as the sidebar does.
+	const waiting = messages.some((m) => m.parts.some((p) => isToolUIPart(p) && p.state === 'approval-requested'));
 	useEffect(() => {
 		if (!draft) return;
 		setInput(draft);
@@ -97,8 +105,21 @@ export function Thread({
 	}, [input]);
 	return (
 		<>
-			<header className="thread-header">
-				<h1 className="thread-title">{title || 'New conversation'}</h1>
+			<header className="view-header thread-header">
+				<div className="view-header-inner">
+					<h1 className="thread-title">{title || 'New conversation'}</h1>
+					{waiting ? (
+						<span className="thread-status waiting">
+							<RaisedHandIcon /> Waiting for you
+						</span>
+					) : (
+						busy && (
+							<span className="thread-status running">
+								<span className="run-dot" /> Replying
+							</span>
+						)
+					)}
+				</div>
 			</header>
 			<ChatConversation className="conversation">
 				<ConversationContent className="conversation-content">

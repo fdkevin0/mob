@@ -7,13 +7,12 @@ import { CloudflarePlugin } from './plugins/CloudflarePlugin';
 import { WeChatILinkPlugin } from './plugins/WeChatILinkPlugin';
 import { errorText } from './plugins/shared';
 import { Deliveries } from './plugins/Deliveries';
-import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 const tabs = ['email', 'telegram', 'wechat_ilink', 'cloudflare', 'deliveries'] as const;
 
-export function Plugins({ connection, close }: { connection: Connection; close: () => void }) {
+export function Plugins({ connection }: { connection: Connection }) {
   const [config, setConfig] = useState<Configs>();
   const [tab, setTab] = useState<keyof Configs | 'deliveries'>('email');
   const [status, setStatus] = useState('');
@@ -49,16 +48,13 @@ export function Plugins({ connection, close }: { connection: Connection; close: 
   }, [connection]);
 
   return (
-    <main className="plugins">
-      <header className="plugins-header">
-        <div>
-          <Logo size={24} />
+    <section className="page" aria-label="Plugins & cloud services">
+      <header className="view-header">
+        <div className="view-header-inner wide">
           <h1>Plugins & cloud services</h1>
         </div>
-        <Button variant="outline" onClick={close}>
-          Back to chat
-        </Button>
       </header>
+      <div className="plugins">
       <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
         <TabsList aria-label="Connections">
           {tabs.map(name => (
@@ -89,6 +85,7 @@ export function Plugins({ connection, close }: { connection: Connection; close: 
         )}
         <TabsContent value="deliveries"><Deliveries connection={connection} /></TabsContent>
       </Tabs>
-    </main>
+      </div>
+    </section>
   );
 }

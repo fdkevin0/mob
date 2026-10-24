@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { chooseFromRunnerMenu } from './runnerMenu.test-helper';
 import { cacheScope, forget, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
 const connection = { url: 'http://127.0.0.1:8787', token: 'saved' };
@@ -70,7 +71,7 @@ it('shows only titles until messages are kept, and forgets them on disconnect', 
 	render(<App />);
 	expect(await screen.findByRole('button', { name: 'Kept title' })).toBeTruthy();
 	expect(screen.queryByText('kept reply')).toBeNull();
-	screen.getByRole('button', { name: /disconnect/i }).click();
+	await chooseFromRunnerMenu('Disconnect');
 	await screen.findByLabelText('Local access token');
 	const { readList } = await import('./localCache');
 	await vi.waitFor(async () => expect(await readList(cacheScope(connection))).toBeUndefined());
@@ -84,7 +85,7 @@ it('forgets kept messages on disconnect even as the open conversation hands them
 	);
 	render(<App />);
 	await screen.findByText('kept reply');
-	screen.getByRole('button', { name: /disconnect/i }).click();
+	await chooseFromRunnerMenu('Disconnect');
 	await screen.findByLabelText('Local access token');
 	await new Promise((resolve) => setTimeout(resolve, 50));
 	expect(await readList(scope)).toBeUndefined();
@@ -119,6 +120,6 @@ it('does not restore a kept running turn as running, so an offline workspace sta
 	render(<App />);
 	await screen.findByText('reply one');
 	await new Promise((resolve) => setTimeout(resolve, 50));
-	expect((screen.getByRole('button', { name: /disconnect/i }) as HTMLButtonElement).disabled).toBe(false);
+	expect((screen.getAllByRole('button', { name: 'New conversation' })[0] as HTMLButtonElement).disabled).toBe(false);
 	expect((screen.getByRole('button', { name: 'Title two' }) as HTMLButtonElement).disabled).toBe(false);
 });

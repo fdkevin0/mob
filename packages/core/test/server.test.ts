@@ -27,3 +27,21 @@ test('models list which ones are free', async () => {
 	const [group] = await registry.list('');
 	expect(group.models.map(m => [m.id, m.free ?? false])).toEqual([['meta/llama:free', true], ['openai/gpt-x', false]]);
 });
+
+test('the conversation list marks conversations waiting for a decision, and says when that changes', async () => {
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const token = 't'.repeat(64);
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token, version: 'test' });
+	const call = (method: string, path: string, body?: unknown) =>
+		server.fetch(new Request('http://127.0.0.1:8787' + path, { method, body: body && JSON.stringify(body), headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }));
+	const listed: string[] = [];
+	store.changes.subscribe(c => { if (c.list && c.conversation) listed.push(c.conversation); });
+	const { id } = await (await call('POST', '/api/conversations')).json() as { id: string };
+	const other = store.create();
+	listed.length = 0;
+	await (await call('POST', '/api/chat', { id, text: '/remember 喜欢中文', requestId: 'r'.repeat(20) })).text();
+	expect(listed.filter(c => c === id).length).toBeGreaterThanOrEqual(3);
+	const list = await (await call('GET', '/api/conversations')).json() as { id: string; active: boolean; waiting: boolean }[];
+	expect(list.find(c => c.id === id)).toMatchObject({ active: false, waiting: true });
+	expect(list.find(c => c.id === other.id)).toMatchObject({ active: false, waiting: false });
+});

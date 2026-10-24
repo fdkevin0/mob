@@ -5,6 +5,7 @@ vi.mock('./Runners', () => ({ Runners: () => null }));
 // The browser runner's worker is replaced by whatever fetch a test stubs.
 vi.mock('./browser/browser', () => ({ startBrowser: async () => ({ persistent: true }), browserFetch: (input: string, init?: RequestInit) => fetch(input, init) }));
 import { App } from './App';
+import { chooseFromRunnerMenu } from './runnerMenu.test-helper';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.mobDesktop; localStorage.clear(); sessionStorage.clear(); });
 
@@ -61,16 +62,16 @@ it('signs in once with the link mob open prints and keeps the token across visit
   });
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
-  await screen.findByRole('button', { name: /disconnect/i });
+  await screen.findByRole('button', { name: /settings and runner/ });
   expect(window.location.hash).toBe('#/c/new');
   expect(localStorage.getItem('mob-token')).toBe('paired');
   const authorized = fetchMock.mock.calls.filter(([url]) => !url.endsWith('/pairing/claim'));
   expect(authorized.every(([, options]) => new Headers(options?.headers).get('Authorization') === 'Bearer paired')).toBe(true);
   cleanup();
   render(<App />);
-  await screen.findByRole('button', { name: /disconnect/i });
+  await screen.findByRole('button', { name: /settings and runner/ });
   expect(claims).toBe(1);
-  screen.getByRole('button', { name: /disconnect/i }).click();
+  await chooseFromRunnerMenu('Disconnect');
   await screen.findByLabelText('Local access token');
   expect(localStorage.getItem('mob-token')).toBeNull();
 });
@@ -103,9 +104,9 @@ it('signs out an open workspace when the token is rotated', async () => {
     return Response.json({ messages: [], active: false, model: 'demo/echo' });
   }));
   render(<App />);
-  await screen.findByRole('button', { name: /disconnect/i });
+  await screen.findByRole('button', { name: /settings and runner/ });
   rotated = true;
-  screen.getByRole('button', { name: /new/i }).click();
+  screen.getAllByRole('button', { name: /new/i })[0].click();
   await screen.findByLabelText('Local access token');
   expect(localStorage.getItem('mob-token')).toBeNull();
 });
@@ -118,10 +119,10 @@ it('ignores a late 401 for a token that was already replaced', async () => {
     return Response.json({ messages: [], active: false, model: 'demo/echo' });
   }));
   render(<App />);
-  await screen.findByRole('button', { name: /disconnect/i });
+  await screen.findByRole('button', { name: /settings and runner/ });
   window.dispatchEvent(new CustomEvent('mob:unauthorized', { detail: 'old' }));
   await new Promise(resolve => setTimeout(resolve, 20));
-  expect(screen.getByRole('button', { name: /disconnect/i })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /settings and runner/ })).toBeTruthy();
   expect(localStorage.getItem('mob-token')).toBe('replacement');
 });
 
@@ -135,10 +136,10 @@ it('keeps a replacement token another tab saved when this tab signs out', async 
     return Response.json({ messages: [], active: false, model: 'demo/echo' });
   }));
   render(<App />);
-  await screen.findByRole('button', { name: /disconnect/i });
+  await screen.findByRole('button', { name: /settings and runner/ });
   localStorage.setItem('mob-token', 'replacement');
   rotated = true;
-  screen.getByRole('button', { name: /new/i }).click();
+  screen.getAllByRole('button', { name: /new/i })[0].click();
   await screen.findByLabelText('Local access token');
   expect(localStorage.getItem('mob-token')).toBe('replacement');
 });
@@ -158,12 +159,12 @@ it('signs the public web in to local Mob with a mob open --web link and remember
   vi.stubGlobal('fetch', fetchMock);
   try {
     render(<App />);
-    await screen.findByRole('button', { name: /disconnect/i });
+    await screen.findByRole('button', { name: /settings and runner/ });
     expect(window.location.hash).toBe('#/c/new');
     expect(localStorage.getItem('mob-url')).toBe('http://127.0.0.1:9000');
     cleanup();
     render(<App />);
-    await screen.findByRole('button', { name: /disconnect/i });
+    await screen.findByRole('button', { name: /settings and runner/ });
     expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/pairing/claim'))).toHaveLength(1);
   } finally { vi.unstubAllEnvs(); }
 });
@@ -223,18 +224,18 @@ it('runs the public web in this browser until another runner is chosen', async (
   vi.stubGlobal('fetch', fetchMock);
   try {
     render(<App />);
-    await screen.findByText('History in this browser · stops with this tab', { exact: false });
+    await screen.findByRole('button', { name: 'This browser: settings and runner' });
     expect(screen.queryByRole('button', { name: 'Plugins & cloud services' })).toBeNull();
     const limits = await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
     expect(limits.textContent).toContain('Coding agents');
     fireEvent.click(within(limits).getByRole('button', { name: 'Got it' }));
     expect(screen.queryByRole('region', { name: 'What Mob in this browser cannot do' })).toBeNull();
     expect(localStorage.getItem('mob-browser-limits-seen')).toBe('1');
-    fireEvent.click(screen.getByRole('button', { name: 'What needs a runner' }));
+    await chooseFromRunnerMenu('What needs a runner');
     await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
     const token = localStorage.getItem('mob-browser-token');
     expect(token).toMatch(/^[0-9a-f]{64}$/);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Connect a runner' })[0]);
+    await chooseFromRunnerMenu('Connect a runner');
     const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
     expect(localStorage.getItem('mob-browser-off')).toBe('1');
     cleanup();
@@ -242,7 +243,7 @@ it('runs the public web in this browser until another runner is chosen', async (
     await screen.findAllByText('No runner connected');
     fireEvent.click(screen.getAllByRole('button', { name: 'Connect a runner' })[0]);
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /This browser/ }));
-    await screen.findByText('History in this browser · stops with this tab', { exact: false });
+    await screen.findByRole('button', { name: 'This browser: settings and runner' });
     expect(localStorage.getItem('mob-browser-off')).toBeNull();
     expect(localStorage.getItem('mob-browser-token')).toBe(token);
     expect(dialog).toBeTruthy();
@@ -275,7 +276,7 @@ it('opens the public web workspace without a runner and asks for one only when s
     fireEvent.click(within(dialog).getByRole('button', { name: /Your own runner/ }));
     fireEvent.change(within(dialog).getByLabelText('Local access token'), { target: { value: 'secret' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Open workspace' }));
-    await screen.findByRole('button', { name: /disconnect/i });
+    await screen.findByRole('button', { name: /settings and runner/ });
     expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('hello 草稿'));
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/new'))).toBe(true);
@@ -382,29 +383,35 @@ it('opens the conversation sheet and closes it after selecting a conversation', 
   expect(screen.getByRole('button', { name: 'Second chat' }).getAttribute('aria-current')).toBe('page');
 });
 
-it('keeps Token usage closed while a submitted command is dispatched, so the command still reaches chat', async () => {
+it('opens Token usage while a command is on its way, and holds other conversations until Mob has it', async () => {
+  window.history.replaceState(null, '', '/');
   window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
   let answer: (r: Response) => void = () => {};
   let chat: Record<string, unknown> | undefined;
   vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
     if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
     if (url.endsWith('/config')) return Promise.resolve(Response.json({ defaultModel: 'demo/echo', demo: false }));
-    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }]));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }, { id: 'two', title: 'Other' }]));
     if (url.endsWith('/commands/run')) return new Promise<Response>((resolve) => { answer = resolve; });
     if (url.endsWith('/chat')) { chat = JSON.parse(String(options?.body)); return Promise.resolve(new Response('', { status: 500 })); }
+    if (url.includes('/usage')) return Promise.resolve(Response.json({ totalTokens: 0, models: [], days: [], top: [] }));
     return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
   }));
   render(<App />);
   const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
   const usage = screen.getAllByRole('button', { name: 'Token usage' })[0] as HTMLButtonElement;
-  expect(usage.disabled).toBe(false);
+  // The list may be redrawn as it loads, so the button is looked up each time.
+  const other = () => screen.getByRole('button', { name: 'Other' }) as HTMLButtonElement;
   fireEvent.change(box, { target: { value: '/compact' } });
   fireEvent.submit(box.closest('form')!);
-  await waitFor(() => expect(usage.disabled).toBe(true));
+  // Leaving the conversation now could lose the command, but a page opens beside it.
+  await waitFor(() => expect(other().disabled).toBe(true));
+  expect(usage.disabled).toBe(false);
   fireEvent.click(usage);
-  expect(screen.queryByRole('heading', { name: 'Usage' })).toBeNull();
+  await screen.findByRole('heading', { name: 'Token usage' });
   answer(Response.json({ handled: false }));
   await waitFor(() => expect(chat).toBeDefined());
+  await waitFor(() => expect(other().disabled).toBe(false));
 });
 
 it('opens the conversation the address names and returns to cached conversations at once', async () => {
@@ -457,4 +464,28 @@ it('keeps the newest back or forward choice when an earlier one answers later', 
   expect(window.location.hash).toBe('#/c/one');
   expect(screen.queryByText('reply in two')).toBeNull();
   expect(screen.getByText('reply in one')).toBeTruthy();
+});
+
+it('opens the page the address names, with its conversation behind it, and goes back to the conversation', async () => {
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  window.history.replaceState(null, '', '/#/usage');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }]);
+    if (url.includes('/usage')) return Response.json({ totalTokens: 0, models: [], days: [], top: [] });
+    if (url.includes('/tasks')) return Response.json([]);
+    return Response.json({ messages: [{ id: 'm', role: 'assistant', parts: [{ type: 'text', text: 'kept reply' }] }], active: false, model: 'demo/echo' });
+  }));
+  render(<App />);
+  await screen.findByRole('heading', { name: 'Token usage' });
+  expect(window.location.hash).toBe('#/usage');
+  expect(screen.getAllByRole('button', { name: 'Token usage' })[0].getAttribute('aria-current')).toBe('page');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Agents' })[0]);
+  await screen.findByRole('heading', { name: 'Agents' });
+  expect(window.location.hash).toBe('#/agents');
+  fireEvent.click(screen.getByRole('button', { name: 'Existing' }));
+  await waitFor(() => expect(window.location.hash).toBe('#/c/one'));
+  expect(screen.queryByRole('heading', { name: 'Agents' })).toBeNull();
+  expect(screen.getByText('kept reply')).toBeTruthy();
+  window.history.replaceState(null, '', '/');
 });

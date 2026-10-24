@@ -13,6 +13,11 @@ export type ConversationState = {
 	messages: ChatMessage[];
 	streaming: boolean;
 	busy: boolean;
+	/**
+	 * dispatching is set until the service has taken a message, command or decision. Leaving the conversation
+	 * then could lose it; once the service has it, the turn goes on without this client.
+	 */
+	dispatching: boolean;
 	remoteBusy: boolean;
 	approvalBusy: boolean;
 	failure: string;
@@ -29,6 +34,7 @@ export class ConversationClient {
 	private readonly listeners = new Set<() => void>();
 	private state: ConversationState;
 	private running = false;
+	private deciding = false;
 	private following = false;
 	private followRetry = 0;
 	private recoveryFailure = '';
@@ -66,6 +72,7 @@ export class ConversationClient {
 			messages: initial.messages,
 			streaming: false,
 			busy: initial.active,
+			dispatching: false,
 			remoteBusy: initial.active,
 			approvalBusy: false,
 			failure: '',
@@ -153,7 +160,7 @@ export class ConversationClient {
 
 	private update(patch: Partial<ConversationState>) {
 		const streaming = this.chat.status === 'submitted' || this.chat.status === 'streaming';
-		this.state = { ...this.state, ...patch, streaming };
+		this.state = { ...this.state, ...patch, streaming, dispatching: this.running || this.deciding || this.chat.status === 'submitted' };
 		this.state.busy =
 			streaming ||
 			this.state.approvalBusy ||
@@ -374,6 +381,8 @@ export class ConversationClient {
 		this.update({ approvalBusy: true, failure: '' });
 		const controller = new AbortController();
 		this.approvalController = controller;
+		this.deciding = true;
+		this.update({});
 		try {
 			const stream = await this.transport.sendMessages({
 				chatId: this.options.id,
@@ -383,6 +392,8 @@ export class ConversationClient {
 				abortSignal: controller.signal,
 				body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined, remember: remember || undefined } },
 			});
+			this.deciding = false;
+			this.update({});
 			const baseline = (await this.options.client.openConversation(this.options.id)).messages.filter(
 				(m) => m.metadata?.status !== 'streaming',
 			);
@@ -394,6 +405,7 @@ export class ConversationClient {
 			if (!controller.signal.aborted) this.update({ failure: errorText(e) });
 		} finally {
 			this.approvalController = undefined;
+			this.deciding = false;
 			this.update({ approvalBusy: false });
 			if (this.active) {
 				void this.reload();

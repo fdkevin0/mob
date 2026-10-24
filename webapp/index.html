@@ -6,6 +6,9 @@
     <meta name="theme-color" content="#07080a" />
     <!-- Applies the saved or system colour scheme before the first paint; see src/theme/theme.ts. Its hash is in worker/index.ts. -->
     <script>(function(){var t;try{t=localStorage.getItem('starlight-theme')}catch(e){}var l=t==='light'||t!=='dark'&&matchMedia('(prefers-color-scheme: light)').matches,r=document.documentElement;r.dataset.theme=l?'light':'dark';r.classList.toggle('dark',!l);if(l)document.querySelector('meta[name="theme-color"]').setAttribute('content','#f4f3ee')})()</script>
+    <link rel="icon" type="image/png" sizes="32x32" href="/src/components/brand/favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" href="/src/components/brand/favicon.svg" />
+    <link rel="apple-touch-icon" href="/src/components/brand/apple-touch-icon.png" />
     <title>Mob</title>
   </head>
   <body>

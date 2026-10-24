@@ -22,6 +22,14 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   from the event after `Last-Event-ID`, and then follows it live. It answers 204
   when no turn is running. Any number of clients can follow one turn, and a
   client that leaves ends only its own stream.
+- `GET /api/conversations` marks each conversation `active` while a turn runs
+  and `waiting` while a tool call awaits the owner's decision. A turn starting
+  or ending, and an approval being requested, decided or expiring, publish a
+  list change on `/api/events`, so the web sidebar marks those conversations as
+  they change. Because the turn belongs to the service, the web workspace lets
+  the owner switch conversations or open a page while a reply streams; only
+  while a message, command or decision is still on its way to Mob
+  (`dispatching` in the client state) does it hold the other conversations.
 - The web UI and experimental TypeScript TUI use the same `@mob/client`
   conversation state and follow a running turn whenever a snapshot says one is
   active. The client reads the replay itself (`reconnectToStream` and
