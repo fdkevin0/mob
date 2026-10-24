@@ -767,6 +767,8 @@ test('a review squad', async () => {
 	const squad = h.tool('task_review');
 	for (const [input, want] of [
 		[{ task: work.id, aspects: ['style'] }, 'no aspect'],
+		[{ task: work.id, aspects: ['constructor'] }, 'no aspect'],
+		[{ task: work.id, aspects: ['__proto__'] }, 'no aspect'],
 		[{ task: work.id, aspects: ['correctness', 'tests', 'docs', 'hygiene'] }, 'at most 3'],
 		[{ task: work.id, agent: 'dsh' }, 'cannot work read-only'],
 		[{ task: 'nope' }, 'no task'],

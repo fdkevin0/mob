@@ -66,7 +66,7 @@ export function squadTool(svc: Service): Tool {
 			const picked: string[] = [];
 			for (let name of input.aspects?.length ? input.aspects : squadAspects) {
 				name = String(name).trim().toLowerCase();
-				if (!aspects[name]) throw new Error(`no aspect ${JSON.stringify(name)}`);
+				if (!Object.hasOwn(aspects, name)) throw new Error(`no aspect ${JSON.stringify(name)}`);
 				if (!picked.includes(name)) picked.push(name);
 			}
 			if (picked.length > subtaskActive) throw new Error(`at most ${subtaskActive} aspects at once`);
@@ -100,8 +100,8 @@ export async function startSquad(svc: Service, conversation: string, input: Requ
 	const started: { aspect: string; task: string }[] = [];
 	const failures: string[] = [];
 	for (const name of input.aspects) {
-		const focus = aspects[name];
-		if (!focus) continue;
+		if (!Object.hasOwn(aspects, name)) continue;
+		const focus = aspects[name]!;
 		let joined = '';
 		try {
 			svc.hub.reserve(t);
