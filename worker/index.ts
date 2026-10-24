@@ -2,10 +2,14 @@ import { configured, createAuth, type Env } from './auth';
 import { accountRunners, runnerTransport } from './runners';
 export { RunnerRelay } from './relay';
 
+// Every page runs one inline script, which applies the colour scheme before
+// the first paint (index.html, account.html, landing.html, demo.html).
+const themeScript = "'sha256-S6W4VqyCb8qKkLG/FDCsAHhGN7IBdaOVQRlaEQyTHX0='";
+
 // The landing page talks to this Worker (sign-in) and Turnstile.
 const landingPolicy = [
 	"default-src 'self'",
-	"script-src 'self' https://challenges.cloudflare.com",
+	`script-src 'self' ${themeScript} https://challenges.cloudflare.com`,
 	'frame-src https://challenges.cloudflare.com',
 	"connect-src 'self'",
 	"img-src 'self' data: https:",
@@ -20,6 +24,7 @@ const landingPolicy = [
 // The demo page replays recorded runs; it needs only its own files.
 const demoPolicy = [
 	"default-src 'self'",
+	`script-src 'self' ${themeScript}`,
 	"connect-src 'self'",
 	"img-src 'self' data:",
 	"style-src 'self' 'unsafe-inline'",
@@ -33,6 +38,7 @@ const demoPolicy = [
 // The account page talks only to this Worker's auth API.
 const accountPolicy = [
 	"default-src 'self'",
+	`script-src 'self' ${themeScript}`,
 	"connect-src 'self'",
 	"img-src 'self' data: https:",
 	"style-src 'self' 'unsafe-inline'",
@@ -46,6 +52,7 @@ const accountPolicy = [
 // The app reaches loopback Mob or its own encrypted runner relay.
 const appPolicy = [
 	"default-src 'self'",
+	`script-src 'self' ${themeScript}`,
 	"connect-src 'self' http://127.0.0.1:* http://localhost:*",
 	"img-src 'self' data: blob: https:",
 	"style-src 'self' 'unsafe-inline'",

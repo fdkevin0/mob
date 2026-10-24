@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Voxel } from './model';
 import { paint, type Frame } from './project';
 import { createVoxelRenderer, type VoxelRenderer } from './gpu';
+import { onThemeApplied } from '../../theme/theme';
 
 type Props = {
 	scene: (time: number) => Voxel[];
@@ -61,7 +62,10 @@ export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, f
 			resize();
 			raf = requestAnimationFrame(loop);
 		});
-		return () => { gone = true; cancelAnimationFrame(raf); observer.disconnect(); seen.disconnect(); renderer?.destroy(); };
+		// The scene's colours follow the page's scheme; a still scene (reduced
+		// motion) is drawn again when it changes.
+		const unwatch = onThemeApplied(draw);
+		return () => { gone = true; cancelAnimationFrame(raf); unwatch(); observer.disconnect(); seen.disconnect(); renderer?.destroy(); };
 	}, [scene, frame, pixel, gpu, still, fps]);
 	return <canvas ref={ref} className={className} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} />;
 }

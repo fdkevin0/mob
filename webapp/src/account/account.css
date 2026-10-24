@@ -1,6 +1,6 @@
 .account-page { min-height: 100dvh; }
-.account-nav { display: flex; align-items: center; gap: 16px; max-width: 760px; margin: 0 auto; padding: 18px 28px; }
-.account-nav-actions { display: flex; gap: 8px; margin-left: auto; }
+.account-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; max-width: 760px; margin: 0 auto; padding: 18px 28px; }
+.account-nav-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-left: auto; }
 .account-main { max-width: 760px; margin: 0 auto; padding: 24px 28px 64px; display: flex; flex-direction: column; gap: 20px; }
 .account-main h1 { margin: 0 0 4px; font-size: 30px; font-weight: 560; letter-spacing: -0.03em; }
 .account-card { display: flex; flex-direction: column; gap: 14px; padding: 22px; border: 1px solid var(--line-strong); background: var(--panel); }
@@ -21,9 +21,9 @@
 .account-add { display: flex; }
 .account-add-row { display: flex; gap: 8px; align-items: center; }
 .account-add-row .ui-input { flex: 1; }
-.form-error { margin: 0; padding: 10px 12px; border-left: 2px solid var(--amber); background: #ffb6480d; color: #ffd393; font-size: 13px; line-height: 1.45; }
+.form-error { margin: 0; padding: 10px 12px; border-left: 2px solid var(--wait); background: color-mix(in srgb, var(--wait) 5%, transparent); color: color-mix(in srgb, var(--wait) 55%, var(--text)); font-size: 13px; line-height: 1.45; }
 .form-error .btn { margin-left: 8px; }
-.account-notice { margin: 0; padding: 10px 12px; border-left: 2px solid var(--lime); background: #c8f5600d; color: var(--lime); font-size: 13px; }
+.account-notice { margin: 0; padding: 10px 12px; border-left: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 5%, transparent); color: var(--ok); font-size: 13px; }
 
 @media (max-width: 640px) {
 	.account-nav, .account-main { padding-left: 16px; padding-right: 16px; }
@@ -31,5 +31,5 @@
 	.account-add-row { flex-direction: column; align-items: stretch; }
 	.account-item-actions { margin-left: -8px; width: 100%; }
 }
-.account-link { font-family: var(--mono); font-size: 13px; color: var(--lime); }
+.account-link { font-family: var(--mono); font-size: 13px; color: var(--brand); }
 .account-link:hover { text-decoration: underline; }

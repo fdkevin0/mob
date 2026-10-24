@@ -19,6 +19,17 @@
 	--amber: #ffb648;
 	--violet: #a894ff;
 	--white: #f4f6ef;
+	--text-soft: #d7dcd4;
+	--text-dim: #c5cbc3;
+	--line-hover: #ffffff33;
+	--overlay: #050607cc;
+	--sunken: #08090b;
+	--shadow: 1;
+	/* Roles: what you act on, an agent at work, waiting on you, done. */
+	--brand: var(--lime);
+	--run: var(--cyan);
+	--wait: var(--amber);
+	--ok: var(--lime);
 	--sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 	--background: var(--bg);
@@ -38,6 +49,43 @@
 	--input: var(--line-strong);
 	--ring: var(--lime);
 	--radius: 0px;
+}
+
+/* Every page can be light (see src/theme).
+ *
+ * Light is "paper": the dark theme's moss-tinted greys turned warm, close to
+ * the calf's cream, so the orange logo sits on it naturally. Lime stays the one
+ * brand colour: --primary keeps it as a bright fill (buttons, progress), while
+ * --lime, used for text, icons and rings on paper, deepens to olive so it reads.
+ * The status hues (cyan, amber, red, violet) drop to their deep ink tones for
+ * the same reason; tints of them come from color-mix, so they follow. */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #f4f3ee;
+	--panel: #fbfaf7;
+	--line: #e2e0d6;
+	--line-strong: #d2d0c4;
+	--text: #1a1c15;
+	--muted: #ebe9e1;
+	--muted-foreground: #696c60;
+	--faint: #696c60;
+	--lime: #4f7a0c;
+	--cyan: #0b6f7c;
+	--amber: #a35300;
+	--violet: #5d43c9;
+	--white: #1a1c15;
+	--text-soft: #2c2f25;
+	--text-dim: #43473b;
+	--line-hover: #1a1c1533;
+	--overlay: #2a2b2066;
+	--sunken: #ebe9e2;
+	--shadow: 0.3;
+	--primary: #bdec4f;
+	--primary-foreground: #141a04;
+	--secondary: #ebe9e1;
+	--accent: #4f7a0c12;
+	--destructive: #be3a2c;
+	--ring: #6a9c14;
 }
 
 @theme inline {

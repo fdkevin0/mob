@@ -4,6 +4,7 @@ import { Logo } from '../components/brand/Logo';
 import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { ThemePicker } from '../theme/ThemePicker';
 
 type Passkey = { id: string; name?: string | null; createdAt?: Date | string | null; backedUp: boolean; deviceType: string };
 type Linked = { id: string; providerId: string; createdAt: Date | string };
@@ -53,6 +54,7 @@ function Header() {
 		<header className="account-nav">
 			<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
 			<div className="account-nav-actions">
+				<ThemePicker />
 				<Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button>
 				<Button variant="ghost" className="small" onClick={() => { void authClient.signOut().finally(() => window.location.assign('/')); }}>Sign out</Button>
 			</div>

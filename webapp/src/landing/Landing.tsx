@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { SignIn } from './SignIn';
+import { ThemePicker } from '../theme/ThemePicker';
 import { Story } from './Story';
 
 const installs = {
@@ -58,6 +59,7 @@ export function Landing() {
 					<a href="/docs/">Docs</a>
 					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
 				</nav>
+				<ThemePicker className="nav-theme" />
 				<div className="nav-account">
 					{session.isPending ? <span className="nav-pending" aria-hidden="true" /> : user ? (
 						<div className="account">

@@ -35,13 +35,26 @@ function route(from: Spot, to: Spot): P[] {
 	return points.filter((p, i) => i === 0 || p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1]);
 }
 
-const palette = {
-	floorA: hex('#1b1f24'), floorB: hex('#181b20'), lane: hex('#21252b'), edge: hex('#14171b'),
-	wall: hex('#23272e'), wallTop: hex('#2c313a'), window: hex('#2b5560'),
+// The room itself follows the page's colour scheme; the furniture and the
+// calves look the same in both.
+const rooms = {
+	dark: {
+		floorA: hex('#1b1f24'), floorB: hex('#181b20'), lane: hex('#21252b'), edge: hex('#14171b'),
+		wall: hex('#23272e'), wallTop: hex('#2c313a'), window: hex('#2b5560'), post: hex('#3a4f57'), boothFloor: hex('#16262b'),
+	},
+	light: {
+		floorA: hex('#d9d5c8'), floorB: hex('#d2cec0'), lane: hex('#e2dfd4'), edge: hex('#c6c1b2'),
+		wall: hex('#c9c5b7'), wallTop: hex('#dedacd'), window: hex('#9ccbd2'), post: hex('#8fa3a8'), boothFloor: hex('#c4d8d8'),
+	},
+};
+type Theme = keyof typeof rooms;
+const pageTheme = (): Theme => (typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+let palette = {
+	...rooms.dark,
 	table: hex('#8a7a66'), tableEdge: hex('#6c5f50'), leg: hex('#3a4048'),
 	screen: hex('#0f1114'), board: hex('#d9dccf'), counter: hex('#4a3a30'), counterTop: hex('#6d5646'),
 	machine: hex('#b0413e'), steel: hex('#a7adb5'), coffee: hex('#5a3a26'), mug: hex('#f2efe8'),
-	glass: hex('#62e0ea'), post: hex('#3a4f57'), boothFloor: hex('#16262b'),
+	glass: hex('#62e0ea'),
 	sofa: hex('#3c4a7a'), sofaSeat: hex('#5b6bb0'), cushion: hex('#7d8bd0'), leaf: hex('#4f8f4a'), pot: hex('#6d5646'),
 };
 
@@ -225,13 +238,17 @@ class Office {
 	rand: () => number;
 	agents: Agent[] = [];
 	fixed: Voxel[];
+	theme: Theme;
+	readonly furniture: Voxel[];
 	notes: { x: number; y: number; color: number }[] = [];
 
 	constructor(readonly seed: number) {
 		this.rand = random(seed);
 		for (const s of [...bar, ...coffee, ...sofa, ...board, ...booth]) s.user = undefined;
 		const { voxels, seats } = layout(seed);
-		this.fixed = [...room(), ...kitchen(), ...voxels];
+		this.furniture = voxels;
+		this.theme = pageTheme();
+		this.fixed = this.build();
 		// Seat about seven calves in ten, on randomly chosen seats.
 		const free = [...seats];
 		const count = Math.round(seats.length * OCCUPANCY);
@@ -250,6 +267,11 @@ class Office {
 			errand: 'home', where: post, poseUntil: 0, spark: 0, deskBlock: 0, deskCupUntil: 0, leader: true, whipAt: 0, approvedAt: -9,
 		});
 		for (let n = 0; n < 5; n++) this.note();
+	}
+
+	build(): Voxel[] {
+		palette = { ...palette, ...rooms[this.theme] };
+		return [...room(), ...kitchen(), ...this.furniture];
 	}
 
 	note() {
@@ -497,10 +519,21 @@ const hands = (a: Agent): Vec => [a.at[0], 7, a.at[1]];
 const deskTop = (a: Agent): Vec => add([a.home.x, 0, a.home.z], rotate([0, 6, 4], a.home.facing));
 const OUTSIDE: Vec = [-16, 22, 44];
 
-const dimmed = (v: Voxel[], k: number): Voxel[] => v.map(p => [p[0], p[1], p[2], p[3] * k, p[4] * k, p[5] * k, p[6] * k, p[7]]);
+// What the spotlight dims the rest of the office towards: the night in dark,
+// the page's paper in light, so the office fades into the page either way.
+const backdrop: Record<Theme, RGB> = { dark: [0, 0, 0], light: hex('#f4f3ee') };
+// The renderers fade a voxel after lighting it (project.ts), so the dimmed
+// part of the office melts into the page instead of keeping grey sides.
+const dimmed = (v: Voxel[], k: number): Voxel[] => v.map(p => [p[0], p[1], p[2], p[3], p[4], p[5], p[6] * k, p[7], k]);
 // The dimmed floor, cached at a handful of levels so a fade costs nothing.
 const fixedDim = new Map<number, Voxel[]>();
 const floorAt = (k: number) => {
+	const theme = pageTheme();
+	if (theme !== office.theme) {
+		office.theme = theme;
+		office.fixed = office.build();
+		fixedDim.clear();
+	}
 	const level = Math.round(k * 20) / 20;
 	if (level >= 1) return office.fixed;
 	let v = fixedDim.get(level);
@@ -673,5 +706,5 @@ export function calfAt(x: number, y: number, width: number, height: number): Act
 // in the middle of the stage, under the title.
 export function officeFrame(width: number, height: number) {
 	const unit = Math.min(2.8, Math.max(1.6, Math.min(width / 260, height / 150)));
-	return { unit, x: width / 2, y: height * 0.54 - (SIZE / Math.sqrt(6)) * unit };
+	return { unit, x: width / 2, y: height * 0.54 - (SIZE / Math.sqrt(6)) * unit, backdrop: backdrop[pageTheme()] };
 }
