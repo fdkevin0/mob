@@ -38,14 +38,14 @@
 	],
 	"vars": {
 		"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
-		"CLOUDFLARE_SCOPES": "account-settings.read workers_ai.read workers_ai.write offline_access",
+		"CLOUDFLARE_SCOPES": "account-settings.read offline_access",
 		"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
 	},
 	"previews": {
 		"vars": {
 			"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
-			"CLOUDFLARE_SCOPES": "account-settings.read workers_ai.read workers_ai.write offline_access",
+			"CLOUDFLARE_SCOPES": "account-settings.read offline_access",
 			"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 			"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
 		},
