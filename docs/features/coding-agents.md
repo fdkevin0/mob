@@ -88,6 +88,8 @@ Owner-only tools:
   code and the last 32 KiB of its output. Every command asks for approval;
   Always allow covers the same command in the same project. A command still
   running after ten minutes is ended.
+- `task_review` asks the owner to approve a review squad for a finished task
+  (see Review squads below).
 
 `task_start` is offered while an agent's command (or `npx`) is installed, or
 once there is a project or task; the others once there is a project or task.
@@ -167,7 +169,44 @@ command), instead of the agent's own words. At most three reviews start on
 their own for one task while Mob runs. A task with no parent, one another
 task started (its agent checks it), one past its three reviews, or one whose
 conversation is busy or has no model gets the agent's words in a "Task done"
-notice as before. Failed tasks are not reviewed.
+notice as before. Failed tasks are not reviewed. The note names the round
+("review round 2 of 3"), so the model knows when sending more work is the
+last chance.
+
+### Review squads
+
+For a change that is more than trivial, the model may call `task_review`
+(task, optional aspects and agent) instead of reviewing everything itself.
+It asks the owner to approve a squad: up to three readers (see Readers
+below) of the task's worktree, one per aspect, started together. The
+aspects are `correctness` and `tests` by default, and `hygiene`, `docs` and
+`security` on request; the agent is Codex unless another agent that can read
+is named. Always allow covers squads in the same project with the same
+agent. A task still at work, a reader, or a task a squad is already
+reviewing cannot get one (two approvals decided together start one squad), and the reviewers count toward the task's
+sub-task limits.
+
+Each reviewer is told the branch, the task's title, its aspect and the
+commit the work began at, reviews committed and uncommitted changes without
+changing anything, and reports with `task_result` (see Results below):
+`passed`, or `rework` with findings by file and line, most severe first.
+A reviewer's own "Task done" notice is not sent.
+
+Once every reviewer has ended, their reports go to the conversation that
+asked for the squad rather than to the task's agent, without waiting for the
+task's other sub-tasks, whose summary still reaches the task's agent without
+the reviewers in it: a turn starts there,
+like a review, asking the model to check each finding with `task_diff` and
+`task_check`, drop those that do not hold, rank the rest P0 (breaks the
+build, loses data, opens a hole) to P3 (nit), and then either send the P0
+and P1 findings back to the same task's agent with `task_message`, unless
+it is the last round, or tell the owner whether the work is ready to merge.
+The owner gets one notice, "Task reviewed by N agents", with the model's
+conclusion. When the agent finishes the rework, the next review round
+starts as usual, so the loop ends after three rounds. When the conversation
+stays busy or has no model, the reports are added to it as a note and sent
+as a notice instead. Squads are kept in memory: a squad whose reviewers were
+stopped by a restart is not checked.
 
 ## Sub-tasks
 

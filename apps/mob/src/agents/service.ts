@@ -10,6 +10,7 @@ import { firstLine, git, slug, start, type Conn } from './process';
 import { preset, presets, readers, type Preset } from './presets';
 import { Session } from './session';
 import { review } from './review';
+import type { Squad } from './squad';
 import { Hub, settle } from './subtasks';
 import { tree } from './tree';
 
@@ -35,6 +36,12 @@ export class Service implements Delegate, Tasks {
 	reviews = new Map<string, number>();
 	/** hub is the MCP server for sub-tasks and results. */
 	readonly hub = new Hub(this);
+	/** squads are the review squads at work, by the ID of the task they review. */
+	readonly squads = new Map<string, Squad>();
+	/** reviewers are the tasks started as squads' reviewers, which report to their squad rather than to the task they review. */
+	readonly reviewers = new Set<string>();
+	/** launched, when set by a test, runs once a task's agent was handed its first prompt. */
+	launched?: (t: Task) => Promise<void> | void;
 
 	constructor(readonly store: Store, readonly conversations: ConversationService,
 		/** dir holds the tasks' worktrees, under worktrees/. */
@@ -94,6 +101,9 @@ export class Service implements Delegate, Tasks {
 			n.approvals = this.conversations.pending(t.conversationId);
 			if (!n.approvals.length) return;
 			n.text = '**Task waits for your decision:** ' + title;
+		} else if (t.status === taskReview && this.reviewers.has(t.id)) {
+			// A reviewer's report reaches the owner with its squad's.
+			return;
 		} else if (t.status === taskReview && turn.wrote()) {
 			// Mob's model checks the work first and tells the owner what it found.
 			if (this.review(t)) return;
@@ -219,21 +229,23 @@ export class Service implements Delegate, Tasks {
 	}
 
 	/** startReader starts a read-only task in the worktree and branch of task base, such as to review its work, and hands prompt to the agent. parent is the conversation that started it. */
-	async startReader(parent: string, base: Task, agent: string, title: string, prompt: string): Promise<Task> {
+	async startReader(parent: string, base: Task, agent: string, title: string, prompt: string, saved?: (t: Task) => void): Promise<Task> {
 		const a = preset(agent);
 		if (!a.readOnly) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
 		if (base.readOnly) throw new Error("a read-only task's worktree is another task's; share that task's instead");
 		title = title.trim() || firstLine(prompt, 60);
-		return this.launch({ project: base.project, agent: a.name, title, worktree: base.worktree, branch: base.branch, status: taskRunning, parent: parent || undefined, readOnly: true }, prompt);
+		return this.launch({ project: base.project, agent: a.name, title, worktree: base.worktree, branch: base.branch, status: taskRunning, parent: parent || undefined, readOnly: true }, prompt, saved);
 	}
 
-	/** launch saves task t and hands prompt to its agent. */
-	private async launch(t: Omit<Task, 'id' | 'conversationId' | 'createdAt' | 'updatedAt'>, prompt: string): Promise<Task> {
+	/** launch saves task t and hands prompt to its agent; saved, if set, is called with the task in between, so that its agent's turn, which may end before launch returns, finds what saved recorded. */
+	private async launch(t: Omit<Task, 'id' | 'conversationId' | 'createdAt' | 'updatedAt'>, prompt: string, saved?: (t: Task) => void): Promise<Task> {
 		const task = this.store.createTask(t);
+		saved?.(task);
 		try { await this.message(task.id, prompt); } catch (e) {
 			this.store.setTaskStatus(task.id, taskFailed);
 			throw e;
 		}
+		await this.launched?.(task);
 		return task;
 	}
 

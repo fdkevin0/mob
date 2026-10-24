@@ -95,6 +95,11 @@ class Fake implements Agent {
 			// Hands the rest to a sub-task through Mob's MCP server; subread has it try to edit this task's worktree.
 			const args = text.startsWith('subread ') ? { title: text.slice(8), prompt: 'edit', workspace: 'shared' } : { title: text.slice(4), prompt: 'hello' };
 			await this.text(id, await this.callMob('task_start', args));
+		} else if (text.startsWith('Review the work')) {
+			// A squad's reviewer: it finds something in the work it reads.
+			let out: string;
+			try { out = await this.callMob('task_result', { outcome: 'rework', summary: 'found a bug in ' + this.dir.split(sep).pop() }); } catch (e) { out = 'error: ' + (e as Error).message; }
+			await this.text(id, out);
 		} else if (text.startsWith('result ')) {
 			// Reports how its work ended through Mob's MCP server.
 			const outcome = text.slice(7);
@@ -740,3 +745,65 @@ test('tasks report how they ended', async () => {
 	expect([again.outcome, again.result]).toEqual([undefined, undefined]);
 });
 
+
+test('a review squad', async () => {
+	const seen: string[] = [];
+	const validator: llm.Model = {
+		ref: { provider: 'test', model: 'validator' } as llm.Ref,
+		info: { id: 'validator', name: 'validator', tools: true, known: false } as llm.Info,
+		async stream(req, emit) {
+			seen.push(req.messages[req.messages.length - 1]!.text);
+			await emit('text', 'P1: a bug; reworking.');
+			return { text: 'P1: a bug; reworking.', reasoning: '', signature: '', calls: [] };
+		},
+	};
+	const h = harness({ default: () => 'test/validator', resolve: () => validator, setDefault: () => validator.ref, list: async () => [] });
+	const origin = h.store.create();
+	await h.svc.addProject(h.repo, 'mob');
+	const work = await h.wait(await h.svc.startTask(origin.id, 'mob', '', 'Work', 'hello'));
+	// Mob's own review of the finished work ends first.
+	await h.until('the review did not end', () => seen.length > 0 && !h.conv.isActive(origin.id));
+	seen.length = 0;
+	const squad = h.tool('task_review');
+	for (const [input, want] of [
+		[{ task: work.id, aspects: ['style'] }, 'no aspect'],
+		[{ task: work.id, aspects: ['correctness', 'tests', 'docs', 'hygiene'] }, 'at most 3'],
+		[{ task: work.id, agent: 'dsh' }, 'cannot work read-only'],
+		[{ task: 'nope' }, 'no task'],
+	] as const) expect(squad.run(toolCall(input))).rejects.toThrow(want);
+	// A sub-task of the work's own waits for the owner meanwhile.
+	const helper = await h.wait(await h.svc.startTask(work.conversationId, 'mob', '', 'Helper', 'run'));
+	expect(helper.status).toBe('waiting');
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	// Each reviewer ends before the call that started it returns.
+	h.svc.launched = async r => {
+		if (r.readOnly) await h.until('a reviewer did not end', () => { const c = h.store.task(r.id)!; return c.status !== 'running' && c.status !== 'waiting' && !h.conv.isActive(c.conversationId); });
+	};
+	const input = JSON.stringify({ task: work.id, project: 'mob', agent: 'codex', aspects: ['correctness', 'tests'] });
+	const approve = () => squad.approved!({ conversationId: origin.id, approvalId: '', input, store: h.store, owner: true });
+	// Of two approvals decided together, one starts a squad.
+	const outs = await Promise.allSettled([approve(), approve()]);
+	expect(outs.map(o => o.status).sort()).toEqual(['fulfilled', 'rejected']);
+	const out = (outs.find(o => o.status === 'fulfilled') as PromiseFulfilledResult<{ reviewers: unknown[] }>).value;
+	expect(out.reviewers).toHaveLength(2);
+	// Once both reviewers end, Mob's model gets their reports, and the owner its conclusion.
+	await h.until('no squad notice', () => notices.length > 0 && !h.conv.isActive(origin.id));
+	expect(seen).toHaveLength(1);
+	expect(seen[0]).toContain('review squad for coding task ' + work.id);
+	expect(seen[0]!.split('Done, needs rework')).toHaveLength(3);
+	expect(['Review correctness: Work', 'Review tests: Work', 'found a bug in'].map(s => seen[0]!.includes(s))).toEqual([true, true, true]);
+	// One notice: the conclusion, not each reviewer's words.
+	expect(notices).toHaveLength(1);
+	expect(notices[0]!.text).toStartWith('**Task reviewed by 2 agents:** codex · Work');
+	expect(notices[0]!.text).toContain('P1: a bug');
+	// The reports went to Mob, not to the agent that did the work, without waiting for its own sub-task.
+	const told = () => h.store.history(work.conversationId).filter(m => m.role === 'user').map(textOf).find(t => t.startsWith('Automatic update from Mob'));
+	expect(told()).toBeUndefined();
+	// The squad is done, so another may start.
+	expect(h.svc.squads.has(work.id)).toBe(false);
+	// Once its own sub-task ends, the agent hears of it, and not of the reviewers.
+	await h.decide(helper, { approved: true });
+	const summary = await h.until('the worker was not told its sub-task ended', told);
+	expect([summary.includes('Helper'), summary.includes('Review correctness')]).toEqual([true, false]);
+});
