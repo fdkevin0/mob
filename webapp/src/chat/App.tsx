@@ -29,6 +29,8 @@ export function App() {
   const [starting, setStarting] = useState(true);
   // The public web opens the workspace without a runner; prompting shows how to connect one, and draft keeps what was typed meanwhile.
   const [prompting, setPrompting] = useState(false);
+  const connectionAttempt = useRef(0);
+  const closeConnection = () => { connectionAttempt.current++; setPrompting(false); setLoading(false); setError(''); };
   // The dialog first offers a choice of runner: the user's own one, or one deployed to their cloud account.
   const [choice, setChoice] = useState<'own' | 'cloud'>();
   const [draft, setDraft] = useState('');
@@ -89,12 +91,20 @@ export function App() {
   }, []);
   async function connect(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
+    const attempt = ++connectionAttempt.current;
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
     if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
-    try { await api(next, '/config'); saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); }
-    catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
+    try {
+      await api(next, '/config');
+      if (attempt !== connectionAttempt.current) return;
+      saveConnection(next); chooseBrowser(false); setConnection(next); closeConnection();
+    } catch (e) {
+      if (attempt === connectionAttempt.current) setError(reachText(next.url, e));
+    } finally {
+      if (attempt === connectionAttempt.current) setLoading(false);
+    }
   }
-  const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
+  const open = (next: Connection) => { setConnection(next); closeConnection(); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
   // Keep the browser workspace mounted while choosing a runner; switch only after connecting.
   const leave = (from: Connection) => {
     if (from.browser) { setChoice(undefined); setError(''); setPrompting(true); return; }
@@ -114,11 +124,11 @@ export function App() {
     {error && <p role="alert">{error}</p>}</>;
   if (isPublicWeb()) return <>
     {connection ? workspaceView : <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setChoice(undefined); setPrompting(true); }} />}
-    <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
+    <Dialog open={prompting} onOpenChange={show => { if (show) setPrompting(true); else closeConnection(); }}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
       <DialogDescription className="dialog-description">Choose where Mob runs.</DialogDescription>
       {choice ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setChoice(undefined); setError(''); }}>← Other runners</Button>{choice === 'cloud' ? <Runners connect={open} deploy /> : panel}</> : <div className="runner-choices">
-        <Button type="button" variant="outline" className="runner-choice" onClick={() => open(browserConnection())}><strong>This browser</strong><span>Start now, with nothing to install. Conversations stay in this browser; coding agents, the sandbox and channels need a runner.</span></Button>
+        <Button type="button" variant="outline" className="runner-choice" onClick={() => connection?.browser ? closeConnection() : open(browserConnection())}><strong>This browser</strong><span>Start now, with nothing to install. Conversations stay in this browser; coding agents, the sandbox and channels need a runner.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('own')}><strong>Your own runner</strong><span>Mob on this computer, or on another computer you pair. Conversations stay there.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('cloud')}><strong>Deploy to the cloud {hosts.filter(h => h.deployURL).map(h => <small key={h.id} className="host-mark"><h.Logo />{h.name}</small>)}</strong><span>Mob in your own Render account, on its free tier. No computer needs to stay on.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>

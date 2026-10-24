@@ -65,7 +65,9 @@ served by the Worker in `worker/`:
   visitor can start talking at once. **Connect a runner** in the runner menu
   opens a dialog over the current workspace. The sidebar, selected conversation
   and draft stay in place when it is closed or a connection fails. The browser
-  runner remains selected until another runner connects successfully.
+  runner remains selected until another runner connects successfully. Choosing
+  **This browser** again closes the dialog without reopening the conversation.
+  Closing the dialog discards any pending connection result.
   Visitors without a connection can still look around and type a message;
   actions that need Mob open the same dialog. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's
