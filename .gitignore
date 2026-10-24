@@ -6,9 +6,6 @@ dist/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-!webapp/dist/
-webapp/dist/*
-!webapp/dist/.gitkeep
 *.test
 webapp/dist-public/
 

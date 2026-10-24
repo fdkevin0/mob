@@ -9,7 +9,7 @@ const { values } = parseArgs({ options: { outfile: { type: 'string' }, target: {
 const root = resolve(import.meta.dir, '../../..');
 const dist = resolve(root, 'webapp/dist');
 if (!existsSync(resolve(dist, 'index.html'))) throw new Error('webapp/dist is empty; run bun run build first');
-const assets = [...new Glob('**/*').scanSync({ cwd: dist, onlyFiles: true })].filter(f => f !== '.gitkeep');
+const assets = [...new Glob('**/*').scanSync({ cwd: dist, onlyFiles: true })];
 // Each file is imported as a file, which a compiled executable embeds as it is.
 const web = assets.map((f, i) => `import f${i} from ${JSON.stringify(resolve(dist, f))} with { type: 'file' };`).join('\n') +
 	`\nexport const files: Record<string, string> = {${assets.map((f, i) => `${JSON.stringify('/' + f.replaceAll('\\', '/'))}: f${i}`).join(', ')}};\n`;

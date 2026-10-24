@@ -12,10 +12,7 @@ export default defineConfig(({ mode }) => ({
 	base: '/',
 	resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
 	publicDir: mode === 'public' ? path.resolve(__dirname, 'public') : false,
-	plugins: [react(), tailwindcss(), mode === 'public' ? null : {
-		name: 'go-embed-placeholder',
-		generateBundle() { this.emitFile({ type: 'asset', fileName: '.gitkeep', source: '\n' }); },
-	}],
+	plugins: [react(), tailwindcss()],
 	server: { host: '127.0.0.1', port: 5173, strictPort: true },
 	// sqlite-wasm finds its .wasm next to its own module, which prebundling would move.
 	optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
