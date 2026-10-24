@@ -2,7 +2,7 @@
 // server runs in Bun, in a service worker or behind any other host.
 import { CommandError } from '../chat/conversation';
 import { NotFound } from '../chat/sql';
-import { StaleApproval } from '../chat/store';
+import { Conflict, StaleApproval } from '../chat/store';
 
 export const json = (status: number, data: unknown) => new Response(JSON.stringify(data) + '\n', { status, headers: { 'Content-Type': 'application/json' } });
 export const text = (status: number, message: string) => new Response(message + '\n', { status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
@@ -10,7 +10,7 @@ export const text = (status: number, message: string) => new Response(message + 
 /** failure maps an error to the status that says why. */
 export function failure(err: unknown, fallback = 500): Response {
 	if (err instanceof CommandError) return text(err.status, err.message);
-	if (err instanceof StaleApproval) return text(409, err.message);
+	if (err instanceof StaleApproval || err instanceof Conflict) return text(409, err.message);
 	if (err instanceof NotFound) return text(404, 'conversation not found');
 	if (err instanceof HTTPError) return text(err.status, err.message);
 	if (fallback === 500) {

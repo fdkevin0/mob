@@ -111,8 +111,8 @@ export function App({
 		try {
 			const snapshot = await client.openConversation(id);
 			const conversations = await client.listConversations();
-			const selected = conversations.find((c) => c.id === id);
-			if (!selected) throw new Error('Conversation is no longer available.');
+			// A conversation nothing was said in yet is not listed, but opens.
+			const selected = conversations.find((c) => c.id === id) ?? { id, title: 'New conversation', updatedAt: Date.now() };
 			setSession(makeSession(id, snapshot));
 			setCurrent(selected);
 			setPanel('chat');

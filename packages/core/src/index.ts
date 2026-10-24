@@ -23,6 +23,7 @@ export * from './provider/provider';
 export * from './provider/presets';
 export * from './provider/catalog';
 export * from './provider/registry';
+export * from './provider/save';
 export * from './app/server';
 export * from './app/configuration';
 export * from './app/extension';

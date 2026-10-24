@@ -63,7 +63,7 @@ it('signs in once with the link mob open prints and keeps the token across visit
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
   await screen.findByRole('button', { name: /settings and runner/ });
-  expect(window.location.hash).toBe('#/c/new');
+  expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/);
   expect(localStorage.getItem('mob-token')).toBe('paired');
   const authorized = fetchMock.mock.calls.filter(([url]) => !url.endsWith('/pairing/claim'));
   expect(authorized.every(([, options]) => new Headers(options?.headers).get('Authorization') === 'Bearer paired')).toBe(true);
@@ -160,7 +160,7 @@ it('signs the public web in to local Mob with a mob open --web link and remember
   try {
     render(<App />);
     await screen.findByRole('button', { name: /settings and runner/ });
-    expect(window.location.hash).toBe('#/c/new');
+    expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/);
     expect(localStorage.getItem('mob-url')).toBe('http://127.0.0.1:9000');
     cleanup();
     render(<App />);
@@ -279,7 +279,9 @@ it('opens the public web workspace without a runner and asks for one only when s
     await screen.findByRole('button', { name: /settings and runner/ });
     expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('hello 草稿'));
-    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/new'))).toBe(true);
+    // The draft opens a new conversation, which Mob starts only with its first message.
+    expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/);
+    expect(fetchMock.mock.calls.some(([url, init]) => url.endsWith('/conversations') && init?.method === 'POST')).toBe(false);
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/one'))).toBe(false);
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/chat'))).toBe(false);
   } finally { vi.unstubAllEnvs(); }
@@ -452,6 +454,76 @@ it('frees the sidebar when the open conversation is chosen again while another i
   window.history.replaceState(null, '', '/');
 });
 
+it('shows the calf while it connects to Mob on this computer, not a form about to go away', async () => {
+  window.history.replaceState(null, '', '/');
+  localStorage.setItem('mob-token', 'saved');
+  let answer!: (r: Response) => void;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('/config')) return new Promise<Response>(resolve => { answer = resolve; });
+    if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([]));
+    return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
+  }));
+  render(<App />);
+  expect((await screen.findByRole('status')).textContent).toContain('Connecting to Mob…');
+  expect(screen.queryByRole('button', { name: /Open workspace|Connecting/ })).toBeNull();
+  await waitFor(() => expect(answer).toBeDefined());
+  answer(Response.json({ defaultModel: 'demo/echo' }));
+  await screen.findByLabelText('Message');
+});
+
+it('starts a new conversation only with its first message, and renames and deletes conversations', async () => {
+  window.history.replaceState(null, '', '/');
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  let list = [{ id: 'one', title: 'Existing' }, { id: 'two', title: 'Other' }];
+  const posts: { url: string; body: Record<string, unknown> }[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') posts.push({ url, body: JSON.parse(String(init.body)) });
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/config')) return Response.json({ defaultModel: 'demo/echo' });
+    if (url.endsWith('/conversations')) return Response.json(list);
+    if (url.endsWith('/rename')) return Response.json({ title: 'Renamed' });
+    if (url.endsWith('/delete')) { list = list.filter(c => !url.includes(`/conversations/${c.id}/`)); return Response.json({ deleted: true }); }
+    if (url.endsWith('/chat')) return new Response('', { status: 500 });
+    const id = url.match(/\/conversations\/(\w+)$/)?.[1];
+    return Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' });
+  }));
+  render(<App />);
+  await screen.findByText('reply in one');
+  const nav = () => within(screen.getByRole('navigation', { name: 'Conversations' }));
+  const menu = (title: string) => {
+    fireEvent.keyDown(nav().getByRole('button', { name: `More for ${title}` }), { key: 'Enter' });
+    return within(screen.getByRole('menu'));
+  };
+
+  fireEvent.click(menu('Other').getByRole('menuitem', { name: 'Rename' }));
+  fireEvent.change(screen.getByLabelText('Conversation title'), { target: { value: 'Renamed' } });
+  fireEvent.submit(screen.getByLabelText('Conversation title').closest('form')!);
+  expect(nav().getByRole('button', { name: 'Renamed' })).toBeTruthy();
+  expect(posts).toContainEqual({ url: 'http://localhost/api/conversations/two/rename', body: { title: 'Renamed' } });
+
+  // Deleting the open conversation asks first, then opens the next one.
+  fireEvent.click(menu('Existing').getByRole('menuitem', { name: 'Delete' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Delete this conversation?' });
+  expect(dialog.textContent).toContain('“Existing” and its messages are deleted from this computer');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+  await screen.findByText('reply in two');
+  expect(posts.some(p => p.url.endsWith('/conversations/one/delete'))).toBe(true);
+  expect(nav().queryByRole('button', { name: 'Existing' })).toBeNull();
+  expect(screen.queryByRole('dialog')).toBeNull();
+
+  // A new conversation is a draft until its first message names it to Mob.
+  fireEvent.click(screen.getAllByRole('button', { name: 'New conversation' })[0]);
+  await waitFor(() => expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/));
+  const id = window.location.hash.slice('#/c/'.length);
+  expect(posts.some(p => p.url.endsWith('/api/conversations'))).toBe(false);
+  const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+  fireEvent.change(box, { target: { value: 'hello' } });
+  fireEvent.submit(box.closest('form')!);
+  await waitFor(() => expect(posts.find(p => p.url.endsWith('/api/chat'))?.body.id).toBe(id));
+  window.history.replaceState(null, '', '/');
+});
+
 it('keeps a page open that was chosen while a conversation was still loading, and opens the conversation behind it', async () => {
   window.history.replaceState(null, '', '/');
   window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
@@ -581,4 +653,25 @@ it('uses the shared highlighter for message text, reasoning and tool data', asyn
     expect(view.container.querySelectorAll('.tool-body [data-streamdown="code-block"]')).toHaveLength(2);
   });
   expect(view.container.querySelector('.reasoning [data-streamdown="strong"]')?.textContent).toBe('Checking');
+});
+
+it('keeps the empty Agents page the address names, and starts a conversation from an example', async () => {
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  window.history.replaceState(null, '', '/#/agents');
+  const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([]);
+    if (url.includes('/tasks')) return Response.json([]);
+    return Response.json({ messages: [], active: false, model: '' });
+  });
+  vi.stubGlobal('fetch', fetch);
+  render(<App />);
+  await screen.findByRole('heading', { name: 'No agents yet' });
+  expect(window.location.hash).toBe('#/agents');
+  fireEvent.click(screen.getByRole('button', { name: /Have Claude Agent review/ }));
+  await waitFor(() => expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/));
+  await waitFor(() => expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Have Claude Agent review the last commit in my project'));
+  // Nothing is sent until the owner sends it.
+  expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  window.history.replaceState(null, '', '/');
 });

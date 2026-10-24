@@ -62,6 +62,23 @@ test('the first provider added takes over from the demo default, and a model lis
 	expect(group.models.map(m => [m.id, m.tools])).toEqual([['a/no-tools:free', false], ['z/tools:free', true]]);
 });
 
+test('the web saves a model provider, which becomes the default', async () => {
+	const { memoryProviders } = await import('../src');
+	const registry = new ProviderRegistry(memoryProviders({ providers: [] }), undefined, false, async () => Response.json({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }] }));
+	const token = 't'.repeat(64);
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const server = new Server({ store, providers: registry, token, version: 'test' });
+	const save = (body: unknown) => server.fetch(new Request('http://127.0.0.1:8787/api/providers', { method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }));
+	expect(await (await save({ preset: 'deepseek', key: '' })).text()).toContain('Enter an API key.');
+	expect((await save({ preset: 'nowhere', key: 'k' })).status).toBe(400);
+	expect((await save({ preset: 'deepseek', key: 'k', extra: 1 })).status).toBe(400);
+	expect(await (await save({ preset: 'deepseek', key: ' sk-1 ', model: 'deepseek-reasoner' })).json()).toEqual({ default: 'deepseek/deepseek-reasoner', models: 2 });
+	expect(registry.providers()).toMatchObject({ default: 'deepseek/deepseek-reasoner', providers: [{ id: 'deepseek', preset: 'deepseek', key: 'sk-1' }] });
+	// A local server needs no key.
+	expect(await (await save({ preset: 'ollama', key: '' })).json()).toEqual({ default: 'ollama/deepseek-chat', models: 2 });
+	expect((await save({ preset: '', url: '', key: 'k' })).status).toBe(400);
+});
+
 test('the conversation list marks conversations waiting for a decision, and says when that changes', async () => {
 	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
 	const token = 't'.repeat(64);
@@ -77,5 +94,40 @@ test('the conversation list marks conversations waiting for a decision, and says
 	expect(listed.filter(c => c === id).length).toBeGreaterThanOrEqual(3);
 	const list = await (await call('GET', '/api/conversations')).json() as { id: string; active: boolean; waiting: boolean }[];
 	expect(list.find(c => c.id === id)).toMatchObject({ active: false, waiting: true });
-	expect(list.find(c => c.id === other.id)).toMatchObject({ active: false, waiting: false });
+	// A conversation nothing was said in has nothing to list.
+	expect(list.find(c => c.id === other.id)).toBeUndefined();
+});
+
+test('a client starts a conversation with its first message, and the owner renames and deletes it', async () => {
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const token = 't'.repeat(64);
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token, version: 'test' });
+	const call = (method: string, path: string, body?: unknown) =>
+		server.fetch(new Request('http://127.0.0.1:8787' + path, { method, body: body && JSON.stringify(body), headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }));
+	const list = async () => (await (await call('GET', '/api/conversations')).json() as { id: string; title: string }[]);
+	const id = 'a'.repeat(32);
+	// Before its first message the conversation is empty and listed nowhere.
+	expect(await (await call('GET', `/api/conversations/${id}`)).json()).toMatchObject({ messages: [], active: false });
+	expect((await call('GET', '/api/conversations/not-an-id')).status).toBe(404);
+	expect(await list()).toEqual([]);
+	await (await call('POST', '/api/chat', { id, text: '/remember 喜欢中文', requestId: 'r'.repeat(20) })).text();
+	expect((await list()).map(c => c.id)).toEqual([id]);
+
+	expect((await call('POST', `/api/conversations/${id}/rename`, { title: '   ' })).status).toBe(400);
+	expect((await call('POST', `/api/conversations/${'b'.repeat(32)}/rename`, { title: 'Nowhere' })).status).toBe(404);
+	expect(await (await call('POST', `/api/conversations/${id}/rename`, { title: ' Chinese\n replies ' })).json()).toEqual({ id, title: 'Chinese replies' });
+	expect((await list())[0].title).toBe('Chinese replies');
+
+	// A fact the owner approved outlives the conversation that saved it.
+	store.saveFact('f'.repeat(32), id, 'kept everywhere', true);
+	store.saveFact('g'.repeat(32), id, 'only here', false);
+	expect(await (await call('POST', `/api/conversations/${id}/delete`)).json()).toEqual({ deleted: true });
+	expect(await list()).toEqual([]);
+	expect(store.history(id)).toEqual([]);
+	expect(store.facts().map(f => f.text)).toEqual(['kept everywhere']);
+	const plain = store.create();
+	store.command(plain.id, 'p'.repeat(20), '/help', 'help');
+	await call('POST', `/api/conversations/${plain.id}/delete`);
+	expect(store.exists(plain.id)).toBe(false);
+	expect((await call('POST', `/api/conversations/${plain.id}/delete`)).status).toBe(404);
 });

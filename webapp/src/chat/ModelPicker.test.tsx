@@ -208,3 +208,12 @@ it('selects the first expanded search result and does nothing when all result gr
 	fireEvent.keyDown(search, { key: 'Enter' });
 	expect(picked).not.toHaveBeenCalled();
 });
+
+it('offers to add a model provider, first of all when none is set up', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([])));
+	const add = vi.fn();
+	render(<Dialog defaultOpen><ModelPicker connection={connection} onPick={() => {}} addProvider={add} /></Dialog>);
+	await screen.findByText('No model provider is set up yet. Add one to choose from its models.');
+	fireEvent.click(screen.getByRole('button', { name: 'Add a model provider' }));
+	expect(add).toHaveBeenCalled();
+});

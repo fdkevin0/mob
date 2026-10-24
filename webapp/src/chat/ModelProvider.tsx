@@ -1,16 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type Connection } from '../api';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Label } from '../../components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../components/ui/dialog';
-import type { OpenRouterSignIn, ProviderForm } from './providers';
-import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from './openrouter';
+import { api, type Connection } from './api';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
+import type { OpenRouterSignIn, ProviderForm } from './browser/providers';
+import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from './browser/openrouter';
 
 // The presets a browser can call: vendors that need a key. OpenRouter leads,
 // since its sign-in is the browser's way to free models. The model list
 // comes from the vendor once the key is saved.
-const services = [
+type Service = { id: string; name: string; noKey?: boolean };
+const browserServices: Service[] = [
 	{ id: 'openrouter', name: 'OpenRouter (free models)' },
 	{ id: 'openai', name: 'OpenAI' },
 	{ id: 'anthropic', name: 'Anthropic' },
@@ -20,10 +21,19 @@ const services = [
 	{ id: 'zhipu', name: 'Zhipu GLM' },
 	{ id: '', name: 'Custom API' },
 ];
+// A runner calls the vendor itself, so it can also reach model servers on its own machine, which need no key.
+const local = [
+	{ id: 'ollama', name: 'Ollama (on the runner)', noKey: true },
+	{ id: 'lmstudio', name: 'LM Studio (on the runner)', noKey: true },
+];
+const runnerServices: Service[] = [...browserServices.slice(0, -1), ...local, browserServices[browserServices.length - 1]];
 
 type Saved = { default: string; providers: { id: string; name?: string; key?: string; chat?: string; anthropic?: string }[] };
 
-/** ModelProvider sets the model provider of the browser runner, which has no `mob provider add`. */
+/**
+ * ModelProvider adds a model provider and makes it the default, as `mob provider add` does on a runner's command line.
+ * The browser runner keeps the key in this browser and calls only vendors that accept browsers; a runner keeps it in its providers.json.
+ */
 export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn }: { connection: Connection; open: boolean; onOpenChange: (open: boolean) => void; onSaved?: (model: string) => void; signIn?: OpenRouterSignIn }) {
 	const [form, setForm] = useState<ProviderForm>({ preset: 'openrouter', url: '', protocol: 'chat', key: '', model: '' });
 	const [saved, setSaved] = useState<Saved>();
@@ -41,9 +51,12 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		finishOpenRouterSignIn();
 		void submit('/plugins/browser/openrouter', signIn);
 	}, [open, signIn]);
+	const browser = !!connection.browser;
+	const services = browser ? browserServices : runnerServices;
+	const noKey = services.find(s => s.id === form.preset)?.noKey;
 	async function save(event: FormEvent) {
 		event.preventDefault();
-		await submit('/plugins/browser/provider', form);
+		await submit(browser ? '/plugins/browser/provider' : '/providers', form);
 	}
 	async function submit(path: string, body: object) {
 		setBusy(true); setError(''); setNotice('');
@@ -63,7 +76,9 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 			<DialogContent className="connect-dialog">
 				<DialogTitle className="dialog-title">Model provider</DialogTitle>
 				<DialogDescription className="dialog-description">
-					Mob in this browser calls the provider directly, so it must accept requests from browsers. The key is kept in this browser only.
+					{browser
+						? 'Mob in this browser calls the provider directly, so it must accept requests from browsers. The key is kept in this browser only.'
+						: `Mob calls the provider from ${connection.runner ? 'your runner' : 'this computer'}, which keeps the key in its providers.json. Saving makes it the default model.`}
 				</DialogDescription>
 				{saved && saved.providers.length > 0 && (
 					<p>Now: {saved.providers.map(p => `${p.name || p.id}${p.key ? ` (${p.key})` : ''}`).join(', ')} · default {saved.default}</p>
@@ -83,12 +98,12 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 								<option value="anthropic">Anthropic Messages (base URL without /v1)</option>
 							</select>
 						</>}
-						{form.preset === 'openrouter' && <>
+						{browser && form.preset === 'openrouter' && <>
 							<Button type="button" variant="outline" className="provider-signin" onClick={() => void startOpenRouter().catch(e => setError(String(e)))}>Sign in with OpenRouter</Button>
 							<p>OpenRouter creates a key for Mob in your account, which you can limit or revoke there. Mob starts on one of its free models, which have daily limits; pick a paid one in the model picker. Or paste a key:</p>
 						</>}
-						<Label htmlFor="provider-key">API key</Label>
-						<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required />
+						<Label htmlFor="provider-key">{noKey ? 'API key (optional)' : 'API key'}</Label>
+						<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required={!noKey} />
 						<Label htmlFor="provider-model">Model (optional)</Label>
 						<Input id="provider-model" placeholder="The first model the provider lists" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} />
 						<Button disabled={busy}>{busy ? 'Checking…' : 'Save'}</Button>

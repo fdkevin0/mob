@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { chooseFromRunnerMenu } from './runnerMenu.test-helper';
@@ -122,4 +122,32 @@ it('does not restore a kept running turn as running, so an offline workspace sta
 	await new Promise((resolve) => setTimeout(resolve, 50));
 	expect((screen.getAllByRole('button', { name: 'New conversation' })[0] as HTMLButtonElement).disabled).toBe(false);
 	expect((screen.getByRole('button', { name: 'Title two' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it('does not keep a deleted conversation again as its thread closes', async () => {
+	await seed({ one: reply('a', 'reply one'), two: reply('b', 'reply two') });
+	let list = [{ id: 'one', title: 'Title one' }, { id: 'two', title: 'Title two' }];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url: string) => {
+			if (url.endsWith('/runtime')) return Response.json({ background: false });
+			if (url.endsWith('/config')) return Response.json({ defaultModel: 'demo/echo' });
+			if (url.endsWith('/conversations')) return Response.json(list);
+			if (url.endsWith('/one/delete')) {
+				list = list.filter((c) => c.id !== 'one');
+				return Response.json({ deleted: true });
+			}
+			return Response.json(url.endsWith('/two') ? reply('b', 'reply two') : reply('a', 'reply one'));
+		}),
+	);
+	render(<App />);
+	await screen.findByText('reply one');
+	const nav = within(screen.getByRole('navigation', { name: 'Conversations' }));
+	fireEvent.keyDown(nav.getByRole('button', { name: 'More for Title one' }), { key: 'Enter' });
+	fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }));
+	fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
+	await screen.findByText('reply two');
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	expect(await readSnapshot(scope, 'one')).toBeUndefined();
+	expect((await readList(scope))?.map((c) => c.id)).toEqual(['two']);
 });

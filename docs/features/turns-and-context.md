@@ -35,6 +35,21 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   disconnects; they are not written to browser storage. The workspace error
   banner's **Refresh** retries initialization and the requested conversation,
   then clears the error on recovery.
+- A conversation starts with its first message. The web's New conversation
+  opens a draft under an ID it chooses, in the form Mob gives conversations (32
+  hex characters); `POST /api/chat` or a transcript command under that ID
+  creates the conversation, and `GET /api/conversations/{id}` answers an empty
+  snapshot until then. `GET /api/conversations` leaves out conversations nothing
+  was said in, so a New conversation that is never used leaves nothing behind.
+  `POST /api/conversations` still creates one at once, for the TUI.
+- `POST /api/conversations/{id}/rename` with `{title}` gives a conversation a
+  title of 1 to 200 characters. `POST /api/conversations/{id}/delete` deletes it
+  with its messages, decisions, schedules and remembered approvals. It answers
+  409 while a turn runs there, and for a coding agent's task conversation or one
+  that started tasks, which stay with the agent tree. Facts the owner approved
+  apply everywhere, so they outlive the conversation that saved them, and the
+  usage ledger keeps the tokens it spent (Token usage lists it as a deleted
+  conversation).
 - The web UI and experimental TypeScript TUI use the same `@mob/client`
   conversation state and follow a running turn whenever a snapshot says one is
   active. The client reads the replay itself (`reconnectToStream` and

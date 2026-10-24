@@ -7,6 +7,7 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Runners, runnerConnection } from './Runners';
 import { Lobby } from './Lobby';
+import { Splash } from './Splash';
 import { hosts } from './hosts';
 import { browserChosen, browserConnection, browserLast, chooseBrowser } from './browser/connection';
 import { cacheScope, forget, readList } from './localCache';
@@ -24,6 +25,8 @@ export function App() {
   const [address, setAddress] = useState(serviceURL);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  // starting is set until a saved connection, a sign-in link or the desktop's connection has been tried.
+  const [starting, setStarting] = useState(true);
   // The public web opens the workspace without a runner; prompting shows how to connect one, and draft keeps what was typed meanwhile.
   const [prompting, setPrompting] = useState(false);
   // The dialog first offers a choice of runner: the user's own one, or one deployed to their cloud account.
@@ -34,7 +37,7 @@ export function App() {
   useEffect(() => {
     const desktop = window.mobDesktop;
     if (desktop) {
-      desktop.connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => setLoading(false));
+      desktop.connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => { setLoading(false); setStarting(false); });
       return;
     }
     const saved = savedToken();
@@ -51,7 +54,7 @@ export function App() {
       if (saved) {
         const next = { url, token: saved };
         if (!(await readList(cacheScope(next)))) return verify(next);
-        pending.current = next; setConnection(next); setLoading(false);
+        pending.current = next; setConnection(next); setLoading(false); setStarting(false);
         void verify(next).catch(() => { /* the workspace reports it */ });
         return undefined;
       }
@@ -63,7 +66,7 @@ export function App() {
       return undefined;
     };
     restore().then(next => { if (next) { saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); } })
-      .catch(e => setError(current => current || reachText(url, e))).finally(() => setLoading(false));
+      .catch(e => setError(current => current || reachText(url, e))).finally(() => { setLoading(false); setStarting(false); });
   }, []);
   // A replaced token signs this window out; the desktop reads the new token instead.
   const active = useRef<Connection | undefined>(undefined); active.current = connection;
@@ -98,9 +101,11 @@ export function App() {
     else { void forget(cacheScope(from)); if (from.runner) forgetRunner(); else clearToken(); }
     setConnection(undefined);
   };
-  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
+  if (connection) return <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
   // The desktop connects by itself, so a failure there has no token form to retry.
-  if (error && window.mobDesktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
+  if (error && window.mobDesktop) return <Splash label="Mob could not start."><h1 className="splash-title">Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></Splash>;
+  // Connecting shows the calf rather than a form that is about to go away; the public web shows its lobby meanwhile.
+  if (starting && !error && !isPublicWeb()) return <Splash label={window.mobDesktop ? 'Starting Mob…' : 'Connecting to Mob…'} />;
   const panel = <>
     {isPublicWeb() && <Runners connect={open} />}
     <form onSubmit={connect}>{isPublicWeb() && <><Label htmlFor="address">Mob address</Label><Input id="address" type="url" value={address} onChange={e => setAddress(e.target.value)} required /></>}<Label htmlFor="token">Local access token</Label><Input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
@@ -117,7 +122,7 @@ export function App() {
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('cloud')}><strong>Deploy to the cloud {hosts.filter(h => h.deployURL).map(h => <small key={h.id} className="host-mark"><h.Logo />{h.name}</small>)}</strong><span>Mob in your own Render account, on its free tier. No computer needs to stay on.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>
       </div>}</DialogContent></Dialog></>;
-  return <main className="connect"><Logo /><h1>A place to think.</h1><p>Connect to your local Go service. Your conversations stay in SQLite on this computer.</p>{panel}</main>;
+  return <main className="connect"><div className="connect-card"><Logo /><h1>A place to think.</h1><p>Connect to Mob on this computer. Your conversations stay on it.</p>{panel}</div></main>;
 }
 
 // Storage can be unavailable, such as in a private window; the token form still works then.

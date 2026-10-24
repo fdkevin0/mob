@@ -6,8 +6,11 @@ import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '../components/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
 import { tokens } from './Usage';
+import { Loading } from './Splash';
+import { Button } from '../components/ui/button';
 import {
 	AlertIcon,
+	ArrowRightIcon,
 	CheckIcon,
 	ChevronDownIcon,
 	ChevronIcon,
@@ -466,12 +469,83 @@ function edges(branches: Branch[], collapsed: Set<string>): [string, string, str
 	);
 }
 
+// Ways to hand coding work to an agent, which the empty page offers to start with.
+const examples = [
+	'Ask Codex to find and fix the failing tests in my project',
+	'Have Claude Agent review the last commit in my project',
+	'Split this refactor across two coding agents and compare the results',
+];
+
+/**
+ * Empty is the page before any agent ran: a sketch of the tree it will show,
+ * and how to get one going, or, in the browser runner, that agents need a runner.
+ */
+function Empty({ browser, start, connect }: { browser?: boolean; start?: (text: string) => void; connect?: () => void }) {
+	const agents = ['codex', 'claude', 'dsh'].map((id) => runtimeBrand(id)!);
+	return (
+		<div className="agents-empty">
+			<div className="agents-empty-sketch" aria-hidden="true" data-locked={browser || undefined}>
+				<span className="agents-empty-root">
+					<Calf size={22} />
+				</span>
+				<svg className="agents-empty-links" viewBox="0 0 240 36" preserveAspectRatio="none">
+					<path d="M120 0 V12 Q120 18 114 18 H46 Q40 18 40 24 V36 M120 12 V36 M120 12 Q120 18 126 18 H194 Q200 18 200 24 V36" />
+				</svg>
+				<span className="agents-empty-children">
+					{agents.map((a) => (
+						<span key={a.name} className="agents-empty-agent">
+							<BrandIcon brand={a} size={16} />
+							{a.name}
+						</span>
+					))}
+				</span>
+			</div>
+			{browser ? (
+				<>
+					<h2>Coding agents need a runner</h2>
+					<p>
+						Mob in this browser cannot start programs, so it cannot hand work to Codex, Claude Agent and other coding agents. Connect
+						Mob on your computer or a server, and each task shows here under the conversation that started it.
+					</p>
+					{connect && (
+						<div className="agents-empty-actions">
+							<Button onClick={connect}>Connect a runner</Button>
+						</div>
+					)}
+				</>
+			) : (
+				<>
+					<h2>No agents yet</h2>
+					<p>
+						Ask Mob for coding work in a project and it hands the work to a coding agent. Each task shows here under the conversation
+						that started it, where you can follow it, answer its questions and stop it.
+					</p>
+					{start && (
+						<ul className="agents-empty-examples" aria-label="Try asking">
+							{examples.map((text) => (
+								<li key={text}>
+									<button type="button" onClick={() => start(text)}>
+										<span>{text}</span>
+										<ArrowRightIcon />
+									</button>
+								</li>
+							))}
+						</ul>
+					)}
+				</>
+			)}
+		</div>
+	);
+}
+
 export function AgentTree({
 	connection,
 	changes,
 	open,
 	held,
 	browser,
+	start,
+	connect,
 }: {
 	connection: Connection;
 	/** browser is set in the browser runner, which has no coding agents. */
@@ -481,6 +555,10 @@ export function AgentTree({
 	open: (conversationId: string) => void;
 	/** held says which conversations cannot open now, while the open one hands a message to Mob. */
 	held?: (conversationId: string) => boolean;
+	/** start opens a new conversation, with a message already typed. */
+	start?: (text: string) => void;
+	/** connect leaves the browser runner to connect a runner, which can start coding agents. */
+	connect?: () => void;
 }) {
 	const [nodes, setNodes] = useState<AgentNode[]>();
 	const [error, setError] = useState('');
@@ -577,7 +655,7 @@ export function AgentTree({
 			<header className="view-header">
 				<div className="view-header-inner wide agents-header">
 				<h1>Agents</h1>
-				<div className="agents-summary">
+				{all.length > 0 && <div className="agents-summary">
 					<span>
 						{all.length} {all.length === 1 ? 'agent' : 'agents'}
 					</span>
@@ -589,7 +667,7 @@ export function AgentTree({
 							{total.cost > 0 ? cost(total.cost) : `${tokens(total.tokens)} tokens`}
 						</strong>
 					)}
-				</div>
+				</div>}
 				</div>
 			</header>
 			<div className="agents">
@@ -599,17 +677,9 @@ export function AgentTree({
 				</div>
 			)}
 			{!nodes && !error && (
-				<div className="loading" role="status">
-					Loading agents…
-				</div>
+				<Loading label="Loading agents…" />
 			)}
-			{nodes && !all.length && (
-				<p className="agents-empty">
-					{browser
-						? 'Coding agents run on a runner, so Mob in this browser cannot start them. Connect a runner to hand coding work to Codex, Claude Agent and others.'
-						: 'No tasks yet. Ask Mob to hand coding work in a project to a coding agent; each task shows here under the conversation that started it.'}
-				</p>
-			)}
+			{nodes && !all.length && <Empty browser={browser} start={start} connect={connect} />}
 			<div className="agents-canvas" ref={canvas}>
 				<Links canvas={canvas} edges={lines} version={`${lines.map((l) => l.join(':')).join(',')} ${filter ?? ''} ${now}`} />
 				<ul className="agents-tree">

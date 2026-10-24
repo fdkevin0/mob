@@ -66,7 +66,8 @@ export function tree(svc: Service, project: string): AgentNode[] {
 		return n;
 	});
 	if (parents.size) {
-		for (const c of svc.store.list()) {
+		// A conversation that started tasks belongs in the tree even before anything was said in it.
+		for (const c of svc.store.list(true)) {
 			if (!parents.has(c.id)) continue;
 			const n: AgentNode = { conversationId: c.id, agent: mob, label: 'Mob', title: c.title, status: idle, approvals: waiting(svc, c.id), tools: [] };
 			if (n.approvals.length) n.status = taskWaiting;

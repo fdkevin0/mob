@@ -24,6 +24,11 @@ export const ArrowUpIcon = () => (
 		<path d="M12 19V5M5 12l7-7 7 7" />
 	</Icon>
 );
+export const ArrowRightIcon = () => (
+	<Icon size={14}>
+		<path d="M5 12h14M12 5l7 7-7 7" />
+	</Icon>
+);
 export const StopIcon = () => (
 	<Icon size={14}>
 		<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
@@ -209,5 +214,22 @@ export const RaisedHandIcon = () => (
 	<Icon size={14}>
 		<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" />
 		<path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+	</Icon>
+);
+export const MoreIcon = () => (
+	<Icon>
+		<circle cx="5" cy="12" r="1" />
+		<circle cx="12" cy="12" r="1" />
+		<circle cx="19" cy="12" r="1" />
+	</Icon>
+);
+export const RenameIcon = () => (
+	<Icon>
+		<path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+	</Icon>
+);
+export const TrashIcon = () => (
+	<Icon>
+		<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
 	</Icon>
 );

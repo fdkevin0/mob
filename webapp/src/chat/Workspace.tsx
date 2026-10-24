@@ -6,10 +6,12 @@ import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
+import { Loading } from './Splash';
+import { DeleteConversation } from './DeleteConversation';
 import { Sidebar, type View } from './Sidebar';
 import { ComposeIcon, MenuIcon } from './icons';
 import { pendingOpenRouterSignIn } from './browser/openrouter';
-import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
+import { cacheScope, forgetSnapshot, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
 const errorText = (error: unknown) =>
 	error instanceof TypeError
@@ -24,8 +26,8 @@ const Plugins = lazy(() => import('./Plugins').then((m) => ({ default: m.Plugins
 const Usage = lazy(() => import('./Usage').then((m) => ({ default: m.Usage })));
 const BrowserLimits = lazy(() => import('./browser/Limits').then((m) => ({ default: m.BrowserLimits })));
 const Move = lazy(() => import('./Move').then((m) => ({ default: m.Move })));
-const ModelProvider = lazy(() => import('./browser/ModelProvider').then((m) => ({ default: m.ModelProvider })));
-const panel = <div className="loading" role="status">Loading…</div>;
+const ModelProvider = lazy(() => import('./ModelProvider').then((m) => ({ default: m.ModelProvider })));
+const panel = <Loading />;
 
 // The address names what the workspace shows: a conversation as #/c/<id>, or a page such as #/usage,
 // so reloading or going back returns to it.
@@ -40,6 +42,10 @@ function route(hash: string, replace: boolean) {
 	if (window.location.hash === hash) return;
 	if (replace) window.history.replaceState(window.history.state, '', hash);
 	else window.history.pushState(window.history.state, '', hash);
+}
+/** newConversationID chooses the ID of a new conversation, in the form Mob gives them. */
+function newConversationID() {
+	return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 // Recently opened conversations are kept in memory, so switching back shows them at once while they refresh.
 const cacheSize = 20;
@@ -63,6 +69,8 @@ export function Workspace({
 	const [signIn] = useState(() => (connection.browser ? pendingOpenRouterSignIn() : undefined));
 	const [provider, setProvider] = useState(!!signIn);
 	const [limits, setLimits] = useState(false);
+	// A message chosen on another page, such as an example on the empty Agents page, waits in the new conversation's composer.
+	const [prompt, setPrompt] = useState('');
 	const [moving, setMoving] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -96,12 +104,16 @@ export function Workspace({
 	}, [changes]);
 	const cache = useRef(new Map<string, Snapshot>());
 	// A remembered snapshot is shown before Mob answers, so it never claims a turn is running: that comes from Mob.
+	// Deleted conversations are never kept again, though their thread hands its messages over as it closes.
+	const deleted = useRef(new Set<string>());
 	const remember = (id: string, kept: Snapshot) => {
+		if (deleted.current.has(id)) return;
 		const snapshot = { ...kept, active: false };
 		cache.current.delete(id);
 		cache.current.set(id, snapshot);
 		if (cache.current.size > cacheSize) cache.current.delete(cache.current.keys().next().value!);
-		void writeSnapshot(scope, id, snapshot);
+		// A draft nothing was said in has nothing worth keeping on this device.
+		if (snapshot.messages.length) void writeSnapshot(scope, id, snapshot);
 	};
 	const fetching = useRef(new Map<string, Promise<Snapshot>>());
 	function load(id: string) {
@@ -188,21 +200,37 @@ export function Workspace({
 				.catch((e) => setError(errorText(e)));
 		else if (action.kind === 'open-plugins' || action.kind === 'compose-mail') page('plugins');
 	}
-	// A new conversation opens as soon as the service names it; the list refreshes behind it.
-	async function create(replace = false) {
+	// A new conversation is only a draft under an ID chosen here: Mob starts it with its first message, so none is left empty.
+	function create(replace = false) {
 		if (handing.current) return;
-		const ticket = ++choice.current;
-		const since = viewing.current;
-		setSwitching(true);
-		try {
-			const next = await api<Conversation>(connection, '/conversations', {});
-			setConversations((list) => [next, ...list.filter((c) => c.id !== next.id)]);
-			if (ticket === choice.current) arrive(next.id, { messages: [], active: false, model: '' }, since, replace);
-			void refreshList().catch((e) => setError(errorText(e)));
-		} catch (e) {
-			if (ticket === choice.current) setError(errorText(e));
-		} finally {
-			if (ticket === choice.current) setSwitching(false);
+		choice.current++;
+		setSwitching(false);
+		setError('');
+		show(newConversationID(), { messages: [], active: false, model: '' }, replace);
+	}
+	// A new title shows at once; the list from Mob replaces it if renaming fails.
+	function rename(id: string, title: string) {
+		setConversations((list) => list.map((c) => (c.id === id ? { ...c, title } : c)));
+		api(connection, `/conversations/${id}/rename`, { title }).catch((e) => {
+			setError(errorText(e));
+			void refreshList().catch(() => { /* the error says what went wrong */ });
+		});
+	}
+	const [removing, setRemoving] = useState<Conversation>();
+	async function remove(c: Conversation) {
+		await api(connection, `/conversations/${c.id}/delete`, {});
+		deleted.current.add(c.id);
+		setRemoving(undefined);
+		cache.current.delete(c.id);
+		drafts.current.delete(c.id);
+		void forgetSnapshot(scope, c.id);
+		const rest = conversations.filter((other) => other.id !== c.id);
+		setConversations(rest);
+		void writeList(scope, rest);
+		// Deleting the open conversation opens the next one, or a new one when none is left.
+		if (current.current === c.id) {
+			if (rest.length) void open(rest[0].id, true);
+			else create(true);
 		}
 	}
 	useEffect(() => {
@@ -243,7 +271,9 @@ export function Workspace({
 				// A conversation the owner picked meanwhile stays open.
 				if (choice.current !== start) return;
 				// A draft typed before connecting starts a new conversation, as the lobby showed.
-				if ((draft && !current.current) || !list.length) await create(true);
+				if (draft && !current.current) create(true);
+				// With none yet, a new conversation waits behind the page the address names.
+				else if (!list.length) showBehind(newConversationID(), { messages: [], active: false, model: '' });
 				else if (routedView() !== 'chat') {
 					const id = pick(list);
 					showBehind(id, cache.current.get(id) ?? (await load(id)));
@@ -296,11 +326,16 @@ export function Workspace({
 			background={background}
 			keeping={keeping}
 			searchRef={searchRef}
-			create={() => void create()}
+			create={() => create()}
 			open={(id) => void open(id)}
 			prefetch={prefetch}
 			show={page}
-			provider={connection.browser ? () => { setNavigation(false); setProvider(true); } : undefined}
+			rename={rename}
+			remove={(c) => {
+				setNavigation(false);
+				setRemoving(c);
+			}}
+			provider={() => { setNavigation(false); setProvider(true); }}
 			move={switchTo && isPublicWeb() ? () => { setNavigation(false); setMoving(true); } : undefined}
 			limits={connection.browser ? () => { setNavigation(false); setLimits(true); } : undefined}
 			keep={(on) => {
@@ -314,6 +349,9 @@ export function Workspace({
 
 	return (
 		<div className="workspace">
+			<Dialog open={!!removing} onOpenChange={(on) => !on && setRemoving(undefined)}>
+				{removing && <DeleteConversation connection={connection} conversation={removing} confirm={() => remove(removing)} cancel={() => setRemoving(undefined)} />}
+			</Dialog>
 			{moving && switchTo && (
 				<Dialog open={moving} onOpenChange={setMoving}>
 					<Suspense fallback={null}>
@@ -351,7 +389,7 @@ export function Workspace({
 						</SheetContent>
 					</Sheet>
 					<span className="mobile-title">{view === 'chat' ? title : pageTitles[view]}</span>
-					<Button variant="ghost" className="icon-button" aria-label="New conversation" disabled={dispatching || switching} onClick={() => void create()}>
+					<Button variant="ghost" className="icon-button" aria-label="New conversation" disabled={dispatching || switching} onClick={() => create()}>
 						<ComposeIcon />
 					</Button>
 				</div>
@@ -376,6 +414,11 @@ export function Workspace({
 							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
 							held={held}
+							start={(text) => {
+								setPrompt(text);
+								create();
+							}}
+							connect={connection.browser ? disconnect : undefined}
 						/>
 					</Suspense>
 				)}
@@ -406,7 +449,7 @@ export function Workspace({
 							onDispatching={setDispatching}
 							onLeave={(snapshot, input) => {
 								remember(selected.id, snapshot);
-								if (input) drafts.current.set(selected.id, input);
+								if (input && !deleted.current.has(selected.id)) drafts.current.set(selected.id, input);
 								else drafts.current.delete(selected.id);
 							}}
 							changes={changes}
@@ -414,15 +457,17 @@ export function Workspace({
 								void refreshList().catch((e) => setError(errorText(e)));
 							}}
 							onAction={act}
-							draft={draft}
-							clearDraft={clearDraft}
+							draft={prompt || draft}
+							clearDraft={() => {
+								setPrompt('');
+								clearDraft?.();
+							}}
+							addProvider={() => setProvider(true)}
 						/>
 					</div>
 				) : (
 					view === 'chat' && (
-						<div className="loading" role="status">
-							Opening workspace…
-						</div>
+						<Loading label="Opening workspace…" />
 					)
 				)}
 			</main>
