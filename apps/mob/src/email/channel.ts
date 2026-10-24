@@ -1,5 +1,6 @@
 // The email channel: Mob answers the owner's mail in INBOX, each mail thread
 // in its own conversation, and replies in the thread.
+import { sleep } from '@mob/core/sleep';
 import { Bridge, clientEmail, describeApproval, useText, type ConversationService, type Reply, type Store, type Texts } from '@mob/core';
 import type { ImapFlow } from 'imapflow';
 import type { ParsedMail } from 'mailparser';
@@ -129,7 +130,7 @@ export class Mailer {
 				if (signal.aborted) return;
 				status((err as Error).message);
 			}
-			await new Promise(resolve => { const t = setTimeout(resolve, wait.retry); signal.addEventListener('abort', () => { clearTimeout(t); resolve(undefined); }, { once: true }); });
+			await sleep(wait.retry, signal).catch(() => {});
 		}
 	}
 

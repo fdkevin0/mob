@@ -1,6 +1,7 @@
 // Sending model requests: stall detection, retries before a response begins,
 // and recognising a prompt longer than the model's window.
 
+import { sleep } from '../sleep';
 export const limits = {
 	// How long a model request may wait for its response to start, and then for
 	// each further piece of it. A reply that keeps arriving is never cut off.
@@ -39,13 +40,6 @@ export function overflow(status: number, body: string) {
 const retryable = [408, 429, 500, 502, 503, 504, 529];
 
 export type Fetch = (input: string, init: RequestInit) => Promise<Response>;
-
-const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
-	if (signal?.aborted) return reject(signal.reason);
-	const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
-	const abort = () => { clearTimeout(timer); reject(signal!.reason); };
-	signal?.addEventListener('abort', abort, { once: true });
-});
 
 /** after is how long a Retry-After header asks to wait, in seconds or until a date, or delay without one. */
 export function after(header: string | null, delay: number) {

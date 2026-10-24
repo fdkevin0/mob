@@ -3,6 +3,7 @@
 // opened here and answered by the local service, and the answers are sealed
 // with the pairing key, which never leaves this machine and the browser.
 
+import { sleep } from '@mob/core/sleep';
 export type Credentials = { url: string; id: string; token: string; key: string };
 
 /** Envelope is one sealed frame; v, runner, session, id, direction, seq and final are authenticated with it. */
@@ -244,6 +245,6 @@ export async function run(credentials: Credentials, handler: Handler, status: (l
 		const err = await connect(base, credentials, k, handler, status, signal);
 		if (signal.aborted) return;
 		status(`Runner disconnected (${err.message}); reconnecting`);
-		await new Promise(r => { const t = setTimeout(r, 2000); signal.addEventListener('abort', () => { clearTimeout(t); r(undefined); }, { once: true }); });
+		await sleep(2000, signal).catch(() => {});
 	}
 }
