@@ -267,8 +267,19 @@ that take a key) or a custom OpenAI Chat Completions or Anthropic Messages
 base URL, with its API key and optionally a model. Saving lists the
 provider's models and makes the named model, or the first listed, the
 default (`POST /api/plugins/browser/provider`). An Anthropic-only provider is
-sent `anthropic-dangerous-direct-browser-access`. The key stays in the
-browser's database. Coding agents, the sandbox, stdio MCP
+sent `anthropic-dangerous-direct-browser-access`. With OpenRouter selected,
+**Sign in with OpenRouter** gets a key without copying one: OpenRouter's PKCE
+flow returns to `/app?code=…`, and the worker trades the code, with the
+verifier kept in the tab's session storage, for a key of the user's account
+(`POST /api/plugins/browser/openrouter`), which the user can limit or revoke
+on OpenRouter; without a named model it uses `openrouter/auto`.
+
+Keys are stored unencrypted in the browser's database, in the site's origin
+private file system, like any key a web app keeps. The browser keeps other
+sites out, and the API returns keys only masked, but anyone who can run code
+on usemob.app or read the browser profile on disk can read them; the strict
+content security policy and having no third-party scripts on the origin are
+what guard the first. Coding agents, the sandbox, stdio MCP
 servers, messaging channels and schedules need a runner, and Plugins & cloud
 services is hidden. Mob stops when the tab closes.
 

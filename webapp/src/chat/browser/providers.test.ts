@@ -3,15 +3,16 @@ import { ProviderRegistry, Server, Store, memoryProviders, type SQL } from '@mob
 import { browserProviders, providerPlugin } from './providers';
 
 const noSQL = {} as SQL;
-function setup(listed: Response | (() => never)) {
+function setup(listed: Response | (() => never), exchange?: typeof fetch) {
 	const asked: { url: string; headers: Headers }[] = [];
 	const registry = new ProviderRegistry(memoryProviders(browserProviders()), undefined, false, async (input, init) => {
 		asked.push({ url: String(input), headers: new Headers(init?.headers) });
 		return typeof listed === 'function' ? listed() : listed.clone();
 	});
-	const server = new Server({ store: new Store(noSQL), providers: registry, token: 't', version: 'test' }, [providerPlugin(registry)]);
-	const save = (form: object) => server.fetch(new Request('http://localhost/api/plugins/browser/provider', { method: 'POST', headers: { Authorization: 'Bearer t' }, body: JSON.stringify(form) }));
-	return { registry, save, asked };
+	const server = new Server({ store: new Store(noSQL), providers: registry, token: 't', version: 'test' }, [providerPlugin(registry, exchange)]);
+	const post = (path: string, form: object) => server.fetch(new Request('http://localhost/api/plugins/browser/' + path, { method: 'POST', headers: { Authorization: 'Bearer t' }, body: JSON.stringify(form) }));
+	const save = (form: object) => post('provider', form);
+	return { registry, save, post, asked };
 }
 const models = () => Response.json({ data: [{ id: 'b-model' }, { id: 'a-model' }] });
 
@@ -34,4 +35,18 @@ it('asks Anthropic for browser access and keeps a named model when the list fail
 	expect(failed.status).toBe(502);
 	expect(await failed.text()).toContain('Could not list OpenAI’s models');
 	expect((await save({ preset: 'opencode', key: 'x' })).status).toBe(400);
+});
+
+it('turns an OpenRouter sign-in into a key and routes to openrouter/auto', async () => {
+	const exchanged: unknown[] = [];
+	const exchange = (async (_: RequestInfo | URL, init?: RequestInit) => {
+		exchanged.push(JSON.parse(String(init?.body)));
+		return Response.json({ key: 'sk-or-1' });
+	}) as typeof fetch;
+	const { registry, post, asked } = setup(Response.json({ data: [{ id: 'anthropic/claude-x' }, { id: 'openrouter/auto' }] }), exchange);
+	expect(await (await post('openrouter', { code: 'c1', verifier: 'v1' })).json()).toEqual({ default: 'openrouter/openrouter/auto', models: 2 });
+	expect(exchanged).toEqual([{ code: 'c1', code_verifier: 'v1', code_challenge_method: 'S256' }]);
+	expect(asked[0].headers.get('Authorization')).toBe('Bearer sk-or-1');
+	expect(registry.providers().providers[0]).toEqual({ id: 'openrouter', preset: 'openrouter', key: 'sk-or-1' });
+	expect((await post('openrouter', { code: 'c2' })).status).toBe(400);
 });

@@ -4,7 +4,8 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../components/ui/dialog';
-import type { ProviderForm } from './providers';
+import type { OpenRouterSignIn, ProviderForm } from './providers';
+import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from './openrouter';
 
 // The presets a browser can call: vendors that need a key. The model list
 // comes from the vendor once the key is saved.
@@ -22,7 +23,7 @@ const services = [
 type Saved = { default: string; providers: { id: string; name?: string; key?: string; chat?: string; anthropic?: string }[] };
 
 /** ModelProvider sets the model provider of the browser runner, which has no `mob provider add`. */
-export function ModelProvider({ connection, open, onOpenChange, onSaved }: { connection: Connection; open: boolean; onOpenChange: (open: boolean) => void; onSaved?: (model: string) => void }) {
+export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn }: { connection: Connection; open: boolean; onOpenChange: (open: boolean) => void; onSaved?: (model: string) => void; signIn?: OpenRouterSignIn }) {
 	const [form, setForm] = useState<ProviderForm>({ preset: 'openai', url: '', protocol: 'chat', key: '', model: '' });
 	const [saved, setSaved] = useState<Saved>();
 	const [busy, setBusy] = useState(false);
@@ -33,10 +34,20 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved }: { con
 		setError(''); setNotice('');
 		api<Saved>(connection, '/providers').then(setSaved).catch(() => setSaved(undefined));
 	}, [open, connection]);
+	// A sign-in OpenRouter sent the user back from is finished as the dialog opens.
+	useEffect(() => {
+		if (!open || !signIn || pendingOpenRouterSignIn() !== signIn) return;
+		finishOpenRouterSignIn();
+		void submit('/plugins/browser/openrouter', signIn);
+	}, [open, signIn]);
 	async function save(event: FormEvent) {
-		event.preventDefault(); setBusy(true); setError(''); setNotice('');
+		event.preventDefault();
+		await submit('/plugins/browser/provider', form);
+	}
+	async function submit(path: string, body: object) {
+		setBusy(true); setError(''); setNotice('');
 		try {
-			const result = await api<{ default: string; models: number }>(connection, '/plugins/browser/provider', form);
+			const result = await api<{ default: string; models: number }>(connection, path, body);
 			setForm(f => ({ ...f, key: '' }));
 			setSaved(await api<Saved>(connection, '/providers'));
 			setNotice(`Saved. Conversations now use ${result.default}${result.models ? `; ${result.models} models are listed in the model picker` : ''}.`);
@@ -70,6 +81,10 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved }: { con
 								<option value="chat">OpenAI Chat Completions (base URL ends in /v1)</option>
 								<option value="anthropic">Anthropic Messages (base URL without /v1)</option>
 							</select>
+						</>}
+						{form.preset === 'openrouter' && <>
+							<Button type="button" variant="outline" className="provider-signin" onClick={() => void startOpenRouter().catch(e => setError(String(e)))}>Sign in with OpenRouter</Button>
+							<p>OpenRouter creates a key for Mob in your account, which you can limit or revoke there. Or paste a key:</p>
 						</>}
 						<Label htmlFor="provider-key">API key</Label>
 						<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required />

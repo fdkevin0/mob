@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
 import { ThemePicker } from '../theme/ThemePicker';
+import { pendingOpenRouterSignIn } from './browser/openrouter';
 import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
 // home says where a connection keeps conversations.
@@ -55,7 +56,9 @@ export function Workspace({
 	const [plugins, setPlugins] = useState(false);
 	const [usage, setUsage] = useState(false);
 	const [agents, setAgents] = useState(false);
-	const [provider, setProvider] = useState(false);
+	// OpenRouter's sign-in returns to the page with a code, which the provider dialog finishes.
+	const [signIn] = useState(() => (connection.browser ? pendingOpenRouterSignIn() : undefined));
+	const [provider, setProvider] = useState(!!signIn);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
@@ -362,6 +365,7 @@ export function Workspace({
 						connection={connection}
 						open={provider}
 						onOpenChange={setProvider}
+						signIn={signIn}
 						onSaved={() => {
 							// The open conversation follows the new default, which its picker shows once reloaded.
 							if (selected) void load(selected.id).then((snapshot) => show(selected.id, snapshot, true)).catch((e) => setError(errorText(e)));
