@@ -120,6 +120,14 @@ owner's turns.
   approved remember and it ran. Result: …" or "The user denied the remember
   request."
 
+In the Web UI, chat and Agents cards show request details expanded by default.
+Long inputs wrap and scroll without truncation. **Allow once** and **Deny** are
+the primary actions; **More permissions** offers conversation-only or
+cross-conversation remembered approval and explains its scope. Partial requests
+on Agents cards cannot be approved there; open the conversation to review the
+complete request. Decision controls are disabled while submitting; failures
+remain visible in the conversation or agent card.
+
 ## Remembered approvals
 
 - The owner may remember an approval for the conversation or always

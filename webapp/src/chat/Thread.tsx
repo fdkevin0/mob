@@ -11,7 +11,7 @@ import {
 } from '../components/ai-elements/conversation';
 import { JsonResponse, Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
+import { ApprovalPrompt } from './ApprovalPrompt';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogTrigger } from '../components/ui/dialog';
@@ -207,33 +207,35 @@ export function Thread({
 						}}
 					/>
 					<div className="composer-bar">
-						<Dialog open={choosing} onOpenChange={setChoosing}>
-							<DialogTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									className="model-button"
-									aria-haspopup="dialog"
-									aria-expanded={choosing}
-									disabled={busy}
-									title={busy ? 'Wait for the current turn to finish before switching models' : "This conversation's model; choose another without typing /model"}
-								>
-									{modelLabel}
-									<ChevronDownIcon />
-								</Button>
-							</DialogTrigger>
-							{choosing && (
-								<ModelPicker
-									connection={connection}
-									current={model}
-									defaultModel={defaultModel}
-									disabled={busy}
-									onPick={(choice) => {
-										if (run(choice ? `/model ${choice}` : '/model default')) setChoosing(false);
-									}}
-								/>
-							)}
-						</Dialog>
+						<div className="model-picker-anchor">
+							<Dialog modal={false} open={choosing} onOpenChange={setChoosing}>
+								<DialogTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										className="model-button"
+										aria-haspopup="dialog"
+										aria-expanded={choosing}
+										disabled={busy}
+										title={busy ? 'Wait for the current turn to finish before switching models' : "This conversation's model; choose another without typing /model"}
+									>
+										{modelLabel}
+										<ChevronDownIcon />
+									</Button>
+								</DialogTrigger>
+								{choosing && (
+									<ModelPicker
+										connection={connection}
+										current={model}
+										defaultModel={defaultModel}
+										disabled={busy}
+										onPick={(choice) => {
+											if (run(choice ? `/model ${choice}` : '/model default')) setChoosing(false);
+										}}
+									/>
+								)}
+							</Dialog>
+						</div>
 						{busy ? (
 							<Button type="button" className="send-button" aria-label="Stop" title="Stop" onClick={() => void cancel()}>
 								<StopIcon />
@@ -307,16 +309,17 @@ const MessageView = memo(function MessageView({
 									<span className="sr-only">{state.label}</span>
 									<ChevronIcon />
 								</summary>
-								<div className="tool-body">
+								{part.state !== 'approval-requested' && <div className="tool-body">
 									<JsonResponse value={part.input} />
 									{part.state === 'output-available' && <JsonResponse value={part.output} />}
 									{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
-								</div>
+								</div>}
 								{part.state === 'approval-requested' && (
 									<ApprovalPrompt
 										question={
 											name === 'remember' ? 'Mob wants to save this to memory.' : `Mob wants to use ${toolTitle(name).toLowerCase()}.`
 										}
+										request={JSON.stringify(part.input, null, 2) ?? ''}
 										busy={busy}
 										decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
 									/>
@@ -410,66 +413,6 @@ function CopyButton({ message }: { message: { parts: { type: string; text?: stri
 			>
 				{result === 'copied' ? <CheckIcon /> : result === 'failed' ? <CrossIcon /> : <CopyIcon />}
 			</Button>
-		</div>
-	);
-}
-
-/**
- * ApprovalPrompt asks the user to decide a tool request. An approval may be remembered for this conversation or always,
- * so calls like it stop asking; a denial may say why, and Mob answers it.
- */
-function ApprovalPrompt({
-	question,
-	busy,
-	decide,
-}: {
-	question: string;
-	busy: boolean;
-	decide: (approved: boolean, reason?: string, remember?: string) => void;
-}) {
-	const [denying, setDenying] = useState(false);
-	const [reason, setReason] = useState('');
-	return (
-		<div className="approval-prompt">
-			<p className="approval-question">{question}</p>
-			{denying ? (
-				<form
-					className="approval-actions"
-					onSubmit={(e) => {
-						e.preventDefault();
-						decide(false, reason);
-					}}
-				>
-					<Input
-						aria-label="Reason for denying (optional)"
-						placeholder="Tell Mob why (optional)"
-						value={reason}
-						maxLength={2000}
-						autoFocus
-						onChange={(e) => setReason(e.target.value)}
-					/>
-					<Button disabled={busy}>Deny</Button>
-					<Button type="button" variant="ghost" onClick={() => setDenying(false)}>
-						Back
-					</Button>
-				</form>
-			) : (
-				<div className="approval-actions">
-					<Button disabled={busy} onClick={() => decide(true)}>
-						Approve
-					</Button>
-					<Button variant="outline" disabled={busy} onClick={() => decide(true, undefined, 'conversation')}>
-						Allow in this conversation
-					</Button>
-					<Button variant="outline" disabled={busy} onClick={() => decide(true, undefined, 'always')}>
-						Always allow
-					</Button>
-					<Button variant="ghost" disabled={busy} onClick={() => setDenying(true)}>
-						Deny…
-					</Button>
-				</div>
-			)}
-			<p className="approval-note">Approval expires after one hour. Remembered approvals are listed by /grants.</p>
 		</div>
 	);
 }
