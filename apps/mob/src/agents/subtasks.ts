@@ -233,7 +233,7 @@ export class Hub {
 const mayDelegate = (svc: Service, t: Task) => !!t.parent && !svc.owns(t.parent);
 
 /** children are the tasks task t's conversation started. */
-const children = (svc: Service, t: Task) => svc.store.tasks(t.project).filter(c => c.parent === t.conversationId);
+export const children = (svc: Service, t: Task) => svc.store.tasks(t.project).filter(c => c.parent === t.conversationId);
 
 /** report lists tasks with their status, branch, what they used and their latest reply. */
 export function report(svc: Service, list: Task[]) {

@@ -663,6 +663,13 @@ test('an agent starts sub-tasks', async () => {
 	await h.until('the approved call did not end', () => JSON.stringify(h.store.history(lead.conversationId)).includes('Started sub-task ' + child.id));
 	// Another task's agent cannot reach this one's sub-tasks.
 	expect(() => h.svc.hub.subtask(child.id, child.id)).toThrow();
+	// Once the lead has delivered its work too, the sub-task's agent ends, and the lead's stays.
+	await h.wait(lead);
+	await h.until("the sub-task's agent was not reaped", () => !h.svc.running(child.id));
+	expect(h.svc.running(lead.id)).toBeDefined();
+	// A message starts it again, in the session it had.
+	child = await h.say(child, 'hello');
+	expect([child.status, h.reply(child), h.fakes.last().loaded]).toEqual(['review', 'Hi', 's1']);
 });
 
 test('ended tasks are summarized', async () => {
@@ -802,8 +809,10 @@ test('a review squad', async () => {
 	// The reports went to Mob, not to the agent that did the work, without waiting for its own sub-task.
 	const told = () => h.store.history(work.conversationId).filter(m => m.role === 'user').map(textOf).find(t => t.startsWith('Automatic update from Mob'));
 	expect(told()).toBeUndefined();
-	// The squad is done, so another may start.
+	// The squad is done, so another may start, and its reviewers' agents have ended.
 	expect(h.svc.squads.has(work.id)).toBe(false);
+	expect((out.reviewers as { task: string }[]).filter(r => h.svc.running(r.task))).toEqual([]);
+	expect(h.svc.running(work.id)).toBeDefined();
 	// Once its own sub-task ends, the agent hears of it, and not of the reviewers.
 	await h.decide(helper, { approved: true });
 	const summary = await h.until('the worker was not told its sub-task ended', told);
