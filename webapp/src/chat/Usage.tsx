@@ -51,7 +51,16 @@ export function fillDays(days: DayUsage[], first: string, last: string): DayUsag
 	return list;
 }
 
-export function Usage({ connection, open }: { connection: Connection; open: (id: string) => void }) {
+export function Usage({
+	connection,
+	open,
+	held,
+}: {
+	connection: Connection;
+	open: (id: string) => void;
+	/** held says which conversations cannot open now, while the open one hands a message to Mob. */
+	held?: (id: string) => boolean;
+}) {
 	const [period, setPeriod] = useState<number>(30);
 	const [report, setReport] = useState<UsageReport>();
 	const [error, setError] = useState('');
@@ -94,14 +103,14 @@ export function Usage({ connection, open }: { connection: Connection; open: (id:
 			) : report.totalTokens === 0 ? (
 				<p>No tokens were used in this period. Replies and coding agent tasks count here once they finish.</p>
 			) : (
-				<Report report={report} open={open} />
+				<Report report={report} open={open} held={held} />
 			)}
 			</div>
 		</section>
 	);
 }
 
-function Report({ report, open }: { report: UsageReport; open: (id: string) => void }) {
+function Report({ report, open, held }: { report: UsageReport; open: (id: string) => void; held?: (id: string) => boolean }) {
 	const days = useMemo(() => fillDays(report.days, report.firstDay, report.lastDay), [report]);
 	const top = Math.max(...report.models.map((m) => m.totalTokens), 1);
 	return (
@@ -167,7 +176,7 @@ function Report({ report, open }: { report: UsageReport; open: (id: string) => v
 					{report.top.map((c) => (
 						<tr key={c.id}>
 							<th scope="row">
-								<button type="button" className="usage-link" onClick={() => open(c.id)}>
+								<button type="button" className="usage-link" disabled={held?.(c.id)} onClick={() => open(c.id)}>
 									{c.title || 'Untitled'}
 								</button>
 								{c.agent && <span className="usage-agent">task · {c.agent}</span>}

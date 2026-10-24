@@ -131,13 +131,35 @@ export function Workspace({
 		if (next === 'chat') {
 			if (selected) route(routePrefix + encodeURIComponent(selected.id), replace);
 		} else route(Object.keys(pages).find((hash) => pages[hash] === next)!, replace);
+		paged(next);
+	}
+	// choice counts the conversations asked for, so a slow response for an earlier one is dropped.
+	const choice = useRef(0);
+	// viewing counts the pages asked for since, so a conversation that loads after one opens behind it.
+	const viewing = useRef(0);
+	function paged(next: View) {
+		viewing.current++;
+		// Going back to the conversation that is open drops one still loading.
+		if (next === 'chat') choice.current++;
+		setSwitching(false);
 		setView(next);
 		setNavigation(false);
 	}
-	// choice counts what was asked to show, so a slow response for an earlier choice is dropped.
-	const choice = useRef(0);
+	// arrive shows a conversation that loaded, unless a page was asked for meanwhile: then it opens behind the page.
+	function arrive(id: string, snapshot: Snapshot, since: number, replace: boolean) {
+		if (since === viewing.current) show(id, snapshot, replace);
+		else setSelected({ id, snapshot });
+	}
+	// held keeps another conversation from opening while the open one hands a message to Mob, which leaving it could lose.
+	const current = useRef(selected?.id);
+	current.current = selected?.id;
+	const handing = useRef(dispatching);
+	handing.current = dispatching;
+	const held = (id: string) => handing.current && id !== current.current;
 	async function open(id: string, replace = false) {
+		if (held(id)) return;
 		const ticket = ++choice.current;
+		const since = viewing.current;
 		setError('');
 		// A cached conversation shows at once; its thread reloads the latest messages as it opens.
 		const cached = cache.current.get(id);
@@ -147,7 +169,7 @@ export function Workspace({
 		try {
 			// What this browser kept also shows at once, even while Mob cannot be reached.
 			const snapshot = (await readSnapshot(scope, id)) ?? (await load(id));
-			if (ticket === choice.current) show(id, snapshot, replace);
+			if (ticket === choice.current) arrive(id, snapshot, since, replace);
 		} catch (e) {
 			if (ticket === choice.current) setError(errorText(e));
 		} finally {
@@ -163,12 +185,14 @@ export function Workspace({
 	}
 	// A new conversation opens as soon as the service names it; the list refreshes behind it.
 	async function create(replace = false) {
+		if (handing.current) return;
 		const ticket = ++choice.current;
+		const since = viewing.current;
 		setSwitching(true);
 		try {
 			const next = await api<Conversation>(connection, '/conversations', {});
 			setConversations((list) => [next, ...list.filter((c) => c.id !== next.id)]);
-			if (ticket === choice.current) show(next.id, { messages: [], active: false, model: '' }, replace);
+			if (ticket === choice.current) arrive(next.id, { messages: [], active: false, model: '' }, since, replace);
 			void refreshList().catch((e) => setError(errorText(e)));
 		} catch (e) {
 			if (ticket === choice.current) setError(errorText(e));
@@ -226,17 +250,18 @@ export function Workspace({
 			live = false;
 		};
 	}, [connection]);
-	// Back and forward move between the conversations the address named.
+	// Back and forward move between the conversations and pages the address named.
 	const opener = useRef(open);
 	opener.current = open;
-	const current = useRef(selected?.id);
-	current.current = selected?.id;
+	const pager = useRef(paged);
+	pager.current = paged;
 	useEffect(() => {
 		const follow = () => {
 			const id = routedID();
-			if (routedView() !== 'chat') setView(routedView());
+			if (routedView() !== 'chat') pager.current(routedView());
+			else if (id && held(id)) route(routePrefix + encodeURIComponent(current.current!), true);
 			else if (id && id !== current.current) void opener.current(id, true);
-			else setView('chat');
+			else pager.current('chat');
 		};
 		window.addEventListener('popstate', follow);
 		return () => window.removeEventListener('popstate', follow);
@@ -344,12 +369,17 @@ export function Workspace({
 							browser={connection.browser}
 							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
+							held={held}
 						/>
 					</Suspense>
 				)}
 				{view === 'usage' && (
 					<Suspense fallback={panel}>
-						<Usage connection={connection} open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))} />
+						<Usage
+							connection={connection}
+							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
+							held={held}
+						/>
 					</Suspense>
 				)}
 				{view === 'plugins' && (

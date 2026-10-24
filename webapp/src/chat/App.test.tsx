@@ -394,14 +394,14 @@ it('opens Token usage while a command is on its way, and holds other conversatio
     if (url.endsWith('/conversations')) return Promise.resolve(Response.json([{ id: 'one', title: 'Existing' }, { id: 'two', title: 'Other' }]));
     if (url.endsWith('/commands/run')) return new Promise<Response>((resolve) => { answer = resolve; });
     if (url.endsWith('/chat')) { chat = JSON.parse(String(options?.body)); return Promise.resolve(new Response('', { status: 500 })); }
-    if (url.includes('/usage')) return Promise.resolve(Response.json({ totalTokens: 0, models: [], days: [], top: [] }));
+    if (url.includes('/usage')) return Promise.resolve(Response.json({ totalTokens: 1, models: [], days: [], top: [{ id: 'two', title: 'Other', totalTokens: 1, inputTokens: 1, cacheReadTokens: 0, turns: 1, cost: 0 }] }));
     return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
   }));
-  render(<App />);
+  const { container } = render(<App />);
   const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
   const usage = screen.getAllByRole('button', { name: 'Token usage' })[0] as HTMLButtonElement;
   // The list may be redrawn as it loads, so the button is looked up each time.
-  const other = () => screen.getByRole('button', { name: 'Other' }) as HTMLButtonElement;
+  const other = () => within(screen.getByRole('navigation', { name: 'Conversations' })).getByRole('button', { name: 'Other' }) as HTMLButtonElement;
   fireEvent.change(box, { target: { value: '/compact' } });
   fireEvent.submit(box.closest('form')!);
   // Leaving the conversation now could lose the command, but a page opens beside it.
@@ -409,9 +409,46 @@ it('opens Token usage while a command is on its way, and holds other conversatio
   expect(usage.disabled).toBe(false);
   fireEvent.click(usage);
   await screen.findByRole('heading', { name: 'Token usage' });
+  // The page's own link to another conversation is held too.
+  const link = await waitFor(() => container.querySelector<HTMLButtonElement>('.usage-link')!);
+  expect(link.disabled).toBe(true);
+  fireEvent.click(link);
   answer(Response.json({ handled: false }));
   await waitFor(() => expect(chat).toBeDefined());
   await waitFor(() => expect(other().disabled).toBe(false));
+  expect(link.disabled).toBe(false);
+  expect(window.location.hash).toBe('#/usage');
+});
+
+it('keeps a page open that was chosen while a conversation was still loading, and opens the conversation behind it', async () => {
+  window.history.replaceState(null, '', '/');
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  let releaseTwo!: () => void;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Existing' }, { id: 'two', title: 'Other' }]);
+    if (url.includes('/usage')) return Response.json({ totalTokens: 0, models: [], days: [], top: [] });
+    const id = url.match(/\/conversations\/(\w+)$/)?.[1];
+    const snapshot = () => Response.json({ messages: [{ id: `m-${id}`, role: 'assistant', parts: [{ type: 'text', text: `reply in ${id}` }] }], active: false, model: 'demo/echo' });
+    if (id === 'two') return new Promise<Response>(resolve => { releaseTwo = () => resolve(snapshot()); });
+    if (id) return snapshot();
+    return Response.json({});
+  }));
+  render(<App />);
+  await screen.findByText('reply in one');
+  fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+  await waitFor(() => expect(releaseTwo).toBeDefined());
+  fireEvent.click(screen.getAllByRole('button', { name: 'Token usage' })[0]);
+  await screen.findByRole('heading', { name: 'Token usage' });
+  releaseTwo();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(window.location.hash).toBe('#/usage');
+  expect(screen.getByRole('heading', { name: 'Token usage' })).toBeTruthy();
+  // The conversation that loaded waits behind the page.
+  fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+  await waitFor(() => expect(window.location.hash).toBe('#/c/two'));
+  expect(screen.getByText('reply in two')).toBeTruthy();
+  window.history.replaceState(null, '', '/');
 });
 
 it('opens the conversation the address names and returns to cached conversations at once', async () => {
