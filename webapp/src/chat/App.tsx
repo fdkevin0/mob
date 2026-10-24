@@ -6,13 +6,12 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Runners, runnerConnection } from './Runners';
-import { Lobby } from './Lobby';
 import { Splash } from './Splash';
 import { hosts } from './hosts';
-import { browserChosen, browserConnection, browserLast, chooseBrowser } from './browser/connection';
+import { browserConnection, browserLast, chooseBrowser } from './browser/connection';
 import { cacheScope, forget, readList } from './localCache';
 
-// The workspace and its chat renderer load in parallel with signing in, so the lobby and the connect form
+// The workspace and its chat renderer load in parallel with signing in, so the loading screen and connect form
 // paint without waiting for them.
 const workspace = import('./Workspace');
 const Workspace = lazy(() => workspace.then((m) => ({ default: m.Workspace })));
@@ -27,13 +26,12 @@ export function App() {
   const [loading, setLoading] = useState(true);
   // starting is set until a saved connection, a sign-in link or the desktop's connection has been tried.
   const [starting, setStarting] = useState(true);
-  // The public web opens the workspace without a runner; prompting shows how to connect one, and draft keeps what was typed meanwhile.
+  // The connection dialog can open over the current workspace.
   const [prompting, setPrompting] = useState(false);
   const connectionAttempt = useRef(0);
   const closeConnection = () => { connectionAttempt.current++; setPrompting(false); setLoading(false); setError(''); };
   // The dialog first offers a choice of runner: the user's own one, or one deployed to their cloud account.
   const [choice, setChoice] = useState<'own' | 'cloud'>();
-  const [draft, setDraft] = useState('');
   // pending is a connection opened before its token was checked, which a rejection may arrive before it renders.
   const pending = useRef<Connection | undefined>(undefined);
   useEffect(() => {
@@ -64,7 +62,7 @@ export function App() {
       const runner = lastRunner();
       if (runner && (await readList(cacheScope(runner)))) { setConnection(runner); return undefined; }
       // With nothing else to open, the public web runs Mob in this browser.
-      if (isPublicWeb() && browserChosen()) { chooseBrowser(true); setConnection(browserConnection()); }
+      if (isPublicWeb()) { chooseBrowser(true); setConnection(browserConnection()); }
       return undefined;
     };
     restore().then(next => { if (next) { saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); } })
@@ -111,11 +109,11 @@ export function App() {
     else { void forget(cacheScope(from)); if (from.runner) forgetRunner(); else clearToken(); }
     setConnection(undefined);
   };
-  const workspaceView = connection && <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
+  const workspaceView = connection && <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
   if (connection && !isPublicWeb()) return workspaceView;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.mobDesktop) return <Splash label="Mob could not start."><h1 className="splash-title">Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></Splash>;
-  // Connecting shows the calf rather than a form that is about to go away; the public web shows its lobby meanwhile.
+  // Connecting shows the calf rather than a form that is about to go away.
   if (starting && !error && !isPublicWeb()) return <Splash label={window.mobDesktop ? 'Starting Mob…' : 'Connecting to Mob…'} />;
   const panel = <>
     {isPublicWeb() && <Runners connect={open} />}
@@ -123,7 +121,7 @@ export function App() {
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
     {error && <p role="alert">{error}</p>}</>;
   if (isPublicWeb()) return <>
-    {connection ? workspaceView : <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setChoice(undefined); setPrompting(true); }} />}
+    {workspaceView || <Splash label="Connecting to Mob…">{starting ? undefined : <Button onClick={() => { setChoice(error ? 'own' : undefined); setPrompting(true); }}>Connect a runner</Button>}</Splash>}
     <Dialog open={prompting} onOpenChange={show => { if (show) setPrompting(true); else closeConnection(); }}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
       <DialogDescription className="dialog-description">Choose where Mob runs.</DialogDescription>

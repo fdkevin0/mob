@@ -18,12 +18,6 @@ export function browserConnection(): Connection {
 	return { url: browserURL, token, browser: true };
 }
 
-// Choosing a runner instead is remembered, so the next visit opens that, not the browser.
-const offKey = 'mob-browser-off';
-/** browserChosen reports whether the public web opens the browser runner when nothing else is saved. */
-export function browserChosen() {
-	try { return localStorage.getItem(offKey) !== '1'; } catch { return true; }
-}
 // Opening the browser runner is remembered too, so it reopens even when a local Mob's token is also saved.
 const lastKey = 'mob-browser-last';
 /** browserLast reports whether the browser runner was the last Mob this browser opened. */
@@ -32,7 +26,7 @@ export function browserLast() {
 }
 export function chooseBrowser(on: boolean) {
 	try {
-		if (on) { localStorage.removeItem(offKey); localStorage.setItem(lastKey, '1'); }
-		else { localStorage.setItem(offKey, '1'); localStorage.removeItem(lastKey); }
+		if (on) localStorage.setItem(lastKey, '1');
+		else localStorage.removeItem(lastKey);
 	} catch { /* asked again next time */ }
 }

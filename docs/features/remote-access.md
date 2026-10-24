@@ -68,14 +68,12 @@ served by the Worker in `worker/`:
   runner remains selected until another runner connects successfully. Choosing
   **This browser** again closes the dialog without reopening the conversation.
   Closing the dialog discards any pending connection result.
-  Visitors without a connection can still look around and type a message;
-  actions that need Mob open the same dialog. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
+  After disconnecting a local or remote runner, the connection screen offers
+  the same dialog. Choose **This browser** to reopen the browser workspace. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's
   account at Render or another host (see
   [Runners in the cloud](#runners-in-the-cloud)), and **Cloud runner**, which is
-  disabled and marked coming soon. A typed message is kept and placed in the
-  composer of the first conversation that opens after connecting; it is not
-  sent automatically. A `mob open --web` link opens the dialog to show its
+  disabled and marked coming soon. A `mob open --web` link opens the dialog to show its
   progress, and a replaced token reopens it with the reason.
 - The browser keeps what each Mob showed last in IndexedDB, separately for
   each runner and local address, so a Mob it has shown before opens at once

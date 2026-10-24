@@ -54,15 +54,11 @@ export function Workspace({
 	connection,
 	disconnect,
 	switchTo,
-	draft,
-	clearDraft,
 }: {
 	connection: Connection;
 	disconnect: () => void;
 	/** switchTo opens another Mob, such as the one conversations were just moved to. */
 	switchTo?: (connection: Connection) => void;
-	draft?: string;
-	clearDraft?: () => void;
 }) {
 	const [view, setView] = useState<View>(routedView);
 	// OpenRouter's sign-in returns to the page with a code, which the provider dialog finishes.
@@ -249,7 +245,7 @@ export function Workspace({
 		// What this browser kept shows first, while the service is asked for the latest.
 		const kept = (async () => {
 			const list = await readList(scope);
-			if (!live || !list?.length || draft) return;
+			if (!live || !list?.length) return;
 			setConversations((current) => (current.length ? current : list));
 			const id = pick(list);
 			const snapshot = await readSnapshot(scope, id);
@@ -270,10 +266,8 @@ export function Workspace({
 				setBackground(runtime.background);
 				// A conversation the owner picked meanwhile stays open.
 				if (choice.current !== start) return;
-				// A draft typed before connecting starts a new conversation, as the lobby showed.
-				if (draft && !current.current) create(true);
 				// With none yet, a new conversation waits behind the page the address names.
-				else if (!list.length) showBehind(newConversationID(), { messages: [], active: false, model: '' });
+				if (!list.length) showBehind(newConversationID(), { messages: [], active: false, model: '' });
 				else if (routedView() !== 'chat') {
 					const id = pick(list);
 					showBehind(id, cache.current.get(id) ?? (await load(id)));
@@ -457,11 +451,8 @@ export function Workspace({
 								void refreshList().catch((e) => setError(errorText(e)));
 							}}
 							onAction={act}
-							draft={prompt || draft}
-							clearDraft={() => {
-								setPrompt('');
-								clearDraft?.();
-							}}
+							draft={prompt}
+							clearDraft={() => setPrompt('')}
 							addProvider={() => setProvider(true)}
 						/>
 					</div>

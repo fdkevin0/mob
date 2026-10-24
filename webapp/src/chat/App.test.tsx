@@ -196,12 +196,12 @@ it('explains why the public web could not reach local Mob', async () => {
 it('sends a typed token from the public web only to Mob on this computer', async () => {
   vi.stubEnv('MODE', 'public');
   localStorage.setItem('mob-url', 'https://mob.example');
-  localStorage.setItem('mob-browser-off', '1');
-  const fetchMock = vi.fn(async () => Response.json({}));
+  const fetchMock = vi.fn(async (url: string) => Response.json(url.endsWith('/conversations') ? [] : {}));
   vi.stubGlobal('fetch', fetchMock);
   try {
     render(<App />);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Connect a runner' }))[0]);
+    await screen.findByRole('button', { name: 'This browser: settings and runner' });
+    await chooseFromRunnerMenu('Connect a runner');
     fireEvent.click(await screen.findByRole('button', { name: /Your own runner/ }));
     const address = await screen.findByLabelText('Mob address') as HTMLInputElement;
     expect(address.value).toBe('http://127.0.0.1:8787');
@@ -209,7 +209,7 @@ it('sends a typed token from the public web only to Mob on this computer', async
     fireEvent.change(screen.getByLabelText('Local access token'), { target: { value: 'secret' } });
     fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Mob on this computer');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.every(([url]) => url.startsWith('http://localhost/api/'))).toBe(true);
   } finally { vi.unstubAllEnvs(); }
 });
 
@@ -241,7 +241,7 @@ it('keeps the browser workspace when choosing the current runner or a connection
     const hash = window.location.hash;
     await chooseFromRunnerMenu('Connect a runner');
     let dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
-    expect(localStorage.getItem('mob-browser-off')).toBeNull();
+    expect(localStorage.getItem('mob-browser-last')).toBe('1');
     expect(composer.isConnected).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: /This browser/ }));
     await act(async () => {});
@@ -258,7 +258,7 @@ it('keeps the browser workspace when choosing the current runner or a connection
     expect((await within(dialog).findByRole('alert')).textContent).toContain('Runner unavailable');
     expect(composer.isConnected).toBe(true);
     expect(composer.value).toBe('Keep this draft');
-    expect(localStorage.getItem('mob-browser-off')).toBeNull();
+    expect(localStorage.getItem('mob-browser-last')).toBe('1');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     cleanup();
     render(<App />);
@@ -301,51 +301,44 @@ it.each([200, 503])('ignores a dismissed connection returning %i while a newer a
     expect(composer.isConnected).toBe(true);
     expect(composer.value).toBe('Still typing after closing');
     expect(localStorage.getItem('mob-token')).toBeNull();
-    expect(localStorage.getItem('mob-browser-off')).toBeNull();
+    expect(localStorage.getItem('mob-browser-last')).toBe('1');
     expect(within(dialog).queryByRole('alert')).toBeNull();
     expect((within(dialog).getByRole('button', { name: 'Connecting…' }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => { requests[1](Response.json({})); });
     await screen.findByRole('button', { name: 'This computer: settings and runner' });
     expect(localStorage.getItem('mob-token')).toBe('new-token');
-    expect(localStorage.getItem('mob-browser-off')).toBe('1');
+    expect(localStorage.getItem('mob-browser-last')).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
   } finally { vi.unstubAllEnvs(); }
 });
 
-it('opens the public web workspace without a runner and asks for one only when sending', async () => {
+it('opens the current workspace even with the retired browser-off preference', async () => {
   vi.stubEnv('MODE', 'public');
   localStorage.setItem('mob-browser-off', '1');
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/runtime')) return Response.json({ background: false });
-    if (url.endsWith('/conversations')) return init?.method === 'POST' ? Response.json({ id: 'new', title: 'New conversation' }) : Response.json([{ id: 'one', title: 'Existing' }]);
-    if (url.endsWith('/config')) return Response.json({});
-    return Response.json({ messages: [], active: false, model: 'demo/echo' });
-  });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/conversations') ? [] : {})));
   try {
     render(<App />);
-    const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+    await screen.findByRole('button', { name: 'This browser: settings and runner' });
+    expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
-    fireEvent.submit(box.closest('form')!);
+    expect(localStorage.getItem('mob-browser-last')).toBe('1');
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('offers the connection screen after disconnecting and can reopen the browser workspace', async () => {
+  vi.stubEnv('MODE', 'public');
+  localStorage.setItem('mob-token', 'local-token');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/conversations') ? [] : {})));
+  try {
+    render(<App />);
+    await screen.findByRole('button', { name: 'This computer: settings and runner' });
+    await chooseFromRunnerMenu('Disconnect');
+    expect(screen.queryByRole('searchbox', { name: 'Search conversations' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect a runner' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /This browser/ }));
+    await screen.findByRole('button', { name: 'This browser: settings and runner' });
+    expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
-    fireEvent.change(box, { target: { value: 'hello 草稿' } });
-    fireEvent.submit(box.closest('form')!);
-    const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
-    expect((within(dialog).getByRole('button', { name: /Cloud runner/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect((within(dialog).getByRole('button', { name: /Deploy to the cloud/ }) as HTMLButtonElement).disabled).toBe(false);
-    expect(within(dialog).queryByLabelText('Local access token')).toBeNull();
-    fireEvent.click(within(dialog).getByRole('button', { name: /Your own runner/ }));
-    fireEvent.change(within(dialog).getByLabelText('Local access token'), { target: { value: 'secret' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Open workspace' }));
-    await screen.findByRole('button', { name: /settings and runner/ });
-    expect(screen.queryByRole('dialog')).toBeNull();
-    await waitFor(() => expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('hello 草稿'));
-    // The draft opens a new conversation, which Mob starts only with its first message.
-    expect(window.location.hash).toMatch(/^#\/c\/[0-9a-f]{32}$/);
-    expect(fetchMock.mock.calls.some(([url, init]) => url.endsWith('/conversations') && init?.method === 'POST')).toBe(false);
-    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/conversations/one'))).toBe(false);
-    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/chat'))).toBe(false);
   } finally { vi.unstubAllEnvs(); }
 });
 

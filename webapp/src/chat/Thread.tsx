@@ -46,7 +46,7 @@ export function Thread({
 	onAction: (action: Action) => void;
 	onLeave?: (snapshot: Snapshot, input: string) => void;
 	changes?: Changes;
-	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
+	/** draft is a prompt chosen on another page, such as an example in Agents. */
 	draft?: string;
 	clearDraft?: () => void;
 	/** addProvider opens the Model provider dialog from the model picker. */
@@ -112,7 +112,7 @@ export function Thread({
 		<>
 			<header className="view-header thread-header">
 				<div className="view-header-inner">
-					<h1 className="thread-title">{title || 'New conversation'}</h1>
+					<h1>{title || 'New conversation'}</h1>
 					{waiting ? (
 						<span className="thread-status waiting">
 							<RaisedHandIcon /> Waiting for you
