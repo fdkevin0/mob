@@ -96,7 +96,10 @@ For documentation writing or organization, the repository skill
   release-please builds the changelog and the next version from them (see
   [Releases](docs/features/releases.md)), so a breaking change needs `!` in the
   title. Commits inside a pull request are not checked.
-- A pull request merges once `CI passed` and `PR title` are green.
+- A pull request merges once `CI passed` and `PR title` are green. The
+  repository's rulesets are kept in [.github/rulesets/](.github/rulesets/); GitHub
+  does not read them from there, so a change to one is applied by hand under
+  Settings → Rules → Rulesets (import the JSON) in the same pull request.
 - A pull request describes the behaviour change, links related issues, lists the
   checks run, and includes screenshots for UI changes.
 - Design discussion happens in issues and pull requests. Mob does not keep
