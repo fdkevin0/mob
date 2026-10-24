@@ -78,7 +78,7 @@ async function sharedClients() {
     await sending;
     assert((await client.openConversation(id)).active, 'detaching Web must not stop the turn');
     detachWeb = web.start();
-    const expected = `[Demo mode — no model request]\n\nReceived: ${prompt}\n\nUse /remember a fact to exercise persistent approval.`;
+    const expected = `[Demo mode — no model request]\n\nReceived: ${prompt}\n\nUse /remember a fact to exercise persistent approval. Add a model provider for real replies.`;
     await until(() => !web.getSnapshot().busy && !tui.getSnapshot().busy && textOf(web.getSnapshot().messages).includes(expected) && textOf(tui.getSnapshot().messages).includes(expected), 'both readers receive complete replayed text');
     const saved = await client.openConversation(id);
     assert.equal(saved.messages.filter(m => m.role === 'user').length, 1, 'reconnecting must not submit the prompt twice');

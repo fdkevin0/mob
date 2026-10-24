@@ -40,12 +40,11 @@ type List = { ids: string[]; at: number; error?: string; of: string };
 /** fingerprint identifies what a model list depends on, so a provider whose endpoint or key changes is asked again. */
 const fingerprint = (p: Provider) => destination(p) + '\x00' + (p.key ?? '') + '\x00' + Object.keys(p.headers ?? {}).sort().map(k => k + '\x00' + p.headers![k]).join('\x00');
 
-/**
- * isFree tells a model that costs nothing to call: priced at zero, OpenCode
- * Zen's free tier, or a `:free` variant, which is how OpenRouter names them.
- */
-const isFree = (p: Provider, i: Info) =>
-	(i.cost?.input === 0 && i.cost.output === 0) || (p.preset === 'opencode' && openCodeFree(i.id)) || i.id.endsWith(':free');
+/** isFree tells a model that costs nothing to call: priced at zero, or a `:free` variant, which is how OpenRouter names them. */
+const isFree = (i: Info) => (i.cost?.input === 0 && i.cost.output === 0) || i.id.endsWith(':free');
+
+/** hidden drops the models Mob must not offer: OpenCode Zen's free tier, which is for OpenCode's own clients. */
+const hidden = (p: Provider, ids: string[]) => findPreset(p.preset)?.id === 'opencode' ? ids.filter(id => !openCodeFree(id)) : ids;
 
 /** nonChat are fragments of model IDs that do not converse. */
 const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'transcribe', 'rerank', 'audio', 'realtime', 'sora'];
@@ -53,6 +52,8 @@ const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'tr
 export class ProviderRegistry implements Models {
 	private file: ProvidersFile;
 	private lists = new Map<string, List>();
+	/** noTools holds, per provider, the models whose vendor list says they take no tools (OpenRouter's supported_parameters). */
+	private noTools = new Map<string, Set<string>>();
 
 	/** demo makes the offline model the default, for MOB_DEMO. */
 	// A browser's fetch throws when called as another object's method, so the default calls it on its own.
@@ -116,12 +117,7 @@ export class ProviderRegistry implements Models {
 		let ids = picks(p, this.listOf(p).ids ?? []);
 		const preset = findPreset(p.preset);
 		if (!ids.length && preset?.catalog) ids = this.catalog.models(preset.catalog).map(i => i.id);
-		if (preset?.publicKey && !p.key) {
-			// Without a key only the free tier answers.
-			ids = ids.filter(openCodeFree);
-			if (!ids.length && preset.default) ids = [preset.default];
-		}
-		return ids;
+		return hidden(p, ids);
 	}
 
 	/** info is the catalog's description of a model with the user's overrides; an unknown model is assumed to take tools. */
@@ -133,11 +129,12 @@ export class ProviderRegistry implements Models {
 		if (pref.context && pref.context > 0) i.context = pref.context;
 		if (pref.output && pref.output > 0) i.output = pref.output;
 		if (pref.reasoning !== undefined) i.reasoning = pref.reasoning;
+		if (this.noTools.get(p.id)?.has(id)) i.tools = false;
 		if (pref.tools !== undefined) i.tools = pref.tools;
 		if (pref.vision !== undefined) i.vision = pref.vision;
 		if (pref.efforts?.length) i.efforts = pref.efforts;
 		if (pref.cost) i.cost = pref.cost;
-		if (isFree(p, i)) i.free = true; else delete i.free;
+		if (isFree(i)) i.free = true; else delete i.free;
 		return i;
 	}
 
@@ -147,8 +144,7 @@ export class ProviderRegistry implements Models {
 		let key = p.key ?? '';
 		const preset = findPreset(p.preset);
 		if (!key && preset) {
-			if (preset.publicKey && openCodeFree(ref.model)) key = preset.publicKey;
-			else if (preset.appKey) key = preset.appKey;
+			if (preset.appKey) key = preset.appKey;
 			else if (!preset.noKey) throw new Error(`provider ${p.id} has no API key; run: mob provider add ${p.id} --key-stdin`);
 		}
 		const proto = protocolFor(p, ref.model);
@@ -235,7 +231,7 @@ export class ProviderRegistry implements Models {
 		if (!url && endpoint(p, 'chat')) url = endpoint(p, 'chat').replace(/\/+$/, '') + '/models';
 		else if (!url) { url = endpoint(p, 'anthropic').replace(/\/+$/, '') + '/v1/models?limit=1000'; anthropicAPI = true; }
 		const preset = findPreset(p.preset);
-		const key = p.key || preset?.publicKey || preset?.appKey || '';
+		const key = p.key || preset?.appKey || '';
 		const headers = new Headers();
 		if (key) {
 			if (anthropicAPI) { headers.set('x-api-key', key); headers.set('anthropic-version', '2023-06-01'); } else headers.set('Authorization', 'Bearer ' + key);
@@ -247,16 +243,18 @@ export class ProviderRegistry implements Models {
 			response = await this.fetcher(url, { headers, redirect: 'manual', signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
 		} catch { throw new Error(p.id + ': model list unavailable'); }
 		if (response.status !== 200) throw new Error(p.id + ': ' + (await statusError(response, secrets(key, p.headers))).message);
-		let body: { data?: { id?: unknown }[] };
+		let body: { data?: { id?: unknown; supported_parameters?: unknown }[] };
 		try { body = JSON.parse((await response.text()).slice(0, 4 << 20)); } catch { throw new Error(p.id + ': invalid model list'); }
-		const ids: string[] = [];
+		const ids: string[] = [], noTools = new Set<string>();
 		for (const m of body.data ?? []) {
 			const id = typeof m.id === 'string' ? m.id : '';
 			const lower = id.toLowerCase();
 			if (!id || id.length > 256 || /[\r\n\0 ]/.test(id) || nonChat.some(s => lower.includes(s))) continue;
 			if (!ids.includes(id)) ids.push(id);
+			if (Array.isArray(m.supported_parameters) && !m.supported_parameters.includes('tools')) noTools.add(id);
 		}
-		return ids.sort();
+		this.noTools.set(p.id, noTools);
+		return hidden(p, ids).sort();
 	}
 }
 

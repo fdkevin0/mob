@@ -21,6 +21,13 @@ export type OpenRouterSignIn = { code: string; verifier: string };
 // Without a named model, OpenRouter routes each request to a model it picks.
 const preferred: Record<string, string> = { openrouter: 'openrouter/auto' };
 
+// OpenRouter is how the browser gets free models, so a free one that takes
+// tools comes first: a catalogued one, then one only its :free name marks.
+function freeModel(registry: ProviderRegistry, p: Provider, listed: string[]) {
+	const free = listed.map(id => registry.info(p, id)).filter(i => i.free && i.tools);
+	return (free.find(i => i.known) ?? free[0])?.id;
+}
+
 export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch = (input, init) => fetch(input, init)): Plugin {
 	// save lists the provider's models, then makes the named one, or the first listed, the default.
 	async function save(p: Provider, named?: string) {
@@ -29,7 +36,7 @@ export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch
 		let listed: string[] = [];
 		let listError = '';
 		try { listed = await registry.fetch(p, AbortSignal.timeout(20_000)); } catch (e) { listError = (e as Error).message; }
-		const fallback = [preferred[p.id], preset?.default].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
+		const fallback = [p.id === 'openrouter' ? freeModel(registry, p, listed) : '', preferred[p.id], preset?.default].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
 		// A vendor's own ID wins, as OpenRouter's openrouter/auto does; otherwise a Mob reference loses its provider prefix.
 		const typed = named?.trim() ?? '';
 		const model = (listed.includes(typed) ? typed : typed.startsWith(p.id + '/') ? typed.slice(p.id.length + 1) : typed) || fallback;

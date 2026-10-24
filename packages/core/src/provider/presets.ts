@@ -13,8 +13,6 @@ export type Preset = {
 	keysUrl?: string;
 	/** noKey marks local servers, where a key is optional. */
 	noKey?: boolean;
-	/** publicKey is sent when the user saved none (OpenCode Zen's free tier). */
-	publicKey?: string;
 	/** appKey is sent when the user saved none, to a local gateway that tells apps apart by it (magpie). */
 	appKey?: string;
 	/** default is the model a new installation starts on. */
@@ -26,53 +24,14 @@ export type Preset = {
 export const magpieKey = 'magpie-mob';
 export const magpiePort = 3425;
 
-// openCodeVersion is the client release version accepted by OpenCode Zen's gateway.
-const openCodeVersion = '1.18.34';
+// OpenCode Zen's free models are for OpenCode's own clients, so only its paid
+// models, with the user's key, are offered.
 const openCodeFreeIDs = new Set(['big-pickle', 'grok-code']);
 export const openCodeFree = (model: string) => model.endsWith('-free') || openCodeFreeIDs.has(model);
 
-const base62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const hex = (b: Uint8Array) => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
-
-// sessionSeed is sha256("global"), which OpenCode's CLI identifiers derive from.
-let session = '';
-async function openCodeSession() {
-	if (!session) session = openCodeIDFrom('ses', new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('global'))));
-	return session;
-}
-void openCodeSession();
-
-function openCodeIDFrom(prefix: string, b: Uint8Array) {
-	let id = prefix + '_' + hex(b.subarray(0, 6));
-	for (const c of b.subarray(6, 20)) id += base62[c % base62.length];
-	return id;
-}
-
-const randomID = (prefix: string) => openCodeIDFrom(prefix, crypto.getRandomValues(new Uint8Array(32)));
-
-/**
- * openCode presents requests as the OpenCode CLI does. Its free tier also
- * rejects requests whose tools lack the CLI's bash and read, so inert stubs
- * are declared when missing.
- */
-const openCode: Quirk = (model, h, body) => {
-	h.set('User-Agent', 'opencode/' + openCodeVersion);
-	h.set('x-opencode-client', 'cli');
-	h.set('x-opencode-project', 'global');
-	h.set('x-opencode-session', session || randomID('ses'));
-	h.set('x-opencode-request', randomID('msg'));
-	if (!openCodeFree(model)) return;
-	const tools = (body.tools as { function?: { name?: string } }[] | undefined) ?? [];
-	const have = new Set(tools.map(t => t.function?.name));
-	for (const name of ['bash', 'read']) {
-		if (!have.has(name)) tools.push({ type: 'function', function: { name, description: 'Not available in this session. Never call this tool.', parameters: { type: 'object', properties: {} } } } as never);
-	}
-	body.tools = tools;
-};
-
 /** presets are ordered as `mob provider add --help` lists them. */
 export const presets: Preset[] = [
-	{ id: 'opencode', name: 'OpenCode Zen', chat: 'https://opencode.ai/zen/v1', catalog: 'opencode', keysUrl: 'https://opencode.ai/auth', publicKey: 'public', default: 'mimo-v2.6-flash-free', quirk: openCode },
+	{ id: 'opencode', name: 'OpenCode Zen', chat: 'https://opencode.ai/zen/v1', catalog: 'opencode', keysUrl: 'https://opencode.ai/auth' },
 	{ id: 'openai', name: 'OpenAI', chat: 'https://api.openai.com/v1', catalog: 'openai', keysUrl: 'https://platform.openai.com/api-keys' },
 	{ id: 'anthropic', name: 'Anthropic', anthropic: 'https://api.anthropic.com', catalog: 'anthropic', keysUrl: 'https://console.anthropic.com/settings/keys' },
 	{ id: 'deepseek', name: 'DeepSeek', chat: 'https://api.deepseek.com/v1', anthropic: 'https://api.deepseek.com/anthropic', catalog: 'deepseek', keysUrl: 'https://platform.deepseek.com/api_keys' },
@@ -89,4 +48,4 @@ export const presets: Preset[] = [
 export const findPreset = (id?: string) => (id ? presets.find(p => p.id === id) : undefined);
 
 /** publicPreset is a preset as the API lists it. */
-export const publicPreset = ({ quirk: _q, publicKey: _p, appKey: _a, default: _d, ...rest }: Preset) => rest;
+export const publicPreset = ({ quirk: _q, appKey: _a, default: _d, ...rest }: Preset) => rest;

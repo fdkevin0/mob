@@ -1,11 +1,11 @@
 // mob provider edits providers.json directly; a running service reloads it.
 import { Command } from 'commander';
-import { ProviderRegistry, destination, displayName, endpoint, findPreset, maskedKey, presets, validateProvider, type Provider } from '@mob/core';
+import { ProviderRegistry, adoptDefault, destination, displayName, endpoint, findPreset, maskedKey, presets, validateProvider, type Provider } from '@mob/core';
 import { fileCatalog, fileProviders } from './providers';
 import { findMagpie } from './magpie';
 
-/** needsKey reports whether requests need a key: local servers and OpenCode's free tier don't; a custom endpoint may not. */
-const needsKey = (p: Provider) => { const pr = findPreset(p.preset); return !!pr && !pr.noKey && !pr.publicKey; };
+/** needsKey reports whether requests need a key: local servers don't; a custom endpoint may not. */
+const needsKey = (p: Provider) => { const pr = findPreset(p.preset); return !!pr && !pr.noKey; };
 
 async function readLine(): Promise<string> {
 	const reader = Bun.stdin.stream().getReader();
@@ -108,6 +108,7 @@ export function providerCommand(path: () => string): Command {
 				const i = f.providers.findIndex(q => q.id === id);
 				if (i >= 0) f.providers[i] = p; else f.providers.push(p);
 				if (o.default) f.default = id + '/' + String(o.default).replace(new RegExp('^' + id.replace(/[.]/g, '\\.') + '/'), '');
+				else adoptDefault(f, p, listed);
 			});
 			console.log(`${existing ? 'Updated' : 'Added'} ${id} (${displayName(p)}) in ${path()}`);
 			if (listed.length) console.log(`It lists ${listed.length} models, e.g. ${listed.slice(0, 5).join(', ')}`);

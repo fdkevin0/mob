@@ -32,10 +32,22 @@ export type Provider = {
 /** ProvidersFile is providers.json. default is the model a conversation uses until /model picks another. */
 export type ProvidersFile = { default?: string; providers: Provider[] };
 
-/** initialProviders is the zero-configuration file: OpenCode Zen's free tier. */
+/** initialProviders is the zero-configuration file: the offline demo model, until a provider is added. */
 export function initialProviders(): ProvidersFile {
-	const p = findPreset('opencode')!;
-	return { default: p.id + '/' + p.default, providers: [{ id: p.id, preset: p.id }] };
+	return { default: 'demo/echo', providers: [] };
+}
+
+/**
+ * adoptDefault makes a provider just added the default when the default is
+ * still the demo model (or unset): its picked model, its preset's default, or
+ * the first it lists. With none of those, the default is cleared, so the
+ * provider's first available model is used.
+ */
+export function adoptDefault(f: ProvidersFile, p: Provider, listed: string[]) {
+	if (f.default && !f.default.startsWith('demo/')) return;
+	const preset = findPreset(p.preset)?.default;
+	const model = p.models?.[0] ?? (preset && listed.includes(preset) ? preset : listed[0]);
+	if (model) f.default = p.id + '/' + model; else delete f.default;
 }
 
 /** endpoint is the provider's base URL for a protocol, its own or its preset's. */

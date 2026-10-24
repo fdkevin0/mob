@@ -32,11 +32,13 @@
 		}
 	],
 	"vars": {
+		"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
 		"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
 	},
 	"previews": {
 		"vars": {
+			"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
 			"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 			"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
 		},

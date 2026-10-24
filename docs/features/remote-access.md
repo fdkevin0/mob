@@ -272,7 +272,11 @@ sent `anthropic-dangerous-direct-browser-access`. With OpenRouter selected,
 flow returns to `/app?code=…`, and the worker trades the code, with the
 verifier kept in the tab's session storage, for a key of the user's account
 (`POST /api/plugins/browser/openrouter`), which the user can limit or revoke
-on OpenRouter; without a named model it uses `openrouter/auto`.
+on OpenRouter. OpenRouter is the browser's way to free models, so without a
+named model it starts on a free model that takes tools (OpenRouter limits
+free models per day), and on `openrouter/auto` when none is listed. Mob does
+not proxy OpenCode Zen through usemob.app: OpenCode's docs say its free-tier
+chat models require OpenCode, so other clients must use its paid models.
 
 Keys are stored unencrypted in the browser's database, in the site's origin
 private file system, like any key a web app keeps. The browser keeps other
