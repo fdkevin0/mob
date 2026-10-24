@@ -37,6 +37,8 @@ jobs:
       # links and policies on every pull request.
       - name: Build public site
         run: bun run build:web
+      - name: Check public site routing
+        run: bun run test:site
 
   core:
     name: TypeScript core and host

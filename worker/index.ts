@@ -128,7 +128,7 @@ export default {
 		if (pathname.startsWith('/runner/')) return runnerScript(env, request);
 		if (pathname === '/docs') return Response.redirect(`${url.origin}/docs/`, 301);
 		if (pathname.startsWith('/docs/')) return docs(env, request);
-		return Response.redirect(`${url.origin}/`, 302);
+		return new Response('Not found', { status: 404 });
 	},
 } satisfies ExportedHandler<Env>;
 
