@@ -104,7 +104,10 @@ export function Workspace({
 	}, [changes]);
 	const cache = useRef(new Map<string, Snapshot>());
 	// A remembered snapshot is shown before Mob answers, so it never claims a turn is running: that comes from Mob.
+	// Deleted conversations are never kept again, though their thread hands its messages over as it closes.
+	const deleted = useRef(new Set<string>());
 	const remember = (id: string, kept: Snapshot) => {
+		if (deleted.current.has(id)) return;
 		const snapshot = { ...kept, active: false };
 		cache.current.delete(id);
 		cache.current.set(id, snapshot);
@@ -216,6 +219,7 @@ export function Workspace({
 	const [removing, setRemoving] = useState<Conversation>();
 	async function remove(c: Conversation) {
 		await api(connection, `/conversations/${c.id}/delete`, {});
+		deleted.current.add(c.id);
 		setRemoving(undefined);
 		cache.current.delete(c.id);
 		void forgetSnapshot(scope, c.id);
