@@ -5,8 +5,12 @@
 // Builds deploys it from this repository with build command
 // `bun install --frozen-lockfile && bun run build:web` and deploy command
 // `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
-// Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY and GITHUB_CLIENT_SECRET.
-// The Turnstile site key and GitHub client ID are public, so they are vars.
+// Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, GITHUB_CLIENT_SECRET and
+// CLOUDFLARE_CLIENT_SECRET (Cloudflare sign-in stays off without it).
+// The Turnstile site key and the OAuth client IDs are public, so they are vars.
+// CLOUDFLARE_SCOPES (space-separated) adds scopes to Cloudflare's
+// user-details.read: account read, Workers AI and offline_access let Mob in
+// the browser run Workers AI on the visitor's account.
 // PR builds apply migrations with wrangler.preview-migrations.jsonc before
 // running `npx wrangler preview`; their auth data uses a separate D1.
 {

@@ -12,7 +12,15 @@ export interface Env {
 	TURNSTILE_SECRET_KEY: string;
 	GITHUB_CLIENT_ID: string;
 	GITHUB_CLIENT_SECRET: string;
+	/** Cloudflare sign-in is offered once both are set. */
+	CLOUDFLARE_CLIENT_ID?: string;
+	CLOUDFLARE_CLIENT_SECRET?: string;
+	/** CLOUDFLARE_SCOPES are the scope IDs asked for besides user-details.read, space-separated, as the OAuth client lists them. */
+	CLOUDFLARE_SCOPES?: string;
 }
+
+/** cloudflareReady tells whether Cloudflare can sign in and lend Workers AI. */
+export const cloudflareReady = (env: Env) => Boolean(env.CLOUDFLARE_CLIENT_ID && env.CLOUDFLARE_CLIENT_SECRET);
 
 export function configured(env: Env) {
 	return Boolean(env.BETTER_AUTH_SECRET && env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET_KEY && env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
@@ -27,17 +35,32 @@ export function createAuth(env: Env, origin: string) {
 		secret: env.BETTER_AUTH_SECRET,
 		trustedOrigins: [origin],
 		database: env.DB,
-		// GitHub is the only way to create an account: no passwords to keep.
-		// Passkeys are added afterwards from the account page.
+		// GitHub or Cloudflare creates an account: no passwords to keep.
+		// Passkeys are added afterwards from the account page, and Cloudflare
+		// can be connected there to an account GitHub created.
 		socialProviders: {
 			github: { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET },
+			...(cloudflareReady(env) ? {
+				cloudflare: {
+					clientId: env.CLOUDFLARE_CLIENT_ID!,
+					clientSecret: env.CLOUDFLARE_CLIENT_SECRET!,
+					// Workers AI calls need the account and AI scopes; offline_access keeps the token refreshable.
+					scope: (env.CLOUDFLARE_SCOPES ?? '').split(/\s+/).filter(Boolean),
+				},
+			} : {}),
+		},
+		account: {
+			// Provider tokens are kept encrypted: the Cloudflare one spends the visitor's account.
+			encryptOAuthTokens: true,
+			// Connecting happens only from a signed-in account page, never by matching emails.
+			accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: true, trustedProviders: [] },
 		},
 		advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] } },
 		telemetry: { enabled: false },
 		plugins: [captcha({
 			provider: 'cloudflare-turnstile',
 			secretKey: env.TURNSTILE_SECRET_KEY,
-			// Turnstile guards the start of the GitHub flow.
+			// Turnstile guards the start of the GitHub and Cloudflare flows.
 			endpoints: ['/sign-in/social'],
 			// Turnstile's test keys report another hostname, so local runs skip the check.
 			allowedHostnames: isLocal(origin) ? undefined : [new URL(origin).hostname],

@@ -69,3 +69,17 @@ it('explains a passkey that belongs to no account', async () => {
   expect(openApp).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: /Sign in with a passkey/ }).hasAttribute('disabled')).toBe(false);
 });
+
+it('offers Cloudflare when the site has it set up', async () => {
+  social.mockReturnValue(new Promise(() => {}));
+  const { unmount } = render(<Dialog defaultOpen><SignIn site={site} /></Dialog>);
+  await screen.findByRole('button', { name: /Continue with GitHub/ });
+  expect(screen.queryByRole('button', { name: /Continue with Cloudflare/ })).toBeNull();
+  unmount();
+  render(<Dialog defaultOpen><SignIn site={{ ...site, cloudflare: true }} /></Dialog>);
+  fireEvent.click(await screen.findByRole('button', { name: /Continue with Cloudflare/ }));
+  expect(social).toHaveBeenCalledWith(
+    { provider: 'cloudflare', callbackURL: '/?signin=done', errorCallbackURL: '/?signin=failed' },
+    { headers: { 'x-captcha-response': 'token' } },
+  );
+});

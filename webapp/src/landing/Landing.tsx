@@ -39,7 +39,10 @@ export function Landing() {
 		else if (signin === 'app') setDialog({});
 		else if (signin === 'account') { returnAfterSignIn('/account'); setDialog({ reason: 'Sign in to manage your account and passkeys.' }); }
 		else if (signin === 'done') setSignedIn(true);
-		else if (signin === 'failed') setDialog({ reason: 'GitHub sign-in did not finish. Try again.' });
+		// Cloudflare with the email of an account GitHub made is connected from that account instead.
+		else if (signin === 'failed') setDialog({ reason: params.get('error') === 'account_not_linked'
+			? 'This email already has a Mob account. Sign in with GitHub, then connect Cloudflare on your account page.'
+			: 'Sign-in did not finish. Try again.' });
 		loadSite().then(setSite).catch(e => setSiteError(`Sign-in is unavailable right now. ${e instanceof Error ? e.message : ''}`.trim()));
 	}, []);
 

@@ -1,4 +1,5 @@
-import { configured, createAuth, type Env } from './auth';
+import { cloudflareReady, configured, createAuth, type Env } from './auth';
+import { cloudflareAI, cloudflareBase } from './ai';
 import { accountRunners, runnerTransport } from './runners';
 export { RunnerRelay } from './relay';
 
@@ -108,8 +109,9 @@ export default {
 			return accountRunners(request, env, session.user.id);
 		}
 		if (pathname === '/api/site') {
-			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env) }, { headers: { 'Cache-Control': 'no-store' } });
+			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env), cloudflare: cloudflareReady(env) }, { headers: { 'Cache-Control': 'no-store' } });
 		}
+		if (pathname.startsWith(cloudflareBase + '/')) return cloudflareAI(request, env);
 		if (pathname === '/') return page(env, request, '/landing', landingPolicy);
 		if (pathname === '/demo' || pathname === '/demo/') return page(env, request, '/demo', demoPolicy);
 		if (pathname === '/app' || pathname === '/app/') {

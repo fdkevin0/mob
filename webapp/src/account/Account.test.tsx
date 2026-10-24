@@ -10,6 +10,9 @@ const auth = vi.hoisted(() => ({
 	updatePasskey: vi.fn(),
 	deletePasskey: vi.fn(),
 	signOut: vi.fn(),
+	linkSocial: vi.fn(),
+	unlinkAccount: vi.fn(),
+	loadSite: vi.fn(),
 }));
 vi.mock('../landing/auth', () => ({
 	authClient: {
@@ -19,8 +22,11 @@ vi.mock('../landing/auth', () => ({
 		accountInfo: auth.accountInfo,
 		passkey: { addPasskey: auth.addPasskey, updatePasskey: auth.updatePasskey, deletePasskey: auth.deletePasskey },
 		signOut: auth.signOut,
+		linkSocial: auth.linkSocial,
+		unlinkAccount: auth.unlinkAccount,
 	},
 	errorCode: (error: { code?: string }) => error.code,
+	loadSite: auth.loadSite,
 }));
 
 import { Account } from './Account';
@@ -30,12 +36,13 @@ beforeEach(() => {
 	Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: function PublicKeyCredential() {} });
 	auth.listAccounts.mockResolvedValue({ data: [{ id: 'a', providerId: 'github', createdAt: '2026-10-01T00:00:00Z' }], error: null });
 	auth.signOut.mockResolvedValue({});
+	auth.loadSite.mockResolvedValue({ turnstileSiteKey: 'k', ready: true });
 	auth.accountInfo.mockResolvedValue({ data: { user: {}, data: { login: 'ada-l' } }, error: null });
 	assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
 });
 afterEach(() => {
 	vi.restoreAllMocks();
-	for (const mock of [auth.listAccounts, auth.accountInfo, auth.addPasskey, auth.updatePasskey, auth.deletePasskey, auth.signOut]) mock.mockReset();
+	for (const mock of [auth.listAccounts, auth.accountInfo, auth.addPasskey, auth.updatePasskey, auth.deletePasskey, auth.signOut, auth.linkSocial, auth.unlinkAccount, auth.loadSite]) mock.mockReset();
 	auth.passkeys = { isPending: false, data: [], error: null };
 	auth.session = { isPending: false, data: { user: { name: 'Ada', email: 'ada@example.test', image: null } }, error: null };
 });
@@ -92,4 +99,24 @@ it('sends a signed-out visitor to sign in', async () => {
 	auth.session = { isPending: false, data: null, error: null };
 	render(<Account />);
 	await waitFor(() => expect(assign).toHaveBeenCalledWith('/?signin=account'));
+});
+
+it('connects Cloudflare to the account when the site offers it', async () => {
+	auth.loadSite.mockResolvedValue({ turnstileSiteKey: 'k', ready: true, cloudflare: true });
+	auth.linkSocial.mockReturnValue(new Promise(() => {}));
+	render(<Account />);
+	const row = (await screen.findByText('Cloudflare')).closest('li')!;
+	fireEvent.click(await within(row).findByRole('button', { name: 'Connect' }));
+	expect(auth.linkSocial).toHaveBeenCalledWith({ provider: 'cloudflare', callbackURL: '/account', errorCallbackURL: '/account' });
+});
+
+it('disconnects Cloudflare while GitHub still signs in', async () => {
+	auth.listAccounts.mockResolvedValue({ data: [{ id: 'a', providerId: 'github', createdAt: '2026-10-01T00:00:00Z' }, { id: 'c', providerId: 'cloudflare', createdAt: '2026-10-02T00:00:00Z' }], error: null });
+	auth.unlinkAccount.mockResolvedValue({ data: {}, error: null });
+	Object.defineProperty(window, 'confirm', { configurable: true, value: vi.fn(() => true) });
+	render(<Account />);
+	const row = (await screen.findByText('Cloudflare')).closest('li')!;
+	fireEvent.click(await within(row).findByRole('button', { name: 'Disconnect' }));
+	await waitFor(() => expect(auth.unlinkAccount).toHaveBeenCalledWith({ accountId: 'c' }));
+	await waitFor(() => expect(auth.listAccounts).toHaveBeenCalledTimes(2));
 });

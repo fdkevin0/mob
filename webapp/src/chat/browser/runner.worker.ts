@@ -50,7 +50,7 @@ async function start(token: string) {
 	}
 	const store = new Store(openWasm(db), 'web').open();
 	const providers = new ProviderRegistry(storedProviders(store));
-	const server = new Server({ store, providers, token, version: 'web' }, [providerPlugin(providers)]);
+	const server = new Server({ store, providers, token, version: 'web' }, [providerPlugin(providers, undefined, location.origin)]);
 	return { server, persistent };
 }
 

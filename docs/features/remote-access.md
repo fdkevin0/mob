@@ -36,8 +36,13 @@ served by the Worker in `worker/`:
   directly from static assets; pages still pass through the Worker for
   sign-in checks and content security policies. Unknown paths return 404
   instead of redirecting to the landing page.
-- Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare
-  Turnstile check has to pass before the GitHub flow starts. Accounts and
+- Sign-in is GitHub or Cloudflare OAuth through Better Auth, with no
+  passwords. Cloudflare is offered once `CLOUDFLARE_CLIENT_SECRET` is set. A
+  Cloudflare Turnstile check has to pass before either flow starts. Accounts
+  are never linked by matching emails: signing in with Cloudflare under the
+  email of an account GitHub made is refused with a hint to sign in with
+  GitHub and connect Cloudflare on the account page. Provider tokens are
+  stored encrypted with `BETTER_AUTH_SECRET`. Accounts and
   sessions live in the D1 database `mob-auth`, alongside runner ownership and hashed pairing credentials. Conversation content stays on the runner.
 - Passkeys are an extra way into an account that GitHub created; they never
   create an account. **Sign in with a passkey** in the sign-in dialog skips
@@ -45,8 +50,9 @@ served by the Worker in `worker/`:
   A passkey that is not bound to any account is refused with a hint to sign in
   with GitHub first. The relying party ID is the site's hostname, so passkeys
   made on `usemob.app` do not work on preview hostnames or the previous domain.
-- `/account` shows the signed-in user, the connected GitHub account and the
-  account's passkeys, which can be added, renamed and removed. The GitHub row
+- `/account` shows the signed-in user, the connected GitHub and Cloudflare
+  accounts (either can be connected there, and disconnected while the other
+  still signs in) and the account's passkeys, which can be added, renamed and removed. The GitHub row
   shows the current username: the page asks GitHub once per visit with the
   stored OAuth token (Better Auth `account-info`), so a renamed account shows
   its new name, and it only says Connected when GitHub does not answer.
@@ -159,14 +165,20 @@ Deployment:
   do not inherit their production values. Previews share the separate
   `mob-auth-preview` database.
   Keep that file's database ID aligned with `previews.d1_databases`.
-  Set the three auth secrets in Cloudflare's Previews Base configuration;
+  Set the auth secrets in Cloudflare's Previews Base configuration;
   production secrets are not inherited. Preview URLs are public unless access
   controls are configured. GitHub OAuth callbacks and Turnstile hostnames must
-  also allow the preview hostname to exercise sign-in there.
-- Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY` and
-  `GITHUB_CLIENT_SECRET`. The public `TURNSTILE_SITE_KEY` and
-  `GITHUB_CLIENT_ID` are vars in `wrangler.jsonc`. The GitHub OAuth app's
-  callback URL is `https://usemob.app/api/auth/callback/github`.
+  also allow the preview hostname to exercise sign-in there, and so must the
+  Cloudflare OAuth client's redirect URLs.
+- Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY`,
+  `GITHUB_CLIENT_SECRET` and `CLOUDFLARE_CLIENT_SECRET`. The public
+  `TURNSTILE_SITE_KEY`, `GITHUB_CLIENT_ID` and `CLOUDFLARE_CLIENT_ID` are
+  vars in `wrangler.jsonc`. The OAuth callback URLs are
+  `https://usemob.app/api/auth/callback/github` and
+  `https://usemob.app/api/auth/callback/cloudflare`. Cloudflare always asks
+  for `user-details.read`; the `CLOUDFLARE_SCOPES` var (space-separated scope
+  IDs as the Cloudflare OAuth client lists them) adds account read, Workers
+  AI and `offline_access`, which Workers AI in the browser needs.
 - Locally, put the secrets in `.dev.vars`, which overrides the vars too
   (Turnstile's test keys work), run
   `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
@@ -282,6 +294,18 @@ named model it starts on a free model that takes tools (OpenRouter limits
 free models per day), and on `openrouter/auto` when none is listed. Mob does
 not proxy OpenCode Zen through usemob.app: OpenCode's docs say its free-tier
 chat models require OpenCode, so other clients must use its paid models.
+
+**Cloudflare Workers AI (your account)** needs no key: it uses the Cloudflare
+account the visitor signed in with or connected on `/account`, which includes
+a daily free allowance. The provider's base URL is the site's own
+`/api/ai/cloudflare/v1` (`POST /api/plugins/browser/cloudflare`); the Worker
+there checks the session and the request's origin, takes the stored token
+(refreshing it when it has expired), finds the first account it reaches, and
+forwards `GET /models` (Workers AI text generation models, with
+`supported_parameters` marking those that take tools) and
+`POST /chat/completions` to Workers AI's OpenAI-compatible endpoint. The token
+never reaches the page, and without a model named the browser starts on the
+first one that takes tools.
 
 Keys are stored unencrypted in the browser's database, in the site's origin
 private file system, like any key a web app keeps. The browser keeps other
