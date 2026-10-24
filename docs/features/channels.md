@@ -58,8 +58,8 @@ commands, approvals, delivery records and replies behave the same everywhere.
   survive restart. Restart marks in-flight processing failed and in-flight sends
   uncertain; neither is replayed. There is no resend: a new message is a new
   attempt.
-- Polling continues while a reply is written: each message is answered in its
-  own goroutine, in the order it arrived. A message sent while the
+- Polling continues while a reply is written: each message is answered on its
+  own, in the order it arrived. A message sent while the
   conversation's turn runs gets a busy reply with a Stop button, so it is never
   queued behind the turn.
 - After a second, a reply in progress shows as a "Thinking…" draft
@@ -113,7 +113,7 @@ commands, approvals, delivery records and replies behave the same everywhere.
 ## WeChat iLink
 
 - Connects natively through Tencent's WeChat iLink HTTP API
-  (`ilinkai.weixin.qq.com`) in pure Go (`internal/plugins/wechatilink`).
+  (`ilinkai.weixin.qq.com`) in TypeScript (`apps/mob/src/wechat`).
 - Sign-in is a QR code shown in the web UI (`get_bot_qrcode`, then
   `get_qrcode_status` until confirmed). After confirmation, click **Save
   configuration** to store the bot token and ID locally and enable polling;

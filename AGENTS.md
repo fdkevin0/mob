@@ -1,8 +1,8 @@
 # AGENTS.md
 
-Mob is a local Go assistant: one service with SQLite, used from a React UI
-(browser and Wails desktop), a Bubble Tea TUI, the `mob` CLI and messaging
-channels.
+Mob is a local TypeScript assistant: one Bun service with SQLite, used from a
+React UI (browser and Electron desktop), an OpenTUI terminal UI, the `mob` CLI
+and messaging channels.
 
 ## Working here
 
@@ -12,13 +12,15 @@ channels.
   asking.
 - `./build/mob serve --demo` runs the app on an offline model when you want to
   see a change working.
-- Go tests fail when `packages/client/src/contracts.ts` is stale; regenerate it with
-  `bun run generate:contracts`.
+- `packages/client/src/contracts.ts` is the wire contract the service and its
+  clients share; change both sides in the same pull request.
+- Tests fail when `docs/environment-variables.md` is stale; regenerate it with
+  `bun run generate:configdocs`.
 
 ## Rules tooling does not catch
 
-- Schema changes are a new migration in `internal/chat/migrations.go`, with
-  `Added` set to today's UTC date (`YYYYMMDD`).
+- Schema changes raise `schemaVersion` in `packages/core/src/chat/schema.ts`
+  and add the upgrade from the previous version to `upgrades`.
 - Commit messages use `type(scope): description`; release-please builds the
   changelog from them.
 - Do not write architecture decision records. When a change alters how a

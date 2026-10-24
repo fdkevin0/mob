@@ -1,6 +1,6 @@
 # Environment variables and configuration
 
-Generated from internal/configuration/options.go; run go run ./cmd/configdocs.
+Generated from apps/mob/src/config.ts; run bun run --cwd apps/mob configdocs.
 
 Explicit CLI flags > nonempty MOB_ environment variables > configuration file > defaults.
 Empty environment values are ignored consistently; use a flag or file value to clear a string.
@@ -9,6 +9,7 @@ There is no .env loader. Restart after changing the process environment.
 Keys map to flags by replacing dots/underscores with hyphens, and to environment
 variables by replacing dots with underscores, uppercasing and prefixing MOB_.
 The config selector chooses the file before loading it and cannot appear inside that file.
+The file is YAML (config.yaml) or JSON (config.json).
 
 | File key | CLI flag | Environment | Default | Purpose |
 | --- | --- | --- | --- | --- |
@@ -20,10 +21,6 @@ The config selector chooses the file before loading it and cannot appear inside 
 | `max_tool_steps` | `--max-tool-steps` | `MOB_MAX_TOOL_STEPS` | `20` | Model calls per turn (1-100) |
 | `web_url` | `--web-url` | `MOB_WEB_URL` | `https://usemob.app` | Public web UI URL; an empty flag or file value disables it |
 | `token` | `--token` | `MOB_TOKEN` | `""` | Local access token (at least 32 bytes); empty uses the managed token file; restart required; sensitive: prefer a protected file or environment over argv |
-| `gateway.url` | `--gateway-url` | `MOB_GATEWAY_URL` | `""` | Gateway URL for this service to register with; restart required |
-| `gateway.node_id` | `--gateway-node-id` | `MOB_GATEWAY_NODE_ID` | `""` | Gateway node ID; empty uses hostname or node-local; restart required |
-| `gateway.addr` | `--gateway-addr` | `MOB_GATEWAY_ADDR` | `:8788` | Gateway server listen address; restart required |
-| `gateway.token` | `--gateway-token` | `MOB_GATEWAY_TOKEN` | `""` | Gateway authentication token; empty disables gateway authentication; restart required; sensitive: prefer a protected file or environment over argv |
 | `sandbox.enabled` | `--sandbox-enabled` | `MOB_SANDBOX_ENABLED` | `false` | Expose the container sandbox tool |
 | `sandbox.runtime` | `--sandbox-runtime` | `MOB_SANDBOX_RUNTIME` | `""` | Container runtime: containerd, apple or wslc; empty selects by platform |
 | `sandbox.image` | `--sandbox-image` | `MOB_SANDBOX_IMAGE` | `python:3.13-slim` | Container image for commands |

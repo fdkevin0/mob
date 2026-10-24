@@ -21,8 +21,9 @@ keep architecture decision records.
 | [Schedules](schedules.md) | prompts the model runs on its own later, once or repeatedly |
 | [Skills](skills.md) | Agent Skills the model loads by name, and running their scripts in the sandbox |
 | [Extensions](extensions.md) | how plugins add tools, hooks, commands, routes, configuration and background runs |
+| [Desktop app](desktop.md) | the Electron window, tray and packaging |
 | [Releases and upgrades](releases.md) | nightly and stable channels, database migration windows |
-| [Remote access](remote-access.md) | the public site (landing page, GitHub sign-in, web UI) and the experimental gateway |
+| [Remote access](remote-access.md) | the public site (landing page, GitHub sign-in, web UI) and encrypted remote runners |
 
 The retired Cloudflare Worker and Telegram Mini App, and the decision records
 written for them, are kept at the `legacy-worker` tag.

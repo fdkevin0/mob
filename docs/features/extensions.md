@@ -3,52 +3,53 @@
 Mob is a small kernel with extensions registered at compile time. Plugins add
 tools, commands, HTTP routes, configuration and background runs beside their own
 code, and the engine does not name them. Code from outside Mob comes in only
-through [MCP servers](mcp.md): Go's `plugin` package has no Windows support and
-cannot unload, and Mob ships as one binary.
+through [MCP servers](mcp.md): Mob ships as one binary, and loading code at run
+time would keep it from being compiled ahead of time.
 
 [DeepSeek Harness tools](deepseek-harness.md) use an optional Bun process with
 the official Cordis runtime, connected over that same MCP boundary.
 
-Adding a plugin is a package, one entry in `plugins()` in `internal/app`, and,
-for configuration, one `configuration.Section`. The `configuration.Plugins`
-struct still names each plugin.
+Adding a plugin is a directory under `apps/mob/src`, one import in
+`apps/mob/src/plugins.ts`, and a `Plugin` (`packages/core/src/app/server.ts`)
+that the directory pushes onto `hostPlugins`; configuration is one `Section`
+(`packages/core/src/app/configuration.ts`).
 
 ## Tools
 
-- A `chat.Tool` is an `llm.Tool` definition, an optional `Prompt` added to the
-  system prompt when the tool is offered, and `Run`. `Run` gets a `ToolCall`
-  with the parsed input, the stored part, the message, the store and the event
-  sender. Its output and errors go back to the model, except
-  `ErrAwaitingApproval`, which ends the turn after an approval request, and
-  errors wrapped by `Abort`, which end the turn as failures. A tool error after
+- A `Tool` (`packages/core/src/chat/tools.ts`) is a model tool definition, an
+  optional `prompt` added to the system prompt when the tool is offered, and
+  `run`. `run` gets a `ToolCall` with the parsed input, the stored part, the
+  message, the store and the event sender. Its output and errors go back to the
+  model, except `AwaitingApproval`, which ends the turn after an approval
+  request, and an `Abort`, which ends the turn as a failure. A tool error after
   cancellation ends the turn as cancelled.
-- `Available` says when a tool is offered (plugin tools: while their plugin is
-  enabled). `OwnerOnly` limits it to the owner's turns. `Exposure` makes it
-  direct, deferred until `tool_search` loads it, or hidden, and `Namespace`
+- `available` says when a tool is offered (plugin tools: while their plugin is
+  enabled). `ownerOnly` limits it to the owner's turns. `exposure` makes it
+  direct, deferred until `tool_search` loads it, or hidden, and `namespace`
   groups deferred tools where `tool_search` is described; see
   [Exposure and tool_search](tools-and-approvals.md#exposure-and-tool_search).
-- To ask for approval, `Run` calls `ToolCall.RequestApproval` with the input the
-  user will approve, and `Approved` carries out the call once approved. `Scope`
+- To ask for approval, `run` calls `requestApproval` with the input the
+  user will approve, and `approved` carries out the call once approved. `scope`
   decides which later calls a remembered approval covers. See
   [Tools and approvals](tools-and-approvals.md).
-- `ConversationService.Tools` is a `ToolRegistry`. Names are unique, and
+- `ConversationService.tools` is a `ToolRegistry`. Names are unique, and
   `sandbox` and `tool_search` are reserved: turns add those tools themselves. A
-  turn offered two tools with one name fails. `RegisterSource` adds tools that
-  change while Mob runs, and `RegisterEntries` adds what `tool_search` finds
+  turn offered two tools with one name fails. `registerSource` adds tools that
+  change while Mob runs, and `registerEntries` adds what `tool_search` finds
   besides tools, such as skills.
 
 ## Hooks
 
-`ConversationService.Hooks` run around every turn, in registration order:
+`ConversationService.hooks` run around every turn, in registration order:
 
-- `BeforeTurn` may add to the request's system prompt before history is fitted
+- `beforeTurn` may add to the request's system prompt before history is fitted
   to the context window. Recalling saved facts is one.
-- `BeforeTool` may refuse an offered call; its error is handled as the tool's
+- `beforeTool` may refuse an offered call; its error is handled as the tool's
   own would be.
-- `AfterTurn` sees the saved reply and the turn's error.
+- `afterTurn` sees the saved reply and the turn's error.
 
-Native plugins contribute these typed callbacks through their `hooks` field in
-`internal/app/plugins.go`; registration appends them after existing core hooks.
+Native plugins contribute these typed callbacks through their `hooks` field;
+registration appends them after existing core hooks.
 Hooks are registered once, before serving, and keep the engine's error handling.
 Like tools, hooks that depend on optional configuration must check whether their
 plugin is enabled. Background dependency ordering does not reorder these hooks

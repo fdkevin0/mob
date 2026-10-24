@@ -20,8 +20,8 @@ Paths below are relative to this skill. Read only what the task needs.
 - Package ownership and service boundaries belong in
   [architecture](../../../docs/architecture.md).
 - Configuration names, defaults and help come from
-  [options.go](../../../internal/configuration/options.go). Edit that source and
-  run `go run ./cmd/configdocs` from the repository root to update the generated
+  [config.ts](../../../apps/mob/src/config.ts). Edit that source and
+  run `bun run generate:configdocs` from the repository root to update the generated
   reference. Put operational behavior and migrations in the configuration feature page.
 - Setup, validation and contribution workflows belong in
   [CONTRIBUTING.md](../../../CONTRIBUTING.md).

@@ -3,8 +3,8 @@
 Skills are [Agent Skills](https://agentskills.io/specification): a directory
 holding a `SKILL.md` of instructions for one kind of task, with optional
 `scripts/`, `references/` and `assets/`. Mob reads the same format as other
-agents, so a skill written for them works here. The package is
-`internal/plugins/skills`.
+agents, so a skill written for them works here. The code is in
+`apps/mob/src/skills`.
 
 ## Where skills come from
 

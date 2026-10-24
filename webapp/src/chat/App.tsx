@@ -31,9 +31,9 @@ export function App() {
   // pending is a connection opened before its token was checked, which a rejection may arrive before it renders.
   const pending = useRef<Connection | undefined>(undefined);
   useEffect(() => {
-    const desktop = window.go?.main?.Desktop;
+    const desktop = window.mobDesktop;
     if (desktop) {
-      desktop.Connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => setLoading(false));
+      desktop.connection().then(setConnection).catch(e => setError(errorText(e))).finally(() => setLoading(false));
       return;
     }
     const saved = savedToken();
@@ -67,8 +67,8 @@ export function App() {
       const rejected = (event as CustomEvent<string>).detail;
       const current = active.current?.token ?? savedToken();
       if (current !== null && current !== rejected) return;
-      const desktop = window.go?.main?.Desktop;
-      if (desktop) { desktop.Connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
+      const desktop = window.mobDesktop;
+      if (desktop) { desktop.connection().then(next => setConnection(current => current?.token === next.token ? current : next)).catch(e => setError(errorText(e))); return; }
       const departing = active.current ?? pending.current;
       if (departing && departing.token === rejected) {
         void forget(cacheScope(departing));
@@ -89,7 +89,7 @@ export function App() {
   const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); };
   if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { void forget(cacheScope(connection)); if (connection.runner) forgetRunner(); else clearToken(); setConnection(undefined); }} /></Suspense>;
   // The desktop connects by itself, so a failure there has no token form to retry.
-  if (error && window.go?.main?.Desktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
+  if (error && window.mobDesktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   const panel = <>
     {isPublicWeb() && <Runners connect={open} />}
     <form onSubmit={connect}>{isPublicWeb() && <><Label htmlFor="address">Mob address</Label><Input id="address" type="url" value={address} onChange={e => setAddress(e.target.value)} required /></>}<Label htmlFor="token">Local access token</Label><Input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />

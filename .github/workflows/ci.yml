@@ -14,52 +14,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  go:
-    name: Go
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: gofmt
-        run: |
-          unformatted=$(gofmt -l $(git ls-files '*.go'))
-          if [ -n "$unformatted" ]; then
-            echo "::error::Run gofmt -w on:"
-            echo "$unformatted"
-            exit 1
-          fi
-      - name: go mod tidy
-        run: go mod tidy -diff
-      - name: go vet
-        run: go vet ./...
-      # Reuses what vet compiled. Also checks that packages/client/src/contracts.ts
-      # matches the Go definitions.
-      - name: go test
-        run: go test ./...
-
-  # The race detector compiles every package again with instrumentation, so it
-  # runs beside the plain tests with a cache of its own.
-  go-race:
-    name: Go race detector
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: false
-      - uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-race-${{ hashFiles('go.sum') }}
-      - run: go test -race ./...
-
   web:
     name: Web UI
     runs-on: ubuntu-latest
@@ -76,6 +30,7 @@ jobs:
           bun run test:webapp
           bun run test:tui
           bun run test:docs
+          bun run test:desktop
       - name: Build
         run: bun run build
       # Workers Builds deploys this; building it here checks the documentation's
@@ -83,22 +38,61 @@ jobs:
       - name: Build public site
         run: bun run build:web
 
-  integration:
-    name: Go ↔ AI SDK integration
+  core:
+    name: TypeScript core and host
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: Typecheck and test
+        run: bun run test:core
+
+  integration:
+    name: Host ↔ AI SDK integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      # The host embeds the web UI, so it is built first.
+      - run: bun run build
       # The script builds the CLI itself, starts it in demo mode and drives it
       # with the AI SDK client the web UI uses.
       - name: Check chat, commands and approvals end to end
         run: bun run test:integration
       - name: Check DSH plugins and MCP bridge
         run: bun run test:dsh
+      - name: Check the runner over the encrypted relay
+        run: bun run test:runner
+
+  # scriptc is an experimental native compiler; its report says how much of the
+  # host it can compile. It never blocks a merge.
+  scriptc:
+    name: scriptc coverage (experimental)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: npm install -g --allow-scripts=scriptc scriptc@0.4.3
+      - name: Coverage
+        run: |
+          set +e
+          scriptc coverage apps/mob/src/main.ts > scriptc.txt 2>&1
+          status=$?
+          { echo '## scriptc coverage'; echo; echo "scriptc exited with $status."; echo; echo '```'; tail -n 200 scriptc.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # A report, not a gate: what scriptc cannot compile yet is in the summary.
+          if [ "$status" -ne 0 ]; then echo "::warning::scriptc cannot compile the host yet; see the job summary"; fi

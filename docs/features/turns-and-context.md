@@ -49,9 +49,8 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   clients following changes see the expiry without asking for a snapshot.
   Successful snapshot reconciliation clears transient polling/follow errors,
   but does not dismiss a failed command or approval decision.
-  The original Go terminal follows the same service contract independently.
 - A retained shared-client instance keeps uncertain send text and its original
-  SDK-generated request ID across detach/start. Abort alone does not mean Go
+  SDK-generated request ID across detach/start. Abort alone does not mean the service
   refused the request. The client stays busy until the local send settles and
   fresh history can be checked for that exact user-message ID, never by text.
   While history cannot be read (the service is unreachable), it stays busy but
@@ -64,10 +63,10 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   cleared only if it has not been edited since. A manual Send is a new request,
   not a delivery guarantee for the uncertain original. Recovery is memory-only.
 - Leaving a shared-client view cancels only that view's streams and polling;
-  explicit Stop posts to the service and cancels the local readers. The direct
-  Bun pilot only attaches to an existing service. `MOB_TUI=ts mob tui` instead
-  uses the normal CLI lifecycle: it closes a service it starts when the terminal
-  exits, but leaves an already running service and its turns alone.
+  explicit Stop posts to the service and cancels the local readers. The source
+  entry (`bun run tui:pilot`) only attaches to an existing service. `mob tui`
+  starts the background service when none runs, and leaves it and its turns
+  running when the terminal exits.
 - The reply is saved about once a second while it streams, so a forced
   termination can lose the last second. The event log is not persisted: the
   saved message is the result once a turn ends, and a service restart marks
@@ -80,11 +79,8 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   composer nor the terminal input limits what is typed or pasted. A message that
   alone exceeds what the model's context leaves room for ends the turn with an
   error naming its size and the model, before any model request.
-- **Terminal pastes.** The original Bubble Tea input keeps at most 10000 lines, so a
-  bracketed paste that would bring the input to 100 lines is held aside, shown
-  as `[Pasted text #1 · N lines · <random tag>]`, and sent whole. Only the
-  placeholders the input made are expanded, in one pass. The experimental
-  TypeScript terminal uses its native textarea rather than paste placeholders.
+- **Terminal pastes.** The terminal UI takes a bracketed paste into its native
+  textarea whole, without treating its newlines as send keys.
 - **Replies.** A reply may use the model's output limit, up to 32000 tokens and
   at most a quarter of its context window. Without a known limit, the
   OpenAI-compatible driver lets the provider choose and the Anthropic driver
@@ -106,7 +102,7 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   seconds, or as long as the provider's `Retry-After` asks, at most a minute.
   A 429 for an exhausted quota (`insufficient_quota`), a stalled request and
   a response already streaming are not retried, so a retry never repeats text
-  the turn has shown. The code is in `internal/llm/send.go`.
+  the turn has shown. The code is in `packages/core/src/llm/send.ts`.
 - **Tool arguments** may be up to 1 MiB.
 
 ## Counting the context
@@ -147,7 +143,7 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - Outputs smaller than about twice their note are left as they are. Stored
   messages keep every output; clearing changes only what the model reads.
 - Clearing changes the prompt's prefix, so the provider's prompt cache misses
-  once after each clearing. The code is in `internal/chat/prune.go`.
+  once after each clearing. The code is in `packages/core/src/chat/prune.ts`.
 
 ## Prompt caching
 
@@ -203,7 +199,7 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - `/compact` summarizes every message since the summary on request, with the
   conversation's model, and records what that cost on its reply, also when it
   is stopped. The code is in
-  `internal/chat/compact.go`.
+  `packages/core/src/chat/compact.ts`.
 
 ## Token usage
 
@@ -232,5 +228,5 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   last update.
 - `Store.ConversationUsage(ids...)` returns the same summaries
   (`chat.UsageSummary`) for other features. The code is in
-  `internal/chat/usage.go`.
+  `packages/core/src/chat/usage.ts`.
 

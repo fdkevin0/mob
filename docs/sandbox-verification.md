@@ -35,7 +35,7 @@ prints its path.
 
 ## macOS
 
-Requirements: Apple silicon, macOS 26, Go 1.26+, Git.
+Requirements: Apple silicon, macOS 26, Bun, Git.
 
 1. Install Apple's runtime from the signed `.pkg` on the
    [releases page](https://github.com/apple/container/releases), then start it:
@@ -57,13 +57,13 @@ Requirements: Apple silicon, macOS 26, Go 1.26+, Git.
 3. Also try the real data directory, whose path contains a space
    (`~/Library/Application Support/mob`): add the `sandbox:` section from
    `config.example.yaml` with `enabled: true`, run `build/mob serve --demo`
-   (`go build -o build/mob ./cmd/mob` first), and in the web UI send
+   (`bun run build:cli` first), and in the web UI send
    `/sandbox uname -a; pwd; ls /Users`.
 
 ## Windows
 
 Requirements: Windows 11 with virtualization enabled, a WSL release that
-includes WSL containers, Go 1.26+, Git.
+includes WSL containers, Bun, Git.
 
 1. Install or update WSL with containers, then check `wslc`:
 

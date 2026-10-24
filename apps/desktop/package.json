@@ -1,0 +1,26 @@
+{
+	"name": "@mob/desktop",
+	"private": true,
+	"version": "0.0.0",
+	"description": "Mob desktop app: an Electron window around the local mob service",
+	"homepage": "https://usemob.app",
+	"repository": "github:fdkevin0/mob",
+	"author": {
+		"name": "Mob contributors",
+		"email": "mob@usemob.app"
+	},
+	"main": "dist/main.js",
+	"scripts": {
+		"build": "bun scripts/build.ts",
+		"electron": "node node_modules/electron/install.js",
+		"start": "bun run electron && bun scripts/build.ts && electron .",
+		"package": "bun run electron && bun scripts/build.ts && bun scripts/stage.ts && electron-builder --publish never",
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@types/bun": "1.4.3",
+		"electron": "44.9.3",
+		"electron-builder": "26.15.3"
+	}
+}

@@ -1,14 +1,8 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": ["config:recommended", "schedule:weekly"],
-	"postUpdateOptions": ["gomodTidy"],
 	"minimumReleaseAge": "3 days",
 	"packageRules": [
-		{
-			"matchManagers": ["gomod"],
-			"matchUpdateTypes": ["minor", "patch", "digest"],
-			"groupName": "Go dependencies"
-		},
 		{
 			"matchManagers": ["bun"],
 			"matchUpdateTypes": ["minor", "patch"],

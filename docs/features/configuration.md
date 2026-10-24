@@ -9,10 +9,6 @@ and channels are its clients. Start from
 The [configuration reference](../environment-variables.md) lists file keys,
 CLI flags, `MOB_` variables, defaults and precedence.
 
-TUI selection is CLI-only, not a service configuration field: `MOB_TUI` and
-`MOB_TUI_ENTRY` choose the terminal and source entry as described in
-[Commands](commands.md#experimental-typescript-terminal).
-
 On macOS the default file is `~/Library/Application Support/mob/config.yaml`;
 on Linux normally `~/.config/mob/config.yaml`. YAML, JSON and TOML are accepted.
 Model providers and keys live in `providers.json` beside it (see
@@ -26,11 +22,8 @@ Model providers and keys live in `providers.json` beside it (see
   before applying it. Syntax errors, unsafe permissions, deletion and invalid
   values keep the last valid configuration; diagnostics omit file contents and
   appear in stderr, the background log and `/api/runtime`.
-- Changing `addr`, `data_dir`, `state_dir`, `demo`, `token` or `gateway.url`
-  requires a restart, as do environment changes and removing the watched directory.
-  With a gateway connection configured, `gateway.node_id` and `gateway.token`
-  also require restart. Gateway server address changes do not block local
-  service reloads; restart `mob gateway` to apply them.
+- Changing `addr`, `data_dir`, `state_dir`, `demo` or `token` requires a
+  restart, as do environment changes and removing the watched directory.
 - Files must be regular (not symlinks), at most 64 KiB, and not group- or
   world-writable on Unix. `providers.json` must be owner-only (`chmod 600`); on
   Windows protect it with the user directory's ACLs. A missing default file is
@@ -46,12 +39,9 @@ Model providers and keys live in `providers.json` beside it (see
   exits, and later clients attach to it. `mob serve` stays tied to its terminal.
   To change ownership, close the current owner and run `mob start` with the same
   environment. No login item or system service is installed.
-- The direct TypeScript entry (`bun run tui:pilot`) only attaches to an existing
-  service. In contrast, `MOB_TUI=ts mob tui` uses the normal connect-or-start
-  lifecycle and passes the actual service URL/token through the child environment,
-  not command arguments. It requires Bun >=1.3.14 and installed source dependencies;
-  missing prerequisites or child failures are errors, never a silent Go fallback.
-  Releases/Homebrew still contain only the Go binary, not the TypeScript pilot.
+- `mob tui` uses the normal connect-or-start lifecycle and hands the service
+  URL and token to the terminal UI in memory, not as command arguments. The
+  source entry (`bun run tui:pilot`) only attaches to an existing service.
 - The database owner holds a process lock; clients use HTTP rather than opening
   the SQLite file.
 
@@ -65,12 +55,12 @@ Model providers and keys live in `providers.json` beside it (see
 - `mob token rotate` replaces the managed token, signs out every client and
   stops turns started with the old token. A token supplied through configuration
   is fixed until restart and cannot be rotated by Mob.
-- Files declaring `token` or `gateway.token` must be owner-only on Unix
+- Files declaring `token` must be owner-only on Unix
   (`chmod 600`). Prefer a file or environment variable for secrets: CLI flags
   are visible in the invoking process's arguments. Background startup forwards
   secret flags through its child environment instead of child arguments.
-- Browser dev origins on localhost port 5173, the Wails WebView origin and the
-  `web_url` origin are allowed.
+- Browser dev origins on localhost port 5173 and the `web_url` origin are
+  allowed; the desktop window loads the service itself.
 
 ## Migrating older configuration
 
@@ -78,13 +68,9 @@ There are no legacy aliases. Update scripts and service definitions:
 
 | Previous setting | Current setting |
 | --- | --- |
-| `MOB_NODE_ID` | `MOB_GATEWAY_NODE_ID` |
-| `--node-id` | `--gateway-node-id` |
-| `--connect-gateway` | `--gateway-url` |
-| `mob gateway --addr` | `mob gateway --gateway-addr` |
-| `mob gateway --token` | `mob gateway --gateway-token` |
 | `MOB_WEB_URL=` to disable public Web | `--web-url=` or `web_url: ""` in the file |
+| `mob gateway`, `gateway.*`, `--gateway-*`, `MOB_GATEWAY_*` | removed; use `mob runner` (see [Remote access](remote-access.md#encrypted-remote-runners)) |
 
-`mob gateway` rejects explicit `--addr` and `--token` flags before startup,
-with guidance to use their `--gateway-*` counterparts. Empty environment values
+A file that still has a `gateway` section is refused with a message saying to
+delete it. Empty environment values
 now fall back to the file or default.
