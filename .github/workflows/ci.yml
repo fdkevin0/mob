@@ -72,6 +72,26 @@ jobs:
       - name: Check the runner over the encrypted relay
         run: bun run test:runner
 
+  # The one check the main ruleset requires, so jobs can be renamed, split or
+  # added here without editing the ruleset. scriptc is left out on purpose.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [web, core, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the required jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "::error::A required job ended with '$result'"
+              exit 1
+            fi
+          done
+
   # scriptc is an experimental native compiler; its report says how much of the
   # host it can compile. It never blocks a merge.
   scriptc:

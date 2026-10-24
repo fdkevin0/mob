@@ -21,8 +21,9 @@ and messaging channels.
 
 - Schema changes raise `schemaVersion` in `packages/core/src/chat/schema.ts`
   and add the upgrade from the previous version to `upgrades`.
-- Commit messages use `type(scope): description`; release-please builds the
-  changelog from them.
+- Pull request titles use `type(scope): description`. Pull requests are
+  squash-merged with the title as the commit message, and release-please builds
+  the changelog from them.
 - Do not write architecture decision records. When a change alters how a
   feature behaves, update its page in `docs/features/` in the same pull request.
 - Keep provider keys, tokens and databases out of commits.

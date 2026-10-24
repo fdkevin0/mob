@@ -88,11 +88,15 @@ For documentation writing or organization, the repository skill
 
 ## Changes
 
-- `main` changes only through pull requests, merged by rebase; keep branches
+- `main` changes only through pull requests, squash-merged: each pull request
+  becomes one commit whose message is the pull request title. Keep branches
   linear and rebase onto `main` rather than merging it in.
-- Commit messages follow `type(scope): description`, e.g.
-  `fix(models): close reload race`. release-please builds the changelog and the
-  next version from them (see [Releases](docs/features/releases.md)).
+- Pull request titles follow `type(scope): description`, e.g.
+  `fix(models): close reload race`; the `PR title` check enforces it.
+  release-please builds the changelog and the next version from them (see
+  [Releases](docs/features/releases.md)), so a breaking change needs `!` in the
+  title. Commits inside a pull request are not checked.
+- A pull request merges once `CI passed` and `PR title` are green.
 - A pull request describes the behaviour change, links related issues, lists the
   checks run, and includes screenshots for UI changes.
 - Design discussion happens in issues and pull requests. Mob does not keep

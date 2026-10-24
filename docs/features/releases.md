@@ -21,7 +21,8 @@ migration window, so old schema code does not stay in the tree forever.
   never marked as the latest release. Nightly releases may be pruned.
 - **stable**: [release-please](https://github.com/googleapis/release-please)
   keeps one release PR open with the next `vX.Y.Z` and a `CHANGELOG.md` built
-  from the `type(scope):` commit messages. Merging it tags the release, which
+  from the `type(scope):` commit messages, which are the titles of the
+  squash-merged pull requests. Merging it tags the release, which
   becomes the latest one.
 
 Stable releases start at `v0.1.0`. Below 1.0, a `feat` raises the minor version,
