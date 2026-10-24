@@ -1,7 +1,7 @@
 import { Dialog } from '../components/ui/dialog';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ModelPicker } from './ModelPicker';
+import { ModelPicker, families } from './ModelPicker';
 
 afterEach(() => {
 	cleanup();
@@ -71,4 +71,24 @@ it('marks free models and shows only them when asked', async () => {
 	expect(screen.getByText('meta/llama:free', { selector: '.model-id' })).toBeDefined();
 	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'gpt' } });
 	expect(screen.getByText('No free models match “gpt”.')).toBeDefined();
+});
+
+it('groups a provider’s models by vendor prefix and narrows to one provider', async () => {
+	const many = Array.from({ length: 14 }, (_, i) => ({ id: `openrouter/${i % 2 ? 'anthropic' : 'meta'}/m${i}`, tools: true }));
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([...models, { provider: 'openrouter', name: 'OpenRouter', models: [{ id: 'openrouter/openrouter/auto', tools: true }, ...many] }])));
+	render(<Dialog defaultOpen><ModelPicker connection={connection} current="openrouter/meta/m2" onPick={() => {}} /></Dialog>);
+	await screen.findByText('DeepSeek Chat');
+	const anthropic = screen.getByText('anthropic').closest('details')!;
+	expect(anthropic.open).toBe(false);
+	expect(screen.getByText('meta').closest('details')!.open).toBe(true);
+	fireEvent.click(screen.getByRole('button', { name: 'OpenRouter' }));
+	expect(screen.queryByText('DeepSeek Chat')).toBeNull();
+	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'm1' } });
+	expect(screen.getByText('anthropic').closest('details')!.open).toBe(true);
+});
+
+it('puts models without a vendor prefix first', () => {
+	const f = families('openrouter', [{ id: 'openrouter/z/a', tools: true }, { id: 'openrouter/b', tools: true }, { id: 'openrouter/a/c', tools: true }]);
+	expect(f.map(x => x.prefix)).toEqual(['', 'a', 'z']);
+	expect(families('deepseek', [{ id: 'deepseek/deepseek-chat', tools: true }]).map(x => x.prefix)).toEqual(['']);
 });

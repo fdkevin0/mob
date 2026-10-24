@@ -38,6 +38,25 @@ function capabilities(model: ModelInfo) {
 	return parts.join(' · ');
 }
 
+/** ModelFamily is the models of one provider whose vendor ID starts with the same prefix, such as anthropic/ on OpenRouter. */
+type ModelFamily = { prefix: string; models: ModelInfo[] };
+
+// families splits a provider's models by the vendor prefix after the provider's own:
+// openrouter/anthropic/claude-x belongs to anthropic. Models without one come first, together.
+export function families(provider: string, models: ModelInfo[]): ModelFamily[] {
+	const byPrefix = new Map<string, ModelInfo[]>();
+	for (const model of models) {
+		const vendorID = model.id.startsWith(provider + '/') ? model.id.slice(provider.length + 1) : model.id;
+		const slash = vendorID.indexOf('/');
+		const prefix = slash > 0 ? vendorID.slice(0, slash) : '';
+		byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), model]);
+	}
+	return [...byPrefix].map(([prefix, models]) => ({ prefix, models })).sort((a, b) => (a.prefix ? 1 : 0) - (b.prefix ? 1 : 0) || a.prefix.localeCompare(b.prefix));
+}
+
+// A family list this long starts folded, so a provider such as OpenRouter fits on a screen.
+const foldAbove = 12;
+
 /**
  * ModelPicker offers the models of every configured provider for this conversation.
  * It reuses the /model command: choosing a model is the same switch a typed command makes.
@@ -57,6 +76,7 @@ export function ModelPicker({
 	const [error, setError] = useState('');
 	const [query, setQuery] = useState('');
 	const [freeOnly, setFreeOnly] = useState(false);
+	const [provider, setProvider] = useState('');
 	useEffect(() => {
 		let live = true;
 		api<ModelGroup[]>(connection, '/models')
@@ -72,7 +92,8 @@ export function ModelPicker({
 	}, [connection]);
 	const needle = query.trim().toLowerCase();
 	const visible = groups
-		?.map(group => ({
+		?.filter(group => !provider || group.provider === provider)
+		.map(group => ({
 			...group,
 			models: group.models.filter(
 				model =>
@@ -102,6 +123,15 @@ export function ModelPicker({
 					Free only{groups ? ` (${groups.reduce((n, g) => n + g.models.filter(m => m.free).length, 0)})` : ''}
 				</Button>
 			</div>
+			{groups && groups.length > 1 && (
+				<div className="model-providers" role="group" aria-label="Providers">
+					{[{ provider: '', name: 'All' }, ...groups].map(g => (
+						<Button key={g.provider} variant="outline" className="model-provider" aria-pressed={provider === g.provider} onClick={() => setProvider(g.provider)}>
+							{g.name || g.provider}
+						</Button>
+					))}
+				</div>
+			)}
 			{error && <p role="alert">{error}</p>}
 			{!groups && !error && <p className="muted" role="status">Loading models…</p>}
 			{groups && (
@@ -114,25 +144,41 @@ export function ModelPicker({
 				<section className="model-group" key={group.provider} aria-label={group.name || group.provider}>
 					<h3>{group.name || group.provider}</h3>
 					{group.error && <p className="muted">{group.error}</p>}
-					<ul>
-						{group.models.map(model => (
-							<li key={model.id}>
-								<Button variant="ghost" className="model-choice" aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
-									<span>
-										{model.name || model.id}
-										{model.free && <small className="model-free">Free</small>}
-									</span>
-									<span className="model-id">{model.id}</span>
-									<span className="model-meta">{capabilities(model)}</span>
-								</Button>
-							</li>
-						))}
-					</ul>
+					{families(group.provider, group.models).map(family => {
+						const list = <ModelList models={family.models} current={current} onPick={onPick} />;
+						if (!family.prefix) return <div key="">{list}</div>;
+						const open = !!needle || freeOnly || group.models.length <= foldAbove || family.models.some(m => m.id === current);
+						return (
+							<details className="model-family" key={family.prefix} open={open}>
+								<summary>{family.prefix}<span className="model-count">{family.models.length}</span></summary>
+								{list}
+							</details>
+						);
+					})}
 				</section>
 			))}
 			{visible && visible.length === 0 && (
 				<p className="muted">{freeOnly && !needle ? 'No free models. OpenRouter lists free ones with names ending in :free.' : `No ${freeOnly ? 'free ' : ''}models match “${query.trim()}”.`}</p>
 			)}
 		</DialogContent>
+	);
+}
+
+function ModelList({ models, current, onPick }: { models: ModelInfo[]; current?: string; onPick: (model?: string) => void }) {
+	return (
+		<ul>
+			{models.map(model => (
+				<li key={model.id}>
+					<Button variant="ghost" className="model-choice" aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
+						<span>
+							{model.name || model.id}
+							{model.free && <small className="model-free">Free</small>}
+						</span>
+						<span className="model-id">{model.id}</span>
+						<span className="model-meta">{capabilities(model)}</span>
+					</Button>
+				</li>
+			))}
+		</ul>
 	);
 }
