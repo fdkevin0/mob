@@ -10,7 +10,8 @@
 // The Turnstile site key and the OAuth client IDs are public, so they are vars.
 // CLOUDFLARE_SCOPES (space-separated) adds scopes to Cloudflare's
 // user-details.read: account read, Workers AI and offline_access let Mob in
-// the browser run Workers AI on the visitor's account.
+// the browser run Workers AI on the visitor's account. Each ID must be one the
+// OAuth client offers, or Cloudflare refuses the whole sign-in.
 // PR builds apply migrations with wrangler.preview-migrations.jsonc before
 // running `npx wrangler preview`; their auth data uses a separate D1.
 {
@@ -37,12 +38,14 @@
 	],
 	"vars": {
 		"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
+		"CLOUDFLARE_SCOPES": "account-settings.read workers_ai.read workers_ai.write offline_access",
 		"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
 	},
 	"previews": {
 		"vars": {
 			"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
+			"CLOUDFLARE_SCOPES": "account-settings.read workers_ai.read workers_ai.write offline_access",
 			"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
 			"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
 		},
