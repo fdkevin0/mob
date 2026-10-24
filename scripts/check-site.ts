@@ -51,6 +51,11 @@ try {
 			assert.equal(response.status, 302, path);
 			assert.equal(response.headers.get('Location'), origin + '/?signin=' + path.split('/')[1]);
 		}
+		// Auth answers belong to one visitor, so no cache may keep them.
+		for (const path of ['/api/auth/get-session', '/api/auth/list-accounts']) {
+			const response = await request(path);
+			assert.equal(response.headers.get('Cache-Control'), 'private, no-store', path);
+		}
 		for (const path of ['/missing.png', '/missing-page', '/assets/missing.js', '/docs/missing-page',
 			'/index.html', '/account.html', '/landing.html', '/demo.html']) {
 			const response = await request(path);

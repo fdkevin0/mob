@@ -100,7 +100,9 @@ export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 		const { pathname } = url;
-		if (pathname.startsWith('/api/auth/')) return createAuth(env, url.origin).handler(request);
+		// Auth answers are per visitor: an edge or browser cache must never keep
+		// one, or a page shows another moment's (or another person's) account.
+		if (pathname.startsWith('/api/auth/')) return privateResponse(await createAuth(env, url.origin).handler(request));
 		if (pathname === '/api/runners' || pathname.startsWith('/api/runners/')) {
 			const transport = await runnerTransport(request, env);
 			if (transport) return transport;
@@ -156,6 +158,13 @@ async function runnerScript(env: Env, request: Request) {
 	response.headers.set('Content-Security-Policy', runnerPolicy);
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	return response;
+}
+
+function privateResponse(response: Response) {
+	// A redirect from the OAuth flow can be immutable, so copy before setting headers.
+	const out = new Response(response.body, response);
+	out.headers.set('Cache-Control', 'private, no-store');
+	return out;
 }
 
 async function page(env: Env, request: Request, path: string, policy: string, cache = 'no-cache') {
