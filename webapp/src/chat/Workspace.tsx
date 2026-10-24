@@ -448,7 +448,7 @@ export function Workspace({
 							onDispatching={setDispatching}
 							onLeave={(snapshot, input) => {
 								remember(selected.id, snapshot);
-								if (input) drafts.current.set(selected.id, input);
+								if (input && !deleted.current.has(selected.id)) drafts.current.set(selected.id, input);
 								else drafts.current.delete(selected.id);
 							}}
 							changes={changes}
