@@ -685,6 +685,25 @@ test('sub-tasks that end after their lead stopped are reaped', async () => {
 	await h.until("the sub-task's agent was not reaped", () => !h.svc.running(child.id));
 });
 
+test("a squad waits for its reviewers' turns to end", async () => {
+	const h = harness();
+	const { settleSquad } = await import('../src/agents/squad');
+	const work = await h.start('hello');
+	const origin = h.store.create();
+	const reviewer = await h.svc.startReader(work.conversationId, work, 'codex', 'Review', 'hold', r => {
+		h.svc.reviewers.add(r.id);
+		h.svc.squads.set(work.id, { conversation: origin.id, reviewers: [r.id], starting: false });
+	});
+	const agent = await h.until('the reviewer did not start', () => h.fakes.agents.find(f => f.prompts.includes('hold')));
+	// The reviewer has said how it ended, but its turn is still finishing.
+	h.store.setTaskStatus(reviewer.id, 'review');
+	settleSquad(h.svc, work);
+	expect(h.svc.squads.has(work.id)).toBe(true);
+	// Its turn's end settles the squad, and its agent goes.
+	agent.release.resolve();
+	await h.until("the reviewer's agent was not reaped", () => !h.svc.squads.has(work.id) && !h.svc.running(reviewer.id));
+});
+
 test('ended tasks are summarized', async () => {
 	const h = harness();
 	const root = h.store.create();
