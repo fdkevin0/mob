@@ -61,6 +61,7 @@
     "test:core": "bun run --cwd packages/core typecheck && bun run --cwd packages/core test && bun run --cwd apps/mob typecheck && bun run --cwd apps/mob test",
     "test:integration": "bun scripts/check-chat.ts",
     "test:runner": "tsc -p worker && bun scripts/check-runner.ts",
+    "test:site": "tsc -p worker && bun scripts/check-site.ts",
     "generate:configdocs": "bun run --cwd apps/mob configdocs"
   },
   "packageManager": "bun@1.4.3"

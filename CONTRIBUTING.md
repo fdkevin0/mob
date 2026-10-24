@@ -82,6 +82,7 @@ one, and on broken links.
 ```bash
 bun run --cwd apps/docs dev       # live preview at http://localhost:4321/docs/
 bun run build:web                 # landing page, web UI and documentation
+bun run test:site                 # offline routing checks against the public build
 ```
 
 For documentation writing or organization, the repository skill
