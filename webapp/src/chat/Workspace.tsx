@@ -222,6 +222,7 @@ export function Workspace({
 		deleted.current.add(c.id);
 		setRemoving(undefined);
 		cache.current.delete(c.id);
+		drafts.current.delete(c.id);
 		void forgetSnapshot(scope, c.id);
 		const rest = conversations.filter((other) => other.id !== c.id);
 		setConversations(rest);

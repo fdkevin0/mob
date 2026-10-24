@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Workspace } from './Workspace';
 
@@ -40,6 +40,26 @@ it('restores separate drafts on conversation switches and forgets a cleared draf
 	await waitFor(() => expect(box().value).toBe('Second draft'));
 	fireEvent.click(screen.getByRole('button', { name: 'First conversation' }));
 	await waitFor(() => expect(box().value).toBe(''));
+});
+
+it('forgets the draft of a conversation deleted while another is open', async () => {
+	mockFetch();
+	render(<Workspace connection={connection} disconnect={() => {}} />);
+	const box = () => screen.getByLabelText('Message') as HTMLTextAreaElement;
+	await screen.findByLabelText('Message');
+	fireEvent.change(box(), { target: { value: 'Draft in a deleted conversation' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Second conversation' }));
+	await waitFor(() => expect(window.location.hash).toBe('#/c/two'));
+	fireEvent.keyDown(screen.getByRole('button', { name: 'More for First conversation' }), { key: 'Enter' });
+	fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }));
+	fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }));
+	await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+	// Going back to the deleted conversation's address shows an empty composer.
+	window.history.replaceState(null, '', '/#/c/one');
+	window.dispatchEvent(new PopStateEvent('popstate'));
+	await waitFor(() => expect(window.location.hash).toBe('#/c/one'));
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	expect(box().value).toBe('');
 });
 
 it.each(['/api/conversations', '/api/runtime', '/api/conversations/one'])('retries failed initialization at %s', async (failedPath) => {
