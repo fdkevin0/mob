@@ -1,19 +1,15 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { Changes } from '@mob/client';
 import { api, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { Action } from './contracts';
-import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
-import { PlusIcon } from './icons';
-import { ThemePicker } from '../theme/ThemePicker';
+import { Sidebar, type View } from './Sidebar';
+import { ComposeIcon, MenuIcon } from './icons';
 import { pendingOpenRouterSignIn } from './browser/openrouter';
 import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
-
-// home says where a connection keeps conversations.
-const home = (connection: Connection) => (connection.browser ? 'in this browser' : connection.runner ? 'on your runner' : 'on this computer');
 
 const errorText = (error: unknown) =>
 	error instanceof TypeError
@@ -31,13 +27,16 @@ const Move = lazy(() => import('./Move').then((m) => ({ default: m.Move })));
 const ModelProvider = lazy(() => import('./browser/ModelProvider').then((m) => ({ default: m.ModelProvider })));
 const panel = <div className="loading" role="status">Loading…</div>;
 
-// The address names the open conversation, as #/c/<id>, so reloading or going back returns to it.
+// The address names what the workspace shows: a conversation as #/c/<id>, or a page such as #/usage,
+// so reloading or going back returns to it.
 const routePrefix = '#/c/';
+const pages: Record<string, Exclude<View, 'chat'>> = { '#/agents': 'agents', '#/usage': 'usage', '#/plugins': 'plugins' };
+const pageTitles: Record<View, string> = { chat: '', agents: 'Agents', usage: 'Token usage', plugins: 'Plugins & cloud services' };
 function routedID() {
 	return window.location.hash.startsWith(routePrefix) ? decodeURIComponent(window.location.hash.slice(routePrefix.length)) : undefined;
 }
-function route(id: string, replace: boolean) {
-	const hash = routePrefix + encodeURIComponent(id);
+const routedView = (): View => pages[window.location.hash] ?? 'chat';
+function route(hash: string, replace: boolean) {
 	if (window.location.hash === hash) return;
 	if (replace) window.history.replaceState(window.history.state, '', hash);
 	else window.history.pushState(window.history.state, '', hash);
@@ -59,9 +58,7 @@ export function Workspace({
 	draft?: string;
 	clearDraft?: () => void;
 }) {
-	const [plugins, setPlugins] = useState(false);
-	const [usage, setUsage] = useState(false);
-	const [agents, setAgents] = useState(false);
+	const [view, setView] = useState<View>(routedView);
 	// OpenRouter's sign-in returns to the page with a code, which the provider dialog finishes.
 	const [signIn] = useState(() => (connection.browser ? pendingOpenRouterSignIn() : undefined));
 	const [provider, setProvider] = useState(!!signIn);
@@ -71,7 +68,8 @@ export function Workspace({
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
 	const [error, setError] = useState('');
-	const [busy, setBusy] = useState(false);
+	// dispatching is set while the open conversation hands a message to Mob; switching away then could lose it.
+	const [dispatching, setDispatching] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const [background, setBackground] = useState(false);
 	const [keeping, setKeeping] = useState(keepsMessages);
@@ -124,23 +122,54 @@ export function Workspace({
 	}
 	function show(id: string, snapshot: Snapshot, replace = false) {
 		setSelected({ id, snapshot });
-		route(id, replace);
+		setView('chat');
+		route(routePrefix + encodeURIComponent(id), replace);
 		setNavigation(false);
-		setAgents(false);
 	}
-	// choice counts what was asked to show, so a slow response for an earlier choice is dropped.
+	// page shows one of the workspace's pages beside the conversation, which stays open behind it.
+	function page(next: View, replace = false) {
+		if (next === 'chat') {
+			if (selected) route(routePrefix + encodeURIComponent(selected.id), replace);
+		} else route(Object.keys(pages).find((hash) => pages[hash] === next)!, replace);
+		paged(next);
+	}
+	// choice counts the conversations asked for, so a slow response for an earlier one is dropped.
 	const choice = useRef(0);
+	// viewing counts the pages asked for since, so a conversation that loads after one opens behind it.
+	const viewing = useRef(0);
+	function paged(next: View) {
+		viewing.current++;
+		// Going back to the conversation that is open drops one still loading.
+		if (next === 'chat') choice.current++;
+		setSwitching(false);
+		setView(next);
+		setNavigation(false);
+	}
+	// arrive shows a conversation that loaded, unless a page was asked for meanwhile: then it opens behind the page.
+	function arrive(id: string, snapshot: Snapshot, since: number, replace: boolean) {
+		if (since === viewing.current) show(id, snapshot, replace);
+		else setSelected({ id, snapshot });
+	}
+	// held keeps another conversation from opening while the open one hands a message to Mob, which leaving it could lose.
+	const current = useRef(selected?.id);
+	current.current = selected?.id;
+	const handing = useRef(dispatching);
+	handing.current = dispatching;
+	const held = (id: string) => handing.current && id !== current.current;
 	async function open(id: string, replace = false) {
+		if (held(id)) return;
 		const ticket = ++choice.current;
+		const since = viewing.current;
 		setError('');
 		// A cached conversation shows at once; its thread reloads the latest messages as it opens.
-		const cached = cache.current.get(id);
+		// Either way it supersedes a conversation still loading, so switching ends here.
+		const cached = cache.current.get(id) ?? (id === selected?.id ? selected.snapshot : undefined);
+		setSwitching(!cached);
 		if (cached) return show(id, cached, replace);
-		setSwitching(true);
 		try {
 			// What this browser kept also shows at once, even while Mob cannot be reached.
 			const snapshot = (await readSnapshot(scope, id)) ?? (await load(id));
-			if (ticket === choice.current) show(id, snapshot, replace);
+			if (ticket === choice.current) arrive(id, snapshot, since, replace);
 		} catch (e) {
 			if (ticket === choice.current) setError(errorText(e));
 		} finally {
@@ -152,16 +181,18 @@ export function Workspace({
 			void refreshList()
 				.then(() => open(action.conversationId!))
 				.catch((e) => setError(errorText(e)));
-		else if (action.kind === 'open-plugins' || action.kind === 'compose-mail') setPlugins(true);
+		else if (action.kind === 'open-plugins' || action.kind === 'compose-mail') page('plugins');
 	}
 	// A new conversation opens as soon as the service names it; the list refreshes behind it.
 	async function create(replace = false) {
+		if (handing.current) return;
 		const ticket = ++choice.current;
+		const since = viewing.current;
 		setSwitching(true);
 		try {
 			const next = await api<Conversation>(connection, '/conversations', {});
 			setConversations((list) => [next, ...list.filter((c) => c.id !== next.id)]);
-			if (ticket === choice.current) show(next.id, { messages: [], active: false, model: '' }, replace);
+			if (ticket === choice.current) arrive(next.id, { messages: [], active: false, model: '' }, since, replace);
 			void refreshList().catch((e) => setError(errorText(e)));
 		} catch (e) {
 			if (ticket === choice.current) setError(errorText(e));
@@ -172,6 +203,11 @@ export function Workspace({
 	useEffect(() => {
 		let live = true;
 		const start = choice.current;
+		// A page the address names stays in front of the conversation that opens.
+		const showBehind = (id: string, snapshot: Snapshot) => {
+			if (routedView() === 'chat') show(id, snapshot, true);
+			else setSelected({ id, snapshot });
+		};
 		const pick = (list: Conversation[]) => {
 			const routed = routedID();
 			return routed && list.some((c) => c.id === routed) ? routed : list[0].id;
@@ -185,7 +221,7 @@ export function Workspace({
 			const snapshot = await readSnapshot(scope, id);
 			if (!live || !snapshot || current.current) return;
 			cache.current.set(id, snapshot);
-			show(id, snapshot, true);
+			showBehind(id, snapshot);
 		})();
 		void (async () => {
 			try {
@@ -202,7 +238,10 @@ export function Workspace({
 				if (choice.current !== start) return;
 				// A draft typed before connecting starts a new conversation, as the lobby showed.
 				if (draft || !list.length) await create(true);
-				else await open(pick(list), true);
+				else if (routedView() !== 'chat') {
+					const id = pick(list);
+					showBehind(id, cache.current.get(id) ?? (await load(id)));
+				} else await open(pick(list), true);
 			} catch (e) {
 				if (live) setError(errorText(e));
 			}
@@ -211,176 +250,62 @@ export function Workspace({
 			live = false;
 		};
 	}, [connection]);
-	// Back and forward move between the conversations the address named.
+	// Back and forward move between the conversations and pages the address named.
 	const opener = useRef(open);
 	opener.current = open;
-	const current = useRef(selected?.id);
-	current.current = selected?.id;
+	const pager = useRef(paged);
+	pager.current = paged;
 	useEffect(() => {
 		const follow = () => {
 			const id = routedID();
-			if (id && id !== current.current) void opener.current(id, true);
+			if (routedView() !== 'chat') pager.current(routedView());
+			else if (id && held(id)) route(routePrefix + encodeURIComponent(current.current!), true);
+			else if (id && id !== current.current) void opener.current(id, true);
+			else pager.current('chat');
 		};
 		window.addEventListener('popstate', follow);
 		return () => window.removeEventListener('popstate', follow);
 	}, []);
 
-	const links = (
-		<>
-			<Button variant="outline" className="new-chat" disabled={busy || switching} onClick={() => void create()}>
-				<PlusIcon /> New conversation
-			</Button>
-			<nav aria-label="Conversations">
-				{conversations.map((c) => (
-					<Button
-						variant="ghost"
-						className="conversation-link"
-						key={c.id}
-						aria-current={selected?.id === c.id ? 'page' : undefined}
-						disabled={busy || switching}
-						onClick={() => void open(c.id)}
-						onPointerEnter={() => prefetch(c.id)}
-						onFocus={() => prefetch(c.id)}
-					>
-						{c.title}
-					</Button>
-				))}
-			</nav>
-			<Button
-				variant="ghost"
-				className="sidebar-plugins"
-				aria-current={agents ? 'page' : undefined}
-				disabled={busy}
-				onClick={() => {
-					setNavigation(false);
-					setAgents(true);
-				}}
-			>
-				Agents
-			</Button>
-			{/* The browser runner has no `mob provider add`; its provider is set here. */}
-			{connection.browser && (
-				<Button
-					variant="ghost"
-					className="sidebar-plugins"
-					disabled={busy}
-					onClick={() => {
-						setNavigation(false);
-						setProvider(true);
-					}}
-				>
-					Model provider
-				</Button>
-			)}
-			{switchTo && isPublicWeb() && (
-				<Button
-					variant="ghost"
-					className="sidebar-plugins"
-					disabled={busy}
-					onClick={() => {
-						setNavigation(false);
-						setMoving(true);
-					}}
-				>
-					Move conversations
-				</Button>
-			)}
-			{/* Channels and cloud services run in the background, which a browser tab cannot. */}
-			{!connection.browser && (
-				<Button
-					variant="ghost"
-					className="sidebar-plugins"
-					disabled={busy}
-					onClick={() => {
-						setNavigation(false);
-						setPlugins(true);
-					}}
-				>
-					Plugins & cloud services
-				</Button>
-			)}
-			<Button
-				variant="ghost"
-				className="sidebar-plugins"
-				disabled={busy}
-				onClick={() => {
-					setNavigation(false);
-					setUsage(true);
-				}}
-			>
-				Token usage
-			</Button>
-			<div className="sidebar-footer">
-				{connection.browser ? (
-					<p>
-						<span className="status-dot" /> History in this browser · stops with this tab ·{' '}
-						<button type="button" className="link-button" onClick={() => { setNavigation(false); setLimits(true); }}>
-							What needs a runner
-						</button>
-					</p>
-				) : (
-					<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
-						<span className="status-dot" /> History {home(connection)} ·{' '}
-						{background ? 'keeps running' : 'stops with its process'}
-					</p>
-				)}
-				{/* The browser runner's history is already in this browser. */}
-				{!connection.browser && <label
-					className="keep-messages"
-					title="Conversation titles are always kept in this browser so Mob opens at once. Messages are kept only when this is on; turning it off forgets them."
-				>
-					<input
-						type="checkbox"
-						checked={keeping}
-						onChange={(e) => {
-							const on = e.target.checked;
-							setKeeping(on);
-							void setKeepsMessages(on);
-						}}
-					/>
-					Keep messages on this device
-				</label>}
-				<div className="sidebar-theme">
-					Theme <ThemePicker />
-				</div>
-				{isPublicWeb() && (
-					<>
-						<Button variant="ghost" asChild>
-							<a href="/">Mob home</a>
-						</Button>
-						<Button variant="ghost" asChild>
-							<a href="/account">Account</a>
-						</Button>
-					</>
-				)}
-				<Button variant="ghost" onClick={disconnect} disabled={busy}>
-					{connection.browser ? 'Connect a runner' : 'Disconnect'}
-				</Button>
-			</div>
-		</>
-	);
+	// Ctrl+K or ⌘K finds a conversation: the sidebar's search, or the conversation sheet on a phone.
+	const search = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		const find = (e: KeyboardEvent) => {
+			if (e.key.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+			e.preventDefault();
+			if (search.current?.offsetParent) search.current.focus();
+			else setNavigation(true);
+		};
+		window.addEventListener('keydown', find);
+		return () => window.removeEventListener('keydown', find);
+	}, []);
 
-	if (plugins)
-		return (
-			<Suspense fallback={panel}>
-				<Plugins connection={connection} close={() => setPlugins(false)} />
-			</Suspense>
-		);
-	if (usage)
-		return (
-			<Suspense fallback={panel}>
-				<Usage
-					connection={connection}
-					close={() => setUsage(false)}
-					open={(id) => {
-						setUsage(false);
-						void refreshList()
-							.then(() => open(id))
-							.catch((e) => setError(errorText(e)));
-					}}
-				/>
-			</Suspense>
-		);
+	const sidebar = (searchRef?: Ref<HTMLInputElement>) => (
+		<Sidebar
+			connection={connection}
+			conversations={conversations}
+			selected={selected?.id}
+			view={view}
+			locked={dispatching || switching}
+			background={background}
+			keeping={keeping}
+			searchRef={searchRef}
+			create={() => void create()}
+			open={(id) => void open(id)}
+			prefetch={prefetch}
+			show={page}
+			provider={connection.browser ? () => { setNavigation(false); setProvider(true); } : undefined}
+			move={switchTo && isPublicWeb() ? () => { setNavigation(false); setMoving(true); } : undefined}
+			limits={connection.browser ? () => { setNavigation(false); setLimits(true); } : undefined}
+			keep={(on) => {
+				setKeeping(on);
+				void setKeepsMessages(on);
+			}}
+			disconnect={disconnect}
+		/>
+	);
+	const title = selected ? conversations.find((c) => c.id === selected.id)?.title || 'New conversation' : '';
+
 	return (
 		<div className="workspace">
 			{moving && switchTo && (
@@ -404,30 +329,25 @@ export function Workspace({
 					/>
 				</Suspense>
 			)}
-			<aside className="sidebar">
-				<div className="sidebar-brand">
-					<Logo />
-					<span>{connection.browser ? 'In this browser' : connection.runner ? 'Remote runner' : 'On this computer'}</span>
-				</div>
-				{links}
-			</aside>
+			<aside className="sidebar">{sidebar(search)}</aside>
 			<main className="chat-main">
 				<div className="mobile-toolbar">
-					<Logo size={24} />
 					<Sheet open={navigation} onOpenChange={setNavigation}>
 						<SheetTrigger asChild>
-							<Button variant="outline" className="small">
-								Conversations
+							<Button variant="ghost" className="icon-button" aria-label="Conversations">
+								<MenuIcon />
 							</Button>
 						</SheetTrigger>
-						<SheetContent>
-							<SheetTitle className="dialog-title">Conversations</SheetTitle>
-							<SheetDescription className="dialog-description">
-								Your history stays {home(connection)}.
-							</SheetDescription>
-							{links}
+						<SheetContent className="sidebar-sheet">
+							<SheetTitle className="sr-only">Conversations</SheetTitle>
+							<SheetDescription className="sr-only">Your conversations, pages and settings.</SheetDescription>
+							{sidebar()}
 						</SheetContent>
 					</Sheet>
+					<span className="mobile-title">{view === 'chat' ? title : pageTitles[view]}</span>
+					<Button variant="ghost" className="icon-button" aria-label="New conversation" disabled={dispatching || switching} onClick={() => void create()}>
+						<ComposeIcon />
+					</Button>
 				</div>
 				{connection.browser && (
 					<Suspense fallback={null}>
@@ -442,37 +362,57 @@ export function Workspace({
 						</Button>
 					</div>
 				)}
-				{agents ? (
+				{view === 'agents' && (
 					<Suspense fallback={panel}>
 						<AgentTree
 							connection={connection}
 							browser={connection.browser}
 							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
-							close={() => setAgents(false)}
+							held={held}
 						/>
 					</Suspense>
-				) : selected ? (
-					<Thread
-						key={selected.id}
-						connection={connection}
-						id={selected.id}
-						initial={selected.snapshot}
-						title={conversations.find((c) => c.id === selected.id)?.title}
-						onBusy={setBusy}
-						onLeave={(snapshot) => remember(selected.id, snapshot)}
-						changes={changes}
-						onChanged={() => {
-							void refreshList().catch((e) => setError(errorText(e)));
-						}}
-						onAction={act}
-						draft={draft}
-						clearDraft={clearDraft}
-					/>
-				) : (
-					<div className="loading" role="status">
-						Opening workspace…
+				)}
+				{view === 'usage' && (
+					<Suspense fallback={panel}>
+						<Usage
+							connection={connection}
+							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
+							held={held}
+						/>
+					</Suspense>
+				)}
+				{view === 'plugins' && (
+					<Suspense fallback={panel}>
+						<Plugins connection={connection} />
+					</Suspense>
+				)}
+				{/* The conversation stays open behind a page, so a reply or a message being sent goes on. */}
+				{selected ? (
+					<div className="thread-view" hidden={view !== 'chat'}>
+						<Thread
+							key={selected.id}
+							connection={connection}
+							id={selected.id}
+							initial={selected.snapshot}
+							title={title}
+							onDispatching={setDispatching}
+							onLeave={(snapshot) => remember(selected.id, snapshot)}
+							changes={changes}
+							onChanged={() => {
+								void refreshList().catch((e) => setError(errorText(e)));
+							}}
+							onAction={act}
+							draft={draft}
+							clearDraft={clearDraft}
+						/>
 					</div>
+				) : (
+					view === 'chat' && (
+						<div className="loading" role="status">
+							Opening workspace…
+						</div>
+					)
 				)}
 			</main>
 		</div>

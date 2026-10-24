@@ -39,7 +39,7 @@ it('shows totals, the cache share and the top conversations for the chosen perio
 		}),
 	);
 	const open = vi.fn();
-	render(<Usage connection={connection} close={() => {}} open={open} />);
+	render(<Usage connection={connection} open={open} />);
 	expect((await screen.findAllByText('12k')).length).toBeGreaterThan(0);
 	expect(screen.getAllByText('80%').length).toBeGreaterThan(0);
 	expect(screen.getByText('$1.50')).toBeTruthy();
@@ -54,7 +54,7 @@ it('shows totals, the cache share and the top conversations for the chosen perio
 
 it('says so when nothing was used', async () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...report, totalTokens: 0, models: [], days: [], top: [] })));
-	render(<Usage connection={connection} close={() => {}} open={() => {}} />);
+	render(<Usage connection={connection} open={() => {}} />);
 	expect(await screen.findByText(/No tokens were used in this period/)).toBeTruthy();
 });
 

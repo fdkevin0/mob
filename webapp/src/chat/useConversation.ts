@@ -7,7 +7,6 @@ export function useConversation({
 	connection,
 	id,
 	initial,
-	onBusy,
 	onChanged,
 	onAction,
 	onLeave,
@@ -16,7 +15,6 @@ export function useConversation({
 	connection: Connection;
 	id: string;
 	initial: Snapshot;
-	onBusy: (busy: boolean) => void;
 	onChanged: () => void;
 	onAction?: (action: Action) => void;
 	/** onLeave receives what the conversation showed when it closes or the page is hidden, so reopening it can show that at once. */
@@ -58,10 +56,6 @@ export function useConversation({
 			leave();
 		};
 	}, [conversation]);
-	useEffect(() => {
-		onBusy(state.busy);
-		return () => onBusy(false);
-	}, [state.busy, onBusy]);
 	const run = useCallback(
 		(text: string) => {
 			void conversation.submit(text);

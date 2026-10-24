@@ -128,8 +128,8 @@ export class ConversationService {
 		this.active.set(input.id, running);
 		if (options.signal?.aborted) running.stop();
 		else options.signal?.addEventListener('abort', () => running.stop(), { once: true });
-		// Whether a turn runs is part of what clients show.
-		this.store.changes.conversation(input.id, false);
+		// Whether a turn runs is part of what clients show, in the conversation and the list.
+		this.store.changes.conversation(input.id, true);
 		const signal = running.signal;
 		const proceed = (async () => {
 			let err: Error | undefined;
@@ -143,7 +143,7 @@ export class ConversationService {
 			}
 			running.finish(err);
 			this.active.delete(input.id);
-			this.store.changes.conversation(input.id, false);
+			this.store.changes.conversation(input.id, true);
 			if (err) throw err;
 		})();
 		return [running, proceed];

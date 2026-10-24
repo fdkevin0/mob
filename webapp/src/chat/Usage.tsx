@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Connection } from './api';
 import type { DayUsage, UsageReport } from './contracts';
-import { Logo } from '../components/brand/Logo';
-import { Button } from '../components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -53,7 +51,16 @@ export function fillDays(days: DayUsage[], first: string, last: string): DayUsag
 	return list;
 }
 
-export function Usage({ connection, close, open }: { connection: Connection; close: () => void; open: (id: string) => void }) {
+export function Usage({
+	connection,
+	open,
+	held,
+}: {
+	connection: Connection;
+	open: (id: string) => void;
+	/** held says which conversations cannot open now, while the open one hands a message to Mob. */
+	held?: (id: string) => boolean;
+}) {
 	const [period, setPeriod] = useState<number>(30);
 	const [report, setReport] = useState<UsageReport>();
 	const [error, setError] = useState('');
@@ -70,16 +77,13 @@ export function Usage({ connection, close, open }: { connection: Connection; clo
 	}, [connection, period]);
 
 	return (
-		<main className="plugins usage">
-			<header className="plugins-header">
-				<div>
-					<Logo size={24} />
-					<h1>Usage</h1>
+		<section className="page" aria-label="Token usage">
+			<header className="view-header">
+				<div className="view-header-inner wide">
+					<h1>Token usage</h1>
 				</div>
-				<Button variant="outline" onClick={close}>
-					Back to chat
-				</Button>
 			</header>
+			<div className="plugins usage">
 			<Tabs value={String(period)} onValueChange={(v) => setPeriod(Number(v))}>
 				<TabsList aria-label="Period">
 					{periods.map((p) => (
@@ -99,13 +103,14 @@ export function Usage({ connection, close, open }: { connection: Connection; clo
 			) : report.totalTokens === 0 ? (
 				<p>No tokens were used in this period. Replies and coding agent tasks count here once they finish.</p>
 			) : (
-				<Report report={report} open={open} />
+				<Report report={report} open={open} held={held} />
 			)}
-		</main>
+			</div>
+		</section>
 	);
 }
 
-function Report({ report, open }: { report: UsageReport; open: (id: string) => void }) {
+function Report({ report, open, held }: { report: UsageReport; open: (id: string) => void; held?: (id: string) => boolean }) {
 	const days = useMemo(() => fillDays(report.days, report.firstDay, report.lastDay), [report]);
 	const top = Math.max(...report.models.map((m) => m.totalTokens), 1);
 	return (
@@ -171,7 +176,7 @@ function Report({ report, open }: { report: UsageReport; open: (id: string) => v
 					{report.top.map((c) => (
 						<tr key={c.id}>
 							<th scope="row">
-								<button type="button" className="usage-link" onClick={() => open(c.id)}>
+								<button type="button" className="usage-link" disabled={held?.(c.id)} onClick={() => open(c.id)}>
 									{c.title || 'Untitled'}
 								</button>
 								{c.agent && <span className="usage-agent">task · {c.agent}</span>}

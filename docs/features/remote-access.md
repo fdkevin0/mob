@@ -51,13 +51,13 @@ served by the Worker in `worker/`:
   often reports an anonymous AAGUID. It can be renamed. Visitors without a session go to `/?signin=account` and come back
   to `/account` after signing in. Adding a passkey needs a session less than a
   day old; with an older session the page asks the user to sign in with
-  GitHub again. The landing page's account menu and the `/app` sidebar link to
-  it. The page has its own entry and a content security policy that allows
+  GitHub again. The landing page's account menu and the `/app` runner menu link
+  to it. The page has its own entry and a content security policy that allows
   only the site itself.
 - `/app` is the web UI. The Worker sends visitors without a session back to
   `/?signin=app`. With no local Mob or runner saved, `/app` runs Mob in the
   browser (see [Mob in the browser](#mob-in-the-browser)), so a signed-in
-  visitor can start talking at once. **Connect a runner** in the sidebar
+  visitor can start talking at once. **Connect a runner** in the runner menu
   leaves the browser runner for the workspace without one, where visitors can
   look around and type a message, and the **Connect a runner** dialog opens
   when they do something that needs Mob, such as sending, starting a
@@ -75,7 +75,7 @@ served by the Worker in `worker/`:
   and then catches up; the public web also reopens the runner it last opened.
   Only the conversation list (titles) is kept by default. Messages of the 20
   most recently opened conversations are kept only after **Keep messages on
-  this device** is turned on in the sidebar; turning it off forgets them.
+  this device** is turned on in the runner menu; turning it off forgets them.
   **Disconnect** or a rejected token forgets everything kept for that Mob.
   While Mob is unreachable, the workspace shows what was kept and says so.
 
@@ -261,7 +261,7 @@ The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go
 straight from the browser to the provider, so they work only with providers
 that allow cross-origin requests; OpenCode Zen does not, so the browser
-runner starts on the offline demo model. **Model provider** in the sidebar
+runner starts on the offline demo model. **Model provider** in the runner menu
 saves one provider: a preset (OpenAI, Anthropic, OpenRouter and other vendors
 that take a key) or a custom OpenAI Chat Completions or Anthropic Messages
 base URL, with its API key and optionally a model. Saving lists the
@@ -284,14 +284,14 @@ servers, messaging channels and schedules need a runner, and Plugins & cloud
 services is hidden. Mob stops when the tab closes.
 
 The workspace says so: on first use, and whenever **What needs a runner** in
-the sidebar is pressed, a notice lists what works and what needs a runner,
+the runner menu is chosen, a notice lists what works and what needs a runner,
 with **Connect a runner** beside it. When OPFS is unavailable it also warns
 that conversations end with the tab. The Agents page says coding agents need a
 runner instead of listing none.
 
 ### Moving conversations
 
-**Move conversations** in the sidebar of the public web copies conversations
+**Move conversations** in the runner menu of the public web copies conversations
 to another Mob this browser can reach: this browser's runner, a runner it
 paired, or Mob on this computer (when its token is saved here), and offers to
 open it afterwards. It takes each conversation's messages, summary, model,

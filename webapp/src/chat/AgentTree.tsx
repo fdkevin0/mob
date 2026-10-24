@@ -3,7 +3,6 @@ import type { Changes } from '@mob/client';
 import { api, type Connection } from './api';
 import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '../components/brand/Logo';
-import { Button } from '../components/ui/button';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
 import { tokens } from './Usage';
 import {
@@ -197,12 +196,14 @@ const outcomes: Record<string, string> = { passed: 'Passed', rework: 'Needs rewo
 function Card({
 	branch,
 	open,
+	held,
 	collapsed,
 	toggle,
 	act,
 }: {
 	branch: Branch;
 	open: (conversationId: string) => void;
+	held?: (conversationId: string) => boolean;
 	collapsed: boolean;
 	toggle: () => void;
 	act: Act;
@@ -335,7 +336,14 @@ function Card({
 							<StopIcon />
 						</button>
 					)}
-					<button type="button" className="agent-open" aria-label={`Open ${node.label}: ${node.title}`} title="Open its conversation" onClick={() => open(node.conversationId)}>
+					<button
+						type="button"
+						className="agent-open"
+						aria-label={`Open ${node.label}: ${node.title}`}
+						title="Open its conversation"
+						disabled={held?.(node.conversationId)}
+						onClick={() => open(node.conversationId)}
+					>
 						<OpenIcon />
 					</button>
 					{children.length > 0 && (
@@ -359,6 +367,7 @@ function Subtree({
 	branch,
 	depth,
 	open,
+	held,
 	collapsed,
 	toggle,
 	act,
@@ -366,6 +375,7 @@ function Subtree({
 	branch: Branch;
 	depth: number;
 	open: (conversationId: string) => void;
+	held?: (conversationId: string) => boolean;
 	collapsed: Set<string>;
 	toggle: (id: string) => void;
 	act: Act;
@@ -374,11 +384,11 @@ function Subtree({
 	const shut = collapsed.has(id);
 	return (
 		<li className="agent-branch">
-			<Card branch={branch} open={open} collapsed={shut} toggle={() => toggle(id)} act={act} />
+			<Card branch={branch} open={open} held={held} collapsed={shut} toggle={() => toggle(id)} act={act} />
 			{!shut && branch.children.length > 0 && (
 				<ul className={depth === 0 ? 'agent-children row' : 'agent-children'}>
 					{branch.children.map((c) => (
-						<Subtree key={c.node.conversationId} branch={c} depth={depth + 1} open={open} collapsed={collapsed} toggle={toggle} act={act} />
+						<Subtree key={c.node.conversationId} branch={c} depth={depth + 1} open={open} held={held} collapsed={collapsed} toggle={toggle} act={act} />
 					))}
 				</ul>
 			)}
@@ -494,7 +504,7 @@ export function AgentTree({
 	connection,
 	changes,
 	open,
-	close,
+	held,
 	browser,
 }: {
 	connection: Connection;
@@ -503,7 +513,8 @@ export function AgentTree({
 	/** changes, while live, replaces refreshing on a timer: the tree reloads when something changed. */
 	changes?: Changes;
 	open: (conversationId: string) => void;
-	close: () => void;
+	/** held says which conversations cannot open now, while the open one hands a message to Mob. */
+	held?: (conversationId: string) => boolean;
 }) {
 	const [nodes, setNodes] = useState<AgentNode[]>();
 	const [error, setError] = useState('');
@@ -596,11 +607,10 @@ export function AgentTree({
 		});
 
 	return (
-		<section className="agents" aria-label="Agents">
-			<header className="agents-header">
-				<h1>
-					<SparkIcon /> Agents
-				</h1>
+		<section className="page" aria-label="Agents">
+			<header className="view-header">
+				<div className="view-header-inner wide agents-header">
+				<h1>Agents</h1>
 				<div className="agents-summary">
 					<span>
 						{all.length} {all.length === 1 ? 'agent' : 'agents'}
@@ -614,10 +624,9 @@ export function AgentTree({
 						</strong>
 					)}
 				</div>
-				<Button variant="outline" className="small agents-back" onClick={close}>
-					Back to chat
-				</Button>
+				</div>
 			</header>
+			<div className="agents">
 			{error && (
 				<div className="error" role="alert">
 					{error}
@@ -639,9 +648,10 @@ export function AgentTree({
 				<Links canvas={canvas} edges={lines} version={`${lines.map((l) => l.join(':')).join(',')} ${filter ?? ''} ${now}`} />
 				<ul className="agents-tree">
 					{shown.map((b) => (
-						<Subtree key={b.node.conversationId} branch={b} depth={0} open={open} collapsed={collapsed} toggle={toggle} act={act} />
+						<Subtree key={b.node.conversationId} branch={b} depth={0} open={open} held={held} collapsed={collapsed} toggle={toggle} act={act} />
 					))}
 				</ul>
+			</div>
 			</div>
 		</section>
 	);

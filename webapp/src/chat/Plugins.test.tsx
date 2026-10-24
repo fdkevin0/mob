@@ -19,7 +19,7 @@ it('keeps saved passwords hidden, saves configuration and requires review before
     if (url.endsWith('/plugins/email')) { config = { ...config, email: JSON.parse(options!.body as string) }; return Response.json(config); }
     return Response.json({ config, telegramStatus: 'Disabled' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   const secret = await screen.findByLabelText(/IMAP password/);
   expect(secret.getAttribute('type')).toBe('password');
   expect((secret as HTMLInputElement).value).toBe('');
@@ -44,7 +44,7 @@ it('saves who Mob answers mail from and shows the channel status', async () => {
     if (url.endsWith('/plugins/email')) { config = { ...config, email: JSON.parse(options!.body as string) }; return Response.json(config); }
     return Response.json({ config, telegramStatus: 'Disabled', emailStatus: 'Connected · answering mail from me@example.org' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   fireEvent.click(await screen.findByLabelText("Answer the owner's mail"));
   fireEvent.change(screen.getByLabelText("Owner's address"), { target: { value: 'me@example.org' } });
   fireEvent.change(screen.getByLabelText(/Provider's authserv-id/), { target: { value: 'mx.example.org' } });
@@ -63,7 +63,7 @@ it('tests Telegram and runs a Cloudflare operation using only saved configuratio
     if (url.endsWith('/action')) { expect(JSON.parse(options!.body as string).operation).toBe('ai.models'); return Response.json([{ name: '@cf/model' }]); }
     return Response.json({ config, telegramStatus: 'Connected' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
   fireEvent.mouseDown(screen.getByRole('tab', { name: 'Telegram' }), { button: 0, ctrlKey: false });
   expect(screen.getByLabelText(/Bot Token/).getAttribute('type')).toBe('password');
@@ -81,7 +81,7 @@ it('tests WeChat iLink plugin tab and configuration rendering', async () => {
     if (url.endsWith('/test')) return Response.json({ status: 'ready', channel: 'wechat-ilink' });
     return Response.json({ config, telegramStatus: 'Disabled' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
   fireEvent.mouseDown(screen.getByRole('tab', { name: 'WeChat (iLink)' }), { button: 0, ctrlKey: false });
   expect(screen.getByLabelText(/iLink Base URL/)).toBeDefined();
@@ -98,7 +98,7 @@ it('encodes the WeChat login link as a local QR image', async () => {
     });
     return Response.json({ config: initial(), telegramStatus: 'Disabled' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
   fireEvent.mouseDown(screen.getByRole('tab', { name: 'WeChat (iLink)' }), { button: 0, ctrlKey: false });
   fireEvent.click(screen.getByText('Get Login QR Code'));
@@ -122,7 +122,7 @@ it('asks the user to save confirmed WeChat credentials before claiming they are 
     }
     return Response.json({ config, telegramStatus: 'Disabled' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
   fireEvent.mouseDown(screen.getByRole('tab', { name: 'WeChat (iLink)' }), { button: 0, ctrlKey: false });
   fireEvent.click(screen.getByText('Get Login QR Code'));
@@ -141,7 +141,7 @@ it('preserves email edits across plugin navigation and displays durable delivery
     if (url.endsWith('/deliveries')) return Response.json([{ id: 'email:fixture', state: 'failed-or-unknown', error: 'connection interrupted', reply: '', updatedAt: 1 }]);
     return Response.json({ config: initial(), telegramStatus: 'Disabled' });
   }));
-  render(<Plugins connection={connection} close={() => {}} />);
+  render(<Plugins connection={connection} />);
   fireEvent.change(await screen.findByLabelText('From address'), { target: { value: 'unsaved@example.org' } });
   const emailTab = screen.getByRole('tab', { name: 'Email plugin' });
   act(() => emailTab.focus());

@@ -2,7 +2,15 @@ import type { UIMessage } from 'ai';
 import type { Suggestion, Transfer } from './contracts';
 
 export type Connection = { url: string; token: string };
-export type Conversation = { id: string; title: string; updatedAt: number };
+export type Conversation = {
+	id: string;
+	title: string;
+	updatedAt: number;
+	/** active is set while Mob replies in the conversation. */
+	active?: boolean;
+	/** waiting is set while a tool call in it awaits the owner's decision. */
+	waiting?: boolean;
+};
 export type ChatMessage = UIMessage<{ status?: string; error?: string; model?: string; command?: boolean }>;
 export type Snapshot = { messages: ChatMessage[]; active: boolean; model: string };
 export type ClientType = 'web' | 'tui';
