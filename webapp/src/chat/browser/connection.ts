@@ -24,6 +24,15 @@ const offKey = 'mob-browser-off';
 export function browserChosen() {
 	try { return localStorage.getItem(offKey) !== '1'; } catch { return true; }
 }
+// Opening the browser runner is remembered too, so it reopens even when a local Mob's token is also saved.
+const lastKey = 'mob-browser-last';
+/** browserLast reports whether the browser runner was the last Mob this browser opened. */
+export function browserLast() {
+	try { return localStorage.getItem(lastKey) === '1'; } catch { return false; }
+}
 export function chooseBrowser(on: boolean) {
-	try { if (on) localStorage.removeItem(offKey); else localStorage.setItem(offKey, '1'); } catch { /* asked again next time */ }
+	try {
+		if (on) { localStorage.removeItem(offKey); localStorage.setItem(lastKey, '1'); }
+		else { localStorage.setItem(offKey, '1'); localStorage.removeItem(lastKey); }
+	} catch { /* asked again next time */ }
 }

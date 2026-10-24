@@ -26,6 +26,26 @@ export type Conversation = { id: string; title: string; updatedAt: number };
 /** Summary is a conversation's earlier messages summarized, through message `through`, for models to read in their place. */
 export type Summary = { text: string; through: string };
 
+/**
+ * Transfer is a conversation as it moves from one Mob to another, such as from
+ * the browser to a runner: its transcript, summary, model, facts and usage.
+ * Approvals, grants, tasks and schedules stay behind, since they belong to the
+ * Mob that made them.
+ */
+export type Transfer = {
+	v: 1;
+	title: string;
+	model: string;
+	summary: string;
+	summaryThrough: string;
+	messages: { id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string }[];
+	facts: { fact: string; owner: boolean }[];
+	usage: { messageId: string; session: string; model: string; input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number; cost: number; durationMs: number; createdAt: number }[];
+};
+
+/** TransferError says why a conversation cannot move now. */
+export class TransferError extends Error {}
+
 /** Decision is an approval the user has just decided. */
 export type Decision = { approvalId: string; messageId: string; toolCallId: string; tool: string; input: string };
 
@@ -220,6 +240,59 @@ export class Store {
 	save(m: Message, status: string, failure: string) {
 		this.db.run('UPDATE messages SET parts=?,status=?,error=?,usage=? WHERE id=?', JSON.stringify(m.parts), status, failure, m.usage ? JSON.stringify(m.usage) : '', m.id);
 		this.messageChanged(m.id);
+	}
+
+	/** exportConversation copies conversation id for another Mob; one waiting on an approval cannot move. */
+	exportConversation(id: string): Transfer {
+		const c = this.db.get<{ title: string; model: string; summary: string; summary_through: string }>('SELECT title,model,summary,summary_through FROM conversations WHERE id=?', id);
+		if (!c) throw new NotFound();
+		if (this.db.get("SELECT 1 FROM approvals WHERE conversation_id=? AND status='pending'", id)) throw new TransferError('This conversation waits for an approval; answer it before moving the conversation.');
+		const messages = this.db.all<Transfer['messages'][number]>('SELECT id,role,parts,status,error,model,usage,kind FROM messages WHERE conversation_id=? ORDER BY seq', id);
+		const facts = this.db.all<{ fact: string; owner: number }>('SELECT fact,owner FROM memories WHERE conversation_id=? ORDER BY rowid', id).map(r => ({ fact: r.fact, owner: !!r.owner }));
+		const usage = this.db.all<{ message_id: string; session: string; model: string; input: number; output: number; reasoning: number; cache_read: number; cache_write: number; cost: number; duration_ms: number; created_at: number }>(
+			'SELECT message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at FROM usage WHERE conversation_id=? ORDER BY seq', id,
+		).map(u => ({ messageId: u.message_id, session: u.session, model: u.model, input: u.input, output: u.output, reasoning: u.reasoning, cacheRead: u.cache_read, cacheWrite: u.cache_write, cost: u.cost, durationMs: u.duration_ms, createdAt: u.created_at }));
+		return { v: 1, title: c.title, model: c.model, summary: c.summary, summaryThrough: c.summary_through, messages, facts, usage };
+	}
+
+	/**
+	 * importConversation saves a transferred conversation as a new one. Message
+	 * IDs this Mob already has, such as when a conversation comes back, are
+	 * replaced; a reply that was still streaming arrives interrupted, and an
+	 * owner's fact this Mob already keeps is not saved twice.
+	 */
+	importConversation(t: Transfer): Conversation {
+		const str = (v: unknown) => typeof v === 'string';
+		const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+		const valid = t?.v === 1 && str(t.title) && str(t.model) && str(t.summary) && str(t.summaryThrough) && Array.isArray(t.messages) && Array.isArray(t.facts) && Array.isArray(t.usage) &&
+			t.messages.every(m => ['id', 'role', 'parts', 'status', 'error', 'model', 'usage', 'kind'].every(k => str((m as Record<string, unknown>)[k])) && (m.role === 'user' || m.role === 'assistant')) &&
+			t.facts.every(f => str(f.fact) && typeof f.owner === 'boolean') &&
+			t.usage.every(u => str(u.messageId) && str(u.session) && str(u.model) && [u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt].every(num));
+		if (!valid) throw new TransferError('This is not a conversation Mob can import.');
+		for (const m of t.messages) { try { if (!Array.isArray(JSON.parse(m.parts))) throw 0; } catch { throw new TransferError('This is not a conversation Mob can import.'); } }
+		const c = { id: newID(), title: t.title || 'New conversation', updatedAt: Date.now() };
+		const ids = new Map<string, string>();
+		this.db.transaction(() => {
+			this.db.run('INSERT INTO conversations(id,title,updated_at,model,summary,summary_through) VALUES(?,?,?,?,?,?)', c.id, c.title, c.updatedAt, t.model, '', '');
+			for (const m of t.messages) {
+				const id = this.hasRequest(m.id) || ids.has(m.id) ? newID() : m.id;
+				ids.set(m.id, id);
+				const [status, error] = m.status === 'streaming' ? ['interrupted', 'The reply was still being written when the conversation moved.'] : [m.status, m.error];
+				this.db.run('INSERT INTO messages(id,conversation_id,role,parts,status,error,model,usage,kind) VALUES(?,?,?,?,?,?,?,?,?)', id, c.id, m.role, m.parts, status, error, m.model, m.usage, m.kind);
+			}
+			// A summary is kept only while the message it runs through came along.
+			if (t.summary && ids.has(t.summaryThrough)) this.db.run('UPDATE conversations SET summary=?,summary_through=? WHERE id=?', t.summary, ids.get(t.summaryThrough)!, c.id);
+			for (const f of t.facts) {
+				if (f.owner && this.db.get('SELECT 1 FROM memories WHERE owner=1 AND fact=?', f.fact)) continue;
+				this.saveFact(newID(), c.id, f.fact, f.owner);
+			}
+			for (const u of t.usage) {
+				this.db.run('INSERT INTO usage(conversation_id,message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+					c.id, ids.get(u.messageId) ?? u.messageId, u.session, u.model, u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt);
+			}
+		});
+		this.changes.conversation(c.id, true);
+		return c;
 	}
 
 	/** conversationModel is the model reference /model chose, or "" for the default. */

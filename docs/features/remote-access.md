@@ -283,6 +283,28 @@ what guard the first. Coding agents, the sandbox, stdio MCP
 servers, messaging channels and schedules need a runner, and Plugins & cloud
 services is hidden. Mob stops when the tab closes.
 
+The workspace says so: on first use, and whenever **What needs a runner** in
+the sidebar is pressed, a notice lists what works and what needs a runner,
+with **Connect a runner** beside it. When OPFS is unavailable it also warns
+that conversations end with the tab. The Agents page says coding agents need a
+runner instead of listing none.
+
+### Moving conversations
+
+**Move conversations** in the sidebar of the public web copies conversations
+to another Mob this browser can reach: this browser's runner, a runner it
+paired, or Mob on this computer (when its token is saved here), and offers to
+open it afterwards. It takes each conversation's messages, summary, model,
+saved facts and token usage; the originals stay. Pending approvals, grants,
+tasks and schedules do not move, and a conversation that is still replying or
+waits for an approval is refused until it is done. The service side is
+`GET /api/conversations/{id}/export` and `POST /api/conversations/import`
+(`Transfer` in `packages/client/src/contracts.ts`); an import gets a new
+conversation ID, replaces message IDs the target already has, marks a reply
+that was still streaming as interrupted and does not save an owner's fact
+twice. Through the relay a conversation must fit the relay's frame limit of
+about 2 MB.
+
 The worker is built to `/runner/` (not `/assets/`) so the site's Worker can
 give it its own content security policy: it may compile WebAssembly and
 connect to any HTTPS provider, while the `/app` page that holds access tokens

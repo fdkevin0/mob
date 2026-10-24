@@ -225,9 +225,16 @@ it('runs the public web in this browser until another runner is chosen', async (
     render(<App />);
     await screen.findByText('History in this browser · stops with this tab', { exact: false });
     expect(screen.queryByRole('button', { name: 'Plugins & cloud services' })).toBeNull();
+    const limits = await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
+    expect(limits.textContent).toContain('Coding agents');
+    fireEvent.click(within(limits).getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByRole('region', { name: 'What Mob in this browser cannot do' })).toBeNull();
+    expect(localStorage.getItem('mob-browser-limits-seen')).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'What needs a runner' }));
+    await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
     const token = localStorage.getItem('mob-browser-token');
     expect(token).toMatch(/^[0-9a-f]{64}$/);
-    fireEvent.click(screen.getByRole('button', { name: 'Connect a runner' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Connect a runner' })[0]);
     const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
     expect(localStorage.getItem('mob-browser-off')).toBe('1');
     cleanup();

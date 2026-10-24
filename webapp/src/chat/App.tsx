@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../compon
 import { Runners, runnerConnection } from './Runners';
 import { Lobby } from './Lobby';
 import { hosts } from './hosts';
-import { browserChosen, browserConnection, chooseBrowser } from './browser/connection';
+import { browserChosen, browserConnection, browserLast, chooseBrowser } from './browser/connection';
 import { cacheScope, forget, readList } from './localCache';
 
 // The workspace and its chat renderer load in parallel with signing in, so the lobby and the connect form
@@ -44,6 +44,8 @@ export function App() {
     const restore = async () => {
       const link = signInLink();
       if (link) { url = link.url; return claimPairing(link); }
+      // The browser runner reopens when it was the last Mob opened here, even with another one saved.
+      if (isPublicWeb() && browserLast()) { setConnection(browserConnection()); return undefined; }
       // A Mob this browser showed before opens at once with what it showed. Its token is checked meanwhile:
       // a rejected one signs out, and an unreachable Mob is reported in the workspace.
       if (saved) {
@@ -57,10 +59,10 @@ export function App() {
       const runner = lastRunner();
       if (runner && (await readList(cacheScope(runner)))) { setConnection(runner); return undefined; }
       // With nothing else to open, the public web runs Mob in this browser.
-      if (isPublicWeb() && browserChosen()) setConnection(browserConnection());
+      if (isPublicWeb() && browserChosen()) { chooseBrowser(true); setConnection(browserConnection()); }
       return undefined;
     };
-    restore().then(next => { if (next) { saveConnection(next); setConnection(next); setPrompting(false); } })
+    restore().then(next => { if (next) { saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); } })
       .catch(e => setError(current => current || reachText(url, e))).finally(() => setLoading(false));
   }, []);
   // A replaced token signs this window out; the desktop reads the new token instead.
@@ -86,7 +88,7 @@ export function App() {
     event.preventDefault(); setLoading(true); setError('');
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
     if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
-    try { await api(next, '/config'); saveConnection(next); setConnection(next); setPrompting(false); }
+    try { await api(next, '/config'); saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); }
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
   const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
@@ -96,7 +98,7 @@ export function App() {
     else { void forget(cacheScope(from)); if (from.runner) forgetRunner(); else clearToken(); }
     setConnection(undefined);
   };
-  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} /></Suspense>;
+  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.mobDesktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   const panel = <>

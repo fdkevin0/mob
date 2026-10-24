@@ -52,6 +52,11 @@ const browserFetch = (connection: Connection): typeof fetch => async (input, ini
 	await runner.startBrowser(connection);
 	return runner.browserFetch(input, init);
 };
+/** browserState is the browser runner once it serves: persistent is false when its database lasts only as long as the tab. */
+export async function browserState(connection: Connection) {
+	if (import.meta.env.MODE !== 'public') throw new Error('This Mob has no browser runner.');
+	return (await import('./browser/browser')).startBrowser(connection);
+}
 export function webClient(connection: Connection) {
 	return new MobClient(connection, {
 		fetch: connection.browser ? browserFetch(connection) : connection.runner ? encryptedFetch(connection.runner.id, connection.runner.key) : undefined,
