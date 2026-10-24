@@ -15,7 +15,8 @@ it('highlights code with both themes and copies the original source', async () =
 	vi.stubGlobal('navigator', { clipboard: { writeText } });
 	const source = 'const greeting = "你好";';
 	const view = render(<MessageResponse>{fence('ts', source)}</MessageResponse>);
-	await waitFor(() => expect(tokens(view.container).length).toBeGreaterThan(1));
+	// The first render lazily loads the highlighter, language grammar and themes.
+	await waitFor(() => expect(tokens(view.container).length).toBeGreaterThan(1), { timeout: 3000 });
 	expect(new Set(tokens(view.container).map((span) => span.style.getPropertyValue('--sdm-c'))).size).toBeGreaterThan(1);
 	fireEvent.click(view.getByRole('button', { name: /copy/i }));
 	await waitFor(() => expect(writeText).toHaveBeenCalled());
