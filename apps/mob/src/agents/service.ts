@@ -11,7 +11,7 @@ import { preset, presets, readers, type Preset } from './presets';
 import { Session } from './session';
 import { review } from './review';
 import type { Squad } from './squad';
-import { Hub, settle } from './subtasks';
+import { children, Hub, settle } from './subtasks';
 import { tree } from './tree';
 
 /** Project is a git repository tasks work on. Projects are saved in the "projects" setting. */
@@ -81,6 +81,7 @@ export class Service implements Delegate, Tasks {
 			// The summary repeats the reply this turn saves once it ends.
 			await this.conversations.watch(t.conversationId)?.whenDone();
 			settle(this, t.id);
+			this.retire(t.id);
 		})();
 		if (err) throw err;
 	}
@@ -144,6 +145,25 @@ export class Service implements Delegate, Tasks {
 	drop(id: string, s: Session) {
 		if (this.sessions.get(id) === s) this.sessions.delete(id);
 		s.close();
+	}
+
+	/** reap ends the agents of the tasks in list whose work has ended, now that whoever started them has their reports; their worktrees and branches stay, and a message to one starts its agent again. */
+	reap(list: Task[]) {
+		for (const c of list) {
+			const t = this.store.task(c.id);
+			if (!t || t.status === taskRunning || t.status === taskWaiting || this.conversations.isActive(t.conversationId)) continue;
+			const s = this.running(t.id);
+			if (s) this.drop(t.id, s);
+		}
+	}
+
+	/** retire reaps the agents of task id's sub-tasks once it and they have all ended, which delivers its work; its squads' reviewers are their squads' to reap. */
+	retire(id: string) {
+		const t = this.store.task(id);
+		if (!t || t.status === taskRunning || t.status === taskWaiting) return;
+		const kids = children(this, t).filter(c => !this.reviewers.has(c.id));
+		if (kids.some(c => c.status === taskRunning || c.status === taskWaiting)) return;
+		this.reap(kids);
 	}
 
 	/** close ends every agent. */
@@ -275,6 +295,7 @@ export class Service implements Delegate, Tasks {
 		if (s) this.drop(t.id, s);
 		this.store.setTaskStatus(t.id, taskStopped);
 		settle(this, t.id);
+		this.retire(t.id);
 	}
 
 	/** offered reports whether task_start is offered: once there are projects or tasks, or while a coding agent can be started. */

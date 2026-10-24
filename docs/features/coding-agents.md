@@ -365,10 +365,17 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
 ## Lifetime
 
 - An agent process starts with the first turn that needs it and runs until the
-  task is stopped or Mob stops; it runs in a process group of its own (a
-  process tree on Windows), so what `npx` starts ends with it. Stopping a turn
-  cancels the agent's prompt; an agent that does not end it within ten
-  seconds is ended.
+  task is stopped, Mob stops, or, for a sub-task, its report is delivered
+  (below); it runs in a process group of its own (a process tree on
+  Windows), so what `npx` starts ends with it. Stopping a turn cancels the
+  agent's prompt; an agent that does not end it within ten seconds is ended.
+- Sub-task agents are reaped once their reports are delivered: when a task
+  and all its sub-tasks have ended (after it hears how they went and ends its
+  own turn, or is stopped), the agents of its ended sub-tasks end; a squad's
+  reviewers end once all of them have ended and their reports are gathered.
+  The task's own agent stays, and so do the sub-tasks' worktrees, branches
+  and conversations. A message to a reaped sub-task starts its agent again,
+  loading or resuming its session where the agent can.
 - When Mob starts, tasks still marked running or waiting are marked stopped:
   their agents ended with Mob. Deciding an approval no agent waits for any
   more starts nothing; the call is marked failed and the reply says to send

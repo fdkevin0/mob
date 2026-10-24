@@ -143,6 +143,8 @@ export function settleSquad(svc: Service, t: Task) {
 	}
 	// Taken before anything is awaited, so reviewers ending together check it once.
 	svc.squads.delete(t.id);
+	// Their reports are in hand, so their agents can go.
+	svc.reap(reviewers);
 	void validate(svc, t, sq, reviewers);
 }
 
