@@ -10,7 +10,7 @@ The [configuration reference](../environment-variables.md) lists file keys,
 CLI flags, `MOB_` variables, defaults and precedence.
 
 On macOS the default file is `~/Library/Application Support/mob/config.yaml`;
-on Linux normally `~/.config/mob/config.yaml`. YAML, JSON and TOML are accepted.
+on Linux normally `~/.config/mob/config.yaml`. YAML and JSON are accepted.
 Model providers and keys live in `providers.json` beside it (see
 [Model providers](providers.md)); plugin settings live in the database.
 `mob config check` validates both files without printing credentials.
@@ -35,10 +35,10 @@ Model providers and keys live in `providers.json` beside it (see
 - `mob start` runs the service in the background; `mob status` reports it and
   any reload errors; `mob stop` authenticates to it and waits for shutdown. Start,
   status and stop must use the same address and data-directory overrides.
-- Without `mob start`, the first desktop app or `mob tui` (either version) owns the service until it
-  exits, and later clients attach to it. `mob serve` stays tied to its terminal.
-  To change ownership, close the current owner and run `mob start` with the same
-  environment. No login item or system service is installed.
+- The desktop app and `mob tui` connect to an existing service or start one in
+  the background. Closing either client leaves the service, channels and
+  schedules running; use `mob stop` to stop the background service.
+  `mob serve` stays tied to its terminal. No login item or system service is installed.
 - `mob tui` uses the normal connect-or-start lifecycle and hands the service
   URL and token to the terminal UI in memory, not as command arguments. The
   source entry (`bun run tui:pilot`) only attaches to an existing service.
