@@ -93,3 +93,13 @@ const snapshot = () => (current ??= storedTheme());
 export function useTheme(): [Theme, (theme: Theme) => void] {
 	return [useSyncExternalStore(subscribe, snapshot), saveTheme];
 }
+
+// useScheme is the scheme the page shows now, after the system is resolved.
+// Widgets drawn in another document (Turnstile's iframe) cannot see the
+// page's data-theme or color-scheme, so they are told this instead.
+export function useScheme(): 'light' | 'dark' {
+	return useSyncExternalStore(
+		(listener) => onThemeApplied(listener),
+		() => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'),
+	);
+}
