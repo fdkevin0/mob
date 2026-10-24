@@ -78,7 +78,6 @@ jobs:
     name: scriptc coverage (experimental)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -88,11 +87,12 @@ jobs:
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
-      - run: npm install -g scriptc@0.4.3
+      - run: npm install -g --allow-scripts=scriptc scriptc@0.4.3
       - name: Coverage
         run: |
           set +e
           scriptc coverage apps/mob/src/main.ts > scriptc.txt 2>&1
           status=$?
-          { echo '## scriptc coverage'; echo; echo '```'; tail -n 200 scriptc.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          exit $status
+          { echo '## scriptc coverage'; echo; echo "scriptc exited with $status."; echo; echo '```'; tail -n 200 scriptc.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # A report, not a gate: what scriptc cannot compile yet is in the summary.
+          if [ "$status" -ne 0 ]; then echo "::warning::scriptc cannot compile the host yet; see the job summary"; fi
