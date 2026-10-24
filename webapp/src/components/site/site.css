@@ -1,0 +1,29 @@
+/* The header and footer of the public pages (landing, demo, account). */
+.nav { position: sticky; top: 0; z-index: 10; background: linear-gradient(var(--bg) 55%, transparent); }
+.nav-floating { position: fixed; inset: 0 0 auto; }
+.nav-inner { max-width: 1240px; margin: 0 auto; padding: 18px 28px; display: flex; align-items: center; gap: 28px; }
+.nav .brand { display: flex; }
+.nav-links { display: flex; gap: 24px; font-size: 14px; color: var(--muted-foreground); margin-right: auto; }
+.nav-links a:hover, .nav-links a[aria-current='page'] { color: var(--text); }
+.nav-account { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.nav-account .btn { white-space: nowrap; }
+.nav-pending { width: 82px; height: 32px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+.nav .avatar { width: 32px; height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--panel); font-family: var(--mono); font-size: 12px; cursor: pointer; padding: 0; overflow: hidden; display: grid; place-items: center; }
+.nav .avatar:hover { border-color: var(--line-hover); }
+.nav .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.footer { display: flex; align-items: center; flex-wrap: wrap; gap: 18px 28px; max-width: 1240px; margin: 0 auto; padding: 28px 28px 40px; border-top: 1px solid var(--line); color: var(--faint); font-size: 14px; scroll-snap-align: end; }
+.footer-brand { display: flex; align-items: center; gap: 14px; }
+.footer .logo-word { font-size: 16px; }
+.footer nav { display: flex; gap: 22px; margin-left: auto; }
+.footer nav a:hover { color: var(--text); }
+
+@media (max-width: 760px) {
+	.nav-inner { padding: 14px 16px; gap: 10px; }
+	.nav-account { gap: 4px; }
+	.nav-account .btn.small { padding: 6px 10px; }
+	.nav-links { display: none; }
+	.nav-theme { margin-left: auto; }
+	.footer { padding: 24px 16px 36px; }
+	.footer nav { margin-left: 0; flex-wrap: wrap; gap: 14px 20px; }
+}

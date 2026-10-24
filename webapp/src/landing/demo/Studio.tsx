@@ -4,6 +4,8 @@ import { BrandIcon, runtimeBrand } from '../../chat/brandIcons';
 import { AlertIcon, ArrowUpIcon, CheckIcon, ChevronIcon, HandIcon, MessageIcon, SparkIcon, StopIcon } from '../../chat/icons';
 import { aimAt, Cursor, type Aim } from './Cursor';
 import { begin, branches, clock, count, decide, finish, goal, money, project, report, reported, stop, tasks, typed, view, waitingFor, type Decision, type Run, type Status, type Task, type View } from './orchestra';
+import { Button } from '../../components/ui/button';
+import { Segmented } from '../../components/ui/segmented';
 import './demo.css';
 
 // One replay, two views of it: the conversation where you asked, on the web
@@ -338,13 +340,12 @@ export function Studio() {
 	return (
 		<div className="s-wrap">
 			<div className="demo-controls">
-				<div className="demo-channels" role="group" aria-label="Ask from">
-					<span>Ask from</span>
-					{(['web', 'chat'] as Channel[]).map(c => <button type="button" key={c} aria-pressed={channel === c} onClick={() => pickChannel(c)}>{c === 'web' ? 'Web app' : 'Chat app'}</button>)}
+				<div className="demo-channels">
+					<span aria-hidden="true">Ask from</span>
+					<Segmented label="Ask from" value={channel} onChange={pickChannel}
+						options={[{ value: 'web', label: 'Web app' }, { value: 'chat', label: 'Chat app' }]} />
 				</div>
-				<div className="demo-channels" role="group" aria-label="Replay">
-					<button type="button" onClick={() => { takeOver(); replay(); }}>↻ Replay</button>
-				</div>
+				<Button variant="ghost" className="small" onClick={() => { takeOver(); replay(); }}>↻ Replay</Button>
 			</div>
 			<div className="s-stage" ref={stage} data-channel={channel} onClickCapture={e => { if (e.isTrusted) takeOver(); }}>
 				<div className="d-window s-window" aria-label="The Mob app">

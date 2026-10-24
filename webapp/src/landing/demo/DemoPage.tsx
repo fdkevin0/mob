@@ -1,7 +1,6 @@
-import { Logo } from '../../components/brand/Logo';
 import { Icon, type IconName } from '../../components/brand/Icon';
 import { Button } from '../../components/ui/button';
-import { ThemePicker } from '../../theme/ThemePicker';
+import { SiteFooter, SiteHeader } from '../../components/site/Site';
 import { Studio } from './Studio';
 
 // /demo: one task, replayed in the browser from the message to the report,
@@ -17,17 +16,13 @@ const points: { icon: IconName; title: string; text: string }[] = [
 export function DemoPage() {
 	return (
 		<div className="landing demo-page">
-			<header className="nav"><div className="nav-inner">
-				<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
-				<nav className="nav-links" aria-label="Sections">
-					<a href="/">Home</a>
-					<a href="/demo" aria-current="page">Demo</a>
-					<a href="/docs/">Docs</a>
-					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
-				</nav>
-				<ThemePicker className="nav-theme" />
-				<div className="nav-account"><Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button></div>
-			</div></header>
+			<SiteHeader floating links={[
+				{ href: '/', label: 'Home' },
+				{ href: '/demo', label: 'Demo', current: true },
+				{ href: '/docs/', label: 'Docs' },
+			]}>
+				<Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button>
+			</SiteHeader>
 
 			<main className="demo-main">
 				<div className="demo-copy">
@@ -47,15 +42,7 @@ export function DemoPage() {
 				</div>
 			</main>
 
-			<footer className="footer">
-				<div className="footer-brand"><Logo size={20} /><span>MIT licensed</span></div>
-				<nav aria-label="Project links">
-					<a href="/">Home</a>
-					<a href="/docs/">Docs</a>
-					<a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Releases</a>
-					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
-				</nav>
-			</footer>
+			<SiteFooter links={[{ href: '/', label: 'Home' }, { href: '/docs/', label: 'Docs' }]} />
 		</div>
 	);
 }

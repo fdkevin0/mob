@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { authClient, errorCode } from '../landing/auth';
-import { Logo } from '../components/brand/Logo';
 import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { ThemePicker } from '../theme/ThemePicker';
+import { SiteHeader } from '../components/site/Site';
 
 type Passkey = { id: string; name?: string | null; createdAt?: Date | string | null; backedUp: boolean; deviceType: string };
 type Linked = { id: string; providerId: string; createdAt: Date | string };
@@ -51,14 +50,10 @@ export function Account() {
 
 function Header() {
 	return (
-		<header className="account-nav">
-			<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
-			<div className="account-nav-actions">
-				<ThemePicker />
-				<Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button>
-				<Button variant="ghost" className="small" onClick={() => { void authClient.signOut().finally(() => window.location.assign('/')); }}>Sign out</Button>
-			</div>
-		</header>
+		<SiteHeader links={[{ href: '/demo', label: 'Demo' }, { href: '/docs/', label: 'Docs' }]}>
+			<Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button>
+			<Button variant="ghost" className="small" onClick={() => { void authClient.signOut().finally(() => window.location.assign('/')); }}>Sign out</Button>
+		</SiteHeader>
 	);
 }
 
