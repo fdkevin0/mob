@@ -20,7 +20,8 @@ it('has calves doing every kind of thing, and finds them under the pointer', () 
   }
   for (const a of ['work', 'deliver', 'ask', 'lead', 'sandbox', 'memo', 'drink', 'nap', 'high-five'] as Activity[]) expect(seen).toContain(a);
   expect(calfAt(0, 0, 720, 450)).toBeUndefined();
-});
+  // Simulates 400 seconds of the office; on a CI runner that passes 5 seconds.
+}, 30_000);
 
 it('plays each step of the task without losing the office', () => {
   const before = officeVoxels(401).length;

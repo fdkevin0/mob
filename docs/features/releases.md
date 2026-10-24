@@ -21,7 +21,8 @@ migration window, so old schema code does not stay in the tree forever.
   never marked as the latest release. Nightly releases may be pruned.
 - **stable**: [release-please](https://github.com/googleapis/release-please)
   keeps one release PR open with the next `vX.Y.Z` and a `CHANGELOG.md` built
-  from the `type(scope):` commit messages. Merging it tags the release, which
+  from the `type(scope):` commit messages, which are the titles of the
+  squash-merged pull requests. Merging it tags the release, which
   becomes the latest one.
 
 Stable releases start at `v0.1.0`. Below 1.0, a `feat` raises the minor version,
@@ -41,9 +42,9 @@ minor version. Other commit types are left out of the changelog.
 - Each stable release updates the `mob` cask in `fdkevin0/homebrew-tap`
   (`brew install fdkevin0/tap/mob`, macOS and Linux). The cask removes the
   quarantine flag because the binary is not notarized.
-- An experimental CI job reports how much of the host
-  [scriptc](https://github.com/vercel-labs/scriptc) can compile natively. It
-  never blocks a merge, and no release contains a scriptc build.
+- An experimental workflow reports how much of the host
+  [scriptc](https://github.com/vercel-labs/scriptc) can compile natively, after
+  host changes reach `main` and weekly. It never blocks a merge, and no release contains a scriptc build.
 
 Repository setup: a `HOMEBREW_TAP_TOKEN` secret that can push to the tap (without
 it the cask is built but not pushed); a `RELEASE_PLEASE_TOKEN` secret so the

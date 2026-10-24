@@ -55,8 +55,9 @@ and the encrypted relay against the built binary.
 Also run `bun run test:client` (headless Node tests/typecheck) and
 `bun run test:tui` (pilot typecheck/tests) when changing the shared client or TUI.
 The integration script exercises both client types, concurrent readers,
-reconnection, detachment, scoped approvals, stale decisions and Stop. CI also
-reports, without blocking, how much of the host scriptc can compile.
+reconnection, detachment, scoped approvals, stale decisions and Stop. The
+`scriptc` workflow reports how much of the host scriptc can compile; it runs
+after host changes reach `main`, weekly and by hand, never on pull requests.
 
 Tests use temporary data directories, local fixtures and fake providers, so
 they need no keys and send nothing to real models, mailboxes or chats.
@@ -88,11 +89,18 @@ For documentation writing or organization, the repository skill
 
 ## Changes
 
-- `main` changes only through pull requests, merged by rebase; keep branches
+- `main` changes only through pull requests, squash-merged: each pull request
+  becomes one commit whose message is the pull request title. Keep branches
   linear and rebase onto `main` rather than merging it in.
-- Commit messages follow `type(scope): description`, e.g.
-  `fix(models): close reload race`. release-please builds the changelog and the
-  next version from them (see [Releases](docs/features/releases.md)).
+- Pull request titles follow `type(scope): description`, e.g.
+  `fix(models): close reload race`; the `PR title` check enforces it.
+  release-please builds the changelog and the next version from them (see
+  [Releases](docs/features/releases.md)), so a breaking change needs `!` in the
+  title. Commits inside a pull request are not checked.
+- A pull request merges once `CI passed` and `PR title` are green. The
+  repository's rulesets are kept in [.github/rulesets/](.github/rulesets/); GitHub
+  does not read them from there, so a change to one is applied by hand under
+  Settings → Rules → Rulesets (import the JSON) in the same pull request.
 - A pull request describes the behaviour change, links related issues, lists the
   checks run, and includes screenshots for UI changes.
 - Design discussion happens in issues and pull requests. Mob does not keep
