@@ -327,15 +327,6 @@
 	margin: 4px 6px;
 	background: var(--line);
 }
-.status-dot {
-	display: inline-block;
-	width: 7px;
-	height: 7px;
-	margin-right: 6px;
-	border-radius: 50%;
-	background: var(--ok);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 12%, transparent);
-}
 .chat-main {
 	display: flex;
 	flex: 1;
@@ -1352,21 +1343,6 @@
 	.plugins h1 {
 		font-size: 24px;
 	}
-}
-.lobby-conversation {
-	flex: 1;
-	display: flex;
-}
-.lobby-notice {
-	color: var(--destructive);
-	line-height: 1.5;
-}
-.lobby-note {
-	padding: 0 10px;
-	line-height: 1.6;
-}
-.status-dot.offline {
-	background: var(--muted-foreground);
 }
 .runner-choices {
 	display: grid;

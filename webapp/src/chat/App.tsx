@@ -6,13 +6,12 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Runners, runnerConnection } from './Runners';
-import { Lobby } from './Lobby';
 import { Splash } from './Splash';
 import { hosts } from './hosts';
-import { browserChosen, browserConnection, browserLast, chooseBrowser } from './browser/connection';
+import { browserConnection, browserLast, chooseBrowser } from './browser/connection';
 import { cacheScope, forget, readList } from './localCache';
 
-// The workspace and its chat renderer load in parallel with signing in, so the lobby and the connect form
+// The workspace and its chat renderer load in parallel with signing in, so the loading screen and connect form
 // paint without waiting for them.
 const workspace = import('./Workspace');
 const Workspace = lazy(() => workspace.then((m) => ({ default: m.Workspace })));
@@ -27,11 +26,12 @@ export function App() {
   const [loading, setLoading] = useState(true);
   // starting is set until a saved connection, a sign-in link or the desktop's connection has been tried.
   const [starting, setStarting] = useState(true);
-  // The public web opens the workspace without a runner; prompting shows how to connect one, and draft keeps what was typed meanwhile.
+  // The connection dialog can open over the current workspace.
   const [prompting, setPrompting] = useState(false);
+  const connectionAttempt = useRef(0);
+  const closeConnection = () => { connectionAttempt.current++; setPrompting(false); setLoading(false); setError(''); };
   // The dialog first offers a choice of runner: the user's own one, or one deployed to their cloud account.
   const [choice, setChoice] = useState<'own' | 'cloud'>();
-  const [draft, setDraft] = useState('');
   // pending is a connection opened before its token was checked, which a rejection may arrive before it renders.
   const pending = useRef<Connection | undefined>(undefined);
   useEffect(() => {
@@ -62,7 +62,7 @@ export function App() {
       const runner = lastRunner();
       if (runner && (await readList(cacheScope(runner)))) { setConnection(runner); return undefined; }
       // With nothing else to open, the public web runs Mob in this browser.
-      if (isPublicWeb() && browserChosen()) { chooseBrowser(true); setConnection(browserConnection()); }
+      if (isPublicWeb()) { chooseBrowser(true); setConnection(browserConnection()); }
       return undefined;
     };
     restore().then(next => { if (next) { saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); } })
@@ -89,22 +89,31 @@ export function App() {
   }, []);
   async function connect(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
+    const attempt = ++connectionAttempt.current;
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
     if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
-    try { await api(next, '/config'); saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); }
-    catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
+    try {
+      await api(next, '/config');
+      if (attempt !== connectionAttempt.current) return;
+      saveConnection(next); chooseBrowser(false); setConnection(next); closeConnection();
+    } catch (e) {
+      if (attempt === connectionAttempt.current) setError(reachText(next.url, e));
+    } finally {
+      if (attempt === connectionAttempt.current) setLoading(false);
+    }
   }
-  const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
-  // Leaving the browser runner asks where Mob runs instead; its conversations stay in this browser.
+  const open = (next: Connection) => { setConnection(next); closeConnection(); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
+  // Keep the browser workspace mounted while choosing a runner; switch only after connecting.
   const leave = (from: Connection) => {
-    if (from.browser) { chooseBrowser(false); setChoice(undefined); setPrompting(true); }
+    if (from.browser) { setChoice(undefined); setError(''); setPrompting(true); return; }
     else { void forget(cacheScope(from)); if (from.runner) forgetRunner(); else clearToken(); }
     setConnection(undefined);
   };
-  if (connection) return <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
+  const workspaceView = connection && <Suspense fallback={<Splash label="Opening workspace…" />}><Workspace key={cacheScope(connection)} connection={connection} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
+  if (connection && !isPublicWeb()) return workspaceView;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.mobDesktop) return <Splash label="Mob could not start."><h1 className="splash-title">Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></Splash>;
-  // Connecting shows the calf rather than a form that is about to go away; the public web shows its lobby meanwhile.
+  // Connecting shows the calf rather than a form that is about to go away.
   if (starting && !error && !isPublicWeb()) return <Splash label={window.mobDesktop ? 'Starting Mob…' : 'Connecting to Mob…'} />;
   const panel = <>
     {isPublicWeb() && <Runners connect={open} />}
@@ -112,12 +121,12 @@ export function App() {
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
     {error && <p role="alert">{error}</p>}</>;
   if (isPublicWeb()) return <>
-    <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setChoice(undefined); setPrompting(true); }} />
-    <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
+    {workspaceView || <Splash label="Connecting to Mob…">{starting ? undefined : <Button onClick={() => { setChoice(error ? 'own' : undefined); setPrompting(true); }}>Connect a runner</Button>}</Splash>}
+    <Dialog open={prompting} onOpenChange={show => { if (show) setPrompting(true); else closeConnection(); }}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
       <DialogDescription className="dialog-description">Choose where Mob runs.</DialogDescription>
       {choice ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setChoice(undefined); setError(''); }}>← Other runners</Button>{choice === 'cloud' ? <Runners connect={open} deploy /> : panel}</> : <div className="runner-choices">
-        <Button type="button" variant="outline" className="runner-choice" onClick={() => open(browserConnection())}><strong>This browser</strong><span>Start now, with nothing to install. Conversations stay in this browser; coding agents, the sandbox and channels need a runner.</span></Button>
+        <Button type="button" variant="outline" className="runner-choice" onClick={() => connection?.browser ? closeConnection() : open(browserConnection())}><strong>This browser</strong><span>Start now, with nothing to install. Conversations stay in this browser; coding agents, the sandbox and channels need a runner.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('own')}><strong>Your own runner</strong><span>Mob on this computer, or on another computer you pair. Conversations stay there.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('cloud')}><strong>Deploy to the cloud {hosts.filter(h => h.deployURL).map(h => <small key={h.id} className="host-mark"><h.Logo />{h.name}</small>)}</strong><span>Mob in your own Render account, on its free tier. No computer needs to stay on.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>

@@ -63,18 +63,17 @@ served by the Worker in `worker/`:
   `/?signin=app`. With no local Mob or runner saved, `/app` runs Mob in the
   browser (see [Mob in the browser](#mob-in-the-browser)), so a signed-in
   visitor can start talking at once. **Connect a runner** in the runner menu
-  leaves the browser runner for the workspace without one, where visitors can
-  look around and type a message. This view keeps the workspace sidebar and
-  header layout, with connection and account controls below the conversation
-  list. The **Connect a runner** dialog opens when they do something that needs Mob, such as sending, starting a
-  conversation or opening plugins. The choice is remembered until **This
-  browser** is picked again. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
+  opens a dialog over the current workspace. The sidebar, selected conversation
+  and draft stay in place when it is closed or a connection fails. The browser
+  runner remains selected until another runner connects successfully. Choosing
+  **This browser** again closes the dialog without reopening the conversation.
+  Closing the dialog discards any pending connection result.
+  After disconnecting a local or remote runner, the connection screen offers
+  the same dialog. Choose **This browser** to reopen the browser workspace. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's
   account at Render or another host (see
   [Runners in the cloud](#runners-in-the-cloud)), and **Cloud runner**, which is
-  disabled and marked coming soon. A typed message is kept and placed in the
-  composer of the first conversation that opens after connecting; it is not
-  sent automatically. A `mob open --web` link opens the dialog to show its
+  disabled and marked coming soon. A `mob open --web` link opens the dialog to show its
   progress, and a replaced token reopens it with the reason.
 - The browser keeps what each Mob showed last in IndexedDB, separately for
   each runner and local address, so a Mob it has shown before opens at once
