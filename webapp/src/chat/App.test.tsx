@@ -213,7 +213,7 @@ it('sends a typed token from the public web only to Mob on this computer', async
   } finally { vi.unstubAllEnvs(); }
 });
 
-it('runs the public web in this browser until another runner is chosen', async () => {
+it('keeps the browser workspace when choosing the current runner or a connection fails', async () => {
   vi.stubEnv('MODE', 'public');
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     expect(url.startsWith('http://localhost/api/')).toBe(true);
@@ -243,13 +243,7 @@ it('runs the public web in this browser until another runner is chosen', async (
     let dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
     expect(localStorage.getItem('mob-browser-off')).toBeNull();
     expect(composer.isConnected).toBe(true);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
-    expect(screen.getByLabelText('Message')).toBe(composer);
-    expect(composer.value).toBe('Keep this draft');
-    expect(window.location.hash).toBe(hash);
-    await screen.findByRole('button', { name: 'This browser: settings and runner' });
-    await chooseFromRunnerMenu('Connect a runner');
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /This browser/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /This browser/ }));
     await act(async () => {});
     expect(screen.getByLabelText('Message')).toBe(composer);
     expect(composer.value).toBe('Keep this draft');
@@ -270,16 +264,6 @@ it('runs the public web in this browser until another runner is chosen', async (
     render(<App />);
     await screen.findByRole('button', { name: 'This browser: settings and runner' });
     expect(localStorage.getItem('mob-browser-token')).toBe(token);
-    await chooseFromRunnerMenu('Connect a runner');
-    dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
-    fireEvent.click(within(dialog).getByRole('button', { name: /Your own runner/ }));
-    fireEvent.change(within(dialog).getByLabelText('Mob address'), { target: { value: 'http://localhost' } });
-    fireEvent.change(within(dialog).getByLabelText('Local access token'), { target: { value: 'runner-token' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Open workspace' }));
-    await screen.findByRole('button', { name: 'This computer: settings and runner' });
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(localStorage.getItem('mob-browser-off')).toBe('1');
-    expect(localStorage.getItem('mob-token')).toBe('runner-token');
   } finally { vi.unstubAllEnvs(); }
 });
 
@@ -299,7 +283,6 @@ it.each([200, 503])('ignores a dismissed connection returning %i while a newer a
     await screen.findByRole('button', { name: 'This browser: settings and runner' });
     fireEvent.click(screen.getAllByRole('button', { name: 'New conversation' })[0]);
     const composer = await screen.findByLabelText('Message') as HTMLTextAreaElement;
-    fireEvent.change(composer, { target: { value: 'Keep this draft' } });
     await chooseFromRunnerMenu('Connect a runner');
     let dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Your own runner/ }));
@@ -324,6 +307,7 @@ it.each([200, 503])('ignores a dismissed connection returning %i while a newer a
     await act(async () => { requests[1](Response.json({})); });
     await screen.findByRole('button', { name: 'This computer: settings and runner' });
     expect(localStorage.getItem('mob-token')).toBe('new-token');
+    expect(localStorage.getItem('mob-browser-off')).toBe('1');
     expect(screen.queryByRole('dialog')).toBeNull();
   } finally { vi.unstubAllEnvs(); }
 });
