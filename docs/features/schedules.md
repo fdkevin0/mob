@@ -2,7 +2,7 @@
 
 The owner's model can act later on its own: a morning summary of the coding
 tasks, a reminder, a check on something that is still running. The code is in
-`internal/plugins/schedule`; schedules are saved in the `schedules` table.
+`packages/core/src/app/schedule.ts` and `apps/mob/src/schedules.ts`; schedules are saved in the `schedules` table.
 
 ## Scheduling
 

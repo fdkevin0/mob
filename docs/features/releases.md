@@ -6,12 +6,10 @@ migration window, so old schema code does not stay in the tree forever.
 ## Versions
 
 - A nightly build is named `{date}.{sha}`: the UTC date of its commit and the
-  commit's short hash, e.g. `20261011.c0502b6`. `internal/version` reads both
-  from the VCS stamp Go adds to builds made in a Git checkout, so `go build`,
-  and `bun run build:cli` need no linker flags. A build with uncommitted
-  changes gets `-dirty`; `go run` and tests report `dev`.
-- A stable build gets its `vX.Y.Z` tag through `-X internal/version.release`.
-  `go install …@vX.Y.Z` reports the tag from the module version.
+  commit's short hash, e.g. `20261011.c0502b6`. The release workflow passes it to
+  `scripts/release.ts`, which compiles it into the binary.
+- A stable build reports its `vX.Y.Z` tag the same way. A build made without a
+  version, such as `bun run build:cli`, and a run from source report `dev`.
 - `mob --version` and `GET /api/runtime` show the version.
 
 ## Channels
@@ -32,15 +30,20 @@ minor version. Other commit types are left out of the changelog.
 
 ## Builds
 
-- `.goreleaser.yaml` builds both channels with the web UI embedded: archives for
-  Linux and macOS (amd64, arm64) and Windows (amd64), plus `SHA256SUMS`. CI
-  checks that the binary reports the expected version. The desktop app is built by
-  the `desktop` job (see [Desktop app](desktop.md)).
+- `scripts/release.ts` builds both channels with the web UI embedded, using
+  `bun build --compile` from one Linux runner: archives for Linux and macOS
+  (amd64, arm64) and Windows (amd64), plus `SHA256SUMS`. The release job installs
+  every platform's native packages (`bun install --os='*' --cpu='*'`) so each
+  target finds them. CI checks that the binary reports the expected version. The
+  desktop app is built by the `desktop` job (see [Desktop app](desktop.md)).
 - Both channels attest their archives with `actions/attest-build-provenance`,
   verified with `gh attestation verify`.
 - Each stable release updates the `mob` cask in `fdkevin0/homebrew-tap`
   (`brew install fdkevin0/tap/mob`, macOS and Linux). The cask removes the
   quarantine flag because the binary is not notarized.
+- An experimental CI job reports how much of the host
+  [scriptc](https://github.com/vercel-labs/scriptc) can compile natively. It
+  never blocks a merge, and no release contains a scriptc build.
 
 Repository setup: a `HOMEBREW_TAP_TOKEN` secret that can push to the tap (without
 it the cask is built but not pushed); a `RELEASE_PLEASE_TOKEN` secret so the
@@ -50,34 +53,18 @@ release PR starts CI; and GitHub Actions allowed to create pull requests.
 
 - `PRAGMA user_version` holds the schema. The `meta` table's `service_version`
   holds the release that last opened the database, so a refusal can name it.
-- Each migration in `internal/chat/migrations.go` records the UTC date it was
-  written (`Added`, `YYYYMMDD`; a commit cannot name its own hash). A migration
-  stays in the code for at least six months after that date.
-- Opening a database:
-  - empty: create it from `baseline`, then apply every migration;
-  - schema `first` or newer: apply the remaining migrations, one transaction
-    each;
-  - older than `first`: refuse, naming the retired release for its schema with
-    its download link, and ask the user to start that release once and then come
-    back;
+- `packages/core/src/chat/schema.ts` holds the current schema and, by version,
+  the statements that bring the one before it up to date. Opening a database:
+  - empty: create the current schema;
+  - schema 10 or newer: apply the remaining upgrades and the current schema in
+    one transaction;
+  - older than 10: refuse, and ask the user to start a Go release of Mob once
+    to upgrade it;
   - newer than this code: refuse and ask for the release recorded in `meta`, or
     a newer one.
 
   A refused database is not changed. The desktop app shows the message in its
   window; the CLI prints it.
-- A user who skips more than a window upgrades in steps, each refusal naming the
-  next release, and nothing is lost on the way.
-
-### Closing a migration window
-
-1. Choose the last published stable release that still contains the migrations
-   to remove.
-2. Rewrite `baseline` to create the schema they produce, so new databases start
-   there, and raise `first` to that schema.
-3. Delete those migrations and append `{Below: first, Release: that release}` to
-   `retired`.
-
-`TestSchemaHistoryRules` keeps the history consistent: `Added` is a date,
-retired windows rise, end at `first` and name `vX.Y.Z` releases, and a baseline
-exists exactly when migrations were retired. The named release must stay
-published.
+- An upgrade stays in the code for at least six months after it was written.
+  To retire older ones, raise the oldest schema `open` accepts and name, in its
+  refusal, the last release that still upgrades from there.

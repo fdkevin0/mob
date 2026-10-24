@@ -1,6 +1,6 @@
 # Environment variables and configuration
 
-Generated from internal/configuration/options.go; run go run ./cmd/configdocs.
+Generated from apps/mob/src/config.ts; run bun run --cwd apps/mob configdocs.
 
 Explicit CLI flags > nonempty MOB_ environment variables > configuration file > defaults.
 Empty environment values are ignored consistently; use a flag or file value to clear a string.
@@ -9,6 +9,7 @@ There is no .env loader. Restart after changing the process environment.
 Keys map to flags by replacing dots/underscores with hyphens, and to environment
 variables by replacing dots with underscores, uppercasing and prefixing MOB_.
 The config selector chooses the file before loading it and cannot appear inside that file.
+The file is YAML (config.yaml) or JSON (config.json).
 
 | File key | CLI flag | Environment | Default | Purpose |
 | --- | --- | --- | --- | --- |

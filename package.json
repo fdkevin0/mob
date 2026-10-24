@@ -2,7 +2,7 @@
   "name": "mob",
   "version": "0.0.0",
   "license": "MIT",
-  "description": "Local assistant with Electron, AI SDK UI and Bubble Tea.",
+  "description": "Local assistant with Electron, AI SDK UI and OpenTUI.",
   "workspaces": ["packages/*", "apps/*"],
   "dependencies": {
     "@ai-sdk/react": "4.0.146",
@@ -50,17 +50,16 @@
     "tui:pilot": "bun run --cwd apps/tui start",
     "test:tui": "bun run --cwd apps/tui typecheck && bun run --cwd apps/tui test",
     "test:docs": "bun run --cwd apps/docs sync && bun run --cwd apps/docs test",
-    "test:dsh": "bun run --cwd apps/dsh typecheck && bun run --cwd apps/dsh test && go test ./internal/plugins/mcp -run TestDSHBridge",
+    "test:dsh": "bun run --cwd apps/dsh typecheck && bun run --cwd apps/dsh test",
     "dev": "vite --config webapp/vite.config.ts",
-    "build:cli": "bun run build && go build -o build/mob ./cmd/mob",
+    "build:cli": "bun run build && bun apps/mob/scripts/build.ts",
     "desktop": "bun run build:cli && MOB_BINARY=$PWD/build/mob bun run --cwd apps/desktop start",
     "build:desktop": "bun run --cwd apps/desktop package",
     "test:desktop": "bun run --cwd apps/desktop typecheck && bun run --cwd apps/desktop test",
-    "test:go": "go test ./...",
     "test:core": "bun run --cwd packages/core typecheck && bun run --cwd packages/core test && bun run --cwd apps/mob typecheck && bun run --cwd apps/mob test",
     "test:integration": "bun scripts/check-chat.ts",
     "test:runner": "tsc -p worker && bun scripts/check-runner.ts",
-    "generate:contracts": "go run ./cmd/contracts > packages/client/src/contracts.ts"
+    "generate:configdocs": "bun run --cwd apps/mob configdocs"
   },
   "packageManager": "bun@1.4.3"
 }

@@ -66,7 +66,7 @@ esac
 if [ -z "${MOB:-}" ]; then
 	echo "== Build"
 	MOB=$WORK/bin/mob
-	(cd "$ROOT" && go build -o "$MOB" ./cmd/mob) || { echo "build failed"; exit 2; }
+	(cd "$ROOT" && bun run build && bun apps/mob/scripts/build.ts --outfile "$MOB") || { echo "build failed"; exit 2; }
 fi
 "$MOB" --version
 export MOB_CONFIG=$WORK/config.yaml MOB_SANDBOX_RUNTIME=$RUNTIME

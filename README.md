@@ -1,6 +1,6 @@
 # Mob — local assistant
 
-Mob is a personal AI assistant that runs on your own machine. One Go service keeps
+Mob is a personal AI assistant that runs on your own machine. One service keeps
 conversations in SQLite and serves a desktop app, a browser UI, a terminal UI and
 the `mob` CLI, and it can answer you in Telegram, WeChat and email. The model can
 use tools (a container sandbox, your mailbox, Cloudflare, MCP servers), and
@@ -36,16 +36,9 @@ Then `/models` lists models and `/model NAME` switches the conversation. Type `/
 in the web UI or TUI to see and complete commands; `/help` lists them in
 messaging apps.
 
-In the TUI: Enter sends, Alt+Enter or Ctrl+J inserts a newline, Ctrl+S stops the
-reply, PgUp/PgDn scroll, Ctrl+P opens plugins, Ctrl+C exits.
-
-An [experimental TypeScript TUI](apps/tui/README.md) shares the Web client's
-conversation logic. After installing source dependencies, run
-`MOB_TUI=ts ./build/mob tui`; use `MOB_TUI_ENTRY` for a binary outside the checkout's
-`build/` directory. It needs Bun and is not part of the Go release.
-`mob tui` defaults to Bubble Tea (`MOB_TUI=go`). The direct
-`bun run tui:pilot -- --url URL --token-file PATH` entry only connects to an
-existing service.
+In the TUI: Enter sends, Ctrl+J inserts a newline, F2 switches conversations,
+F3 shows tool details, F4 reviews approvals, Ctrl+S stops the reply, PgUp/PgDn
+scroll, Ctrl+Q exits. See the [terminal UI](apps/tui/README.md) for the rest.
 
 ## Documentation
 

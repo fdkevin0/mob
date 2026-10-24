@@ -15,8 +15,8 @@ describe('rewriteLinks', () => {
 	});
 
 	test('points other repository files at GitHub', () => {
-		expect(rewriteLinks('[example](../../config.example.yaml) [cmd](../../cmd)', page)).toBe(
-			`[example](${github}/blob/main/config.example.yaml) [cmd](${github}/tree/main/cmd)`,
+		expect(rewriteLinks('[example](../../config.example.yaml) [apps](../../apps)', page)).toBe(
+			`[example](${github}/blob/main/config.example.yaml) [apps](${github}/tree/main/apps)`,
 		);
 	});
 
@@ -54,6 +54,6 @@ describe('convert', () => {
 
 	test('edits a generated page at its source', () => {
 		const reference = pages.find((entry) => entry.source === 'docs/environment-variables.md')!;
-		expect(convert('# Keys\n', reference)).toContain(`editUrl: "${github}/edit/main/internal/configuration/options.go"`);
+		expect(convert('# Keys\n', reference)).toContain(`editUrl: "${github}/edit/main/apps/mob/src/config.ts"`);
 	});
 });

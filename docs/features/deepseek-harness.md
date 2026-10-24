@@ -9,7 +9,7 @@ Cordis, system-prompt and tool runtimes, and exposes their tools over
 
 Use a Mob source checkout with the Bun version in `package.json`, then run
 `bun install --frozen-lockfile` in the repository root. The bridge runs from
-source; it is not embedded in the Go release binary.
+source; it is not embedded in the release binary.
 
 Add this to Mob's `config.yaml`, replacing `/path/to/mob` with the absolute
 checkout path:
@@ -87,7 +87,7 @@ Plugin files and this JSON file are not watched.
 
 The pinned baseline is DSH `0.2.1-rc.2` and Cordis `4.0.5`. Tests use the actual
 published runtimes and a plugin built with DSH's `defineTool`, including a real
-Go MCP connection. This is tool compatibility, not a claim that every community
+connection through Mob's MCP plugin. This is tool compatibility, not a claim that every community
 plugin works.
 
 The bridge supplies `tools` and `systemPrompt`; additional service plugins can
@@ -102,5 +102,5 @@ Text results are forwarded as text, and canonical values as MCP structured
 content. Other DSH content blocks, including attachment references, are rendered
 as JSON text; the bridge does not fetch their files or render DSH UI cards.
 
-Mob's native Go plugin dependency and hook APIs are described separately in
+Mob's native plugin dependency and hook APIs are described separately in
 [Extensions](extensions.md).

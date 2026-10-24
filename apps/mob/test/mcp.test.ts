@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { ToolRegistry, type ApprovedCall, type ToolCall } from '@mob/core';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { decode, exposure, fingerprint, validate, type Server, type Servers } from '../src/mcp/config';
 import { Hub, localName, toolName } from '../src/mcp/hub';
@@ -106,6 +108,36 @@ test('a command server offers its tools without Mob’s variables', async () => 
 		delete process.env.MOB_SECRET;
 	}
 });
+
+const dsh = join(import.meta.dir, '../../dsh');
+
+test.skipIf(!existsSync(join(dsh, 'node_modules/@deepseek-ai/cordis')) && !existsSync(join(dsh, '../../node_modules/@deepseek-ai/cordis')))('DSH plugins run through the MCP bridge only once approved, and are disposed when it stops', async () => {
+	const fixture = mkdtempSync(join(tmpdir(), 'mob-dsh-'));
+	const called = join(fixture, 'called'), disposed = join(fixture, 'disposed'), config = join(fixture, 'plugins.json');
+	writeFileSync(config, JSON.stringify([{ module: join(dsh, 'tests/fixtures/noisy.ts'), config: { called, disposed } }]));
+	const hub = new Hub();
+	hub.configure({ dsh: { command: process.execPath, args: [join(dsh, 'src/main.ts'), config] } });
+	const stop = new AbortController();
+	const serving = hub.serve(hub.configured(), stop.signal, () => {});
+	try {
+		await until(() => hub.status() === 'dsh: 1 tools', () => hub.status());
+		const [tool] = hub.tools();
+		expect(tool!.name).toBe('mcp__dsh__noisy');
+		expect(tool!.approved).toBeDefined();
+		let asked = false;
+		await tool!.run({ input: {}, requestApproval: async () => { asked = true; throw new Error('asked'); } } as unknown as ToolCall).catch(() => {});
+		expect(asked).toBe(true);
+		expect(existsSync(called)).toBe(false);
+		expect(await approve(hub, 'mcp__dsh__noisy', {})).toBe('ok');
+		expect(readFileSync(called, 'utf8')).toBe('called');
+	} finally {
+		stop.abort();
+		await serving;
+	}
+	await until(() => existsSync(disposed), () => 'DSH plugin cleanup did not finish');
+	expect(readFileSync(disposed, 'utf8')).toBe('disposed');
+	rmSync(fixture, { recursive: true, force: true });
+}, 60_000);
 
 /** oauthServer is an MCP server behind a minimal OAuth authorization server that accepts only the token it last issued. */
 function oauthServer() {

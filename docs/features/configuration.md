@@ -9,10 +9,6 @@ and channels are its clients. Start from
 The [configuration reference](../environment-variables.md) lists file keys,
 CLI flags, `MOB_` variables, defaults and precedence.
 
-TUI selection is CLI-only, not a service configuration field: `MOB_TUI` and
-`MOB_TUI_ENTRY` choose the terminal and source entry as described in
-[Commands](commands.md#experimental-typescript-terminal).
-
 On macOS the default file is `~/Library/Application Support/mob/config.yaml`;
 on Linux normally `~/.config/mob/config.yaml`. YAML, JSON and TOML are accepted.
 Model providers and keys live in `providers.json` beside it (see
@@ -43,12 +39,9 @@ Model providers and keys live in `providers.json` beside it (see
   exits, and later clients attach to it. `mob serve` stays tied to its terminal.
   To change ownership, close the current owner and run `mob start` with the same
   environment. No login item or system service is installed.
-- The direct TypeScript entry (`bun run tui:pilot`) only attaches to an existing
-  service. In contrast, `MOB_TUI=ts mob tui` uses the normal connect-or-start
-  lifecycle and passes the actual service URL/token through the child environment,
-  not command arguments. It requires Bun >=1.3.14 and installed source dependencies;
-  missing prerequisites or child failures are errors, never a silent Go fallback.
-  Releases/Homebrew still contain only the Go binary, not the TypeScript pilot.
+- `mob tui` uses the normal connect-or-start lifecycle and hands the service
+  URL and token to the terminal UI in memory, not as command arguments. The
+  source entry (`bun run tui:pilot`) only attaches to an existing service.
 - The database owner holds a process lock; clients use HTTP rather than opening
   the SQLite file.
 

@@ -34,9 +34,8 @@ sandbox:
 
 ## Runtimes
 
-`internal/container` drives each platform's own runtime through its CLI, so Mob
-needs no Docker Desktop, gains no dependencies or build tags, and still
-cross-compiles with `CGO_ENABLED=0`:
+`apps/mob/src/sandbox/container.ts` drives each platform's own runtime through
+its CLI, so Mob needs no Docker Desktop and gains no native dependencies:
 
 | Platform | Runtime | Isolation |
 | --- | --- | --- |

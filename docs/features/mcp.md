@@ -75,7 +75,7 @@ SDK:
 
 - The `mcp` plugin keeps every server connected, reconnecting with growing
   pauses, and follows a server's changes to its tool list. It uses the official
-  Go SDK, `github.com/modelcontextprotocol/go-sdk`.
+  TypeScript SDK, `@modelcontextprotocol/sdk`.
 - Each tool is `mcp__<server>__<tool>`, offered only to the owner's turns and
   only while its server is connected. A name with characters models refuse, or
   longer than 64, is cut and ends in a hash of the real name, so two tools never

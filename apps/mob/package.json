@@ -8,6 +8,7 @@
 	"scripts": {
 		"start": "bun src/main.ts",
 		"build": "bun scripts/build.ts",
+		"configdocs": "bun scripts/configdocs.ts",
 		"typecheck": "tsc -p tsconfig.json",
 		"test": "bun test"
 	},

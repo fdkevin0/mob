@@ -9,7 +9,7 @@ const root = `${import.meta.dir}/..`;
 const name = process.platform === 'win32' ? 'mob.exe' : 'mob';
 mkdirSync(`${root}/bin`, { recursive: true });
 if (process.env.MOB_BINARY) copyFileSync(process.env.MOB_BINARY, `${root}/bin/${name}`);
-else await $`bun run build && go build -o ${root}/bin/${name} ./cmd/mob`.cwd(`${root}/../..`);
+else await $`bun run build && bun apps/mob/scripts/build.ts --outfile ${root}/bin/${name}`.cwd(`${root}/../..`);
 
 mkdirSync(`${root}/build`, { recursive: true });
 await Bun.write(`${root}/build/icon.png`, png(calfBitmap(32)));

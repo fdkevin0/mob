@@ -5,7 +5,7 @@ own model acts as the owner's project manager: it starts a task in a project,
 reports how tasks are going and what waits for a decision, and passes on
 instructions. The agent writes the code. Agents speak the
 [Agent Client Protocol](https://agentclientprotocol.com) (ACP); the code is in
-`internal/agents`, on the official Go SDK `github.com/coder/acp-go-sdk`.
+`apps/mob/src/agents`, on the official TypeScript SDK `@agentclientprotocol/sdk`.
 
 ## Agents
 
@@ -321,7 +321,7 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
   stays), under the model of the last
   `turn_context`. Codex reports no cost.
 - An agent that reports neither shows no usage, and a prompt stopped from
-  Mob may record none. The code is in `internal/agents/usage.go`.
+  Mob may record none. The code is in `apps/mob/src/agents/usage.ts`.
 
 ## Lifetime
 

@@ -51,7 +51,7 @@ export const pages: Page[] = [
 		slug: 'reference/configuration',
 		group: 'Reference',
 		title: 'Configuration keys',
-		editSource: 'internal/configuration/options.go',
+		editSource: 'apps/mob/src/config.ts',
 	},
 	{ source: 'CONTRIBUTING.md', slug: 'contributing', group: 'Contributing' },
 	{ source: 'docs/architecture.md', slug: 'contributing/architecture', group: 'Contributing' },

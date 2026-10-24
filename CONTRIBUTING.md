@@ -2,8 +2,8 @@
 
 ## Setup
 
-You need Go (version in `go.mod`) and Bun (version in `package.json`). The
-desktop app is Electron in `apps/desktop`; it downloads its own runtime.
+You need Bun (version in `package.json`). The desktop app is Electron in
+`apps/desktop`; it downloads its own runtime.
 
 ```bash
 bun install --frozen-lockfile
@@ -16,17 +16,13 @@ bun run desktop                   # Electron window around the running service
 `just` lists the same recipes (`just build`, `just test`, `just desktop`,
 `just mob serve --demo`).
 
-### Experimental TypeScript TUI
+### Terminal UI
 
-`bun run tui:pilot -- --url http://127.0.0.1:8787 --token-file /path/to/data/token`
-launches the OpenTUI React pilot against an already running service. It shares
-`packages/client` with Web. Alternatively, `MOB_TUI=ts ./build/mob tui --demo`
-uses the CLI's normal connect-or-start lifecycle; set the absolute
-`MOB_TUI_ENTRY` source path for a Go binary outside `build/`. Unset/empty
-`MOB_TUI` or `MOB_TUI=go` keeps Bubble Tea as the default.
-Use Bun >=1.3.14 and an interactive terminal; OpenTUI uses a native library via
-FFI. Node and cross-platform standalone packaging are not validated. See
-[the pilot README](apps/tui/README.md) for input controls and limitations.
+`./build/mob tui --demo` starts the OpenTUI React terminal UI, which shares
+`packages/client` with Web; `bun run tui:pilot -- --url http://127.0.0.1:8787 --token-file /path/to/data/token`
+runs it from source against an already running service. OpenTUI uses a native
+library via FFI, which the build embeds. See [its README](apps/tui/README.md)
+for input controls and limitations.
 
 The workspace packages export TypeScript source for Bun/Vite, not a published
 library or a separate release artifact. UI components, browser token storage and
@@ -47,30 +43,31 @@ amp orb service start mob --command './build/mob serve --demo' --port 8787 --por
 
 ## Tests
 
-`just test` runs the existing Go/Web/HTTP checks: `go test ./...`, the UI typecheck and Vitest suite
-(`bun run test:webapp`), and `scripts/check-chat.ts`, which starts a temporary
-service and reads its stream with the real AI SDK UI parser and shared client.
-It also runs `bun run test:dsh`: the optional DSH bridge's typecheck, runtime
-tests and Go MCP integration. Go-only environments skip that integration when
-Bun or the installed DSH dependencies are absent; CI's integration job installs
-both. See [DSH plugin setup](docs/features/deepseek-harness.md).
+`just test` runs the core and host typecheck and tests (`bun run test:core`),
+the UI typecheck and Vitest suite (`bun run test:webapp`), and
+`scripts/check-chat.ts`, which builds the binary, starts a temporary service and
+reads its stream with the real AI SDK UI parser and shared client. It also runs
+`bun run test:dsh`, the optional DSH bridge's typecheck and runtime tests; the
+host's MCP tests run the bridge when its dependencies are installed. See
+[DSH plugin setup](docs/features/deepseek-harness.md).
+`bun run test:runner` checks remote access end to end: the Worker, pairing,
+and the encrypted relay against the built binary.
 Also run `bun run test:client` (headless Node tests/typecheck) and
 `bun run test:tui` (pilot typecheck/tests) when changing the shared client or TUI.
 The integration script exercises both client types, concurrent readers,
-reconnection, detachment, scoped approvals, stale decisions and Stop. CI also runs
-`gofmt`, `go mod tidy -diff`, `go vet` and the race detector.
+reconnection, detachment, scoped approvals, stale decisions and Stop. CI also
+reports, without blocking, how much of the host scriptc can compile.
 
 Tests use temporary data directories, local fixtures and fake providers, so
 they need no keys and send nothing to real models, mailboxes or chats.
 
 ## Generated references
 
-Edit the source and regenerate the affected artifact. Go tests reject stale output.
+Edit the source and regenerate the affected artifact. Tests reject stale output.
 
 | Artifact | Source | Regenerate from the repository root |
 | --- | --- | --- |
-| `packages/client/src/contracts.ts` (`webapp/src/chat/contracts.ts` re-exports it) | Go contracts in `cmd/contracts` | `bun run generate:contracts` |
-| `docs/environment-variables.md` | `internal/configuration/options.go` | `go run ./cmd/configdocs` |
+| `docs/environment-variables.md` | `apps/mob/src/config.ts` | `bun run generate:configdocs` |
 
 ### Documentation site
 
@@ -102,9 +99,10 @@ For documentation writing or organization, the repository skill
   architecture decision records; when a change alters how a feature behaves,
   update its page in [docs/features/](docs/features/README.md) in the same pull
   request.
-- Schema changes are a new migration in `internal/chat/migrations.go` with
-  `Added` set to the UTC date it was written (`YYYYMMDD`).
-- Formatting: `gofmt` for Go; `.editorconfig` and `.prettierrc` for the rest.
+- Schema changes raise `schemaVersion` in `packages/core/src/chat/schema.ts`
+  and add the upgrade from the previous version to `upgrades` (see
+  [Releases](docs/features/releases.md)).
+- Formatting: `.editorconfig` and `.prettierrc`.
 - Never commit provider keys, tokens or databases.
 
 AI Elements sources in `webapp/src/components/ai-elements/` keep

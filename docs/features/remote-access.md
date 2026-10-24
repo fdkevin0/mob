@@ -237,7 +237,7 @@ before deploying this Worker; the existing Workers Builds command does so.
 No additional cloud secrets are needed. Passkeys add D1 migration
 `0003_passkey.sql` (the Better Auth `passkey` table), applied the same way.
 `bun run test:runner` runs the real
-Worker/D1/Durable Object, Go service, runner and browser encryption code
+Worker/D1/Durable Object, the built `mob` binary, runner and browser encryption code
 locally with fake account sessions and an offline demo model.
 
 ## Runners in the cloud

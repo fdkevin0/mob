@@ -5,7 +5,7 @@ name: Release
 # - nightly: the commit is published as a prerelease tagged {date}.{sha};
 # - stable: release-please keeps a release PR with the next vX.Y.Z and its
 #   changelog up to date. When that PR is merged it tags the release, and
-#   GoReleaser adds the archives and updates the Homebrew cask.
+#   scripts/release.ts adds the archives and updates the Homebrew cask.
 # Older releases stay downloadable for database upgrades (docs/features/releases.md).
 on:
   workflow_run:
@@ -35,29 +35,24 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - run: bun install --frozen-lockfile
+      # Every platform's native packages, so one runner compiles every target.
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - name: Build the web UI
         run: bun run build
-      # internal/version names the build from the same commit date and hash; the
-      # check below confirms the binary agrees.
+      # The build is named from the commit date and hash; the check below
+      # confirms the binary agrees.
       - name: Name the build
         run: |
           version="$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d HEAD).$(git rev-parse HEAD | cut -c1-7)"
           echo "NIGHTLY_VERSION=$version" >> "$GITHUB_ENV"
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --snapshot --clean
+      - name: Build the archives
+        run: bun scripts/release.ts --version "$NIGHTLY_VERSION"
       - name: Check the version
         run: |
-          version=$(dist/mob_linux_amd64_v1/mob --version | awk '{print $NF}')
+          version=$(dist/mob_${NIGHTLY_VERSION}_linux_amd64/mob --version | awk '{print $NF}')
           if [ "$version" != "$NIGHTLY_VERSION" ]; then
             echo "::error::The binary reports $version, expected $NIGHTLY_VERSION"
             exit 1
@@ -99,9 +94,6 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
@@ -154,34 +146,36 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.tag }}
           fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --os='*' --cpu='*'
       - name: Build the web UI
         run: bun run build
       # Without HOMEBREW_TAP_TOKEN the cask is built but not pushed to
       # fdkevin0/homebrew-tap.
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --clean
+      - name: Build the archives and the cask
+        run: bun scripts/release.ts --version "$TAG" --cask
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       - name: Check the version
         run: |
-          version=$(dist/mob_linux_amd64_v1/mob --version | awk '{print $NF}')
-          if [ "$version" != "${{ needs.release-please.outputs.tag }}" ]; then
-            echo "::error::The binary reports $version, expected ${{ needs.release-please.outputs.tag }}"
+          version=$(dist/mob_${TAG}_linux_amd64/mob --version | awk '{print $NF}')
+          if [ "$version" != "$TAG" ]; then
+            echo "::error::The binary reports $version, expected $TAG"
             exit 1
           fi
+        env:
+          TAG: ${{ needs.release-please.outputs.tag }}
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
+      # release-please created the release with its notes; this adds the archives.
+      - name: Attach the archives
+        run: gh release upload "$TAG" dist/*.tar.gz dist/*.zip dist/SHA256SUMS --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag }}

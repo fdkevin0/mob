@@ -45,7 +45,8 @@ try {
 		Write-Host '== Build'
 		$Mob = Join-Path $Work 'bin\mob.exe'
 		Push-Location $Root
-		go build -o $Mob ./cmd/mob
+		bun run build
+		if ($LASTEXITCODE -eq 0) { bun apps/mob/scripts/build.ts --outfile $Mob }
 		$built = $LASTEXITCODE
 		Pop-Location
 		if ($built -ne 0) { Write-Host 'build failed'; exit 2 }
