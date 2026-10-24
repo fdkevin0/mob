@@ -131,3 +131,15 @@ test('a client starts a conversation with its first message, and the owner renam
 	expect(store.exists(plain.id)).toBe(false);
 	expect((await call('POST', `/api/conversations/${plain.id}/delete`)).status).toBe(404);
 });
+
+test('a conversation not written in yet has its context estimated, and an unknown one is not found', async () => {
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const token = 't'.repeat(64);
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token, version: 'test' });
+	const get = (path: string) => server.fetch(new Request('http://127.0.0.1:8787' + path, { headers: { Authorization: 'Bearer ' + token } }));
+	const { context } = await (await get('/api/conversations/' + 'a'.repeat(32) + '/context')).json() as { context: { model: string; window: number; used: number; measured: boolean } };
+	// The demo model has no known window, so only its tokens are shown.
+	expect([context.model, context.window, context.measured]).toEqual(['demo/echo', 0, false]);
+	expect(context.used).toBeGreaterThan(0);
+	expect((await get('/api/conversations/nope/context')).status).toBe(404);
+});

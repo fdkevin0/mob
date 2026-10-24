@@ -5,7 +5,7 @@ import { Registry } from './commands';
 import { builtins, command } from './builtins';
 import type { Answer, Delegate } from './delegate';
 import { runDelegate } from './delegate';
-import { emptyHooks, run, type Agent, type Hooks, type Turn } from './engine';
+import { emptyHooks, estimate, run, type Agent, type ContextSnapshot, type Hooks, type Turn } from './engine';
 import type { Event } from './events';
 import { modelOutput, save, type Saver } from './output';
 import { Running } from './running';
@@ -56,6 +56,8 @@ export class ConversationService {
 	private delegate?: Delegate;
 	private listeners = new Set<(n: Notice) => void>();
 	private active = new Map<string, Running>();
+	/** contexts keeps each conversation's last reported context, valid while its reply is the latest message. */
+	private contexts = new Map<string, { context: ContextSnapshot; messageId: string }>();
 	private closing = false;
 
 	constructor(readonly store: Store, readonly models?: Models) {
@@ -138,7 +140,11 @@ export class ConversationService {
 			try {
 				options.admitted?.(running);
 				if (signal.aborted) throw signal.reason;
-				const send = async (e: Event) => { running.record(e); await emit(e); };
+				const send = async (e: Event) => {
+					if (e.kind === 'context') this.contexts.set(input.id, { context: e.context as ContextSnapshot, messageId: running.messageId });
+					running.record(e);
+					await emit(e);
+				};
 				await this.turn(input, signal, send, delegate, model, isCommand);
 			} catch (e) {
 				err = e instanceof Error ? e : new Error(String(e));
@@ -185,6 +191,28 @@ export class ConversationService {
 		if (input.channel) agent.prompt = channelPrompt(input.channel);
 		await run(signal, this.store, model!, agent, input.id, message, note, emit);
 		await emit({ kind: 'turn-finished', reason: 'stop' });
+	}
+
+	/**
+	 * context is what the conversation's prompt takes of its model's window:
+	 * as its last turn reported, while that turn's reply is the latest message
+	 * and the model is the same, or else estimated for the next turn. An
+	 * outside agent's conversation has only what the agent last reported.
+	 */
+	context(id: string, owner: boolean): ContextSnapshot | undefined {
+		const known = this.contexts.get(id);
+		if (this.delegated(id)) return known?.context;
+		if (!this.models) return undefined;
+		const exists = this.store.exists(id);
+		const ref = exists ? this.model(id) : this.models.default();
+		if (!ref) return undefined;
+		let model: Model;
+		try { model = this.models.resolve(ref); } catch { return undefined; }
+		const last = exists ? this.store.history(id).filter(m => !m.command).at(-1) : undefined;
+		if (known && last?.id === known.messageId && known.context.model === refString(model.ref)) return known.context;
+		const turn: Turn = { conversationId: id, owner, model: model.info, request: { system: '', messages: [] } };
+		this.recall(turn);
+		return estimate(this.store, model, this.agent(owner), id, turn.request.system);
 	}
 
 	/** carryOut runs an approved call and records its result, returning the note that tells the model. */

@@ -9,7 +9,7 @@ import type { Hooks } from '../chat/engine';
 import { encode, type Event } from '../chat/events';
 import type { Running } from '../chat/running';
 import type { Entry } from '../chat/search';
-import { newID } from '../chat/sql';
+import { NotFound, newID } from '../chat/sql';
 import { isConversationID, TransferError, type Store, type Transfer } from '../chat/store';
 import type { Tool } from '../chat/tools';
 import { publicProvider } from '../provider/provider';
@@ -278,6 +278,11 @@ export class Server extends ConversationService {
 			// A client showing the snapshot must not offer a decision on an approval that has expired.
 			s.store.expireApprovals(p.id);
 			return json(200, { messages: s.store.history(p.id).map(m => ({ id: m.id, role: m.role, parts: m.parts, metadata: m.metadata })), active: s.isActive(p.id), model: s.model(p.id) });
+		});
+		r.handle('GET /api/conversations/{id}/context', (_, p) => {
+			// A conversation a client named but has not said anything in yet is estimated empty.
+			if (!s.store.exists(p.id) && !isConversationID(p.id)) throw new NotFound();
+			return json(200, { context: s.context(p.id, true) ?? null, usage: s.store.conversationUsage(p.id).get(p.id) });
 		});
 		r.handle('POST /api/conversations/{id}/rename', async (req, p) => {
 			const input = await body<{ title?: unknown }>(req, 4 << 10, ['title']);

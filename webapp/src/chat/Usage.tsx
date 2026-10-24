@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Connection } from './api';
 import { Loading } from './Splash';
+import { tokens } from './format';
+export { tokens } from './format';
 import type { DayUsage, UsageReport } from './contracts';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
@@ -22,12 +24,6 @@ const parts = [
 	{ key: 'output', label: 'Output', hint: 'reasoning included', value: (u: Counts) => u.outputTokens },
 ] as const;
 
-export function tokens(n: number) {
-	if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-	if (n >= 1e4) return `${Math.round(n / 1e3)}k`;
-	if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
-	return String(n);
-}
 const percent = (part: number, whole: number) => (whole > 0 ? `${Math.round((part * 100) / whole)}%` : '—');
 const dollars = (n: number) => (n > 0 ? `$${n < 1 ? n.toFixed(3) : n.toFixed(2)}` : '—');
 function duration(ms: number) {

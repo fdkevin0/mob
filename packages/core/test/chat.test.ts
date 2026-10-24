@@ -122,3 +122,41 @@ test('a denial without a reason ends its stream', async () => {
 	expect(chunks).toEqual([{ type: 'finish', finishReason: 'stop' }]);
 	s.close();
 });
+
+test('a turn reports what its prompt takes of the window, and the service keeps it until the conversation moves on', async () => {
+	const s = open();
+	// A model with a known window that says how many tokens each prompt was.
+	class Counted extends DemoModel {
+		override readonly info = { ...new DemoModel().info, context: 100000, output: 8000 };
+		override async stream(...args: Parameters<DemoModel['stream']>) {
+			const result = await super.stream(...args);
+			result.usage = { inputTokens: 1200, outputTokens: 30 };
+			return result;
+		}
+	}
+	const models: Models = { ...demoModels, resolve: () => new Counted() };
+	const service = new ConversationService(s, models);
+	const c = s.create();
+	const fresh = service.context(newID(), true)!;
+	expect([fresh.window, fresh.reserve, fresh.limit, fresh.measured]).toEqual([100000, 8000, 92000, false]);
+	expect(fresh.parts!.messages).toBe(0);
+	expect(fresh.parts!.tools).toBeGreaterThan(0);
+	const chunks: Record<string, any>[] = [];
+	await service.execute({ id: c.id, text: 'hello', requestId: newID() }, e => { chunks.push(encodeEvent(e)); });
+	const reported = chunks.filter(k => k.type === 'data-context');
+	expect(reported.map(k => k.id)).toEqual(['context', 'context']);
+	expect(reported[0].data.measured).toBe(false);
+	const last = reported.at(-1)!.data;
+	expect([last.measured, last.used, last.limit]).toEqual([true, 1230, 92000]);
+	const p = last.parts;
+	expect(Math.abs(p.system + p.tools + p.summary + p.messages + p.outputs - 1230)).toBeLessThanOrEqual(3);
+	expect(service.context(c.id, true)).toEqual(last);
+	// Another message is newer than the reply the snapshot describes, so the next turn is estimated.
+	s.command(c.id, newID(), '/usage', 'usage');
+	expect(service.context(c.id, true)).toEqual(last);
+	s.begin(c.id, newID(), 'and more', 'demo/echo');
+	const next = service.context(c.id, true)!;
+	expect(next.measured).toBe(false);
+	expect(next.parts!.messages).toBeGreaterThan(0);
+	s.close();
+});
