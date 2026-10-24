@@ -2,6 +2,7 @@
 @import '@fontsource-variable/geist';
 @import '@fontsource/geist-mono/400.css';
 @source '../../../node_modules/streamdown/dist';
+@source '../../../node_modules/@streamdown/code/dist';
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {

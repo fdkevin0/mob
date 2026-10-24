@@ -558,3 +558,27 @@ it('opens the page the address names, with its conversation behind it, and goes 
   expect(screen.getByText('kept reply')).toBeTruthy();
   window.history.replaceState(null, '', '/');
 });
+
+it('uses the shared highlighter for message text, reasoning and tool data', async () => {
+  window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return Response.json([{ id: 'one', title: 'Code' }]);
+    return Response.json({ model: 'demo/echo', active: false, messages: [{
+      id: 'reply', role: 'assistant', parts: [
+        { type: 'text', text: '```typescript\nconst answer = 42;\n```' },
+        { type: 'reasoning', text: '**Checking**\n\n```python\nprint(42)\n```' },
+        { type: 'dynamic-tool', toolName: 'example', toolCallId: 'call', state: 'output-available', input: { query: 'answer' }, output: { answer: 42 } },
+      ],
+    }] });
+  }));
+  const view = render(<App />);
+  await screen.findByLabelText('Message');
+  await waitFor(() => {
+    for (const selector of ['.assistant-content', '.reasoning', '.tool-body']) {
+      expect(view.container.querySelector(`${selector} code span[style*="--shiki-dark"]`)).toBeTruthy();
+    }
+    expect(view.container.querySelectorAll('.tool-body [data-streamdown="code-block"]')).toHaveLength(2);
+  });
+  expect(view.container.querySelector('.reasoning [data-streamdown="strong"]')?.textContent).toBe('Checking');
+});

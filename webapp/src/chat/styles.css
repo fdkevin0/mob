@@ -646,20 +646,12 @@
 	padding: 4px 0 4px 14px;
 	border-left: 1px solid var(--line-strong);
 }
-.tool-body pre,
 .mail-body,
 .plugin-result {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	font-family: var(--mono);
 	font-size: 12px;
-}
-.tool-body pre {
-	margin: 6px 0;
-	padding: 10px 12px;
-	border-radius: 8px;
-	background: var(--surface);
-	color: var(--text-dim);
 }
 .tool-call.waiting {
 	padding: 10px 16px 16px;
@@ -721,8 +713,8 @@
 .reasoning[open] summary svg {
 	transform: rotate(90deg);
 }
-.reasoning p {
-	white-space: pre-wrap;
+.reasoning-content {
+	width: auto;
 	margin: 8px 0 0 20px;
 	padding-left: 12px;
 	border-left: 1px solid var(--line-strong);

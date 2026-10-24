@@ -85,6 +85,31 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   saved message is the result once a turn ends, and a service restart marks
   turns in progress interrupted rather than rerunning them.
 
+## Code and structured content
+
+The browser and desktop conversation views share a Streamdown renderer for
+message text, command results and expandable reasoning. Fenced code blocks use
+Shiki through `@streamdown/code`, with language grammars loaded from the app's
+own assets as needed. Highlighting runs locally, follows the app's light/dark
+scheme and does not execute the displayed code. Missing or unknown languages
+remain readable as plain text; inline code keeps its monospace styling.
+
+Code remains visible while highlighting loads and while a reply streams, even
+before its closing fence arrives. Streamdown owns incremental rendering and the
+plugin's bounded token cache. Tool inputs and outputs are serialized as JSON
+and displayed as static code blocks, so embedded Markdown or HTML remains data.
+Tool JSON above 20,000 UTF-16 code units or 300 lines bypasses Markdown parsing
+and highlighting to avoid blocking the UI, including when tool details are
+collapsed. It remains complete, escaped plain text in a keyboard-focusable,
+scrollable container. Both highlighted blocks and plain tool JSON retain copy
+controls.
+
+![Highlighted message code, reasoning and tool JSON in the conversation view](../images/chat-syntax-highlighting.png)
+
+The shared rendering configuration is in
+`webapp/src/components/ai-elements/message.tsx`; the conversation uses it in
+`webapp/src/chat/Thread.tsx`.
+
 ## Limits follow the model
 
 - **Messages.** A chat message has no length limit of its own. The chat request

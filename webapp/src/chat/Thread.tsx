@@ -9,7 +9,7 @@ import {
 	ConversationEmptyState,
 	ConversationScrollButton,
 } from '../components/ai-elements/conversation';
-import { Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
+import { JsonResponse, Message, MessageContent, MessageResponse } from '../components/ai-elements/message';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -286,7 +286,7 @@ const MessageView = memo(function MessageView({
 								<summary>
 									<ChevronIcon /> Reasoning
 								</summary>
-								<p>{part.text}</p>
+								<MessageResponse className="reasoning-content" isAnimating={animating}>{part.text}</MessageResponse>
 							</details>
 						);
 					if (isToolUIPart(part)) {
@@ -308,8 +308,8 @@ const MessageView = memo(function MessageView({
 									<ChevronIcon />
 								</summary>
 								<div className="tool-body">
-									<pre>{JSON.stringify(part.input, null, 2)}</pre>
-									{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+									<JsonResponse value={part.input} />
+									{part.state === 'output-available' && <JsonResponse value={part.output} />}
 									{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
 								</div>
 								{part.state === 'approval-requested' && (
