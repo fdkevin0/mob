@@ -19,3 +19,11 @@ test('plugin routes answer whether the plugin comes with the server or after it'
 	expect((await call('GET', '/api/plugins/late/ping')).status).toBe(405);
 	expect((await call('GET', '/api/plugins/missing/ping')).status).toBe(404);
 });
+
+test('models list which ones are free', async () => {
+	const { memoryProviders } = await import('../src');
+	const listed = { data: [{ id: 'meta/llama:free' }, { id: 'openai/gpt-x' }] };
+	const registry = new ProviderRegistry(memoryProviders({ providers: [{ id: 'openrouter', preset: 'openrouter', key: 'k' }] }), undefined, false, async () => Response.json(listed));
+	const [group] = await registry.list('');
+	expect(group.models.map(m => [m.id, m.free ?? false])).toEqual([['meta/llama:free', true], ['openai/gpt-x', false]]);
+});

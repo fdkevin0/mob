@@ -211,3 +211,15 @@ export type AgentNode = {
   task?: Task;
   usage?: UsageSummary;
 };
+
+/** Transfer is a conversation moving between Mobs (GET /api/conversations/{id}/export, POST /api/conversations/import). */
+export type Transfer = {
+  v: 1;
+  title: string;
+  model: string;
+  summary: string;
+  summaryThrough: string;
+  messages: { id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string }[];
+  facts: { fact: string; owner: boolean }[];
+  usage: { messageId: string; session: string; model: string; input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number; cost: number; durationMs: number; createdAt: number }[];
+};

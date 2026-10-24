@@ -1,5 +1,5 @@
 import type { UIMessage } from 'ai';
-import type { Suggestion } from './contracts';
+import type { Suggestion, Transfer } from './contracts';
 
 export type Connection = { url: string; token: string };
 export type Conversation = { id: string; title: string; updatedAt: number };
@@ -9,7 +9,7 @@ export type ClientType = 'web' | 'tui';
 
 // Plugin operations and commands can take as long as the service's remote calls.
 export function timeoutFor(path: string) {
-	return path.startsWith('/plugins') || path === '/commands/run' ? 60_000 : 10_000;
+	return path.startsWith('/plugins') || path === '/commands/run' || path.endsWith('/export') || path.endsWith('/import') ? 60_000 : 10_000;
 }
 
 /** Fetch is the part of fetch the client calls. */
@@ -48,6 +48,13 @@ export class MobClient {
 	}
 	openConversation(id: string) {
 		return this.request<Snapshot>(`/conversations/${id}`);
+	}
+	/** exportConversation and importConversation copy a conversation from one Mob to another. */
+	async exportConversation(id: string) {
+		return this.request<Transfer>(`/conversations/${id}/export`);
+	}
+	importConversation(t: Transfer) {
+		return this.request<Conversation>('/conversations/import', t);
 	}
 	complete(id: string, text: string, clientType: ClientType) {
 		return this.request<Suggestion[]>('/commands/complete', { client: clientType, conversationId: id, text });

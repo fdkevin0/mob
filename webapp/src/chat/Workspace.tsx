@@ -4,11 +4,16 @@ import { api, isPublicWeb, webClient, type Connection, type Conversation, type S
 import type { Action } from './contracts';
 import { Logo } from '../components/brand/Logo';
 import { Button } from '../components/ui/button';
+import { Dialog } from '../components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
 import { PlusIcon } from './icons';
 import { ThemePicker } from '../theme/ThemePicker';
+import { pendingOpenRouterSignIn } from './browser/openrouter';
 import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
+
+// home says where a connection keeps conversations.
+const home = (connection: Connection) => (connection.browser ? 'in this browser' : connection.runner ? 'on your runner' : 'on this computer');
 
 const errorText = (error: unknown) =>
 	error instanceof TypeError
@@ -21,6 +26,9 @@ const errorText = (error: unknown) =>
 const AgentTree = lazy(() => import('./AgentTree').then((m) => ({ default: m.AgentTree })));
 const Plugins = lazy(() => import('./Plugins').then((m) => ({ default: m.Plugins })));
 const Usage = lazy(() => import('./Usage').then((m) => ({ default: m.Usage })));
+const BrowserLimits = lazy(() => import('./browser/Limits').then((m) => ({ default: m.BrowserLimits })));
+const Move = lazy(() => import('./Move').then((m) => ({ default: m.Move })));
+const ModelProvider = lazy(() => import('./browser/ModelProvider').then((m) => ({ default: m.ModelProvider })));
 const panel = <div className="loading" role="status">Loading…</div>;
 
 // The address names the open conversation, as #/c/<id>, so reloading or going back returns to it.
@@ -40,17 +48,25 @@ const cacheSize = 20;
 export function Workspace({
 	connection,
 	disconnect,
+	switchTo,
 	draft,
 	clearDraft,
 }: {
 	connection: Connection;
 	disconnect: () => void;
+	/** switchTo opens another Mob, such as the one conversations were just moved to. */
+	switchTo?: (connection: Connection) => void;
 	draft?: string;
 	clearDraft?: () => void;
 }) {
 	const [plugins, setPlugins] = useState(false);
 	const [usage, setUsage] = useState(false);
 	const [agents, setAgents] = useState(false);
+	// OpenRouter's sign-in returns to the page with a code, which the provider dialog finishes.
+	const [signIn] = useState(() => (connection.browser ? pendingOpenRouterSignIn() : undefined));
+	const [provider, setProvider] = useState(!!signIn);
+	const [limits, setLimits] = useState(false);
+	const [moving, setMoving] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
@@ -242,17 +258,47 @@ export function Workspace({
 			>
 				Agents
 			</Button>
-			<Button
-				variant="ghost"
-				className="sidebar-plugins"
-				disabled={busy}
-				onClick={() => {
-					setNavigation(false);
-					setPlugins(true);
-				}}
-			>
-				Plugins & cloud services
-			</Button>
+			{/* The browser runner has no `mob provider add`; its provider is set here. */}
+			{connection.browser && (
+				<Button
+					variant="ghost"
+					className="sidebar-plugins"
+					disabled={busy}
+					onClick={() => {
+						setNavigation(false);
+						setProvider(true);
+					}}
+				>
+					Model provider
+				</Button>
+			)}
+			{switchTo && isPublicWeb() && (
+				<Button
+					variant="ghost"
+					className="sidebar-plugins"
+					disabled={busy}
+					onClick={() => {
+						setNavigation(false);
+						setMoving(true);
+					}}
+				>
+					Move conversations
+				</Button>
+			)}
+			{/* Channels and cloud services run in the background, which a browser tab cannot. */}
+			{!connection.browser && (
+				<Button
+					variant="ghost"
+					className="sidebar-plugins"
+					disabled={busy}
+					onClick={() => {
+						setNavigation(false);
+						setPlugins(true);
+					}}
+				>
+					Plugins & cloud services
+				</Button>
+			)}
 			<Button
 				variant="ghost"
 				className="sidebar-plugins"
@@ -265,11 +311,21 @@ export function Workspace({
 				Token usage
 			</Button>
 			<div className="sidebar-footer">
-				<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
-					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'} ·{' '}
-					{background ? 'keeps running' : 'stops with its process'}
-				</p>
-				<label
+				{connection.browser ? (
+					<p>
+						<span className="status-dot" /> History in this browser · stops with this tab ·{' '}
+						<button type="button" className="link-button" onClick={() => { setNavigation(false); setLimits(true); }}>
+							What needs a runner
+						</button>
+					</p>
+				) : (
+					<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
+						<span className="status-dot" /> History {home(connection)} ·{' '}
+						{background ? 'keeps running' : 'stops with its process'}
+					</p>
+				)}
+				{/* The browser runner's history is already in this browser. */}
+				{!connection.browser && <label
 					className="keep-messages"
 					title="Conversation titles are always kept in this browser so Mob opens at once. Messages are kept only when this is on; turning it off forgets them."
 				>
@@ -283,7 +339,7 @@ export function Workspace({
 						}}
 					/>
 					Keep messages on this device
-				</label>
+				</label>}
 				<div className="sidebar-theme">
 					Theme <ThemePicker />
 				</div>
@@ -298,7 +354,7 @@ export function Workspace({
 					</>
 				)}
 				<Button variant="ghost" onClick={disconnect} disabled={busy}>
-					Disconnect
+					{connection.browser ? 'Connect a runner' : 'Disconnect'}
 				</Button>
 			</div>
 		</>
@@ -327,10 +383,31 @@ export function Workspace({
 		);
 	return (
 		<div className="workspace">
+			{moving && switchTo && (
+				<Dialog open={moving} onOpenChange={setMoving}>
+					<Suspense fallback={null}>
+						<Move connection={connection} conversations={conversations} selected={selected?.id} onSwitch={(next) => { setMoving(false); switchTo(next); }} />
+					</Suspense>
+				</Dialog>
+			)}
+			{provider && (
+				<Suspense fallback={null}>
+					<ModelProvider
+						connection={connection}
+						open={provider}
+						onOpenChange={setProvider}
+						signIn={signIn}
+						onSaved={() => {
+							// The open conversation follows the new default, which its picker shows once reloaded.
+							if (selected) void load(selected.id).then((snapshot) => show(selected.id, snapshot, true)).catch((e) => setError(errorText(e)));
+						}}
+					/>
+				</Suspense>
+			)}
 			<aside className="sidebar">
 				<div className="sidebar-brand">
 					<Logo />
-					<span>{connection.runner ? 'Remote runner' : 'On this computer'}</span>
+					<span>{connection.browser ? 'In this browser' : connection.runner ? 'Remote runner' : 'On this computer'}</span>
 				</div>
 				{links}
 			</aside>
@@ -346,12 +423,17 @@ export function Workspace({
 						<SheetContent>
 							<SheetTitle className="dialog-title">Conversations</SheetTitle>
 							<SheetDescription className="dialog-description">
-								Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.
+								Your history stays {home(connection)}.
 							</SheetDescription>
 							{links}
 						</SheetContent>
 					</Sheet>
 				</div>
+				{connection.browser && (
+					<Suspense fallback={null}>
+						<BrowserLimits connection={connection} open={limits} setOpen={setLimits} connect={disconnect} />
+					</Suspense>
+				)}
 				{error && (
 					<div className="error" role="alert">
 						{error}
@@ -364,6 +446,7 @@ export function Workspace({
 					<Suspense fallback={panel}>
 						<AgentTree
 							connection={connection}
+							browser={connection.browser}
 							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
 							close={() => setAgents(false)}

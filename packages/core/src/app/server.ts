@@ -10,7 +10,7 @@ import { encode, type Event } from '../chat/events';
 import type { Running } from '../chat/running';
 import type { Entry } from '../chat/search';
 import { newID } from '../chat/sql';
-import type { Store } from '../chat/store';
+import { TransferError, type Store, type Transfer } from '../chat/store';
 import type { Tool } from '../chat/tools';
 import { publicProvider } from '../provider/provider';
 import type { ProviderRegistry } from '../provider/registry';
@@ -60,6 +60,7 @@ export type ServerOptions = {
 
 const pairingLifetime = 5 * 60_000;
 const chatBody = 8 << 20;
+const transferBody = 64 << 20;
 const eventsHeartbeat = 25_000;
 
 const bearer = (header: string | null, token: string) => {
@@ -270,6 +271,14 @@ export class Server extends ConversationService {
 			let since = 0;
 			if (days > 0) { const now = new Date(); since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1).getTime(); }
 			return json(200, s.store.report(since, 20));
+		});
+		// A conversation moves between Mobs, such as from the browser to a runner, as an export here and an import there.
+		r.handle('GET /api/conversations/{id}/export', (_, p) => {
+			if (s.isActive(p.id)) throw new HTTPError(409, 'Mob is still replying in this conversation; wait for it or stop it before moving the conversation.');
+			try { return json(200, s.store.exportConversation(p.id)); } catch (e) { if (e instanceof TransferError) throw new HTTPError(409, e.message); throw e; }
+		});
+		r.handle('POST /api/conversations/import', async req => {
+			try { return json(200, s.store.importConversation(await body<Transfer>(req, transferBody))); } catch (e) { if (e instanceof TransferError) throw new HTTPError(400, e.message); throw e; }
 		});
 		r.handle('POST /api/conversations/{id}/stop', (_, p) => json(200, { stopped: s.stop(p.id) }));
 		r.handle('GET /api/tasks', (_, __, url) => json(200, s.tasks?.tree(url.searchParams.get('project') ?? '') ?? []));

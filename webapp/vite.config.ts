@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => ({
 		generateBundle() { this.emitFile({ type: 'asset', fileName: '.gitkeep', source: '\n' }); },
 	}],
 	server: { host: '127.0.0.1', port: 5173, strictPort: true },
+	// sqlite-wasm finds its .wasm next to its own module, which prebundling would move.
+	optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
+	// The browser runner's worker is served from /runner/, where the Worker gives it its own policy.
+	worker: { format: 'es', rollupOptions: { output: { entryFileNames: 'runner/[name]-[hash].js' } } },
 	build: {
 		outDir: path.resolve(__dirname, mode === 'public' ? 'dist-public' : 'dist'),
 		emptyOutDir: true,

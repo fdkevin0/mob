@@ -14,7 +14,7 @@ type Entry = { key: string; scope: string; kind: 'list' | 'snapshot'; id?: strin
 
 /** cacheScope names the Mob a connection reaches, so two runners never share a cache. */
 export function cacheScope(connection: Connection) {
-	return connection.runner ? `runner:${connection.runner.id}` : `local:${connection.url}`;
+	return connection.browser ? 'browser' : connection.runner ? `runner:${connection.runner.id}` : `local:${connection.url}`;
 }
 
 /** keepsMessages reports whether this device keeps messages, not only titles. */

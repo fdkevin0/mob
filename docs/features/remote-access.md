@@ -55,11 +55,14 @@ served by the Worker in `worker/`:
   it. The page has its own entry and a content security policy that allows
   only the site itself.
 - `/app` is the web UI. The Worker sends visitors without a session back to
-  `/?signin=app`. Signed-in visitors enter the workspace even when no runner or
-  local Mob is connected yet: they can look around and type a message, and the
-  **Connect a runner** dialog opens only when they do something that needs
-  Mob, such as sending, starting a conversation or opening plugins. It offers
-  **Your own runner** (paired runners, or the Mob address and access token of
+  `/?signin=app`. With no local Mob or runner saved, `/app` runs Mob in the
+  browser (see [Mob in the browser](#mob-in-the-browser)), so a signed-in
+  visitor can start talking at once. **Connect a runner** in the sidebar
+  leaves the browser runner for the workspace without one, where visitors can
+  look around and type a message, and the **Connect a runner** dialog opens
+  when they do something that needs Mob, such as sending, starting a
+  conversation or opening plugins. The choice is remembered until **This
+  browser** is picked again. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's
   account at Render or another host (see
   [Runners in the cloud](#runners-in-the-cloud)), and **Cloud runner**, which is
@@ -239,6 +242,74 @@ No additional cloud secrets are needed. Passkeys add D1 migration
 `bun run test:runner` runs the real
 Worker/D1/Durable Object, the built `mob` binary, runner and browser encryption code
 locally with fake account sessions and an offline demo model.
+
+## Mob in the browser
+
+The public web can run Mob's core service, `@mob/core`, in a dedicated Web
+Worker in the tab (`webapp/src/chat/browser/`), so no runner is needed. The
+page reaches it through a `fetch` that posts each request to the worker and
+streams the response back, the same way the relay is a `fetch` for paired
+runners; the API, the chat stream and the change feed are unchanged. The
+database is the usual SQLite schema on sqlite-wasm, stored in the origin
+private file system (OPFS) with the `opfs-sahpool` VFS, and `providers.json`
+is a setting in that database. Where OPFS is unavailable, such as in some
+private windows, conversations last until the tab closes. One tab at a time
+owns the database; another tab says so until it is reloaded after the first
+one closes.
+
+The browser runner has what needs no process of its own: conversations,
+approvals, memory, commands, token usage and the demo model. Model calls go
+straight from the browser to the provider, so they work only with providers
+that allow cross-origin requests; OpenCode Zen does not, so the browser
+runner starts on the offline demo model. **Model provider** in the sidebar
+saves one provider: a preset (OpenAI, Anthropic, OpenRouter and other vendors
+that take a key) or a custom OpenAI Chat Completions or Anthropic Messages
+base URL, with its API key and optionally a model. Saving lists the
+provider's models and makes the named model, or the first listed, the
+default (`POST /api/plugins/browser/provider`). An Anthropic-only provider is
+sent `anthropic-dangerous-direct-browser-access`. With OpenRouter selected,
+**Sign in with OpenRouter** gets a key without copying one: OpenRouter's PKCE
+flow returns to `/app?code=…`, and the worker trades the code, with the
+verifier kept in the tab's session storage, for a key of the user's account
+(`POST /api/plugins/browser/openrouter`), which the user can limit or revoke
+on OpenRouter; without a named model it uses `openrouter/auto`.
+
+Keys are stored unencrypted in the browser's database, in the site's origin
+private file system, like any key a web app keeps. The browser keeps other
+sites out, and the API returns keys only masked, but anyone who can run code
+on usemob.app or read the browser profile on disk can read them; the strict
+content security policy and having no third-party scripts on the origin are
+what guard the first. Coding agents, the sandbox, stdio MCP
+servers, messaging channels and schedules need a runner, and Plugins & cloud
+services is hidden. Mob stops when the tab closes.
+
+The workspace says so: on first use, and whenever **What needs a runner** in
+the sidebar is pressed, a notice lists what works and what needs a runner,
+with **Connect a runner** beside it. When OPFS is unavailable it also warns
+that conversations end with the tab. The Agents page says coding agents need a
+runner instead of listing none.
+
+### Moving conversations
+
+**Move conversations** in the sidebar of the public web copies conversations
+to another Mob this browser can reach: this browser's runner, a runner it
+paired, or Mob on this computer (when its token is saved here), and offers to
+open it afterwards. It takes each conversation's messages, summary, model,
+saved facts and token usage; the originals stay. Pending approvals, grants,
+tasks and schedules do not move, and a conversation that is still replying or
+waits for an approval is refused until it is done. The service side is
+`GET /api/conversations/{id}/export` and `POST /api/conversations/import`
+(`Transfer` in `packages/client/src/contracts.ts`); an import gets a new
+conversation ID, replaces message IDs the target already has, marks a reply
+that was still streaming as interrupted and does not save an owner's fact
+twice. Through the relay a conversation must fit the relay's frame limit of
+about 2 MB.
+
+The worker is built to `/runner/` (not `/assets/`) so the site's Worker can
+give it its own content security policy: it may compile WebAssembly and
+connect to any HTTPS provider, while the `/app` page that holds access tokens
+keeps its narrow `connect-src`. The local web UI that Mob serves itself is
+built without the browser runner.
 
 ## Runners in the cloud
 

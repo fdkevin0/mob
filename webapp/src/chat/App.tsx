@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../compon
 import { Runners, runnerConnection } from './Runners';
 import { Lobby } from './Lobby';
 import { hosts } from './hosts';
+import { browserChosen, browserConnection, browserLast, chooseBrowser } from './browser/connection';
 import { cacheScope, forget, readList } from './localCache';
 
 // The workspace and its chat renderer load in parallel with signing in, so the lobby and the connect form
@@ -43,6 +44,8 @@ export function App() {
     const restore = async () => {
       const link = signInLink();
       if (link) { url = link.url; return claimPairing(link); }
+      // The browser runner reopens when it was the last Mob opened here, even with another one saved.
+      if (isPublicWeb() && browserLast()) { setConnection(browserConnection()); return undefined; }
       // A Mob this browser showed before opens at once with what it showed. Its token is checked meanwhile:
       // a rejected one signs out, and an unreachable Mob is reported in the workspace.
       if (saved) {
@@ -54,10 +57,12 @@ export function App() {
       }
       // A runner's connection is its pairing key, not a saved token, so it is opened rather than saved.
       const runner = lastRunner();
-      if (runner && (await readList(cacheScope(runner)))) setConnection(runner);
+      if (runner && (await readList(cacheScope(runner)))) { setConnection(runner); return undefined; }
+      // With nothing else to open, the public web runs Mob in this browser.
+      if (isPublicWeb() && browserChosen()) { chooseBrowser(true); setConnection(browserConnection()); }
       return undefined;
     };
-    restore().then(next => { if (next) { saveConnection(next); setConnection(next); setPrompting(false); } })
+    restore().then(next => { if (next) { saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); } })
       .catch(e => setError(current => current || reachText(url, e))).finally(() => setLoading(false));
   }, []);
   // A replaced token signs this window out; the desktop reads the new token instead.
@@ -83,11 +88,17 @@ export function App() {
     event.preventDefault(); setLoading(true); setError('');
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
     if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
-    try { await api(next, '/config'); saveConnection(next); setConnection(next); setPrompting(false); }
+    try { await api(next, '/config'); saveConnection(next); chooseBrowser(false); setConnection(next); setPrompting(false); }
     catch (e) { setError(reachText(next.url, e)); } finally { setLoading(false); }
   }
-  const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); };
-  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => { void forget(cacheScope(connection)); if (connection.runner) forgetRunner(); else clearToken(); setConnection(undefined); }} /></Suspense>;
+  const open = (next: Connection) => { setConnection(next); setPrompting(false); if (next.runner) rememberRunner(next.runner.id); chooseBrowser(!!next.browser); };
+  // Leaving the browser runner asks where Mob runs instead; its conversations stay in this browser.
+  const leave = (from: Connection) => {
+    if (from.browser) { chooseBrowser(false); setChoice(undefined); setPrompting(true); }
+    else { void forget(cacheScope(from)); if (from.runner) forgetRunner(); else clearToken(); }
+    setConnection(undefined);
+  };
+  if (connection) return <Suspense fallback={<div className="loading" role="status">Opening workspace…</div>}><Workspace key={cacheScope(connection)} connection={connection} draft={draft} clearDraft={() => setDraft('')} disconnect={() => leave(connection)} switchTo={open} /></Suspense>;
   // The desktop connects by itself, so a failure there has no token form to retry.
   if (error && window.mobDesktop) return <main className="connect"><Logo /><h1>Mob could not start.</h1><p role="alert" className="startup-error">{error}</p></main>;
   const panel = <>
@@ -99,8 +110,9 @@ export function App() {
     <Lobby draft={draft} setDraft={setDraft} connecting={loading && !prompting} notice={error} connect={() => { setChoice(undefined); setPrompting(true); }} />
     <Dialog open={prompting} onOpenChange={setPrompting}><DialogContent className="connect-dialog">
       <DialogTitle className="dialog-title">Connect a runner</DialogTitle>
-      <DialogDescription className="dialog-description">Mob needs a runner to send messages. Choose where it runs.</DialogDescription>
+      <DialogDescription className="dialog-description">Choose where Mob runs.</DialogDescription>
       {choice ? <><Button type="button" variant="ghost" className="choice-back" onClick={() => { setChoice(undefined); setError(''); }}>← Other runners</Button>{choice === 'cloud' ? <Runners connect={open} deploy /> : panel}</> : <div className="runner-choices">
+        <Button type="button" variant="outline" className="runner-choice" onClick={() => open(browserConnection())}><strong>This browser</strong><span>Start now, with nothing to install. Conversations stay in this browser; coding agents, the sandbox and channels need a runner.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('own')}><strong>Your own runner</strong><span>Mob on this computer, or on another computer you pair. Conversations stay there.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" onClick={() => setChoice('cloud')}><strong>Deploy to the cloud {hosts.filter(h => h.deployURL).map(h => <small key={h.id} className="host-mark"><h.Logo />{h.name}</small>)}</strong><span>Mob in your own Render account, on its free tier. No computer needs to stay on.</span></Button>
         <Button type="button" variant="outline" className="runner-choice" disabled><strong>Cloud runner <small>Coming soon</small></strong><span>A runner hosted for you, with nothing to install.</span></Button>

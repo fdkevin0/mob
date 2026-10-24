@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, expect, it, vi } from 'vitest';
 // Local pairing tests keep runner discovery isolated; Runners.test.tsx covers that flow.
 vi.mock('./Runners', () => ({ Runners: () => null }));
+// The browser runner's worker is replaced by whatever fetch a test stubs.
+vi.mock('./browser/browser', () => ({ startBrowser: async () => ({ persistent: true }), browserFetch: (input: string, init?: RequestInit) => fetch(input, init) }));
 import { App } from './App';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.mobDesktop; localStorage.clear(); sessionStorage.clear(); });
@@ -193,6 +195,7 @@ it('explains why the public web could not reach local Mob', async () => {
 it('sends a typed token from the public web only to Mob on this computer', async () => {
   vi.stubEnv('MODE', 'public');
   localStorage.setItem('mob-url', 'https://mob.example');
+  localStorage.setItem('mob-browser-off', '1');
   const fetchMock = vi.fn(async () => Response.json({}));
   vi.stubGlobal('fetch', fetchMock);
   try {
@@ -209,8 +212,46 @@ it('sends a typed token from the public web only to Mob on this computer', async
   } finally { vi.unstubAllEnvs(); }
 });
 
+it('runs the public web in this browser until another runner is chosen', async () => {
+  vi.stubEnv('MODE', 'public');
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    expect(url.startsWith('http://localhost/api/')).toBe(true);
+    if (url.endsWith('/runtime')) return Response.json({ background: false });
+    if (url.endsWith('/conversations')) return init?.method === 'POST' ? Response.json({ id: 'new', title: 'New conversation' }) : Response.json([]);
+    return Response.json({ messages: [], active: false, model: 'demo/echo' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    render(<App />);
+    await screen.findByText('History in this browser · stops with this tab', { exact: false });
+    expect(screen.queryByRole('button', { name: 'Plugins & cloud services' })).toBeNull();
+    const limits = await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
+    expect(limits.textContent).toContain('Coding agents');
+    fireEvent.click(within(limits).getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByRole('region', { name: 'What Mob in this browser cannot do' })).toBeNull();
+    expect(localStorage.getItem('mob-browser-limits-seen')).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'What needs a runner' }));
+    await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
+    const token = localStorage.getItem('mob-browser-token');
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Connect a runner' })[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Connect a runner' });
+    expect(localStorage.getItem('mob-browser-off')).toBe('1');
+    cleanup();
+    render(<App />);
+    await screen.findAllByText('No runner connected');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Connect a runner' })[0]);
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /This browser/ }));
+    await screen.findByText('History in this browser · stops with this tab', { exact: false });
+    expect(localStorage.getItem('mob-browser-off')).toBeNull();
+    expect(localStorage.getItem('mob-browser-token')).toBe(token);
+    expect(dialog).toBeTruthy();
+  } finally { vi.unstubAllEnvs(); }
+});
+
 it('opens the public web workspace without a runner and asks for one only when sending', async () => {
   vi.stubEnv('MODE', 'public');
+  localStorage.setItem('mob-browser-off', '1');
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/runtime')) return Response.json({ background: false });
     if (url.endsWith('/conversations')) return init?.method === 'POST' ? Response.json({ id: 'new', title: 'New conversation' }) : Response.json([{ id: 'one', title: 'Existing' }]);

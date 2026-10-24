@@ -63,6 +63,15 @@ const appPolicy = [
 	"frame-ancestors 'none'",
 ].join('; ');
 
+// The browser runner (webapp/src/chat/browser) is a worker with its own
+// policy: it compiles sqlite-wasm and calls model providers, which may be
+// anywhere, while the app page that holds the tokens keeps its narrow connect-src.
+const runnerPolicy = [
+	"default-src 'none'",
+	"script-src 'self' 'wasm-unsafe-eval'",
+	"connect-src 'self' https: http://127.0.0.1:* http://localhost:*",
+].join('; ');
+
 // The documentation (apps/docs) is public and runs no third-party code: it
 // shares an origin with /app, whose local storage holds Mob access tokens.
 // The build puts a <meta> policy at the top of every page's <head> (and fails
@@ -116,6 +125,7 @@ export default {
 			return page(env, request, '/account', accountPolicy, 'private, no-store');
 		}
 		if (pathname.startsWith('/assets/')) return env.ASSETS.fetch(request);
+		if (pathname.startsWith('/runner/')) return runnerScript(env, request);
 		if (pathname === '/docs') return Response.redirect(`${url.origin}/docs/`, 301);
 		if (pathname.startsWith('/docs/')) return docs(env, request);
 		return Response.redirect(`${url.origin}/`, 302);
@@ -133,6 +143,15 @@ async function docs(env: Env, request: Request) {
 	const html = response.headers.get('Content-Type')?.startsWith('text/html') || response.status >= 300 && response.status < 400;
 	response.headers.set('Content-Security-Policy', html ? docsPolicy : docsFilePolicy);
 	response.headers.set('Referrer-Policy', 'no-referrer');
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	return response;
+}
+
+async function runnerScript(env: Env, request: Request) {
+	const asset = await env.ASSETS.fetch(request);
+	const response = new Response(asset.body, asset);
+	if (asset.ok) response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+	response.headers.set('Content-Security-Policy', runnerPolicy);
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	return response;
 }

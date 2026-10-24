@@ -223,7 +223,8 @@ export function describe(i: Info) {
 	if (i.tools) traits.push('tools');
 	if (i.vision) traits.push('images');
 	if (i.context && i.context > 0) traits.push(`${Math.floor(i.context / 1000)}k context`);
-	if (i.cost) traits.push(i.cost.input === 0 && i.cost.output === 0 ? 'free' : `$${i.cost.input}/$${i.cost.output} per 1M tokens`);
+	if (i.free) traits.push('free');
+	else if (i.cost) traits.push(`$${i.cost.input}/$${i.cost.output} per 1M tokens`);
 	return traits.join(' · ');
 }
 

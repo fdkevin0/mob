@@ -8,7 +8,7 @@ import { ThemePicker } from '../theme/ThemePicker';
 import { ArrowUpIcon, ChevronDownIcon, PlusIcon } from './icons';
 
 /**
- * Lobby is the public web workspace before a runner is connected. Signed-in visitors can look around and type;
+ * Lobby is the public web workspace after leaving the browser runner, before another is connected. Signed-in visitors can look around and type;
  * anything that needs Mob, such as sending or opening plugins, calls connect to ask for a runner instead.
  */
 export function Lobby({
@@ -80,7 +80,7 @@ export function Lobby({
 					<ConversationEmptyState
 						className="empty-state"
 						title="What’s on your mind?"
-						description="Mob runs on your own computer. Connect a runner when you are ready to send."
+						description="Choose where Mob runs: in this browser, or on a runner of your own."
 					/>
 				</div>
 				<div className="composer-area">

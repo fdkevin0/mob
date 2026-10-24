@@ -41,6 +41,8 @@ export type Info = {
 	vision?: boolean;
 	efforts?: string[];
 	cost?: Cost;
+	/** free is set for a model that costs nothing to call: listed at no price, or a vendor's free tier. */
+	free?: boolean;
 	/** Set when the catalog described the model. */
 	known: boolean;
 };
