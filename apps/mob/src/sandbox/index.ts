@@ -22,7 +22,7 @@ function apply(e: Environment, server: Server) {
 	applied.set(server, { settings, box });
 	server.setSandbox(box);
 	// An enabled sandbox that cannot run is logged; the model is told why when it tries.
-	box?.runtime.check(AbortSignal.timeout(30_000)).catch(err => console.error('Sandbox enabled but not ready: ' + (err as Error).message));
+	box?.backend.check(AbortSignal.timeout(30_000)).catch(err => console.error('Sandbox enabled but not ready: ' + (err as Error).message));
 }
 
 setups.push(apply);

@@ -45,7 +45,9 @@ test('load copies the skill into the workspace and reads files inside it only', 
 	expect(out).toContain('Files in the skill: references/forms.md, scripts/fill.py.');
 	expect(out).toContain('copied to /workspace/.mob/skills/pdf');
 	const copy = join(workspace, '.mob', 'skills', 'pdf');
-	expect(statSync(join(copy, 'scripts', 'fill.py')).mode & 0o777).toBe(0o700);
+	// Commands may run as another user than Mob's, so the copy is readable by all.
+	expect(statSync(join(copy, 'scripts', 'fill.py')).mode & 0o777).toBe(0o755);
+	expect(statSync(join(copy, 'references', 'forms.md')).mode & 0o777).toBe(0o644);
 	expect(existsSync(join(copy, '.git'))).toBe(false);
 	expect(existsSync(join(copy, 'leak'))).toBe(false);
 	expect(l.readFile(s, 'references/forms.md')).toBe('Forms guide');

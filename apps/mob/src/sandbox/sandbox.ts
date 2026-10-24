@@ -1,10 +1,11 @@
-// The sandbox runs the model's commands in a container whose only host
-// directory is the conversation's workspace.
-import { mkdirSync, openSync, writeSync, closeSync } from 'node:fs';
+// The sandbox runs the model's commands, each in a new process of its backend
+// whose only host directory is the conversation's workspace.
 import { join } from 'node:path';
 import { sandboxDefaultTimeout, sandboxMaxTimeout, type Sandbox as CoreSandbox, type SandboxResult, type Saver } from '@mob/core';
 import type { SandboxSettings } from '../config';
-import { Runtime, gvisor, containerd, noNetwork, parseMemory, runtimeNames, Unavailable, type Limits } from './container';
+import { ContainerBackend, Runtime, defaultRuntime, gvisor, containerd, noNetwork, parseMemory, runtimeNames, validUser, type Runner } from './container';
+import { run, type Backend, type Policy } from './policy';
+import { openWorkspace, safeDir, writeNew } from './workspace';
 
 export const workdir = '/workspace';
 const outputCap = 1 << 20, minMemoryMiB = 64;
@@ -14,29 +15,33 @@ export function validateSandbox(s: SandboxSettings) {
 		try { new Runtime(s.runtime); } catch { throw new Error(`sandbox.runtime must be ${runtimeNames.join(', ')} or empty`); }
 	}
 	if (!s.image || s.image.startsWith('-') || /\s/.test(s.image)) throw new Error('sandbox.image must be an image reference');
-	limits(s);
+	if (s.user && !validUser(s.user)) throw new Error('sandbox.user must be a UID[:GID] or user name, or empty');
+	policy(s);
+	// An empty runtime is this platform's own, so an option only containerd
+	// offers fails here on macOS or Windows rather than on the first command.
+	let name = '';
+	try { name = Runtime.open(s.runtime).name; } catch { /* below */ }
+	if (s.pids && name !== containerd) throw new Error('sandbox.pids needs the containerd runtime (Linux)');
 	if (s.isolation) {
 		if (s.isolation !== gvisor) throw new Error('sandbox.isolation must be "gvisor" or empty');
-		let name = '';
-		try { name = Runtime.open(s.runtime).name; } catch { /* below */ }
 		if (name !== containerd) throw new Error('sandbox.isolation "gvisor" needs the containerd runtime (Linux)');
 	}
 }
 
-function limits(s: SandboxSettings): Limits {
-	const l: Limits = { network: s.network, cpus: s.cpus };
+/** policy is what the settings allow every command; the workspace mount is added per conversation. */
+function policy(s: SandboxSettings): Policy {
 	if (s.network && s.network !== noNetwork) throw new Error('sandbox.network must be "none" or empty');
 	if (s.cpus < 0 || !Number.isInteger(s.cpus)) throw new Error("sandbox.cpus must be a whole number of CPUs, or 0 for the runtime's default");
+	if (s.pids < 0 || !Number.isInteger(s.pids)) throw new Error("sandbox.pids must be a number of processes, or 0 for the runtime's default");
+	const p: Policy = { mounts: [], network: s.network === noNetwork ? 'off' : 'host', workdir, user: s.user || undefined, limits: { cpus: s.cpus, pids: s.pids } };
 	if (s.memory) {
 		let mib = 0;
 		try { mib = parseMemory(s.memory); } catch { /* below */ }
 		if (mib < minMemoryMiB) throw new Error(`sandbox.memory must be a size of at least ${minMemoryMiB}m, such as 512m or 2g, or empty`);
-		l.memoryMiB = mib;
+		p.limits!.memoryMiB = mib;
 	}
-	return l;
+	return p;
 }
-
-const random = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
 
 /** capture keeps at most outputCap bytes of a stream. */
 function capture() {
@@ -54,42 +59,33 @@ function capture() {
 }
 
 export class Sandbox implements CoreSandbox, Saver {
-	private pulled = false;
-	private pulling?: Promise<void>;
-	readonly limits: Limits;
 	readonly root: string;
 
-	constructor(readonly runtime: Runtime, readonly image: string, settings: SandboxSettings, dataDir: string) {
-		this.limits = limits(settings);
-		this.isolation = settings.isolation;
+	/** policy is what every command may reach, apart from its workspace. */
+	constructor(readonly backend: Backend, readonly policy: Policy, dataDir: string) {
 		this.root = join(dataDir, 'sandbox');
 	}
-	readonly isolation: string;
 
-	/** create is the sandbox settings describe, or undefined while it is off. */
-	static create(s: SandboxSettings, dataDir: string) {
+	/** create is the sandbox settings describe, or undefined while it is off; tests replace the runner. */
+	static create(s: SandboxSettings, dataDir: string, runner?: Runner) {
 		if (!s.enabled) return undefined;
 		validateSandbox(s);
-		return new Sandbox(Runtime.open(s.runtime), s.image, s, dataDir);
+		return new Sandbox(new ContainerBackend(new Runtime(s.runtime || defaultRuntime(), runner), s.image, s.isolation), policy(s), dataDir);
 	}
 
-	offline() { return this.limits.network === noNetwork; }
+	offline() { return this.policy.network === 'off'; }
 
 	/** workspace is the conversation's directory, the only host path its commands reach. */
 	workspace(conversationID: string) {
 		if (!conversationID || /[^0-9a-fA-F]/.test(conversationID)) throw new Error('invalid conversation ID');
-		const dir = join(this.root, conversationID);
-		mkdirSync(dir, { recursive: true, mode: 0o700 });
-		return dir;
+		return openWorkspace(this.root, join(this.root, conversationID));
 	}
 
 	/** save keeps a large tool output in the workspace and returns its path inside the container. */
 	async save(conversationID: string, name: string, text: string) {
 		if (!name || name.includes('/') || name.includes('\\') || name.startsWith('.')) throw new Error('invalid file name');
-		const dir = join(this.workspace(conversationID), '.mob', 'outputs');
-		mkdirSync(dir, { recursive: true, mode: 0o700 });
-		const fd = openSync(join(dir, name), 'wx', 0o600);
-		try { writeSync(fd, text); } finally { closeSync(fd); }
+		// Commands control the workspace and may plant links in it.
+		writeNew(safeDir(this.workspace(conversationID), '.mob/outputs'), name, text);
 		return [workdir, '.mob', 'outputs', name].join('/');
 	}
 
@@ -97,39 +93,13 @@ export class Sandbox implements CoreSandbox, Saver {
 		if (!command.trim()) throw new Error('command is required');
 		if (timeoutMs <= 0 || timeoutMs > sandboxMaxTimeout) timeoutMs = sandboxDefaultTimeout;
 		const workspace = this.workspace(conversationID);
-		await this.pull(signal);
-		const name = 'mob-' + random();
-		const timeout = AbortSignal.timeout(timeoutMs);
-		const run = signal ? AbortSignal.any([signal, timeout]) : timeout;
+		await this.backend.prepare(signal);
+		const p: Policy = { ...this.policy, mounts: [{ source: workspace, target: workdir }, ...this.policy.mounts] };
 		const stdout = capture(), stderr = capture();
-		let code = -1, failure: unknown;
-		try {
-			code = await this.runtime.stream({ name, image: this.image, command: ['sh', '-c', command], mounts: [{ source: workspace, target: workdir }], workdir, limits: this.limits, isolation: this.isolation }, { stdout: stdout.out, stderr: stderr.out, signal: run });
-		} catch (e) { failure = e; }
-		const result: SandboxResult = { exitCode: code, stdout: stdout.text(), stderr: stderr.text() };
+		const exit = await run(this.backend, p, { args: ['sh', '-c', command], stdout: stdout.out, stderr: stderr.out }, timeoutMs, signal);
+		const result: SandboxResult = { exitCode: exit.code, stdout: stdout.text(), stderr: stderr.text() };
 		if (stdout.over || stderr.over) result.truncated = true;
-		if (run.aborted) {
-			await this.runtime.removeContainer(name, AbortSignal.timeout(30_000)).catch(() => {});
-			if (signal?.aborted) throw signal.reason;
-			result.timedOut = true;
-			return result;
-		}
-		if (failure) throw new Unavailable((failure as Error).message);
+		if (exit.timedOut) result.timedOut = true;
 		return result;
-	}
-
-	private async pull(signal?: AbortSignal) {
-		if (this.pulled) return;
-		this.pulling ??= (async () => {
-			try {
-				await this.runtime.pull(this.image, signal);
-				this.pulled = true;
-			} catch (e) {
-				if (signal?.aborted) throw e;
-				// Without a registry an image already present still runs.
-				await this.runtime.check(signal);
-			}
-		})().finally(() => { this.pulling = undefined; });
-		await this.pulling;
 	}
 }

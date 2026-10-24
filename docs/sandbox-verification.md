@@ -105,3 +105,15 @@ The script's full output, plus for any FAIL:
 - the output of the failing step run by hand, with `--help` for that
   subcommand (`container run --help`, `wslc run --help`, `wslc rm --help`),
   since the flags Mob uses are taken from documentation that may lag the CLI.
+
+## Non-root user in the tests
+
+One test in `apps/mob/test/sandbox.test.ts` runs a real container as
+`65534:65534` and checks that it reads what Mob saved and writes the workspace.
+It is skipped unless an image is named:
+
+```bash
+cd apps/mob && MOB_SANDBOX_TEST_IMAGE=alpine:3.20 bun test test/sandbox.test.ts
+```
+
+`MOB_SANDBOX_TEST_RUNTIME` picks another runtime than the platform's own.

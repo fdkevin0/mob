@@ -4,10 +4,11 @@
 // skill tool when a task matches, and reads its other files on demand. Scripts
 // run only in the sandbox, from a copy of the skill in the conversation's
 // workspace.
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, posix, relative, sep } from 'node:path';
 import { workdir } from '../sandbox/sandbox';
+import { safeDir, writeNew } from '../sandbox/workspace';
 
 /** maxSkills bounds how many skills one root offers. */
 const maxSkills = 100;
@@ -128,8 +129,7 @@ export class Library {
 				if (count > maxFiles || info.size > maxBytes - size) throw new Error(`it has over ${maxFiles} files or ${maxBytes >> 20} MiB`);
 				const data = readFileSync(join(dir, from));
 				size += data.length;
-				const fd = openSync(join(dest, entry.name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, info.mode & 0o111 ? 0o700 : 0o600);
-				try { writeSync(fd, data); } finally { closeSync(fd); }
+				writeNew(dest, entry.name, data, (info.mode & 0o111) !== 0);
 			}
 		};
 		try { walk(''); } catch (err) {
@@ -159,21 +159,6 @@ export class Library {
 /** copies is where loaded skills are copied in a sandbox workspace. */
 const copies = '.mob/skills';
 const cell = (text: string) => text.split(/\s+/).filter(Boolean).join(' ').replaceAll('|', '\\|');
-
-/** safeDir creates rel's directories under root, refusing any that is a link, and returns the last. */
-function safeDir(root: string, rel: string) {
-	let at = root;
-	for (const part of rel.split('/').filter(Boolean)) {
-		at = join(at, part);
-		try {
-			if (!lstatSync(at).isDirectory()) throw new Error(`${relative(root, at)} in the workspace is not a directory`);
-		} catch (err) {
-			if (!missing(err)) throw err;
-			mkdirSync(at, { mode: 0o700 });
-		}
-	}
-	return at;
-}
 
 /**
  * read parses dir's SKILL.md. A skill whose name differs from its directory's

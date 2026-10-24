@@ -36,6 +36,8 @@ export const options: Option[] = [
 	{ key: 'sandbox.network', value: '', help: 'Container network; none disables it, empty uses runtime default' },
 	{ key: 'sandbox.cpus', value: 0, help: 'Nonnegative CPU limit; zero uses runtime default' },
 	{ key: 'sandbox.memory', value: '', help: 'Memory limit with unit, at least 64m; empty uses runtime default' },
+	{ key: 'sandbox.pids', value: 0, help: 'Nonnegative process limit, containerd only; zero uses runtime default' },
+	{ key: 'sandbox.user', value: '', help: "UID[:GID] or name commands run as; empty uses the image's user" },
 	{ key: 'sandbox.isolation', value: '', help: 'gvisor requires containerd; empty uses runtime default' },
 	{ key: 'mcp_servers', value: '{}', help: 'MCP server map; JSON object in flags/environment, native map in files', secret: true },
 	{ key: 'mcp_registry.url', value: defaultRegistry, help: 'MCP registry the model searches for remote servers to install' },
@@ -46,7 +48,7 @@ export const flagOf = (o: Option) => o.key.replace(/[._]/g, '-');
 export const envOf = (o: Option) => 'MOB_' + o.key.replaceAll('.', '_').toUpperCase();
 const defaultOf = (o: Option) => (typeof o.value === 'function' ? o.value() : o.value);
 
-export type SandboxSettings = { enabled: boolean; runtime: string; image: string; network: string; cpus: number; memory: string; isolation: string };
+export type SandboxSettings = { enabled: boolean; runtime: string; image: string; network: string; cpus: number; memory: string; pids: number; user: string; isolation: string };
 export type MCPServers = Record<string, Record<string, unknown>>;
 
 export type Environment = {
@@ -165,7 +167,7 @@ export class Loader {
 		webOrigin(String(get.web_url));
 		const e: Environment = {
 			dir: resolve(String(get.data_dir)), stateDir: resolve(String(get.state_dir)), addr, token, demo: get.demo as boolean,
-			sandbox: { enabled: get['sandbox.enabled'] as boolean, runtime: get['sandbox.runtime'] as string, image: get['sandbox.image'] as string, network: get['sandbox.network'] as string, cpus: get['sandbox.cpus'] as number, memory: get['sandbox.memory'] as string, isolation: get['sandbox.isolation'] as string },
+			sandbox: { enabled: get['sandbox.enabled'] as boolean, runtime: get['sandbox.runtime'] as string, image: get['sandbox.image'] as string, network: get['sandbox.network'] as string, cpus: get['sandbox.cpus'] as number, memory: get['sandbox.memory'] as string, pids: get['sandbox.pids'] as number, user: get['sandbox.user'] as string, isolation: get['sandbox.isolation'] as string },
 			maxToolSteps: steps, mcpServers: get.mcp_servers as MCPServers,
 			mcpRegistry: { url: get['mcp_registry.url'] as string, namespaces: String(get['mcp_registry.namespaces']).split(',').map(s => s.trim()).filter(Boolean) },
 			webURL: String(get.web_url), loader: this,
