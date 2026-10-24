@@ -59,6 +59,19 @@ export function saveTheme(theme: Theme) {
 	setCurrent(theme);
 }
 
+// onThemeApplied calls back whenever the page's resolved scheme changes,
+// whatever changed it: a picker, the system or another tab.
+export function onThemeApplied(callback: (light: boolean) => void) {
+	const root = document.documentElement;
+	let light = root.dataset.theme === 'light';
+	const observer = new MutationObserver(() => {
+		const now = root.dataset.theme === 'light';
+		if (now !== light) callback((light = now));
+	});
+	observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+	return () => observer.disconnect();
+}
+
 // startTheme keeps the page in step with the system colour scheme and with a
 // choice made in another tab (the app or the account page).
 export function startTheme() {

@@ -7,7 +7,7 @@ import { shade, type Frame } from './project';
 // camera can see (+x, +y, +z) are generated.
 
 const shader = /* wgsl */ `
-struct U { frame: vec4f, size: vec4f };
+struct U { frame: vec4f, size: vec4f, backdrop: vec4f };
 @group(0) @binding(0) var<uniform> u: U;
 
 struct VOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @location(1) uv: vec2f };
@@ -19,7 +19,7 @@ fn project(p: vec3f) -> vec4f {
 	return vec4f(sx / u.size.x * 2.0 - 1.0, 1.0 - sy / u.size.y * 2.0, depth, 1.0);
 }
 
-@vertex fn vs_voxel(@builtin(vertex_index) vi: u32, @location(0) at: vec3f, @location(1) rgb: vec3f, @location(2) extra: vec2f) -> VOut {
+@vertex fn vs_voxel(@builtin(vertex_index) vi: u32, @location(0) at: vec3f, @location(1) rgb: vec3f, @location(2) extra: vec2f, @location(3) fade: f32) -> VOut {
 	var quads = array<vec3f, 12>(
 		vec3f(0.0, 1.0, 0.0), vec3f(1.0, 1.0, 0.0), vec3f(1.0, 1.0, 1.0), vec3f(0.0, 1.0, 1.0),
 		vec3f(0.0, 0.0, 1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 1.0, 1.0), vec3f(0.0, 1.0, 1.0),
@@ -35,7 +35,8 @@ fn project(p: vec3f) -> vec4f {
 	let g = extra.x;
 	var o: VOut;
 	o.pos = project(p);
-	o.color = vec4f(min(rgb * (k + (1.0 - k) * g * 0.7) + vec3f(g * 0.12), vec3f(1.0)), 1.0);
+	// Faded after lighting, as project.ts does, so a fully faded voxel is the backdrop.
+	o.color = vec4f(mix(u.backdrop.rgb, min(rgb * (k + (1.0 - k) * g * 0.7) + vec3f(g * 0.12), vec3f(1.0)), fade), 1.0);
 	o.uv = vec2f(0.0);
 	return o;
 }
@@ -78,12 +79,13 @@ export async function createVoxelRenderer(canvas: HTMLCanvasElement): Promise<Vo
 
 	const module = device.createShaderModule({ code: shader });
 	const layout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }] });
-	const uniforms = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+	const uniforms = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 	const bindGroup = device.createBindGroup({ layout, entries: [{ binding: 0, resource: { buffer: uniforms } }] });
-	const instance: GPUVertexBufferLayout = { arrayStride: 32, stepMode: 'instance', attributes: [
+	const instance: GPUVertexBufferLayout = { arrayStride: 36, stepMode: 'instance', attributes: [
 		{ shaderLocation: 0, offset: 0, format: 'float32x3' },
 		{ shaderLocation: 1, offset: 12, format: 'float32x3' },
 		{ shaderLocation: 2, offset: 24, format: 'float32x2' },
+		{ shaderLocation: 3, offset: 32, format: 'float32' },
 	] };
 	const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
 	const voxelPipeline = device.createRenderPipeline({
@@ -121,12 +123,13 @@ export async function createVoxelRenderer(canvas: HTMLCanvasElement): Promise<Vo
 			if (voxels.length > capacity) {
 				buffer?.destroy();
 				capacity = Math.ceil(voxels.length * 1.5);
-				buffer = device.createBuffer({ size: capacity * 32, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-				data = new Float32Array(capacity * 8);
+				buffer = device.createBuffer({ size: capacity * 36, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+				data = new Float32Array(capacity * 9);
 			}
-			voxels.forEach((v, i) => data.set(v, i * 8));
-			device.queue.writeBuffer(buffer!, 0, data, 0, voxels.length * 8);
-			device.queue.writeBuffer(uniforms, 0, new Float32Array([frame.unit, frame.x, frame.y, 0, canvas.width, canvas.height, 0, 0]));
+			voxels.forEach((v, i) => { for (let j = 0; j < 8; j++) data[i * 9 + j] = v[j]!; data[i * 9 + 8] = v[8] ?? 1; });
+			device.queue.writeBuffer(buffer!, 0, data, 0, voxels.length * 9);
+			const [r, g, b] = frame.backdrop ?? [0, 0, 0];
+			device.queue.writeBuffer(uniforms, 0, new Float32Array([frame.unit, frame.x, frame.y, 0, canvas.width, canvas.height, 0, 0, r, g, b, 0]));
 			const encoder = device.createCommandEncoder();
 			const pass = encoder.beginRenderPass({
 				colorAttachments: [{ view: context.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }],

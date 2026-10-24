@@ -4,7 +4,9 @@
 // grid cell. Models are built facing +z and turned in quarter steps.
 
 export type RGB = [number, number, number];
-export type Voxel = [number, number, number, number, number, number, number, number];
+// x, y, z, r, g, b, glow, size and, optionally, how much of the lit colour
+// shows (1 when left out); the rest is the frame's backdrop.
+export type Voxel = [number, number, number, number, number, number, number, number, number?];
 
 export const hex = (value: string): RGB => {
 	const n = parseInt(value.slice(1), 16);

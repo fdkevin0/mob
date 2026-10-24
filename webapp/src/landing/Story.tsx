@@ -3,6 +3,7 @@ import { Icon } from '../components/brand/Icon';
 import type { IconName } from '../components/brand/Icon';
 import { magnet, type Magnet } from './snap';
 import { VoxelCanvas } from './voxel/VoxelCanvas';
+import { onThemeApplied } from '../theme/theme';
 import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
 
 // The top of the landing page is one pinned stage over the calves' office,
@@ -141,7 +142,11 @@ export function Story({ hero }: { hero: ReactNode }) {
 				field.current.style.transform = narrow
 					? `translateY(${-aside * 14 - ramp(p, 0.4, WORKFLOW) * 10}svh) scale(${1 - aside * 0.08})`
 					: `translateX(${-aside * 19}vw) scale(${1 - aside * 0.2})`;
-				field.current.style.opacity = String(0.4 + ramp(p, 0.4, WORKFLOW) * 0.25 + aside * 0.33);
+				// On paper the office needs more of itself to read; it fills in to
+				// the same full strength by the feature list.
+				const light = document.documentElement.dataset.theme === 'light';
+				const base = light ? 0.7 : 0.4;
+				field.current.style.opacity = String(base + (ramp(p, 0.4, WORKFLOW) * 0.25 + aside * 0.33) * (light ? (1 - base) / 0.58 : 1));
 				field.current.dataset.live = aside >= 1 ? 'true' : 'false';
 			}
 			const s = p > 0.45 && p < FEATURES - 0.6 ? clamp(Math.floor((p - WORKFLOW + STEP / 2) / STEP), 0, 3) : -1;
@@ -153,7 +158,8 @@ export function Story({ hero }: { hero: ReactNode }) {
 		apply();
 		window.addEventListener('scroll', schedule, { passive: true });
 		window.addEventListener('resize', schedule);
-		return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+		const unwatch = onThemeApplied(schedule);
+		return () => { cancelAnimationFrame(raf); unwatch(); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
 	}, [still]);
 
 	// A wheel turns the pages one at a time, up to the section after the story.

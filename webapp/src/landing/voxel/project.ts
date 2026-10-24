@@ -3,7 +3,10 @@ import type { Voxel } from './model';
 // A true isometric view: the camera looks along -(1, 1, 1), the normal of the
 // plane x + y + z = 0, with y up. Visible faces are +x, +y and +z.
 
-export type Frame = { unit: number; x: number; y: number };
+import type { RGB } from './model';
+
+// backdrop is what faded voxels fade towards, black when left out.
+export type Frame = { unit: number; x: number; y: number; backdrop?: RGB };
 
 export const shade = { top: 1, left: 0.8, right: 0.6 }; // +y, +z, +x
 
@@ -25,9 +28,11 @@ export function visibleFaces(voxels: Voxel[]) {
 	};
 }
 
-const lit = (v: Voxel, k: number) => {
-	const g = v[6];
-	return [0, 1, 2].map(i => Math.min(255, Math.round((v[3 + i] * (k + (1 - k) * g * 0.7) + g * 0.12) * 255)));
+// A face's colour: lit by its side and glow, then faded towards the backdrop
+// after lighting, so a fully faded voxel is the backdrop on every face.
+export const lit = (v: Voxel, k: number, backdrop: RGB = [0, 0, 0]) => {
+	const g = v[6], fade = v[8] ?? 1;
+	return [0, 1, 2].map(i => Math.round((Math.min(1, v[3 + i]! * (k + (1 - k) * g * 0.7) + g * 0.12) * fade + backdrop[i] * (1 - fade)) * 255));
 };
 
 // Paints voxels back to front with Canvas 2D.
@@ -48,9 +53,9 @@ export function paint(ctx: CanvasRenderingContext2D, voxels: Voxel[], f: Frame) 
 		const cx = v[0] + 0.5, cy = v[1] + 0.5, cz = v[2] + 0.5;
 		const x0 = cx - h, x1 = cx + h, y0 = cy - h, y1 = cy + h, z0 = cz - h, z1 = cz + h;
 		const show = faces(v);
-		if (show.right) poly([[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]], lit(v, shade.right));
-		if (show.left) poly([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], lit(v, shade.left));
-		if (show.top) poly([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], lit(v, shade.top));
+		if (show.right) poly([[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]], lit(v, shade.right, f.backdrop));
+		if (show.left) poly([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], lit(v, shade.left, f.backdrop));
+		if (show.top) poly([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], lit(v, shade.top, f.backdrop));
 	}
 }
 

@@ -522,10 +522,9 @@ const OUTSIDE: Vec = [-16, 22, 44];
 // What the spotlight dims the rest of the office towards: the night in dark,
 // the page's paper in light, so the office fades into the page either way.
 const backdrop: Record<Theme, RGB> = { dark: [0, 0, 0], light: hex('#f4f3ee') };
-const dimmed = (v: Voxel[], k: number): Voxel[] => {
-	const [r, g, b] = backdrop[pageTheme()];
-	return v.map(p => [p[0], p[1], p[2], p[3] * k + r * (1 - k), p[4] * k + g * (1 - k), p[5] * k + b * (1 - k), p[6] * k, p[7]]);
-};
+// The renderers fade a voxel after lighting it (project.ts), so the dimmed
+// part of the office melts into the page instead of keeping grey sides.
+const dimmed = (v: Voxel[], k: number): Voxel[] => v.map(p => [p[0], p[1], p[2], p[3], p[4], p[5], p[6] * k, p[7], k]);
 // The dimmed floor, cached at a handful of levels so a fade costs nothing.
 const fixedDim = new Map<number, Voxel[]>();
 const floorAt = (k: number) => {
@@ -707,5 +706,5 @@ export function calfAt(x: number, y: number, width: number, height: number): Act
 // in the middle of the stage, under the title.
 export function officeFrame(width: number, height: number) {
 	const unit = Math.min(2.8, Math.max(1.6, Math.min(width / 260, height / 150)));
-	return { unit, x: width / 2, y: height * 0.54 - (SIZE / Math.sqrt(6)) * unit };
+	return { unit, x: width / 2, y: height * 0.54 - (SIZE / Math.sqrt(6)) * unit, backdrop: backdrop[pageTheme()] };
 }
