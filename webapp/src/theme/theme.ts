@@ -12,7 +12,7 @@ export const themes: Theme[] = ['system', 'light', 'dark'];
 // or '' for the system, so one choice holds on every page.
 const key = 'starlight-theme';
 const query = '(prefers-color-scheme: light)';
-const colors = { light: '#f4f3ee', dark: '#07080a' };
+const colors = { light: '#f4f3ee', dark: '#0c0d0f' };
 
 export function storedTheme(): Theme {
 	try {

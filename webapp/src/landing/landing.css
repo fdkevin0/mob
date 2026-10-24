@@ -20,7 +20,7 @@ code { font-family: var(--mono); font-size: .92em; }
 	pointer-events: none;
 	background-image: radial-gradient(circle, color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1.2px);
 	background-size: 16px 16px;
-	mask-image: linear-gradient(to bottom, var(--line-strong) 0%, transparent 85%);
+	mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
 }
 
 /* Navigation floats over the stage. */
@@ -45,7 +45,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .stage { position: sticky; top: 0; height: 100svh; overflow: hidden; }
 .stage-field { position: absolute; inset: 0; opacity: var(--field-opacity); transform-origin: 50% 50%; will-change: transform, opacity; pointer-events: none; }
 .stage-field[data-live='true'] { pointer-events: auto; }
-.hero-field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; mask-image: radial-gradient(ellipse 62% 68% at 50% 55%, var(--line-strong) 55%, transparent 100%); }
+.hero-field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; mask-image: radial-gradient(ellipse 62% 68% at 50% 55%, #000 55%, transparent 100%); }
 .calf-tip { position: absolute; z-index: 4; transform: translate(14px, -130%); padding: 6px 10px; background: var(--panel); border: 1px solid var(--line-strong); font-size: 13px; color: var(--text); white-space: nowrap; pointer-events: none; box-shadow: 4px 4px 0 rgb(0 0 0 / calc(0.53 * var(--shadow))); }
 
 .hero-copy { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 16px 6vh; will-change: transform, opacity; }

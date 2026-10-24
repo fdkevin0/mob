@@ -16,11 +16,11 @@
 	--sl-color-white: #f4f6ef;
 	--sl-color-gray-1: #eef1ea;
 	--sl-color-gray-2: #c5ccc1;
-	--sl-color-gray-3: #8b9389;
+	--sl-color-gray-3: #8f978e;
 	--sl-color-gray-4: #4b524a;
-	--sl-color-gray-5: #2a3036;
-	--sl-color-gray-6: #0b0d0f;
-	--sl-color-black: #07080a;
+	--sl-color-gray-5: #25272a;
+	--sl-color-gray-6: #111316;
+	--sl-color-black: #0c0d0f;
 }
 
 :root[data-theme='light'] {
