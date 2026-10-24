@@ -34,8 +34,15 @@ In any conversation, in every client and channel:
   level.
 - `/model default NAME` sets the default for conversations without their own.
 
-In the Web UI, choosing the model name below the message box opens a
-searchable picker instead of requiring the command. It lists every enabled
+In the Web UI, choosing the model name below the message input opens a compact,
+searchable picker above the button, without a backdrop or blocking the conversation.
+Search stays fixed above the scrolling content. The filter button reveals
+provider and free-only filters, which scroll with the model rows so short windows
+can still reach the results; each model’s details control reveals its
+full ID and capabilities. Arrow keys move between visible choices and Enter
+selects one; Enter in a nonempty search selects its first result in an expanded group,
+or does nothing if all result groups are collapsed. Clicking outside or pressing
+Escape closes it; choosing a model also closes it. It lists every enabled
 provider's models with what each can do, marks the current one, and offers
 **Follow the default** for conversations that should not pin a model. Choosing
 a model runs the same `/model` command, so commands, channels and the shared

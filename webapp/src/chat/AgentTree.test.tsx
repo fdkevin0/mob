@@ -119,11 +119,12 @@ it('decides, stops and instructs from the cards', async () => {
 	);
 	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
 	const copy = (await screen.findByText('input: {"command":"npm test"}')).closest('article')!;
-	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Always allow' }));
+	fireEvent.keyDown(within(copy as HTMLElement).getByRole('button', { name: 'More permissions…' }), { key: 'Enter' });
+	fireEvent.click(await screen.findByRole('menuitem', { name: 'Always allow across conversations' }));
 	await waitFor(() => expect(calls[0]).toEqual(['/api/conversations/c-copy/decide', { id: 'a1', approved: true, remember: 'always' }]));
 	// Clicking inside a decision does not fold the card's agents.
 	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Deny…' }));
-	fireEvent.change(within(copy as HTMLElement).getByLabelText('Why deny (optional)'), { target: { value: 'not yet' } });
+	fireEvent.change(within(copy as HTMLElement).getByLabelText('Reason for denying (optional)'), { target: { value: 'not yet' } });
 	fireEvent.click(within(copy as HTMLElement).getByRole('button', { name: 'Deny' }));
 	await waitFor(() => expect(calls[1]).toEqual(['/api/conversations/c-copy/decide', { id: 'a1', approved: false, reason: 'not yet' }]));
 	fireEvent.click(screen.getByRole('button', { name: 'Stop Codex: build' }));
@@ -147,8 +148,8 @@ it('keeps an instruction that failed to send, and approves only what it shows wh
 	);
 	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
 	const copy = (await screen.findByText('input: {"command":"npm test"}')).closest('article') as HTMLElement;
-	expect(within(copy).queryByRole('button', { name: 'Approve' })).toBeNull();
-	expect(within(copy).queryByRole('button', { name: 'Always allow' })).toBeNull();
+	expect(within(copy).queryByRole('button', { name: 'Allow once' })).toBeNull();
+	expect(within(copy).queryByRole('button', { name: 'More permissions…' })).toBeNull();
 	expect(within(copy).getByText(/open its conversation to approve it/)).toBeTruthy();
 	fireEvent.click(screen.getByRole('button', { name: 'Instruct Codex: test' }));
 	fireEvent.change(screen.getByLabelText('Instruction for the agent'), { target: { value: 'fix the flaky test' } });
@@ -208,4 +209,23 @@ it('shows how an agent said its work ended', async () => {
 	expect(outcome.dataset.outcome).toBe('rework');
 	expect(within(outcome).getByText('Retries never stop')).toBeTruthy();
 	expect(outcome.getAttribute('title')).toContain('and more');
+});
+
+it.each(['conversation', 'always'] as const)('keeps child agents expanded when granting %s permission', async scope => {
+	const calls: unknown[] = [];
+	const withChild = [...nodes, node(task('nested', 'idle', 1000, 2000, 'c-copy'))];
+	vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+		if (init?.method === 'POST') {
+			calls.push(JSON.parse(String(init.body)));
+			return Response.json({ ok: true }, { status: 202 });
+		}
+		return Response.json(withChild);
+	}));
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
+	const parent = (await screen.findByText('input: {"command":"npm test"}')).closest('article')!;
+	expect(parent.getAttribute('data-collapsed')).toBeNull();
+	fireEvent.keyDown(within(parent).getByRole('button', { name: 'More permissions…' }), { key: 'Enter' });
+	fireEvent.click(await screen.findByRole('menuitem', { name: scope === 'conversation' ? 'Allow in this conversation' : 'Always allow across conversations' }));
+	await waitFor(() => expect(calls).toEqual([{ id: 'a1', approved: true, remember: scope }]));
+	expect(parent.getAttribute('data-collapsed')).toBeNull();
 });

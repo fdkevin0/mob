@@ -84,7 +84,7 @@ it('shows every approval parameter before the decision buttons', async () => {
 		}] });
 	}));
 	render(<Workspace connection={connection} disconnect={() => {}} />);
-	const approve = await screen.findByRole('button', { name: 'Approve' });
+	const approve = await screen.findByRole('button', { name: 'Allow once' });
 	const details = approve.closest('details')!;
 	expect(details.open).toBe(true);
 	const pre = details.querySelector('pre')!;

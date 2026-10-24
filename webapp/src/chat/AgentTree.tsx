@@ -1,3 +1,4 @@
+import { ApprovalPrompt } from './ApprovalPrompt';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import type { Changes } from '@mob/client';
 import { api, type Connection } from './api';
@@ -130,45 +131,10 @@ export type Act = {
 const shownApprovals = 2;
 
 function Decision({ node, approval, act, busy }: { node: AgentNode; approval: AgentApproval; act: Act; busy: boolean }) {
-	const [denying, setDenying] = useState(false);
-	const [reason, setReason] = useState('');
-	const decide = (approved: boolean, extra?: { reason?: string; remember?: string }) => act.decide(node.conversationId, approval.id, approved, extra);
-	const deny = (e: FormEvent) => {
-		e.preventDefault();
-		void decide(false, { reason: reason.trim() || undefined });
-	};
 	return (
 		<div className="agent-approval">
-			<p className="agent-approval-tool">{approval.tool}</p>
-			{approval.text && <pre className="agent-approval-text">{approval.text}</pre>}
-			{!approval.whole && <p className="agent-more">Too long to show here; open its conversation to approve it.</p>}
-			{denying ? (
-				<form className="agent-inline" onSubmit={deny}>
-					<input aria-label="Why deny (optional)" placeholder="Why? (optional)" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus disabled={busy} />
-					<button type="submit" className="agent-button deny" disabled={busy}>
-						Deny
-					</button>
-					<button type="button" className="agent-button" onClick={() => setDenying(false)} disabled={busy}>
-						Cancel
-					</button>
-				</form>
-			) : (
-				<div className="agent-approval-actions">
-					{approval.whole && (
-						<>
-							<button type="button" className="agent-button approve" disabled={busy} onClick={() => void decide(true)}>
-								Approve
-							</button>
-							<button type="button" className="agent-button" disabled={busy} title="Approve, and allow the same request without asking from now on" onClick={() => void decide(true, { remember: 'always' })}>
-								Always allow
-							</button>
-						</>
-					)}
-					<button type="button" className="agent-button deny" disabled={busy} onClick={() => setDenying(true)}>
-						Deny…
-					</button>
-				</div>
-			)}
+			<ApprovalPrompt question={`Allow ${approval.tool}?`} request={approval.text} whole={approval.whole} busy={busy}
+				decide={(approved, reason, remember) => void act.decide(node.conversationId, approval.id, approved, { reason, remember })} />
 		</div>
 	);
 }
