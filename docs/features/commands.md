@@ -73,6 +73,9 @@ first to keep it running after exit.
   Keyboard behavior and forms remain in each UI; single-line slash input is
   checked by the service, while multiline input goes to chat without being interpreted
   as a client command. The terminal uses `client: 'tui'`.
+- In Web, a bare `/` lists only commands without a button of their own:
+  `/new`, `/list`, `/open`, `/model`, `/models`, `/approve` and `/deny` are left
+  out of that list but still complete once their name is typed.
 - Clients own their forms (plugin settings, mail compose); an action opens them.
 - Messaging channels run commands through the registry too; see
   [Channels](channels.md). After each connection the Telegram bot calls

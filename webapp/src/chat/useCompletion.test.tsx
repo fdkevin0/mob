@@ -19,6 +19,7 @@ function setup() {
     if (text === '/mo') return Response.json([{ value: '/model', label: '/model [NAME]' }, { value: '/models', label: '/models [FILTER]' }]);
     if (text === '/model ') return Response.json([{ value: 'default', label: 'default' }, { value: 'demo/echo', label: 'demo/echo' }]);
     if (text === '/models') return Response.json([{ value: '/models', label: '/models [FILTER]' }]);
+    if (text === '/') return Response.json([{ value: '/model', label: '/model [NAME]' }, { value: '/new', label: '/new' }, { value: '/compact', label: '/compact' }]);
     return Response.json([]);
   }));
   const hook = renderHook(() => {
@@ -71,4 +72,12 @@ it('does not apply suggestions computed for older text', async () => {
   act(() => { expect(result.current.onKeyDown(key('Enter'))).toBe(false); });
   act(() => { result.current.onKeyDown(key('Tab')); });
   expect(result.current.input).toBe('/models');
+});
+
+it('leaves commands the workspace has buttons for out of the bare / list, but completes them when typed', async () => {
+  const { hook: { result } } = setup();
+  act(() => result.current.setInput('/'));
+  await waitFor(() => expect(result.current.suggestions.map(s => s.value)).toEqual(['/compact']));
+  act(() => result.current.setInput('/mo'));
+  await waitFor(() => expect(result.current.suggestions.map(s => s.value)).toEqual(['/model', '/models']));
 });

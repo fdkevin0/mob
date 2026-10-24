@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { isToolUIPart } from 'ai';
 import type { Changes } from '@mob/client';
 import { useConversation } from './useConversation';
@@ -18,7 +18,18 @@ import { Dialog, DialogTrigger } from '../components/ui/dialog';
 import { api, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
+import { BrandIcon, modelBrand } from './brandIcons';
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, SpinnerIcon, StopIcon } from './icons';
+
+// What a new conversation offers to start with; a choice fills the message box, and nothing is sent until the owner sends it.
+const starters = [
+	{ label: 'Fix a bug with Codex', text: 'Ask Codex to find and fix the failing tests in my project', runner: true },
+	{ label: 'Remember something', text: 'Remember that I prefer short answers' },
+	{ label: 'Summarize a web page', text: 'Summarize this page: ', runner: true },
+	{ label: 'Explain some code', text: 'Explain what this code does:\n\n' },
+	{ label: 'Plan my week', text: 'Help me plan my week. This week I need to ' },
+];
+
 
 export function Thread({
 	connection,
@@ -78,6 +89,11 @@ export function Thread({
 	}, [dispatching, onDispatching]);
 	// The header says when Mob replies here or waits for a decision, as the sidebar does.
 	const waiting = messages.some((m) => m.parts.some((p) => isToolUIPart(p) && p.state === 'approval-requested'));
+	// Working… shows only while nothing else says Mob is at work: before the reply's first words, and between a tool's result and
+	// what Mob does next. Streaming text and a running tool's spinner say it themselves.
+	const working = busy && !quiet(messages.at(-1));
+	const composer = useRef<HTMLDivElement>(null);
+	const unseen = useUnseenApproval(composer, waiting, messages);
 	useEffect(() => {
 		if (!draft) return;
 		setInput(draft);
@@ -99,7 +115,11 @@ export function Thread({
 			live = false;
 		};
 	}, [connection]);
-	const modelLabel = model?.startsWith('demo/') ? 'Demo mode · no model calls' : model || 'Connecting…';
+	const demo = model?.startsWith('demo/');
+	// A model shows by its name, with its provider in the tooltip and its family's logo.
+	const modelLabel = demo ? 'Demo mode · no model calls' : model ? model.slice(model.indexOf('/') + 1) : 'Connecting…';
+	const brand = model && !demo ? modelBrand(model, '') : undefined;
+	const empty = messages.length === 0 && !busy;
 	const textarea = useRef<HTMLTextAreaElement>(null);
 	// The message box grows with its text up to a limit, then scrolls.
 	useLayoutEffect(() => {
@@ -128,9 +148,9 @@ export function Thread({
 			</header>
 			<ChatConversation className="conversation">
 				<ConversationContent className="conversation-content">
-					{messages.length === 0 && (
+					{empty && (
 						<ConversationEmptyState
-							className="empty-state"
+							className="empty-state thread-empty"
 							title="What’s on your mind?"
 							description="Ask a question, explore an idea, or save something to remember."
 						/>
@@ -146,15 +166,27 @@ export function Thread({
 							proceed={proceed}
 						/>
 					))}
-					{busy && (
+					{busy && remoteBusy && !streaming && !approvalBusy ? (
 						<p className="thinking" role="status">
-							{remoteBusy && !streaming && !approvalBusy ? 'A turn is running in another client…' : 'Working…'}
+							A turn is running in another client…
 						</p>
+					) : (
+						working && (
+							<p className="thinking" role="status">
+								Working…
+							</p>
+						)
 					)}
 				</ConversationContent>
 				<ConversationScrollButton />
 			</ChatConversation>
-			<div className="composer-area">
+			<div className="composer-area" ref={composer}>
+				{unseen && (
+					<button type="button" className="approval-bar" onClick={() => unseen.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+						<RaisedHandIcon /> Mob is waiting for your approval
+						<span>Review</span>
+					</button>
+				)}
 				{(failure || error) && (
 					<p className="error" role="alert">
 						{failure || error?.message}
@@ -181,7 +213,7 @@ export function Thread({
 									completion.accept(i);
 								}}
 							>
-								<span>{s.label}</span>
+								<CommandLabel label={s.label} />
 								{s.detail && <small>{s.detail}</small>}
 							</li>
 						))}
@@ -217,12 +249,14 @@ export function Thread({
 										type="button"
 										variant="ghost"
 										className="model-button"
+										aria-label={model && !demo ? model : undefined}
 										aria-haspopup="dialog"
 										aria-expanded={choosing}
 										disabled={busy}
-										title={busy ? 'Wait for the current turn to finish before switching models' : "This conversation's model; choose another without typing /model"}
+										title={busy ? 'Wait for the current turn to finish before switching models' : `${model && !demo ? model + ' · ' : ''}This conversation's model; choose another without typing /model`}
 									>
-										{modelLabel}
+										{brand && <BrandIcon brand={brand} size={14} />}
+										<span className="model-label">{modelLabel}</span>
 										<ChevronDownIcon />
 									</Button>
 								</DialogTrigger>
@@ -257,9 +291,65 @@ export function Thread({
 						)}
 					</div>
 				</form>
+				{empty && !input && (
+					<ul className="starters" aria-label="Ways to start">
+						{starters
+							.filter((s) => !s.runner || !connection.browser)
+							.slice(0, 4)
+							.map((s) => (
+								<li key={s.label}>
+									<button
+										type="button"
+										onClick={() => {
+											setInput(s.text);
+											textarea.current?.focus();
+										}}
+									>
+										{s.label}
+									</button>
+								</li>
+							))}
+					</ul>
+				)}
 			</div>
 		</>
 	);
+}
+
+// CommandLabel shows a command's name as typed, and its arguments as a quieter hint.
+function CommandLabel({ label }: { label: string }) {
+	const space = label.indexOf(' ');
+	if (space < 0) return <span className="command-name">{label}</span>;
+	return (
+		<span className="command-name">
+			{label.slice(0, space)}
+			<span className="command-args">{label.slice(space)}</span>
+		</span>
+	);
+}
+
+// quiet reports whether the end of a reply already shows Mob at work, or waiting: words arriving, a tool running or asking.
+export function quiet(last: ChatMessage | undefined) {
+	if (last?.role !== 'assistant') return false;
+	const part = last.parts.at(-1);
+	if (!part) return false;
+	if (isToolUIPart(part)) return !part.state.startsWith('output-');
+	return part.type === 'text' || part.type === 'reasoning';
+}
+
+// useUnseenApproval finds the approval card Mob waits on while it is scrolled out of view, so the composer can point to it.
+function useUnseenApproval(composer: RefObject<HTMLDivElement | null>, waiting: boolean, messages: ChatMessage[]) {
+	const [unseen, setUnseen] = useState<HTMLElement>();
+	useEffect(() => {
+		setUnseen(undefined);
+		// The card is in the thread the composer belongs to.
+		const card = waiting ? composer.current?.parentElement?.querySelector<HTMLElement>('.tool-call.waiting') : null;
+		if (!card || typeof IntersectionObserver === 'undefined') return;
+		const observer = new IntersectionObserver(([entry]) => setUnseen(entry.isIntersecting ? undefined : card));
+		observer.observe(card);
+		return () => observer.disconnect();
+	}, [composer, waiting, messages]);
+	return unseen;
 }
 
 type Decide = (approvalId: string, approved: boolean, reason?: string, remember?: string) => Promise<void> | void;
@@ -286,6 +376,7 @@ const MessageView = memo(function MessageView({
 			<p className="sr-only">{message.role === 'user' ? 'You' : 'Mob'}</p>
 			<MessageContent className={message.role === 'user' ? 'user-bubble' : 'assistant-content'}>
 				{message.parts.map((part, index) => {
+					if (part.type === 'text' && message.role === 'user') return <UserText key={index} text={part.text} />;
 					if (part.type === 'text')
 						return (
 							<MessageResponse key={index} isAnimating={animating}>
@@ -358,7 +449,7 @@ const MessageView = memo(function MessageView({
 					)
 				)}
 			</MessageContent>
-			{message.role === 'assistant' && !animating && <CopyButton message={message} />}
+			{!animating && <CopyButton message={message} what={message.role === 'user' ? 'message' : 'reply'} />}
 		</Message>
 	);
 });
@@ -394,7 +485,45 @@ function toolDetail(input: unknown) {
 	return typeof value === 'string' ? value : '';
 }
 
-function CopyButton({ message }: { message: { parts: { type: string; text?: string }[] } }) {
+// UserText shows what the owner typed as they typed it: line breaks kept, `code` and fenced blocks in a monospace face,
+// and no tables or toolbars. A long message folds to its first lines until opened.
+function UserText({ text }: { text: string }) {
+	const [open, setOpen] = useState(false);
+	const long = text.split('\n').length > foldLines || text.length > foldLength;
+	const pieces = text.split(/(```[^\n]*\n[\s\S]*?(?:\n```|$))/);
+	return (
+		<div className="user-text-wrap">
+			<div className="user-text" data-folded={(long && !open) || undefined}>
+				{pieces.map((piece, i) =>
+					i % 2 ? (
+						<pre key={i}>{piece.replace(/^```[^\n]*\n/, '').replace(/\n```$/, '')}</pre>
+					) : (
+						<span key={i}>
+							{around(piece, i > 0, i < pieces.length - 1)
+								.split(/(`[^`\n]+`)/)
+								.map((bit, j) => (j % 2 ? <code key={j}>{bit.slice(1, -1)}</code> : bit))}
+						</span>
+					),
+				)}
+			</div>
+			{long && (
+				<button type="button" className="user-text-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+					{open ? 'Show less' : 'Show more'}
+				</button>
+			)}
+		</div>
+	);
+}
+// around drops the line breaks next to a fenced block, whose own spacing replaces them.
+function around(text: string, after: boolean, before: boolean) {
+	if (after) text = text.replace(/^\n+/, '');
+	if (before) text = text.replace(/\n+$/, '');
+	return text;
+}
+const foldLines = 12;
+const foldLength = 1200;
+
+function CopyButton({ message, what }: { message: { parts: { type: string; text?: string }[] }; what: 'message' | 'reply' }) {
 	const [result, setResult] = useState<'copied' | 'failed'>();
 	useEffect(() => {
 		if (!result) return;
@@ -406,7 +535,7 @@ function CopyButton({ message }: { message: { parts: { type: string; text?: stri
 		.map((part) => part.text)
 		.join('\n\n');
 	if (!text) return null;
-	const label = result === 'copied' ? 'Copied' : result === 'failed' ? 'Copy failed' : 'Copy reply';
+	const label = result === 'copied' ? 'Copied' : result === 'failed' ? 'Copy failed' : `Copy ${what}`;
 	return (
 		<div className="message-actions">
 			<Button

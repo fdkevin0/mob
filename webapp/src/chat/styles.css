@@ -436,6 +436,15 @@
 .model-button:hover:not(:disabled) {
 	color: var(--text);
 }
+.model-button .brand-icon {
+	flex-shrink: 0;
+}
+.model-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .model-picker-footer {
 	flex-shrink: 0;
 	margin: 8px -8px -8px;
@@ -600,7 +609,11 @@
 	margin: 0 auto;
 	padding: 24px 24px 40px;
 	min-height: 100%;
-	gap: 28px;
+	gap: 16px;
+}
+/* A reply sits close under the message it answers; the next message starts a new turn further down. */
+.conversation-content > .is-assistant + .is-user {
+	margin-top: 12px;
 }
 /* The browser skips layout and paint for messages scrolled out of view, so long conversations stay smooth. */
 .conversation-content > .group:not(:nth-last-child(-n + 3)) {
@@ -617,6 +630,50 @@
 	padding: 10px 16px;
 	max-width: min(85%, 600px);
 }
+.user-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: 15px;
+	line-height: 1.6;
+}
+.user-text[data-folded] {
+	max-height: calc(1.6em * 12);
+	overflow: hidden;
+	mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+.user-text code,
+.user-text pre {
+	font-family: var(--mono);
+	font-size: 13px;
+}
+.user-text code {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.user-text pre {
+	margin: 6px 0;
+	padding: 8px 12px;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--text) 5%, transparent);
+	white-space: pre;
+	overflow-x: auto;
+	line-height: 1.55;
+}
+.user-text-more {
+	margin-top: 4px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--muted-foreground);
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+}
+.user-text-more:hover {
+	color: var(--text);
+	text-decoration: underline;
+}
 .is-assistant + .is-assistant {
 	margin-top: -16px;
 }
@@ -625,21 +682,75 @@
 }
 .message-actions {
 	display: flex;
-	margin-top: -4px;
+	margin: -10px 0 -12px;
 	gap: 2px;
 	opacity: 0;
 	transition: opacity 0.15s;
 }
-.is-assistant:hover .message-actions,
+.is-user .message-actions {
+	align-self: flex-end;
+}
+.group:hover .message-actions,
 .is-assistant:last-of-type .message-actions,
 .message-actions:focus-within {
 	opacity: 1;
+}
+/* Touch screens cannot hover, so the actions stay in view, quietly. */
+@media (hover: none) {
+	.message-actions {
+		opacity: 0.7;
+	}
 }
 .message-actions .btn {
 	min-height: 28px;
 	width: 28px;
 	padding: 0;
 	border-radius: 8px;
+}
+/* A new conversation centres its title, the message box and ways to start; the box drops to the bottom with the first message. */
+.thread-view:has(.thread-empty) .conversation {
+	flex: none;
+	margin-top: auto;
+}
+.thread-view:has(.thread-empty) .conversation-content {
+	min-height: 0;
+	padding-bottom: 8px;
+}
+.thread-view:has(.thread-empty) .composer-area {
+	margin-bottom: auto;
+	padding-bottom: 12vh;
+}
+.thread-empty {
+	padding: 0;
+}
+.starters {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	margin: 16px 0 0;
+	padding: 0;
+	list-style: none;
+}
+.starters button {
+	padding: 7px 14px;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--muted-foreground);
+	font: inherit;
+	font-size: 13px;
+	cursor: pointer;
+	transition:
+		color 0.15s,
+		border-color 0.15s,
+		background 0.15s;
+}
+.starters button:hover,
+.starters button:focus-visible {
+	color: var(--text);
+	border-color: var(--line-hover);
+	background: var(--surface);
 }
 .empty-state h3 {
 	font-size: 26px;
@@ -728,8 +839,9 @@
 }
 .tool-call.waiting {
 	padding: 10px 16px 16px;
-	background: var(--surface);
-	border: 1px solid color-mix(in srgb, var(--wait) 20%, transparent);
+	background: color-mix(in srgb, var(--wait) 4%, var(--surface));
+	border: 1px solid color-mix(in srgb, var(--wait) 35%, transparent);
+	box-shadow: inset 3px 0 0 var(--wait);
 }
 .tool-call.waiting > summary {
 	margin: 0 0 4px;
@@ -824,7 +936,7 @@
 	border-left: 1px solid var(--line-strong);
 }
 .thinking {
-	margin: -8px 0 0;
+	margin: 0;
 	font-size: 14px;
 	background: linear-gradient(90deg, var(--muted-foreground) 0%, var(--text) 50%, var(--muted-foreground) 100%);
 	background-size: 200% 100%;
@@ -913,9 +1025,35 @@
 	border-radius: 50%;
 }
 .send-button:disabled {
-	background: var(--surface-raised);
+	background: transparent;
+	border: 1px solid var(--line-strong);
 	color: var(--muted-foreground);
 	opacity: 1;
+}
+/* An approval scrolled out of view is one click away from the message box. */
+.approval-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	margin: 0 0 8px;
+	padding: 8px 14px;
+	border: 1px solid color-mix(in srgb, var(--wait) 35%, transparent);
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--wait) 8%, var(--surface));
+	color: var(--text);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+	cursor: pointer;
+}
+.approval-bar svg {
+	color: var(--wait);
+}
+.approval-bar span {
+	margin-left: auto;
+	color: var(--wait);
+	font-weight: 550;
 }
 .command-result {
 	margin: 0 0 12px;
@@ -959,9 +1097,13 @@
 	font-size: 13px;
 	overflow-wrap: anywhere;
 }
-.suggestions li span {
+.command-name {
 	font-family: var(--mono);
 	font-size: 12px;
+	color: var(--text);
+}
+.command-args {
+	color: var(--muted-foreground);
 }
 .suggestions li small {
 	color: var(--muted-foreground);
@@ -2321,4 +2463,60 @@
 	.approval-actions .btn {
 		min-height: 44px;
 	}
+}
+
+/* Code blocks and tables in replies: one frame, a quiet header, and actions that need no frame of their own. */
+.conversation-content [data-streamdown='code-block'] {
+	gap: 0;
+	padding: 0;
+	border-color: var(--line-strong);
+	border-radius: 12px;
+	background: var(--bg);
+	overflow: hidden;
+}
+.conversation-content [data-streamdown='code-block-header'] {
+	height: 36px;
+	padding: 0 12px;
+	border-bottom: 1px solid var(--line);
+	background: var(--surface-raised);
+}
+.conversation-content [data-streamdown='code-block-header'] > span {
+	margin: 0;
+}
+.conversation-content [data-streamdown='code-block-actions'] {
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.conversation-content [data-streamdown='code-block'] > div:has(> [data-streamdown='code-block-actions']) {
+	top: 4px;
+	right: 6px;
+}
+.conversation-content [data-streamdown='code-block-body'] {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.conversation-content [data-streamdown='table-wrapper'] {
+	position: relative;
+	gap: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.conversation-content [data-streamdown='table-wrapper'] > div:first-child {
+	position: absolute;
+	top: -30px;
+	right: 0;
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+.conversation-content [data-streamdown='table-wrapper']:hover > div:first-child,
+.conversation-content [data-streamdown='table-wrapper'] > div:first-child:focus-within {
+	opacity: 1;
+}
+.conversation-content [data-streamdown='table-wrapper'] > div:last-child {
+	border-color: var(--line-strong);
+	border-radius: 12px;
 }
