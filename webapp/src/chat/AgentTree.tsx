@@ -495,8 +495,11 @@ export function AgentTree({
 	changes,
 	open,
 	close,
+	browser,
 }: {
 	connection: Connection;
+	/** browser is set in the browser runner, which has no coding agents. */
+	browser?: boolean;
 	/** changes, while live, replaces refreshing on a timer: the tree reloads when something changed. */
 	changes?: Changes;
 	open: (conversationId: string) => void;
@@ -627,8 +630,9 @@ export function AgentTree({
 			)}
 			{nodes && !all.length && (
 				<p className="agents-empty">
-					No tasks yet. Ask Mob to hand coding work in a project to a coding agent; each task shows here under the conversation that
-					started it.
+					{browser
+						? 'Coding agents run on a runner, so Mob in this browser cannot start them. Connect a runner to hand coding work to Codex, Claude Agent and others.'
+						: 'No tasks yet. Ask Mob to hand coding work in a project to a coding agent; each task shows here under the conversation that started it.'}
 				</p>
 			)}
 			<div className="agents-canvas" ref={canvas}>
