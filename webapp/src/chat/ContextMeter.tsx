@@ -47,9 +47,9 @@ export function useContextUsage(connection: Connection, id: string, messages: Ch
 		let current = true;
 		api<ConversationContext>(connection, `/conversations/${encodeURIComponent(id)}/context`)
 			.then((r) => {
-				if (!current || running.current) return;
-				setShown(r.context ?? undefined);
+				if (!current) return;
 				setUsage(r.usage);
+				if (!running.current) setShown(r.context ?? undefined);
 			})
 			.catch(() => {
 				/* the meter keeps what it showed */
@@ -179,7 +179,8 @@ function Details({
 	const free = Math.max(context.limit - context.used, 0);
 	// What a prompt holds besides its messages is one part: instructions, saved facts and tool definitions.
 	const values = context.parts ? { ...context.parts, system: context.parts.system + context.parts.tools } : undefined;
-	const rows = values ? parts.filter((p) => p.key !== 'summary' || values.summary > 0) : [];
+	// Messages always show; a part the prompt has none of does not.
+	const rows = values ? parts.filter((p) => p.key === 'messages' || values[p.key] > 0) : [];
 	const warn = state === 'warn' || state === 'full';
 	let note = '';
 	if (context.agent) note = 'Reported by the coding agent, which keeps its own context and compacts it itself.';
