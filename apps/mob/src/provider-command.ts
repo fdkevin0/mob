@@ -4,8 +4,8 @@ import { ProviderRegistry, destination, displayName, endpoint, findPreset, maske
 import { fileCatalog, fileProviders } from './providers';
 import { findMagpie } from './magpie';
 
-/** needsKey reports whether requests need a key: local servers and OpenCode's free tier don't; a custom endpoint may not. */
-const needsKey = (p: Provider) => { const pr = findPreset(p.preset); return !!pr && !pr.noKey && !pr.publicKey; };
+/** needsKey reports whether requests need a key: local servers don't; a custom endpoint may not. */
+const needsKey = (p: Provider) => { const pr = findPreset(p.preset); return !!pr && !pr.noKey; };
 
 async function readLine(): Promise<string> {
 	const reader = Bun.stdin.stream().getReader();

@@ -5,11 +5,12 @@ with `/model` and `/models`. There is no automatic routing between models.
 
 ## Using it
 
-With no `providers.json`, Mob uses OpenCode Zen Free
-(`opencode/mimo-v2.6-flash-free`) with OpenCode's anonymous public key, so a
-first run needs no setup. That free model may use collected data to improve the
-model; see [OpenCode Zen privacy](https://docs.opencode.ai/docs/zen/#privacy).
-Conversations and saved facts are sent to the chosen model's provider.
+With no `providers.json`, Mob starts on the offline demo model, which echoes
+the prompt, until a provider is added. OpenRouter's `:free` models are a way to
+start without paying. OpenCode Zen is offered with the user's key for its paid
+models only: its free models are for OpenCode's own clients
+([Zen docs](https://opencode.ai/docs/zen/)), so Mob hides them. Conversations
+and saved facts are sent to the chosen model's provider.
 
 ```bash
 mob provider add deepseek --key-stdin        # presets need only a key
@@ -71,8 +72,8 @@ magpie's usage and routing rules see them as Mob's.
 
 - **Presets** are curated because models.dev has no key pages, regional or
   multi-protocol endpoints.
-- **Vendor quirks** belong to presets (OpenCode's client headers and free-tier
-  tool stubs), never to URL sniffing.
+- **Vendor quirks** belong to presets, never to URL sniffing. Mob does not
+  present itself as another vendor's client.
 - **Model lists** come from the vendor's `/models` (or `modelsURL`), else the
   preset's models.dev entry. Picks that held every listed model take in models
   listed since (`pickedFrom`). Unknown models are assumed to take tools.

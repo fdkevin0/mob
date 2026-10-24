@@ -40,12 +40,8 @@ type List = { ids: string[]; at: number; error?: string; of: string };
 /** fingerprint identifies what a model list depends on, so a provider whose endpoint or key changes is asked again. */
 const fingerprint = (p: Provider) => destination(p) + '\x00' + (p.key ?? '') + '\x00' + Object.keys(p.headers ?? {}).sort().map(k => k + '\x00' + p.headers![k]).join('\x00');
 
-/**
- * isFree tells a model that costs nothing to call: priced at zero, OpenCode
- * Zen's free tier, or a `:free` variant, which is how OpenRouter names them.
- */
-const isFree = (p: Provider, i: Info) =>
-	(i.cost?.input === 0 && i.cost.output === 0) || (p.preset === 'opencode' && openCodeFree(i.id)) || i.id.endsWith(':free');
+/** isFree tells a model that costs nothing to call: priced at zero, or a `:free` variant, which is how OpenRouter names them. */
+const isFree = (i: Info) => (i.cost?.input === 0 && i.cost.output === 0) || i.id.endsWith(':free');
 
 /** nonChat are fragments of model IDs that do not converse. */
 const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'transcribe', 'rerank', 'audio', 'realtime', 'sora'];
@@ -116,11 +112,7 @@ export class ProviderRegistry implements Models {
 		let ids = picks(p, this.listOf(p).ids ?? []);
 		const preset = findPreset(p.preset);
 		if (!ids.length && preset?.catalog) ids = this.catalog.models(preset.catalog).map(i => i.id);
-		if (preset?.publicKey && !p.key) {
-			// Without a key only the free tier answers.
-			ids = ids.filter(openCodeFree);
-			if (!ids.length && preset.default) ids = [preset.default];
-		}
+		if (preset?.id === 'opencode') ids = ids.filter(id => !openCodeFree(id));
 		return ids;
 	}
 
@@ -137,7 +129,7 @@ export class ProviderRegistry implements Models {
 		if (pref.vision !== undefined) i.vision = pref.vision;
 		if (pref.efforts?.length) i.efforts = pref.efforts;
 		if (pref.cost) i.cost = pref.cost;
-		if (isFree(p, i)) i.free = true; else delete i.free;
+		if (isFree(i)) i.free = true; else delete i.free;
 		return i;
 	}
 
@@ -147,8 +139,7 @@ export class ProviderRegistry implements Models {
 		let key = p.key ?? '';
 		const preset = findPreset(p.preset);
 		if (!key && preset) {
-			if (preset.publicKey && openCodeFree(ref.model)) key = preset.publicKey;
-			else if (preset.appKey) key = preset.appKey;
+			if (preset.appKey) key = preset.appKey;
 			else if (!preset.noKey) throw new Error(`provider ${p.id} has no API key; run: mob provider add ${p.id} --key-stdin`);
 		}
 		const proto = protocolFor(p, ref.model);
@@ -235,7 +226,7 @@ export class ProviderRegistry implements Models {
 		if (!url && endpoint(p, 'chat')) url = endpoint(p, 'chat').replace(/\/+$/, '') + '/models';
 		else if (!url) { url = endpoint(p, 'anthropic').replace(/\/+$/, '') + '/v1/models?limit=1000'; anthropicAPI = true; }
 		const preset = findPreset(p.preset);
-		const key = p.key || preset?.publicKey || preset?.appKey || '';
+		const key = p.key || preset?.appKey || '';
 		const headers = new Headers();
 		if (key) {
 			if (anthropicAPI) { headers.set('x-api-key', key); headers.set('anthropic-version', '2023-06-01'); } else headers.set('Authorization', 'Bearer ' + key);

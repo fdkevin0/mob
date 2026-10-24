@@ -28,6 +28,19 @@ test('models list which ones are free', async () => {
 	expect(group.models.map(m => [m.id, m.free ?? false])).toEqual([['meta/llama:free', true], ['openai/gpt-x', false]]);
 });
 
+test('a first run starts on the demo model, and OpenCode Zen lists only its paid models', async () => {
+	const { memoryProviders } = await import('../src');
+	expect(new ProviderRegistry(memoryProviders()).default()).toBe('demo/echo');
+	const asked: Headers[] = [];
+	const registry = new ProviderRegistry(memoryProviders({ providers: [{ id: 'opencode', preset: 'opencode', key: 'k' }] }), undefined, false, async (_, init) => {
+		asked.push(new Headers(init?.headers));
+		return Response.json({ data: [{ id: 'mimo-v2.6-flash-free' }, { id: 'big-pickle' }, { id: 'claude-x' }] });
+	});
+	const [group] = await registry.list('');
+	expect(group.models.map(m => m.id)).toEqual(['claude-x']);
+	expect(asked[0].get('x-opencode-client')).toBeNull();
+});
+
 test('the conversation list marks conversations waiting for a decision, and says when that changes', async () => {
 	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
 	const token = 't'.repeat(64);

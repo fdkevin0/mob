@@ -37,7 +37,7 @@ export class DemoModel implements Model {
 			await emit('text', result.text);
 			return result;
 		}
-		const text = '[Demo mode — no model request]\n\nReceived: ' + last.text + '\n\nUse /remember a fact to exercise persistent approval.';
+		const text = '[Demo mode — no model request]\n\nReceived: ' + last.text + '\n\nUse /remember a fact to exercise persistent approval. Add a model provider for real replies.';
 		for (const r of text) {
 			await sleep(4, signal);
 			result.text += r;

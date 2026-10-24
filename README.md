@@ -26,10 +26,11 @@ mob start / status / stop  # run the service in the background
 mob serve --demo           # foreground, with an offline demo model
 ```
 
-With no setup Mob uses a free model (OpenCode Zen). To use your own:
+With no setup Mob answers with an offline demo model. Add a model provider
+for real replies, such as OpenRouter for free models:
 
 ```bash
-mob provider add deepseek --key-stdin
+mob provider add openrouter --key-stdin
 ```
 
 Then `/models` lists models and `/model NAME` switches the conversation. Type `/`
