@@ -13,6 +13,7 @@ import { newID } from '../chat/sql';
 import { isConversationID, TransferError, type Store, type Transfer } from '../chat/store';
 import type { Tool } from '../chat/tools';
 import { publicProvider } from '../provider/provider';
+import { providerFromForm, saveProvider, type ProviderForm } from '../provider/save';
 import type { ProviderRegistry } from '../provider/registry';
 import { PluginSettings, type Section } from './configuration';
 import { Extensions, ExtensionsClosed, type Extension } from './extension';
@@ -259,6 +260,11 @@ export class Server extends ConversationService {
 		r.handle('GET /api/providers', () => {
 			const f = s.providers.providers();
 			return json(200, { default: f.default ?? '', providers: f.providers.map(publicProvider) });
+		});
+		// The web's Model provider dialog saves a provider here, as `mob provider add` does on the command line.
+		r.handle('POST /api/providers', async req => {
+			const form = await body<ProviderForm>(req, 16 << 10, ['preset', 'url', 'protocol', 'key', 'model']);
+			return json(200, await saveProvider(s.providers, providerFromForm(form), typeof form.model === 'string' ? form.model : undefined));
 		});
 		r.handle('GET /api/conversations', () => {
 			// The list says which conversations are replying or waiting for a decision, so a client can mark them.

@@ -62,6 +62,23 @@ test('the first provider added takes over from the demo default, and a model lis
 	expect(group.models.map(m => [m.id, m.tools])).toEqual([['a/no-tools:free', false], ['z/tools:free', true]]);
 });
 
+test('the web saves a model provider, which becomes the default', async () => {
+	const { memoryProviders } = await import('../src');
+	const registry = new ProviderRegistry(memoryProviders({ providers: [] }), undefined, false, async () => Response.json({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }] }));
+	const token = 't'.repeat(64);
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const server = new Server({ store, providers: registry, token, version: 'test' });
+	const save = (body: unknown) => server.fetch(new Request('http://127.0.0.1:8787/api/providers', { method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }));
+	expect(await (await save({ preset: 'deepseek', key: '' })).text()).toContain('Enter an API key.');
+	expect((await save({ preset: 'nowhere', key: 'k' })).status).toBe(400);
+	expect((await save({ preset: 'deepseek', key: 'k', extra: 1 })).status).toBe(400);
+	expect(await (await save({ preset: 'deepseek', key: ' sk-1 ', model: 'deepseek-reasoner' })).json()).toEqual({ default: 'deepseek/deepseek-reasoner', models: 2 });
+	expect(registry.providers()).toMatchObject({ default: 'deepseek/deepseek-reasoner', providers: [{ id: 'deepseek', preset: 'deepseek', key: 'sk-1' }] });
+	// A local server needs no key.
+	expect(await (await save({ preset: 'ollama', key: '' })).json()).toEqual({ default: 'ollama/deepseek-chat', models: 2 });
+	expect((await save({ preset: '', url: '', key: 'k' })).status).toBe(400);
+});
+
 test('the conversation list marks conversations waiting for a decision, and says when that changes', async () => {
 	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
 	const token = 't'.repeat(64);

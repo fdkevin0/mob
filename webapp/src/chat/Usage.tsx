@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Connection } from './api';
+import { Loading } from './Splash';
 import type { DayUsage, UsageReport } from './contracts';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
@@ -95,11 +96,7 @@ export function Usage({
 			</Tabs>
 			{error && <p role="alert">{error}</p>}
 			{!report ? (
-				!error && (
-					<p className="loading" role="status">
-						Counting tokens…
-					</p>
-				)
+				!error && <Loading label="Counting tokens…" />
 			) : report.totalTokens === 0 ? (
 				<p>No tokens were used in this period. Replies and coding agent tasks count here once they finish.</p>
 			) : (

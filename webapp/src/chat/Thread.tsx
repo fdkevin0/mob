@@ -33,6 +33,7 @@ export function Thread({
 	changes,
 	draft,
 	clearDraft,
+	addProvider,
 }: {
 	connection: Connection;
 	id: string;
@@ -48,6 +49,8 @@ export function Thread({
 	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
 	draft?: string;
 	clearDraft?: () => void;
+	/** addProvider opens the Model provider dialog from the model picker. */
+	addProvider?: () => void;
 }) {
 	const {
 		model,
@@ -232,6 +235,13 @@ export function Thread({
 										onPick={(choice) => {
 											if (run(choice ? `/model ${choice}` : '/model default')) setChoosing(false);
 										}}
+										addProvider={
+											addProvider &&
+											(() => {
+												setChoosing(false);
+												addProvider();
+											})
+										}
 									/>
 								)}
 							</Dialog>

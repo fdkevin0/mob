@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Thread } from './Thread';
+import { Loading } from './Splash';
 import { DeleteConversation } from './DeleteConversation';
 import { Sidebar, type View } from './Sidebar';
 import { ComposeIcon, MenuIcon } from './icons';
@@ -25,8 +26,8 @@ const Plugins = lazy(() => import('./Plugins').then((m) => ({ default: m.Plugins
 const Usage = lazy(() => import('./Usage').then((m) => ({ default: m.Usage })));
 const BrowserLimits = lazy(() => import('./browser/Limits').then((m) => ({ default: m.BrowserLimits })));
 const Move = lazy(() => import('./Move').then((m) => ({ default: m.Move })));
-const ModelProvider = lazy(() => import('./browser/ModelProvider').then((m) => ({ default: m.ModelProvider })));
-const panel = <div className="loading" role="status">Loading…</div>;
+const ModelProvider = lazy(() => import('./ModelProvider').then((m) => ({ default: m.ModelProvider })));
+const panel = <Loading />;
 
 // The address names what the workspace shows: a conversation as #/c/<id>, or a page such as #/usage,
 // so reloading or going back returns to it.
@@ -325,7 +326,7 @@ export function Workspace({
 				setNavigation(false);
 				setRemoving(c);
 			}}
-			provider={connection.browser ? () => { setNavigation(false); setProvider(true); } : undefined}
+			provider={() => { setNavigation(false); setProvider(true); }}
 			move={switchTo && isPublicWeb() ? () => { setNavigation(false); setMoving(true); } : undefined}
 			limits={connection.browser ? () => { setNavigation(false); setLimits(true); } : undefined}
 			keep={(on) => {
@@ -444,13 +445,12 @@ export function Workspace({
 							onAction={act}
 							draft={draft}
 							clearDraft={clearDraft}
+							addProvider={() => setProvider(true)}
 						/>
 					</div>
 				) : (
 					view === 'chat' && (
-						<div className="loading" role="status">
-							Opening workspace…
-						</div>
+						<Loading label="Opening workspace…" />
 					)
 				)}
 			</main>

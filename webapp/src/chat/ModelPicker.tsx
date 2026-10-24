@@ -4,6 +4,7 @@ import { Content as DialogContent } from '@radix-ui/react-dialog';
 import { DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { PlusIcon } from './icons';
 
 export type ModelInfo = {
 	id: string;
@@ -68,12 +69,15 @@ export function ModelPicker({
 	defaultModel,
 	onPick,
 	disabled = false,
+	addProvider,
 }: {
 	connection: Connection;
 	current?: string;
 	defaultModel?: string;
 	onPick: (model?: string) => void;
 	disabled?: boolean;
+	/** addProvider opens the Model provider dialog, for models the configured providers do not offer. */
+	addProvider?: () => void;
 }) {
 	const panel = useRef<HTMLDivElement>(null);
 	const [filtersOpen, setFiltersOpen] = useState(false);
@@ -204,9 +208,22 @@ export function ModelPicker({
 					</section>
 				))}
 				{visible && visible.length === 0 && (
-					<p className="muted">{freeOnly && !needle ? 'No free models. OpenRouter lists free ones with names ending in :free.' : `No ${freeOnly ? 'free ' : ''}models match “${query.trim()}”.`}</p>
+					<p className="muted">
+						{groups?.length === 0
+							? 'No model provider is set up yet. Add one to choose from its models.'
+							: freeOnly && !needle
+								? 'No free models. OpenRouter lists free ones with names ending in :free.'
+								: `No ${freeOnly ? 'free ' : ''}models match “${query.trim()}”.`}
+					</p>
 				)}
 			</div>
+			{addProvider && (
+				<div className="model-picker-footer">
+					<Button type="button" variant={groups?.length === 0 ? 'primary' : 'outline'} className="model-add-provider" onClick={addProvider}>
+						<PlusIcon /> Add a model provider
+					</Button>
+				</div>
+			)}
 		</DialogContent>
 	);
 }

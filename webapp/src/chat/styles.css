@@ -502,6 +502,17 @@
 .model-button:hover:not(:disabled) {
 	color: var(--text);
 }
+.model-picker-footer {
+	flex-shrink: 0;
+	margin: 8px -8px -8px;
+	padding: 8px;
+	border-top: 1px solid var(--line);
+}
+.model-add-provider {
+	width: 100%;
+	gap: 8px;
+	font-size: 13px;
+}
 .model-filters {
 	display: flex;
 	gap: 8px;
@@ -1091,24 +1102,92 @@
 	padding: 12px 24px;
 }
 .loading {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	min-height: 160px;
 	margin: auto;
 	color: var(--muted-foreground);
+	font-size: 13.5px;
 }
 .startup-error {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	user-select: text;
 }
+/* The local sign-in: one card in the middle of the window. */
 .connect {
-	width: min(480px, 100%);
-	margin: 10vh auto;
-	padding: 28px;
+	min-height: 100dvh;
+	display: grid;
+	place-items: center;
+	padding: 24px 16px;
+	background: var(--bg);
+}
+.connect-card {
+	width: min(440px, 100%);
+	padding: 32px;
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	background: var(--panel);
+	box-shadow: 0 24px 60px -32px rgb(0 0 0 / 0.45);
 }
 .connect h1 {
-	font-size: 36px;
+	font-size: 30px;
 	font-weight: 560;
-	letter-spacing: -0.04em;
-	margin: 32px 0 16px;
+	letter-spacing: -0.035em;
+	margin: 28px 0 8px;
+}
+.connect-card .btn {
+	width: 100%;
+	height: 40px;
+}
+/* What fills the window while Mob connects or the workspace opens. */
+.splash {
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
+	padding: 24px 16px;
+	background: var(--bg);
+	text-align: center;
+}
+.splash-calf {
+	animation: splash-breathe 2.4s ease-in-out infinite;
+}
+@keyframes splash-breathe {
+	50% {
+		transform: translateY(-3px);
+		opacity: 0.85;
+	}
+}
+.splash-label {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	color: var(--muted-foreground);
+	font-size: 13.5px;
+}
+.splash-title {
+	margin: 0;
+	font-size: 22px;
+	font-weight: 560;
+	letter-spacing: -0.02em;
+}
+.splash .startup-error {
+	max-width: 560px;
+	margin: 0;
+	color: var(--muted-foreground);
+	font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.splash-calf {
+		animation: none;
+	}
 }
 :is(.connect, .connect-dialog) p {
 	color: var(--muted-foreground);

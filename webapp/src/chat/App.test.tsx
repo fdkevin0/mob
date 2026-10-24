@@ -454,6 +454,24 @@ it('frees the sidebar when the open conversation is chosen again while another i
   window.history.replaceState(null, '', '/');
 });
 
+it('shows the calf while it connects to Mob on this computer, not a form about to go away', async () => {
+  window.history.replaceState(null, '', '/');
+  localStorage.setItem('mob-token', 'saved');
+  let answer!: (r: Response) => void;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('/config')) return new Promise<Response>(resolve => { answer = resolve; });
+    if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
+    if (url.endsWith('/conversations')) return Promise.resolve(Response.json([]));
+    return Promise.resolve(Response.json({ messages: [], active: false, model: 'demo/echo' }));
+  }));
+  render(<App />);
+  expect((await screen.findByRole('status')).textContent).toContain('Connecting to Mob…');
+  expect(screen.queryByRole('button', { name: /Open workspace|Connecting/ })).toBeNull();
+  await waitFor(() => expect(answer).toBeDefined());
+  answer(Response.json({ defaultModel: 'demo/echo' }));
+  await screen.findByLabelText('Message');
+});
+
 it('starts a new conversation only with its first message, and renames and deletes conversations', async () => {
   window.history.replaceState(null, '', '/');
   window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };

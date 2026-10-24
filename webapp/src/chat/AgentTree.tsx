@@ -6,6 +6,7 @@ import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '../components/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
 import { tokens } from './Usage';
+import { Loading } from './Splash';
 import {
 	AlertIcon,
 	CheckIcon,
@@ -599,9 +600,7 @@ export function AgentTree({
 				</div>
 			)}
 			{!nodes && !error && (
-				<div className="loading" role="status">
-					Loading agents…
-				</div>
+				<Loading label="Loading agents…" />
 			)}
 			{nodes && !all.length && (
 				<p className="agents-empty">
