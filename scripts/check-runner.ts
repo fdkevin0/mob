@@ -105,7 +105,7 @@ try {
 	assert.equal((await originalFetch(origin + '/api/runners', { method: 'POST', headers: { Cookie: cookies.alice } })).status, 403);
 
 	const binary = join(dir, 'mob');
-	const build = spawnSync('go', ['build', '-o', binary, './cmd/mob'], { stdio: 'inherit' });
+	const build = spawnSync('bun', ['apps/mob/scripts/build.ts', '--outfile', binary], { stdio: 'inherit' });
 	assert.equal(build.status, 0);
 	await writeFile(join(dir, 'config.yaml'), 'demo: true\n', { mode: 0o600 });
 	const env = {

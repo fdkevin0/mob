@@ -57,6 +57,7 @@
     "build:desktop": "bun run --cwd apps/desktop package",
     "test:desktop": "bun run --cwd apps/desktop typecheck && bun run --cwd apps/desktop test",
     "test:go": "go test ./...",
+    "test:core": "bun run --cwd packages/core typecheck && bun run --cwd packages/core test && bun run --cwd apps/mob typecheck && bun run --cwd apps/mob test",
     "test:integration": "bun scripts/check-chat.ts",
     "test:runner": "tsc -p worker && bun scripts/check-runner.ts",
     "generate:contracts": "go run ./cmd/contracts > packages/client/src/contracts.ts"

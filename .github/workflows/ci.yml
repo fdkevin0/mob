@@ -84,8 +84,21 @@ jobs:
       - name: Build public site
         run: bun run build:web
 
+  core:
+    name: TypeScript core and host
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Typecheck and test
+        run: bun run test:core
+
   integration:
-    name: Go ↔ AI SDK integration
+    name: Host ↔ AI SDK integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -97,9 +110,13 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      # The host embeds the web UI, so it is built first.
+      - run: bun run build
       # The script builds the CLI itself, starts it in demo mode and drives it
       # with the AI SDK client the web UI uses.
       - name: Check chat, commands and approvals end to end
         run: bun run test:integration
       - name: Check DSH plugins and MCP bridge
         run: bun run test:dsh
+      - name: Check the runner over the encrypted relay
+        run: bun run test:runner
