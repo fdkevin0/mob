@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { authClient, errorCode, loadSite } from '../landing/auth';
 import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
@@ -96,14 +96,20 @@ function SignInMethods() {
 		} catch (e) { setError(errorText(e)); }
 		setBusy(undefined);
 	}
+	// One request at a time: a second Disconnect sent before the list refreshes
+	// would find only the last way to sign in left and be refused.
+	const working = useRef(false);
 	async function disconnect(provider: Provider, account: Linked) {
-		if (!window.confirm(`Disconnect ${providerNames[provider]}? Mob in the browser stops using its models.`)) return;
+		if (working.current || !window.confirm(`Disconnect ${providerNames[provider]}? Mob in the browser stops using its models.`)) return;
+		working.current = true;
 		setBusy(provider); setError('');
 		try {
 			const result = await authClient.unlinkAccount({ accountId: account.id });
 			if (result.error) setError(result.error.code === 'FAILED_TO_UNLINK_LAST_ACCOUNT' ? 'This is how you sign in, so it stays connected.' : result.error.message || 'Could not disconnect.');
-			else load();
 		} catch (e) { setError(errorText(e)); }
+		// The list is read again either way, so the page shows what the server keeps.
+		load();
+		working.current = false;
 		setBusy(undefined);
 	}
 	const rows: Provider[] = cloudflare || find('cloudflare') ? ['github', 'cloudflare'] : ['github'];
