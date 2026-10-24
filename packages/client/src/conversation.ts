@@ -49,7 +49,7 @@ export class ConversationClient {
 	private inputRevision = 0;
 	// stale is set when history may have changed but could not be reloaded yet; the next tick reloads it.
 	private stale = false;
-	private pendingSend?: { requestId: string; text: string; inputRevision: number; settled: boolean; uncertain: boolean };
+	private pendingSend?: { requestId: string; text: string; inputRevision: number; preserveInput: boolean; settled: boolean; uncertain: boolean };
 
 	constructor(
 		private readonly options: {
@@ -217,14 +217,14 @@ export class ConversationClient {
 					this.pendingSend = undefined;
 					this.chat.clearError();
 					this.update({
-						input: this.inputRevision === pending.inputRevision && this.state.input === pending.text ? '' : this.state.input,
+						input: !pending.preserveInput && this.inputRevision === pending.inputRevision && this.state.input === pending.text ? '' : this.state.input,
 						failure: this.state.recovery ? '' : this.state.failure,
 						recovery: undefined,
 					});
 				} else {
 					this.update({
 						recovery: { requestId: pending.requestId, text: pending.text },
-						input: this.inputRevision === pending.inputRevision && !this.state.input ? pending.text : this.state.input,
+						input: !pending.preserveInput && this.inputRevision === pending.inputRevision && !this.state.input ? pending.text : this.state.input,
 						failure: 'Delivery not confirmed. Original message retained for recovery; it was not resent.',
 					});
 				}
@@ -256,10 +256,12 @@ export class ConversationClient {
 				// the original returns to an untouched editor so it is not lost.
 				const pending = this.pendingSend;
 				if (pending) {
-					this.recoveryFailure += ' · Delivery not confirmed yet. Original message kept in the editor; it was not resent.';
+					this.recoveryFailure += pending.preserveInput
+						? ' · Delivery not confirmed yet; it was not resent.'
+						: ' · Delivery not confirmed yet. Original message kept in the editor; it was not resent.';
 					this.update({
 						failure: this.recoveryFailure,
-						input: this.inputRevision === pending.inputRevision && !this.state.input ? pending.text : this.state.input,
+						input: !pending.preserveInput && this.inputRevision === pending.inputRevision && !this.state.input ? pending.text : this.state.input,
 					});
 				} else this.update({ failure: this.recoveryFailure });
 			}
@@ -318,7 +320,7 @@ export class ConversationClient {
 		this.chat.clearError();
 		this.update({ ...(preserveInput ? {} : { input: '' }), failure: '', commandResult: undefined, recovery: undefined });
 		if (!text.startsWith('/') || /[\r\n]/.test(text)) {
-			await this.send(text);
+			await this.send(text, preserveInput);
 			return;
 		}
 		this.running = true;
@@ -333,7 +335,7 @@ export class ConversationClient {
 			if (!this.active || generation !== this.generation) return;
 			this.running = false;
 			this.update({ commandResult: result.markdown });
-			if (!result.handled) await this.send(text);
+			if (!result.handled) await this.send(text, preserveInput);
 			else if (result.action?.kind === 'decide')
 				await this.decide(result.action.approvalId ?? '', result.action.approved ?? false, result.action.reason, result.action.remember);
 			else if (result.action) this.options.onAction?.(result.action);
@@ -357,11 +359,11 @@ export class ConversationClient {
 		this.recoveryFailure = '';
 		this.chat.clearError();
 		this.update({ failure: '', recovery: undefined });
-		await this.send('Continue');
+		await this.send('Continue', true);
 	};
 
-	private async send(text: string) {
-		const pending = { requestId: generateId(), text, inputRevision: this.inputRevision, settled: false, uncertain: false };
+	private async send(text: string, preserveInput: boolean) {
+		const pending = { requestId: generateId(), text, inputRevision: this.inputRevision, preserveInput, settled: false, uncertain: false };
 		this.pendingSend = pending;
 		try {
 			await this.chat.sendMessage({ id: pending.requestId, role: 'user', parts: [{ type: 'text', text }] });

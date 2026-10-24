@@ -632,7 +632,7 @@ it('reloads on changes instead of polling while the change stream is live, and p
 	expect(reads.length).toBeGreaterThanOrEqual(dropped + 2);
 });
 
-it.each([200, 500])('preserves the composer during a picker command returning %s', async (status) => {
+it.each([200, 500])('preserves the composer during a directly handled command returning %s', async (status) => {
 	const client = new MobClient(connection, {
 		fetch: async (url) => {
 			if (String(url).endsWith('/commands/run')) return Response.json(status === 200 ? { handled: true } : { error: 'switch failed' }, { status });
@@ -647,4 +647,50 @@ it.each([200, 500])('preserves the composer during a picker command returning %s
 	session.setInput('');
 	await session.submit('/model default', { preserveInput: true });
 	expect(session.getSnapshot().input).toBe('');
+});
+
+for (const outcome of ['absent', 'accepted', 'offline'] as const) {
+	it.each(['', 'Keep my draft', '/model demo/echo'])('preserves picker draft %j when chat delivery is ' + outcome, async (draft) => {
+		let sent: { requestId: string; text: string } | undefined;
+		const client = new MobClient(connection, {
+			fetch: async (url, options) => {
+				if (String(url).endsWith('/commands/run')) return Response.json({ handled: false });
+				if (String(url).endsWith('/chat')) {
+					sent = JSON.parse(String(options?.body));
+					throw new TypeError('connection dropped');
+				}
+				if (sent && outcome === 'offline') throw new TypeError('history unavailable');
+				return Response.json({
+					...initial,
+					messages: sent && outcome === 'accepted'
+						? [{ id: sent.requestId, role: 'user', parts: [{ type: 'text', text: sent.text }] }]
+						: [],
+				});
+			},
+		});
+		const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+		cleanups.push(session.start());
+		session.setInput(draft);
+		await session.submit('/model demo/echo', { preserveInput: true });
+		expect(sent?.text).toBe('/model demo/echo');
+		if (outcome === 'accepted') await vi.waitFor(() => expect(session.getSnapshot().messages).toHaveLength(1));
+		else await vi.waitFor(() => expect(session.getSnapshot().failure).toContain('Delivery not confirmed'));
+		expect(session.getSnapshot().input).toBe(draft);
+		if (outcome === 'offline') expect(session.getSnapshot().failure).not.toContain('kept in the editor');
+	});
+}
+
+it.each(['', 'Continue'])('keeps the composer %j when Continue cannot be delivered', async (draft) => {
+	const client = new MobClient(connection, {
+		fetch: async (url) => {
+			if (String(url).endsWith('/chat')) throw new TypeError('connection dropped');
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	session.setInput(draft);
+	await session.proceed();
+	expect(session.getSnapshot().recovery?.text).toBe('Continue');
+	expect(session.getSnapshot().input).toBe(draft);
 });

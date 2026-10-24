@@ -342,7 +342,8 @@ it('switches the conversation model from the header picker', async () => {
       { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', tools: true },
       { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner', tools: true, reasoning: true },
     ] }]));
-    if (url.endsWith('/commands/run')) { run = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ handled: true, markdown: 'Model switched.' })); }
+    if (url.endsWith('/commands/run')) { run = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ handled: false })); }
+    if (url.endsWith('/chat')) return Promise.resolve(new Response('data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }));
     return Promise.resolve(Response.json({ messages: [], active: false, model: 'deepseek/deepseek-chat' }));
   });
   vi.stubGlobal('fetch', fetchMock);

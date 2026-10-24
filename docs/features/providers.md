@@ -40,7 +40,9 @@ provider's models with what each can do, marks the current one, and offers
 **Follow the default** for conversations that should not pin a model. Choosing
 a model runs the same `/model` command, so commands, channels and the shared
 client remain the single implementation of model switching. Picker commands
-preserve the message draft even if switching fails. Model choices are disabled
+preserve the message draft even if switching fails or delivery remains uncertain
+after a dropped connection. Recovery never inserts a picker command into the
+message box. Model choices are disabled
 while a turn or command is busy. A provider whose model list fails stays visible
 with its error, including when search or the free-only filter is active.
 
