@@ -127,6 +127,12 @@ export class Server extends ConversationService {
 			if (p.source) this.tools.registerSource(p.source);
 			if (p.entries) this.tools.registerEntries(p.entries);
 			if (p.background) this.extensions.register(p.background);
+			// The router exists before any plugin, so each plugin's routes join it as the plugin does.
+			for (const route of p.routes ?? []) {
+				this.routes.handle(`${route.method} /api/plugins/${p.name}/${route.path}`, async req => {
+					try { return json(200, await route.handle(req)); } catch (e) { return failure(e, 502); }
+				});
+			}
 		}
 	}
 
@@ -245,11 +251,6 @@ export class Server extends ConversationService {
 		r.handle('POST /api/plugins/{plugin}/test', async (req, p) => {
 			try { return json(200, await s.testPlugin(p.plugin, req.signal)); } catch (e) { return failure(e, 502); }
 		});
-		for (const plugin of s.plugins) for (const route of plugin.routes ?? []) {
-			r.handle(`${route.method} /api/plugins/${plugin.name}/${route.path}`, async req => {
-				try { return json(200, await route.handle(req)); } catch (e) { return failure(e, 502); }
-			});
-		}
 		r.handle('GET /api/config', () => json(200, { defaultModel: s.providers.default(), demo: s.providers.demo }));
 		r.handle('GET /api/models', async (req, _, url) => json(200, await s.providers.list(url.searchParams.get('q') ?? '', req.signal)));
 		r.handle('GET /api/providers', () => {
