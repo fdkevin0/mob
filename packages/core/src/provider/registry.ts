@@ -48,7 +48,8 @@ export class ProviderRegistry implements Models {
 	private lists = new Map<string, List>();
 
 	/** demo makes the offline model the default, for MOB_DEMO. */
-	constructor(private storage: ProvidersStorage = memoryProviders(), readonly catalog = new Catalog(), public demo = false, private fetcher: Fetch = fetch) {
+	// A browser's fetch throws when called as another object's method, so the default calls it on its own.
+	constructor(private storage: ProvidersStorage = memoryProviders(), readonly catalog = new Catalog(), public demo = false, private fetcher: Fetch = (input, init) => fetch(input, init)) {
 		const f = storage.read();
 		if (f) validateProviders(f);
 		// A missing file is the initial configuration.

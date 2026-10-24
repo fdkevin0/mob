@@ -260,9 +260,15 @@ one closes.
 The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go
 straight from the browser to the provider, so they work only with providers
-that allow cross-origin requests. There is no way to add a provider key in
-the browser yet, so it uses the default OpenCode Zen free tier, or
-`/model demo/echo`. Coding agents, the sandbox, stdio MCP
+that allow cross-origin requests; OpenCode Zen does not, so the browser
+runner starts on the offline demo model. **Model provider** in the sidebar
+saves one provider: a preset (OpenAI, Anthropic, OpenRouter and other vendors
+that take a key) or a custom OpenAI Chat Completions or Anthropic Messages
+base URL, with its API key and optionally a model. Saving lists the
+provider's models and makes the named model, or the first listed, the
+default (`POST /api/plugins/browser/provider`). An Anthropic-only provider is
+sent `anthropic-dangerous-direct-browser-access`. The key stays in the
+browser's database. Coding agents, the sandbox, stdio MCP
 servers, messaging channels and schedules need a runner, and Plugins & cloud
 services is hidden. Mob stops when the tab closes.
 

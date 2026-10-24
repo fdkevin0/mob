@@ -24,6 +24,7 @@ const errorText = (error: unknown) =>
 const AgentTree = lazy(() => import('./AgentTree').then((m) => ({ default: m.AgentTree })));
 const Plugins = lazy(() => import('./Plugins').then((m) => ({ default: m.Plugins })));
 const Usage = lazy(() => import('./Usage').then((m) => ({ default: m.Usage })));
+const ModelProvider = lazy(() => import('./browser/ModelProvider').then((m) => ({ default: m.ModelProvider })));
 const panel = <div className="loading" role="status">Loading…</div>;
 
 // The address names the open conversation, as #/c/<id>, so reloading or going back returns to it.
@@ -54,6 +55,7 @@ export function Workspace({
 	const [plugins, setPlugins] = useState(false);
 	const [usage, setUsage] = useState(false);
 	const [agents, setAgents] = useState(false);
+	const [provider, setProvider] = useState(false);
 	const [navigation, setNavigation] = useState(false);
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
@@ -245,6 +247,20 @@ export function Workspace({
 			>
 				Agents
 			</Button>
+			{/* The browser runner has no `mob provider add`; its provider is set here. */}
+			{connection.browser && (
+				<Button
+					variant="ghost"
+					className="sidebar-plugins"
+					disabled={busy}
+					onClick={() => {
+						setNavigation(false);
+						setProvider(true);
+					}}
+				>
+					Model provider
+				</Button>
+			)}
 			{/* Channels and cloud services run in the background, which a browser tab cannot. */}
 			{!connection.browser && (
 				<Button
@@ -340,6 +356,19 @@ export function Workspace({
 		);
 	return (
 		<div className="workspace">
+			{provider && (
+				<Suspense fallback={null}>
+					<ModelProvider
+						connection={connection}
+						open={provider}
+						onOpenChange={setProvider}
+						onSaved={() => {
+							// The open conversation follows the new default, which its picker shows once reloaded.
+							if (selected) void load(selected.id).then((snapshot) => show(selected.id, snapshot, true)).catch((e) => setError(errorText(e)));
+						}}
+					/>
+				</Suspense>
+			)}
 			<aside className="sidebar">
 				<div className="sidebar-brand">
 					<Logo />

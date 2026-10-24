@@ -5,6 +5,7 @@ import init from '@sqlite.org/sqlite-wasm';
 import { ProviderRegistry, Server, Store, type ProvidersFile, type ProvidersStorage } from '@mob/core';
 import { openWasm } from '@mob/core/sqlite/wasm';
 import type { FromWorker, ToWorker } from './protocol';
+import { browserProviders, providerPlugin } from './providers';
 
 // The page's DOM types describe a worker's self closely enough for these two.
 declare const self: { postMessage(message: FromWorker, transfer: Transferable[]): void; onmessage: ((event: MessageEvent<ToWorker>) => void) | null };
@@ -14,9 +15,10 @@ const providersKey = 'providers.json';
 
 // providers.json is a setting of the browser's own database.
 function storedProviders(store: Store): ProvidersStorage {
+	const read = () => store.setting<ProvidersFile>(providersKey) ?? browserProviders();
 	return {
-		read: () => store.setting<ProvidersFile>(providersKey),
-		update: change => { const f = change(store.setting<ProvidersFile>(providersKey)); store.saveSetting(providersKey, f); return f; },
+		read,
+		update: change => { const f = change(read()); store.saveSetting(providersKey, f); return f; },
 	};
 }
 
@@ -48,7 +50,7 @@ async function start(token: string) {
 	}
 	const store = new Store(openWasm(db), 'web').open();
 	const providers = new ProviderRegistry(storedProviders(store));
-	const server = new Server({ store, providers, token, version: 'web' });
+	const server = new Server({ store, providers, token, version: 'web' }, [providerPlugin(providers)]);
 	return { server, persistent };
 }
 

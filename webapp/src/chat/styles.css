@@ -724,7 +724,17 @@
 	margin: 16px 0;
 	font-size: 13px;
 }
-.plugin-field select {
+.provider-form {
+	border: 0;
+	padding: 0;
+	margin: 0;
+}
+.provider-form select {
+	width: 100%;
+	margin: 8px 0 20px;
+}
+.plugin-field select,
+.provider-form select {
 	border: 1px solid var(--input);
 	border-radius: var(--radius);
 	background: var(--bg);
