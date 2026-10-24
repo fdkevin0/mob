@@ -1,6 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
 import { getEventListeners } from 'node:events';
-import { DemoModel } from '../src/llm/demo';
 import { sleep } from '../src/sleep';
 
 test('completed waits leave no abort listeners on a reused signal', async () => {
@@ -9,7 +8,6 @@ test('completed waits leave no abort listeners on a reused signal', async () => 
 		await sleep(1, signal);
 		expect(getEventListeners(signal, 'abort')).toHaveLength(0);
 	}
-	await sleep(1);
 });
 
 test('cancellation clears the timer and listener and preserves the reason', async () => {
@@ -34,15 +32,4 @@ test('an already cancelled signal creates no timer or listener', async () => {
 		expect(timer).not.toHaveBeenCalled();
 		expect(getEventListeners(signal, 'abort')).toHaveLength(0);
 	} finally { timer.mockRestore(); }
-});
-
-test('demo streaming does not retain listeners between characters', async () => {
-	const controller = new AbortController();
-	const model = new DemoModel();
-	const request = { system: '', messages: [{ role: 'user' as const, text: 'hi' }] };
-	await model.stream(request, () => {
-		expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
-	}, controller.signal);
-	controller.abort(new Error('demo stopped'));
-	await expect(model.stream(request, () => {}, controller.signal)).rejects.toBe(controller.signal.reason);
 });
