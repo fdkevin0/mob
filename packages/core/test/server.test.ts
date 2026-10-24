@@ -41,6 +41,22 @@ test('a first run starts on the demo model, and OpenCode Zen lists only its paid
 	expect(asked[0].get('x-opencode-client')).toBeNull();
 });
 
+test('the first provider added takes over from the demo default, and a model listed without tools says so', async () => {
+	const { adoptDefault, initialProviders, memoryProviders } = await import('../src');
+	const f = initialProviders();
+	adoptDefault(f, { id: 'openrouter', preset: 'openrouter', key: 'k' }, ['a/x', 'b/y']);
+	expect(f.default).toBe('openrouter/a/x');
+	adoptDefault(f, { id: 'deepseek', preset: 'deepseek', key: 'k' }, ['deepseek-chat']);
+	expect(f.default).toBe('openrouter/a/x');
+	const none = initialProviders();
+	adoptDefault(none, { id: 'work', chat: 'https://llm.example/v1' }, []);
+	expect(none.default).toBeUndefined();
+	const listed = { data: [{ id: 'a/no-tools:free', supported_parameters: ['temperature'] }, { id: 'z/tools:free', supported_parameters: ['tools'] }] };
+	const registry = new ProviderRegistry(memoryProviders({ providers: [{ id: 'openrouter', preset: 'openrouter', key: 'k' }] }), undefined, false, async () => Response.json(listed));
+	const [group] = await registry.list('');
+	expect(group.models.map(m => [m.id, m.tools])).toEqual([['a/no-tools:free', false], ['z/tools:free', true]]);
+});
+
 test('the conversation list marks conversations waiting for a decision, and says when that changes', async () => {
 	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
 	const token = 't'.repeat(64);

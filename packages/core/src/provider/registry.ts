@@ -49,6 +49,8 @@ const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'tr
 export class ProviderRegistry implements Models {
 	private file: ProvidersFile;
 	private lists = new Map<string, List>();
+	/** noTools holds, per provider, the models whose vendor list says they take no tools (OpenRouter's supported_parameters). */
+	private noTools = new Map<string, Set<string>>();
 
 	/** demo makes the offline model the default, for MOB_DEMO. */
 	// A browser's fetch throws when called as another object's method, so the default calls it on its own.
@@ -125,6 +127,7 @@ export class ProviderRegistry implements Models {
 		if (pref.context && pref.context > 0) i.context = pref.context;
 		if (pref.output && pref.output > 0) i.output = pref.output;
 		if (pref.reasoning !== undefined) i.reasoning = pref.reasoning;
+		if (this.noTools.get(p.id)?.has(id)) i.tools = false;
 		if (pref.tools !== undefined) i.tools = pref.tools;
 		if (pref.vision !== undefined) i.vision = pref.vision;
 		if (pref.efforts?.length) i.efforts = pref.efforts;
@@ -238,15 +241,17 @@ export class ProviderRegistry implements Models {
 			response = await this.fetcher(url, { headers, redirect: 'manual', signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
 		} catch { throw new Error(p.id + ': model list unavailable'); }
 		if (response.status !== 200) throw new Error(p.id + ': ' + (await statusError(response, secrets(key, p.headers))).message);
-		let body: { data?: { id?: unknown }[] };
+		let body: { data?: { id?: unknown; supported_parameters?: unknown }[] };
 		try { body = JSON.parse((await response.text()).slice(0, 4 << 20)); } catch { throw new Error(p.id + ': invalid model list'); }
-		const ids: string[] = [];
+		const ids: string[] = [], noTools = new Set<string>();
 		for (const m of body.data ?? []) {
 			const id = typeof m.id === 'string' ? m.id : '';
 			const lower = id.toLowerCase();
 			if (!id || id.length > 256 || /[\r\n\0 ]/.test(id) || nonChat.some(s => lower.includes(s))) continue;
 			if (!ids.includes(id)) ids.push(id);
+			if (Array.isArray(m.supported_parameters) && !m.supported_parameters.includes('tools')) noTools.add(id);
 		}
+		this.noTools.set(p.id, noTools);
 		return ids.sort();
 	}
 }
