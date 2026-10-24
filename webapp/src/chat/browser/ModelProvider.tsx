@@ -7,12 +7,13 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../../com
 import type { OpenRouterSignIn, ProviderForm } from './providers';
 import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from './openrouter';
 
-// The presets a browser can call: vendors that need a key. The model list
+// The presets a browser can call: vendors that need a key. OpenRouter leads,
+// since its sign-in is the browser's way to free models. The model list
 // comes from the vendor once the key is saved.
 const services = [
+	{ id: 'openrouter', name: 'OpenRouter (free models)' },
 	{ id: 'openai', name: 'OpenAI' },
 	{ id: 'anthropic', name: 'Anthropic' },
-	{ id: 'openrouter', name: 'OpenRouter' },
 	{ id: 'deepseek', name: 'DeepSeek' },
 	{ id: 'google', name: 'Google Gemini' },
 	{ id: 'moonshot', name: 'Kimi' },
@@ -24,7 +25,7 @@ type Saved = { default: string; providers: { id: string; name?: string; key?: st
 
 /** ModelProvider sets the model provider of the browser runner, which has no `mob provider add`. */
 export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn }: { connection: Connection; open: boolean; onOpenChange: (open: boolean) => void; onSaved?: (model: string) => void; signIn?: OpenRouterSignIn }) {
-	const [form, setForm] = useState<ProviderForm>({ preset: 'openai', url: '', protocol: 'chat', key: '', model: '' });
+	const [form, setForm] = useState<ProviderForm>({ preset: 'openrouter', url: '', protocol: 'chat', key: '', model: '' });
 	const [saved, setSaved] = useState<Saved>();
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
@@ -84,7 +85,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 						</>}
 						{form.preset === 'openrouter' && <>
 							<Button type="button" variant="outline" className="provider-signin" onClick={() => void startOpenRouter().catch(e => setError(String(e)))}>Sign in with OpenRouter</Button>
-							<p>OpenRouter creates a key for Mob in your account, which you can limit or revoke there. Or paste a key:</p>
+							<p>OpenRouter creates a key for Mob in your account, which you can limit or revoke there. Mob starts on one of its free models, which have daily limits; pick a paid one in the model picker. Or paste a key:</p>
 						</>}
 						<Label htmlFor="provider-key">API key</Label>
 						<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required />

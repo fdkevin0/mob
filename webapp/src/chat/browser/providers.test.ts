@@ -58,3 +58,9 @@ it('keeps a model ID the vendor lists even when it starts with the provider name
 	await save({ preset: 'openrouter', key: 'sk-or', model: 'openrouter/anthropic/claude-x' });
 	expect(registry.default()).toBe('openrouter/anthropic/claude-x');
 });
+
+it('starts OpenRouter on a free model that takes tools', async () => {
+	const { registry, save } = setup(Response.json({ data: [{ id: 'openrouter/auto' }, { id: 'meta/llama:free' }, { id: 'openai/gpt-x' }] }));
+	expect(await (await save({ preset: 'openrouter', key: 'sk-or' })).json()).toEqual({ default: 'openrouter/meta/llama:free', models: 3 });
+	expect(registry.default()).toBe('openrouter/meta/llama:free');
+});
