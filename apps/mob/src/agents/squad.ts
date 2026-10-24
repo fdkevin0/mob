@@ -131,18 +131,21 @@ export async function startSquad(svc: Service, conversation: string, input: Requ
 	return { reviewers: started, status: 'started; Mob gives you their reports once they all end', ...failures.length ? { failed: failures } : {} };
 }
 
-/** settleSquad checks the reports of task t's squad once all its reviewers have started and ended, apart from any other sub-tasks of t. */
+/** settleSquad checks the reports of task t's squad once all its reviewers have started and ended, their turns too, apart from any other sub-tasks of t. */
 export function settleSquad(svc: Service, t: Task) {
 	const sq = svc.squads.get(t.id);
 	if (!sq || sq.starting) return;
 	const reviewers: Task[] = [];
 	for (const id of sq.reviewers) {
 		const r = svc.store.task(id);
-		if (!r || r.status === taskRunning || r.status === taskWaiting) return;
+		// A reviewer that has said how it ended may still be finishing its turn; its end settles the squad again.
+		if (!r || r.status === taskRunning || r.status === taskWaiting || svc.conversations.isActive(r.conversationId)) return;
 		reviewers.push(r);
 	}
 	// Taken before anything is awaited, so reviewers ending together check it once.
 	svc.squads.delete(t.id);
+	// Their reports are in hand, so their agents can go.
+	svc.reap(reviewers);
 	void validate(svc, t, sq, reviewers);
 }
 

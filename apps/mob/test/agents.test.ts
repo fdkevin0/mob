@@ -663,6 +663,45 @@ test('an agent starts sub-tasks', async () => {
 	await h.until('the approved call did not end', () => JSON.stringify(h.store.history(lead.conversationId)).includes('Started sub-task ' + child.id));
 	// Another task's agent cannot reach this one's sub-tasks.
 	expect(() => h.svc.hub.subtask(child.id, child.id)).toThrow();
+	// Once the lead has delivered its work too, the sub-task's agent ends, and the lead's stays.
+	await h.wait(lead);
+	await h.until("the sub-task's agent was not reaped", () => !h.svc.running(child.id));
+	expect(h.svc.running(lead.id)).toBeDefined();
+	// A message starts it again, in the session it had.
+	child = await h.say(child, 'hello');
+	expect([child.status, h.reply(child), h.fakes.last().loaded]).toEqual(['review', 'Hi', 's1']);
+});
+
+test('sub-tasks that end after their lead stopped are reaped', async () => {
+	const h = harness();
+	const lead = await h.start('hello');
+	const child = await h.wait(await h.svc.startTask(lead.conversationId, h.repo, '', 'Child', 'run'));
+	expect(child.status).toBe('waiting');
+	// The lead stops while its sub-task waits for the owner, so nothing is reaped yet.
+	h.svc.stopTask(lead.id);
+	expect(h.svc.running(child.id)).toBeDefined();
+	// No turn of the stopped lead follows, so the sub-task's own end reaps it.
+	await h.decide(child, { approved: true });
+	await h.until("the sub-task's agent was not reaped", () => !h.svc.running(child.id));
+});
+
+test("a squad waits for its reviewers' turns to end", async () => {
+	const h = harness();
+	const { settleSquad } = await import('../src/agents/squad');
+	const work = await h.start('hello');
+	const origin = h.store.create();
+	const reviewer = await h.svc.startReader(work.conversationId, work, 'codex', 'Review', 'hold', r => {
+		h.svc.reviewers.add(r.id);
+		h.svc.squads.set(work.id, { conversation: origin.id, reviewers: [r.id], starting: false });
+	});
+	const agent = await h.until('the reviewer did not start', () => h.fakes.agents.find(f => f.prompts.includes('hold')));
+	// The reviewer has said how it ended, but its turn is still finishing.
+	h.store.setTaskStatus(reviewer.id, 'review');
+	settleSquad(h.svc, work);
+	expect(h.svc.squads.has(work.id)).toBe(true);
+	// Its turn's end settles the squad, and its agent goes.
+	agent.release.resolve();
+	await h.until("the reviewer's agent was not reaped", () => !h.svc.squads.has(work.id) && !h.svc.running(reviewer.id));
 });
 
 test('ended tasks are summarized', async () => {
@@ -802,8 +841,10 @@ test('a review squad', async () => {
 	// The reports went to Mob, not to the agent that did the work, without waiting for its own sub-task.
 	const told = () => h.store.history(work.conversationId).filter(m => m.role === 'user').map(textOf).find(t => t.startsWith('Automatic update from Mob'));
 	expect(told()).toBeUndefined();
-	// The squad is done, so another may start.
+	// The squad is done, so another may start, and its reviewers' agents have ended.
 	expect(h.svc.squads.has(work.id)).toBe(false);
+	expect((out.reviewers as { task: string }[]).filter(r => h.svc.running(r.task))).toEqual([]);
+	expect(h.svc.running(work.id)).toBeDefined();
 	// Once its own sub-task ends, the agent hears of it, and not of the reviewers.
 	await h.decide(helper, { approved: true });
 	const summary = await h.until('the worker was not told its sub-task ended', told);
