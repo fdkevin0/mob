@@ -1,6 +1,7 @@
 // The platform's container runtime CLI: nerdctl (containerd) on Linux,
 // Apple's container on macOS, WSL containers (wslc) on Windows.
 import { spawn } from 'node:child_process';
+import { validatePolicy, type Backend, type Command, type Exit, type Output, type Policy, type Process } from './policy';
 
 export const containerd = 'containerd', apple = 'apple', wslc = 'wslc';
 export const runtimeNames = [containerd, apple, wslc];
@@ -12,12 +13,14 @@ export class Unavailable extends Error {
 	constructor(detail: string) { super('container runtime unavailable: ' + detail); }
 }
 
-export type Mount = { source: string; target: string };
-export type Limits = { network?: string; cpus?: number; memoryMiB?: number };
-export type Spec = { name?: string; image: string; command: string[]; env?: string[]; mounts?: Mount[]; workdir?: string; stdin?: boolean; limits?: Limits; isolation?: string };
+/** Mount binds a host path into the container; readOnly stops the container from changing it. */
+export type Mount = { source: string; target: string; readOnly?: boolean };
+/** Limits bound a container; pids, its processes and threads at once, is containerd's alone. */
+export type Limits = { network?: string; cpus?: number; memoryMiB?: number; pids?: number };
+/** Spec is one container run; user is the UID[:GID] or name it runs as, unset for the image's. */
+export type Spec = { name?: string; image: string; command: string[]; env?: string[]; mounts?: Mount[]; workdir?: string; user?: string; stdin?: boolean; limits?: Limits; isolation?: string };
 
-/** Output receives a stream of a command's bytes. */
-export type Output = (chunk: Uint8Array) => void;
+export type { Output };
 
 export const defaultRuntime = (platform = process.platform) => (platform === 'linux' ? containerd : platform === 'darwin' ? apple : platform === 'win32' ? wslc : '');
 
@@ -95,7 +98,15 @@ export class Runtime {
 		if (spec.name) args.push('--name', spec.name);
 		if (spec.stdin) args.push('-i');
 		if (spec.workdir) args.push('-w', spec.workdir);
+		if (spec.user) {
+			if (!validUser(spec.user)) throw new Error(`user "${spec.user}" must be a UID[:GID] or name`);
+			args.push('--user', spec.user);
+		}
 		args.push(...limitArgs(spec.limits ?? {}));
+		if (spec.limits?.pids) {
+			if (this.name !== containerd) throw new Error(`a process limit needs the ${containerd} runtime`);
+			args.push('--pids-limit', String(spec.limits.pids));
+		}
 		if (spec.isolation) {
 			if (spec.isolation !== gvisor) throw new Error(`isolation "${spec.isolation}" must be empty or "${gvisor}"`);
 			if (this.name !== containerd) throw new Error(`isolation "${gvisor}" needs the ${containerd} runtime`);
@@ -107,7 +118,7 @@ export class Runtime {
 		}
 		for (const m of spec.mounts ?? []) {
 			if (!m.source || !m.target.startsWith('/')) throw new Error(`mount "${m.source}":"${m.target}" needs a source and an absolute target`);
-			args.push('-v', m.source + ':' + m.target);
+			args.push('-v', m.source + ':' + m.target + (m.readOnly ? ':ro' : ''));
 		}
 		return this.args(...args, spec.image, ...spec.command);
 	}
@@ -119,11 +130,14 @@ function limitArgs(l: Limits) {
 		if (l.network !== noNetwork) throw new Error(`network "${l.network}" must be empty or "${noNetwork}"`);
 		args.push('--network', noNetwork);
 	}
-	if ((l.cpus ?? 0) < 0 || (l.memoryMiB ?? 0) < 0) throw new Error('CPU and memory limits must not be negative');
+	if ((l.cpus ?? 0) < 0 || (l.memoryMiB ?? 0) < 0 || (l.pids ?? 0) < 0) throw new Error('CPU, memory and process limits must not be negative');
 	if (l.cpus) args.push('--cpus', String(l.cpus));
 	if (l.memoryMiB) args.push('--memory', l.memoryMiB + 'm');
 	return args;
 }
+
+/** validUser reports whether s names a user as all three CLIs read --user: a name or number, optionally :group. */
+export const validUser = (s: string) => /^[A-Za-z0-9_.][A-Za-z0-9_.-]*(:[A-Za-z0-9_.][A-Za-z0-9_.-]*)?$/.test(s);
 
 /** parseMemory reads a size with a unit, such as 512m or 2g, in MiB. */
 export function parseMemory(s: string): number {
@@ -132,3 +146,67 @@ export function parseMemory(s: string): number {
 	if (!(mib >= 1 && mib <= 1 << 30)) throw new Error('memory must be a size with a unit, such as 512m or 2g');
 	return Math.trunc(mib);
 }
+
+/** ContainerBackend runs each process in a fresh container; only the policy's mounts are visible. */
+export class ContainerBackend implements Backend {
+	private pulled = false;
+	private pulling?: Promise<void>;
+
+	constructor(readonly runtime: Runtime, readonly image: string, readonly isolation = '') {}
+
+	get name() { return this.runtime.name; }
+
+	supports(p: Policy) {
+		validatePolicy(p);
+		this.runtime.runArgs(this.spec(p, []));
+	}
+
+	check(signal?: AbortSignal) { return this.runtime.check(signal); }
+
+	/** prepare pulls the image once; without a registry an image already present still runs. */
+	async prepare(signal?: AbortSignal) {
+		if (this.pulled) return;
+		this.pulling ??= (async () => {
+			try {
+				await this.runtime.pull(this.image, signal);
+				this.pulled = true;
+			} catch (e) {
+				if (signal?.aborted) throw e;
+				await this.runtime.check(signal);
+			}
+		})().finally(() => { this.pulling = undefined; });
+		await this.pulling;
+	}
+
+	/** start names the container so that it can be removed: an interrupted CLI may leave it running. */
+	start(p: Policy, cmd: Command, signal?: AbortSignal): Process {
+		if (!cmd.args.length) throw new Error('command is required');
+		this.supports(p);
+		const name = 'mob-' + random();
+		const killer = new AbortController();
+		const stop = signal ? AbortSignal.any([signal, killer.signal]) : killer.signal;
+		const done = (async (): Promise<Exit> => {
+			let code = -1, failure: unknown;
+			try {
+				code = await this.runtime.stream({ ...this.spec(p, cmd.args), name, stdin: !!cmd.stdin }, { stdin: cmd.stdin, stdout: cmd.stdout, stderr: cmd.stderr, signal: stop });
+			} catch (e) { failure = e; }
+			if (stop.aborted) {
+				await this.runtime.removeContainer(name, AbortSignal.timeout(30_000)).catch(() => {});
+				return { code };
+			}
+			if (failure) throw new Unavailable((failure as Error).message);
+			return { code };
+		})();
+		return { done, kill: () => killer.abort() };
+	}
+
+	private spec(p: Policy, command: string[]): Spec {
+		return {
+			image: this.image, command, env: p.env, workdir: p.workdir, user: p.user, isolation: this.isolation,
+			mounts: p.mounts.map(m => ({ source: m.source, target: m.target, readOnly: m.readOnly })),
+			limits: { network: p.network === 'off' ? noNetwork : undefined, cpus: p.limits?.cpus, memoryMiB: p.limits?.memoryMiB, pids: p.limits?.pids },
+		};
+	}
+}
+
+const random = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');

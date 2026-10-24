@@ -2,7 +2,8 @@
 // review once a task it started finishes, and tools to see what a task changed
 // and to run its tests.
 import { cell, newID, taskRunning, taskStopped, taskWaiting, type Task, type Tool, type Turn } from '@mob/core';
-import { environment, git, grouped, kill } from './process';
+import { inheritedEnv } from '../sandbox/policy';
+import { git, grouped, kill } from './process';
 import { noticeLimit, type Service } from './service';
 import { object, text } from './tools';
 
@@ -168,7 +169,7 @@ export class Limited {
 /** check runs an approved command in the worktree it was approved for. */
 export function check(worktree: string, command: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
 	const shell = process.platform === 'win32' ? ['cmd', '/C', command] : ['sh', '-c', command];
-	const child = grouped(shell[0]!, shell.slice(1), worktree, environment());
+	const child = grouped(shell[0]!, shell.slice(1), worktree, inheritedEnv());
 	child.stdin!.end();
 	const out = new Limited(checkOutput);
 	child.stdout!.on('data', (b: Buffer) => out.write(b));

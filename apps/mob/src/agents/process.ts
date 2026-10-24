@@ -5,6 +5,7 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
+import { inheritedEnv } from '../sandbox/policy';
 import { command, type Preset } from './presets';
 
 /** Conn is a started agent's standard input and output. */
@@ -16,13 +17,6 @@ export type Conn = {
 	/** stderr is the end of what the agent wrote to standard error. */
 	stderr?: () => string;
 };
-
-/** environment is Mob's environment without its own MOB_* variables, such as its access token. */
-export function environment(): Record<string, string> {
-	const env: Record<string, string> = {};
-	for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.toUpperCase().startsWith('MOB_')) env[k] = v;
-	return env;
-}
 
 const windows = process.platform === 'win32';
 
@@ -56,7 +50,7 @@ export function start(p: Preset, dir: string): Conn {
 		args.push('--patch', patch);
 	}
 	let child: ChildProcess;
-	try { child = grouped(found[0]!, args, dir, { ...environment(), ...p.env }); } catch (e) {
+	try { child = grouped(found[0]!, args, dir, { ...inheritedEnv(), ...p.env }); } catch (e) {
 		if (patch) rmSync(patch, { force: true });
 		throw e;
 	}

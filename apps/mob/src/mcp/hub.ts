@@ -7,6 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ToolListChangedNotificationSchema, type CallToolResult, type Tool as MCPTool } from '@modelcontextprotocol/sdk/types.js';
 import { createHash } from 'node:crypto';
+import { inheritedEnv } from '../sandbox/policy';
 import { version } from '../version';
 import { catalogKey, curated, fetchRegistry, hostOf, needs, refreshAfter, sameRegistry, type Catalog, type Listing, type Registry } from './catalog';
 import { exposure, fingerprint, names, same, serverName, target, type Server, type Servers } from './config';
@@ -97,14 +98,6 @@ export function localName(raw: string, servers: Servers) {
 	return unique;
 }
 
-/** environment is Mob's environment without its own MOB_* variables, such as the service token. */
-function environment(extra: string[] = []) {
-	const env: Record<string, string> = {};
-	for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.toUpperCase().startsWith('MOB_')) env[k] = v;
-	for (const entry of extra) { const i = entry.indexOf('='); env[entry.slice(0, i)] = entry.slice(i + 1); }
-	return env;
-}
-
 const sleep = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
 	const done = () => { clearTimeout(t); signal.removeEventListener('abort', done); resolve(); };
 	const t = setTimeout(done, ms);
@@ -183,7 +176,7 @@ export class Hub {
 		const opts = { signal, timeout: connectTimeout };
 		let client = this.newClient(name);
 		if (!server.url) {
-			await client.connect(new StdioClientTransport({ command: server.command!, args: server.args, env: environment(server.env), cwd: server.dir || undefined, stderr: 'ignore' }), opts);
+			await client.connect(new StdioClientTransport({ command: server.command!, args: server.args, env: inheritedEnv(server.env), cwd: server.dir || undefined, stderr: 'ignore' }), opts);
 		} else {
 			const make = (signIn?: SignIn) => new StreamableHTTPClientTransport(new URL(server.url!), { authProvider: signIn, requestInit: { headers: server.headers }, fetch: this.fetcher });
 			if (!server.oauth) await client.connect(make(), opts);

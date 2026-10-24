@@ -10,8 +10,13 @@ unless limited, network access.
 The only host path a container sees is the conversation's workspace,
 `data_dir/sandbox/<conversation ID>`, mounted at `/workspace` and kept between
 calls. Everything else in the container is discarded when the command exits. No
-host environment variables are passed in. Files the container writes may be
-owned by its user (often root) on Linux hosts.
+host environment variables are passed in. Commands run as the image's user
+(often root) unless `user` names another; on Linux hosts, files they write are
+owned by that user. Since that user may be anyone, the workspace is open to all
+users and what Mob saves or copies into it is readable by all, while
+`data_dir/sandbox`, which holds every workspace, stays private to Mob's user, so
+other users on the host cannot reach any of it. Mob refuses to write through a
+link a command planted in the workspace.
 
 ## Configuration
 
@@ -25,12 +30,28 @@ sandbox:
   network: none         # empty: the runtime's default network
   cpus: 2               # whole CPUs per command; 0: the runtime's default
   memory: 1g            # at least 64m; empty: the runtime's default
+  pids: 256             # processes and threads; containerd only; 0: no limit
+  user: "65534:65534"   # UID[:GID] or name; empty: the image's user
   isolation: gvisor     # Linux with containerd only; empty: the runtime's own
 ```
 
 `MOB_SANDBOX_ENABLED`, `MOB_SANDBOX_RUNTIME`, `MOB_SANDBOX_IMAGE`,
-`MOB_SANDBOX_NETWORK`, `MOB_SANDBOX_CPUS`, `MOB_SANDBOX_MEMORY` and
-`MOB_SANDBOX_ISOLATION` override it.
+`MOB_SANDBOX_NETWORK`, `MOB_SANDBOX_CPUS`, `MOB_SANDBOX_MEMORY`,
+`MOB_SANDBOX_PIDS`, `MOB_SANDBOX_USER` and `MOB_SANDBOX_ISOLATION` override it.
+
+## Policies and backends
+
+`apps/mob/src/sandbox/policy.ts` separates what a process may reach from how
+that is enforced. A `Policy` is plain data: the host directories it sees (each
+read-only or read-write), whether it has a network, its whole environment, its
+user and its CPU, memory and process limits. A `Backend` starts processes under
+a policy and refuses, in `supports`, any policy it cannot enforce in full,
+rather than enforcing less. `run` starts a command, waits for it and kills it at
+its timeout; a timeout is a result, a cancelled turn an error.
+
+The `sandbox` tool's policy is the settings above plus the conversation's
+workspace. Its backend is `ContainerBackend`, which runs each process in a fresh
+container through the platform's runtime.
 
 ## Runtimes
 
@@ -80,7 +101,10 @@ runtime is not ready the service logs it and the tool returns the reason.
   and an unset value means its configured default (1 GiB unless changed). On
   Linux, CPU and memory limits need the cgroup controllers available to
   containerd; rootless containerd needs them delegated.
-- There is no process-count limit: only nerdctl documents `--pids-limit`.
+- `pids` becomes `--pids-limit N`, which only nerdctl documents; with another
+  runtime the configuration is refused. It bounds fork bombs.
+- `user` becomes `--user`. With a non-root user, installing system packages
+  fails; use a virtual environment or `pip install --user` in `/workspace`.
 
 ## gVisor on Linux
 
@@ -102,7 +126,7 @@ configuration is refused rather than failing on the first command.
 ## Checking a machine
 
 `mob container` uses the same runtime directly, with `--network`, `--cpus`,
-`--memory` and `--isolation`, so a user can confirm it works before enabling the
+`--memory`, `--pids-limit`, `--user`, `-v SOURCE:TARGET[:ro]` and `--isolation`, so a user can confirm it works before enabling the
 sandbox:
 
 ```bash
