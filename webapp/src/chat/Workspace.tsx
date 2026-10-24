@@ -11,7 +11,7 @@ import { DeleteConversation } from './DeleteConversation';
 import { Sidebar, type View } from './Sidebar';
 import { ComposeIcon, MenuIcon } from './icons';
 import { pendingOpenRouterSignIn } from './browser/openrouter';
-import { cacheScope, forgetSnapshot, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
+import { cacheScope, forgetSnapshot, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeDraft, writeList, writeSnapshot } from './localCache';
 
 const errorText = (error: unknown) =>
 	error instanceof TypeError
@@ -341,6 +341,9 @@ export function Workspace({
 			keep={(on) => {
 				setKeeping(on);
 				void setKeepsMessages(on);
+				if (on) for (const [id, input] of drafts.current) {
+					void writeDraft(scope, id, input);
+				}
 			}}
 			disconnect={disconnect}
 		/>
@@ -445,12 +448,12 @@ export function Workspace({
 							id={selected.id}
 							initial={selected.snapshot}
 							initialInput={drafts.current.get(selected.id)}
+							keeping={keeping}
 							title={title}
 							onDispatching={setDispatching}
 							onLeave={(snapshot, input) => {
 								remember(selected.id, snapshot);
-								if (input && !deleted.current.has(selected.id)) drafts.current.set(selected.id, input);
-								else drafts.current.delete(selected.id);
+								if (input !== undefined && !deleted.current.has(selected.id)) drafts.current.set(selected.id, input);
 							}}
 							changes={changes}
 							onChanged={() => {

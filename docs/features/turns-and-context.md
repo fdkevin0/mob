@@ -30,11 +30,24 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   the owner switch conversations or open a page while a reply streams; only
   while a message, command or decision is still on its way to Mob
   (`dispatching` in the client state) does it hold the other conversations.
-- The web workspace keeps unsent drafts separately for each conversation while
-  switching between them. Drafts stay in memory until the workspace closes or
-  disconnects; they are not written to browser storage. The workspace error
-  banner's **Refresh** retries initialization and the requested conversation,
-  then clears the error on recovery.
+- The web workspace keeps unsent drafts separately for each connection and
+  conversation. Browser-runner drafts are saved on this device; local and remote
+  runner drafts are saved only when **Keep messages on this device** is enabled.
+  Saved drafts return after a reload, but never replace a newer edit or a draft
+  cleared in the open workspace. Clearing or sending a draft removes its saved
+  copy. Switching away before a saved draft finishes loading does not clear it.
+  Enabling message caching also saves existing drafts in the open workspace.
+  Turning message caching off removes saved local and remote drafts;
+  signing out removes that connection's cache. When storage is unavailable or
+  caching is off, drafts survive conversation switching in memory only.
+- The composer distinguishes sending from a running reply and labels text typed
+  during a turn as an unsent draft. Enter does not submit it while the client is
+  busy, and it is never queued or sent automatically. Unconfirmed delivery shows
+  the retained original separately from newer input; a manual Send creates a new
+  request. Delivery recovery remains memory-only, so after reloading, check the
+  conversation before resending uncertain text.
+- The workspace error banner's **Refresh** retries initialization and the
+  requested conversation, then clears the error on recovery.
 - A conversation starts with its first message. The web's New conversation
   opens a draft under an ID it chooses, in the form Mob gives conversations (32
   hex characters); `POST /api/chat` or a transcript command under that ID

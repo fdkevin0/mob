@@ -10,7 +10,7 @@ const messagesKey = 'mob-cache-messages';
 /** keptConversations is how many conversations' messages are kept per Mob. */
 export const keptConversations = 20;
 
-type Entry = { key: string; scope: string; kind: 'list' | 'snapshot'; id?: string; at: number; value: unknown };
+type Entry = { key: string; scope: string; kind: 'list' | 'snapshot' | 'draft'; id?: string; at: number; value: unknown };
 
 /** cacheScope names the Mob a connection reaches, so two runners never share a cache. */
 export function cacheScope(connection: Connection) {
@@ -34,7 +34,7 @@ export async function setKeepsMessages(on: boolean) {
 	} catch {
 		/* the setting lasts for this page only */
 	}
-	if (!on) await remove((entry) => entry.kind === 'snapshot');
+	if (!on) await remove((entry) => entry.kind === 'snapshot' || (entry.kind === 'draft' && entry.scope !== 'browser'));
 }
 
 // forgotten holds the Mobs this browser signed out of: writes still on their way, such as a closing
@@ -123,6 +123,27 @@ export async function readSnapshot(scope: string, id: string) {
 	return snapshot && { ...snapshot, active: false };
 }
 
+// Browser-runner conversations already live on this device; other connections opt in.
+const keepsDrafts = (scope: string) => scope === 'browser' || keepsMessages();
+
+export async function readDraft(scope: string, id: string) {
+	if (!keepsDrafts(scope) || forgotten.has(scope)) return undefined;
+	const entry = await withStore('readonly', (store) => done(store.get(`${scope}|draft|${id}`)));
+	const value = (entry as Entry | undefined)?.value;
+	return keepsDrafts(scope) && !forgotten.has(scope) && typeof value === 'string' ? value : undefined;
+}
+
+export async function writeDraft(scope: string, id: string, input: string) {
+	if (!keepsDrafts(scope) || forgotten.has(scope)) return;
+	await withStore('readwrite', async (store) => {
+		// A sign-out or privacy change may have happened while the database opened.
+		if (!keepsDrafts(scope) || forgotten.has(scope)) return;
+		const key = `${scope}|draft|${id}`;
+		if (input) store.put({ key, scope, kind: 'draft', id, at: stamp(), value: input } satisfies Entry);
+		else store.delete(key);
+	});
+}
+
 /** writeSnapshot keeps a conversation's messages, when this device keeps messages, dropping the least recent beyond the limit. */
 export async function writeSnapshot(scope: string, id: string, snapshot: Snapshot) {
 	if (!keepsMessages() || forgotten.has(scope)) return;
@@ -135,9 +156,9 @@ export async function writeSnapshot(scope: string, id: string, snapshot: Snapsho
 	});
 }
 
-/** forgetSnapshot removes the messages kept for a conversation, as when it was deleted. */
+/** forgetSnapshot removes the messages and draft kept for a conversation, as when it was deleted. */
 export async function forgetSnapshot(scope: string, id: string) {
-	await remove((entry) => entry.kind === 'snapshot' && entry.id === id, scope);
+	await remove((entry) => (entry.kind === 'snapshot' || entry.kind === 'draft') && entry.id === id, scope);
 }
 
 /** forget removes everything kept for a Mob, as when this browser signs out of it. */

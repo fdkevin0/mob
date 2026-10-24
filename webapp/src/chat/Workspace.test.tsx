@@ -126,3 +126,62 @@ it('disables the model trigger while another client is running a turn', async ()
 	expect(button.disabled).toBe(true);
 	expect(button.title).toContain('Wait for the current turn');
 });
+
+
+it('identifies an unsent draft while a turn runs and does not send it on Enter or submit', async () => {
+	const fetch = vi.fn(async (url: string) => {
+		if (url.endsWith('/events')) return new Response(null, { status: 404 });
+		if (url.endsWith('/conversations')) return Response.json(list);
+		if (url.endsWith('/runtime')) return Response.json({ background: false });
+		if (url.endsWith('/config')) return Response.json({});
+		if (url.endsWith('/stream')) return new Promise<Response>(() => {});
+		return Response.json({ ...snapshot, active: true });
+	});
+	vi.stubGlobal('fetch', fetch);
+	render(<Workspace connection={connection} disconnect={() => {}} />);
+	const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+	fireEvent.change(box, { target: { value: 'Next instruction' } });
+	expect(screen.getByText('Draft not sent. Send it after the current turn finishes.')).toBeTruthy();
+	fireEvent.keyDown(box, { key: 'Enter' });
+	fireEvent.submit(box.closest('form')!);
+	expect(box.value).toBe('Next instruction');
+	expect(fetch.mock.calls.some(([url]) => url.endsWith('/chat'))).toBe(false);
+});
+
+it('shows sending until acknowledged and prevents duplicate submits', async () => {
+	mockFetch();
+	const fetch = vi.mocked(globalThis.fetch);
+	const original = fetch.getMockImplementation()!;
+	fetch.mockImplementation((...args) => String(args[0]).endsWith('/api/chat') ? new Promise<Response>(() => {}) : original(...args));
+	render(<Workspace connection={connection} disconnect={() => {}} />);
+	const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+	fireEvent.change(box, { target: { value: 'Hello' } });
+	fireEvent.submit(box.closest('form')!);
+	await screen.findByText('Sending… Wait for confirmation.');
+	fireEvent.change(box, { target: { value: 'Next draft' } });
+	fireEvent.submit(box.closest('form')!);
+	expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/api/chat'))).toHaveLength(1);
+	expect(box.value).toBe('Next draft');
+});
+
+
+it('shows the unconfirmed original without overwriting a newer draft or resending it', async () => {
+	mockFetch();
+	const fetch = vi.mocked(globalThis.fetch);
+	const original = fetch.getMockImplementation()!;
+	let reject!: (error: Error) => void;
+	fetch.mockImplementation((...args) => String(args[0]).endsWith('/api/chat')
+		? new Promise<Response>((_, fail) => { reject = fail; }) : original(...args));
+	render(<Workspace connection={connection} disconnect={() => {}} />);
+	const box = await screen.findByLabelText('Message') as HTMLTextAreaElement;
+	fireEvent.change(box, { target: { value: 'Unconfirmed original' } });
+	fireEvent.submit(box.closest('form')!);
+	await screen.findByText('Sending… Wait for confirmation.');
+	fireEvent.change(box, { target: { value: 'Newer draft' } });
+	expect(screen.getByText('Sending previous message… This draft has not been sent.')).toBeTruthy();
+	reject(new Error('Connection lost'));
+	const summary = await screen.findByText('Original message · delivery not confirmed');
+	expect(summary.closest('details')!.querySelector('pre')!.textContent).toBe('Unconfirmed original');
+	expect(box.value).toBe('Newer draft');
+	expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/api/chat'))).toHaveLength(1);
+});

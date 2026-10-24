@@ -25,6 +25,7 @@ export function Thread({
 	id,
 	initial,
 	initialInput,
+	keeping,
 	title,
 	onDispatching,
 	onChanged,
@@ -39,12 +40,13 @@ export function Thread({
 	id: string;
 	initial: Snapshot;
 	initialInput?: string;
+	keeping?: boolean;
 	title?: string;
 	/** onDispatching hears whether a message, command or decision is still on its way to Mob. */
 	onDispatching?: (dispatching: boolean) => void;
 	onChanged: () => void;
 	onAction: (action: Action) => void;
-	onLeave?: (snapshot: Snapshot, input: string) => void;
+	onLeave?: (snapshot: Snapshot, input: string | undefined) => void;
 	changes?: Changes;
 	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
 	draft?: string;
@@ -71,7 +73,8 @@ export function Thread({
 		commandResult,
 		dismissCommand,
 		dispatching,
-	} = useConversation({ connection, id, initial, initialInput, onChanged, onAction, onLeave, changes });
+		recovery,
+	} = useConversation({ connection, id, initial, initialInput, keeping, onChanged, onAction, onLeave, changes });
 	useEffect(() => {
 		onDispatching?.(dispatching);
 		return () => onDispatching?.(false);
@@ -160,6 +163,13 @@ export function Thread({
 						{failure || error?.message}
 					</p>
 				)}
+				{recovery && (
+					<details className="command-result">
+						<summary>Original message · delivery not confirmed</summary>
+						<pre className="recovery-text">{recovery.text}</pre>
+						<p>Check the conversation before sending again. Sending creates a new request.</p>
+					</details>
+				)}
 				{commandResult && (
 					<section className="command-result" aria-label="Command result">
 						<MessageResponse>{commandResult}</MessageResponse>
@@ -198,6 +208,7 @@ export function Thread({
 						value={input}
 						onChange={(e) => setInput(e.target.value)}
 						rows={1}
+						aria-describedby="composer-status"
 						aria-autocomplete="list"
 						aria-controls={completion.suggestions.length ? 'command-suggestions' : undefined}
 						aria-activedescendant={completion.suggestions.length ? `suggestion-${completion.selected}` : undefined}
@@ -205,7 +216,7 @@ export function Thread({
 							if (completion.onKeyDown(e)) return;
 							if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
 								e.preventDefault();
-								e.currentTarget.form?.requestSubmit();
+								if (!busy) e.currentTarget.form?.requestSubmit();
 							}
 						}}
 					/>
@@ -257,6 +268,15 @@ export function Thread({
 						)}
 					</div>
 				</form>
+				<p id="composer-status" className="composer-status" role="status">
+					{recovery ? 'Delivery not confirmed. Your original message has not been resent.'
+						: dispatching ? (input.trim() ? 'Sending previous message… This draft has not been sent.' : 'Sending… Wait for confirmation.')
+						: failure || error ? 'Check the error above before sending again.'
+						: busy ? (input.trim() ? 'Draft not sent. Send it after the current turn finishes.' : streaming ? 'Message received. Reply in progress.' : 'Reply in progress. You can prepare your next message.')
+						: waiting ? 'Waiting for your approval.'
+						: input.trim() ? 'Draft · Enter to send · Shift+Enter for a new line.'
+						: 'Enter to send · Shift+Enter for a new line.'}
+				</p>
 			</div>
 		</>
 	);

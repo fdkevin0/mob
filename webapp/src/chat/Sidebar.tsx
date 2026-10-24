@@ -203,7 +203,7 @@ export function Sidebar({
 							checked={keeping}
 							onCheckedChange={(on) => keep(on === true)}
 							onSelect={(e) => e.preventDefault()}
-							title="Conversation titles are always kept in this browser so Mob opens at once. Messages are kept only when this is on; turning it off forgets them."
+							title="Conversation titles are always kept in this browser so Mob opens at once. Messages and unsent drafts are kept only when this is on; turning it off forgets their saved copies."
 						>
 							<span className="menu-check-box">{keeping && <CheckIcon />}</span>
 							Keep messages on this device
