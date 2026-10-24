@@ -68,6 +68,9 @@ export function Workspace({
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [selected, setSelected] = useState<{ id: string; snapshot: Snapshot }>();
 	const [error, setError] = useState('');
+	const [retry, setRetry] = useState(0);
+	const requested = useRef<string>(undefined);
+	const drafts = useRef(new Map<string, string>());
 	// dispatching is set while the open conversation hands a message to Mob; switching away then could lose it.
 	const [dispatching, setDispatching] = useState(false);
 	const [switching, setSwitching] = useState(false);
@@ -121,6 +124,7 @@ export function Workspace({
 		void writeList(scope, list);
 	}
 	function show(id: string, snapshot: Snapshot, replace = false) {
+		requested.current = id;
 		setSelected({ id, snapshot });
 		setView('chat');
 		route(routePrefix + encodeURIComponent(id), replace);
@@ -158,6 +162,7 @@ export function Workspace({
 	const held = (id: string) => handing.current && id !== current.current;
 	async function open(id: string, replace = false) {
 		if (held(id)) return;
+		requested.current = id;
 		const ticket = ++choice.current;
 		const since = viewing.current;
 		setError('');
@@ -203,13 +208,14 @@ export function Workspace({
 	useEffect(() => {
 		let live = true;
 		const start = choice.current;
+		setError('');
 		// A page the address names stays in front of the conversation that opens.
 		const showBehind = (id: string, snapshot: Snapshot) => {
 			if (routedView() === 'chat') show(id, snapshot, true);
 			else setSelected({ id, snapshot });
 		};
 		const pick = (list: Conversation[]) => {
-			const routed = routedID();
+			const routed = requested.current ?? current.current ?? routedID();
 			return routed && list.some((c) => c.id === routed) ? routed : list[0].id;
 		};
 		// What this browser kept shows first, while the service is asked for the latest.
@@ -237,7 +243,7 @@ export function Workspace({
 				// A conversation the owner picked meanwhile stays open.
 				if (choice.current !== start) return;
 				// A draft typed before connecting starts a new conversation, as the lobby showed.
-				if (draft || !list.length) await create(true);
+				if ((draft && !current.current) || !list.length) await create(true);
 				else if (routedView() !== 'chat') {
 					const id = pick(list);
 					showBehind(id, cache.current.get(id) ?? (await load(id)));
@@ -249,7 +255,7 @@ export function Workspace({
 		return () => {
 			live = false;
 		};
-	}, [connection]);
+	}, [connection, retry]);
 	// Back and forward move between the conversations and pages the address named.
 	const opener = useRef(open);
 	opener.current = open;
@@ -357,7 +363,7 @@ export function Workspace({
 				{error && (
 					<div className="error" role="alert">
 						{error}
-						<Button variant="ghost" onClick={() => void refreshList().catch((e) => setError(errorText(e)))}>
+						<Button variant="ghost" disabled={dispatching || switching} onClick={() => setRetry((value) => value + 1)}>
 							Refresh
 						</Button>
 					</div>
@@ -395,9 +401,14 @@ export function Workspace({
 							connection={connection}
 							id={selected.id}
 							initial={selected.snapshot}
+							initialInput={drafts.current.get(selected.id)}
 							title={title}
 							onDispatching={setDispatching}
-							onLeave={(snapshot) => remember(selected.id, snapshot)}
+							onLeave={(snapshot, input) => {
+								remember(selected.id, snapshot);
+								if (input) drafts.current.set(selected.id, input);
+								else drafts.current.delete(selected.id);
+							}}
 							changes={changes}
 							onChanged={() => {
 								void refreshList().catch((e) => setError(errorText(e)));

@@ -66,11 +66,13 @@ export function ModelPicker({
 	current,
 	defaultModel,
 	onPick,
+	disabled = false,
 }: {
 	connection: Connection;
 	current?: string;
 	defaultModel?: string;
 	onPick: (model?: string) => void;
+	disabled?: boolean;
 }) {
 	const [groups, setGroups] = useState<ModelGroup[]>();
 	const [error, setError] = useState('');
@@ -105,11 +107,12 @@ export function ModelPicker({
 					(model.name ?? '').toLowerCase().includes(needle)),
 			),
 		}))
-		.filter(group => group.models.length > 0);
+		.filter(group => group.models.length > 0 || group.error);
 	return (
 		<DialogContent className="model-picker">
 			<DialogTitle className="dialog-title">Choose a model</DialogTitle>
 			<DialogDescription className="dialog-description">Switch the model for this conversation, or follow your default.</DialogDescription>
+			{disabled && <p role="status">Wait for the current turn to finish before switching models.</p>}
 			<div className="model-filters">
 				<Input
 					className="model-search"
@@ -135,7 +138,7 @@ export function ModelPicker({
 			{error && <p role="alert">{error}</p>}
 			{!groups && !error && <p className="muted" role="status">Loading models…</p>}
 			{groups && (
-				<Button variant="ghost" className="model-choice follow-default" aria-current={current ? undefined : 'true'} onClick={() => onPick(undefined)}>
+				<Button variant="ghost" disabled={disabled} className="model-choice follow-default" aria-current={current ? undefined : 'true'} onClick={() => onPick(undefined)}>
 					<span>Follow the default{defaultModel ? ` (${defaultModel})` : ''}</span>
 					<span className="model-meta">New conversations and ones without their own model use it</span>
 				</Button>
@@ -143,9 +146,9 @@ export function ModelPicker({
 			{visible?.map(group => (
 				<section className="model-group" key={group.provider} aria-label={group.name || group.provider}>
 					<h3>{group.name || group.provider}</h3>
-					{group.error && <p className="muted">{group.error}</p>}
+					{group.error && <p className="muted" role="alert">{group.error}</p>}
 					{families(group.provider, group.models).map(family => {
-						const list = <ModelList models={family.models} current={current} onPick={onPick} />;
+						const list = <ModelList models={family.models} current={current} onPick={onPick} disabled={disabled} />;
 						if (!family.prefix) return <div key="">{list}</div>;
 						const open = !!needle || freeOnly || group.models.length <= foldAbove || family.models.some(m => m.id === current);
 						return (
@@ -164,12 +167,12 @@ export function ModelPicker({
 	);
 }
 
-function ModelList({ models, current, onPick }: { models: ModelInfo[]; current?: string; onPick: (model?: string) => void }) {
+function ModelList({ models, current, onPick, disabled }: { models: ModelInfo[]; current?: string; onPick: (model?: string) => void; disabled: boolean }) {
 	return (
 		<ul>
 			{models.map(model => (
 				<li key={model.id}>
-					<Button variant="ghost" className="model-choice" aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
+					<Button variant="ghost" className="model-choice" disabled={disabled} aria-current={model.id === current ? 'true' : undefined} onClick={() => onPick(model.id)}>
 						<span>
 							{model.name || model.id}
 							{model.free && <small className="model-free">Free</small>}

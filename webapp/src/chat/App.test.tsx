@@ -342,12 +342,13 @@ it('switches the conversation model from the header picker', async () => {
       { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', tools: true },
       { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner', tools: true, reasoning: true },
     ] }]));
-    if (url.endsWith('/commands/run')) { run = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ markdown: 'Model switched.' })); }
+    if (url.endsWith('/commands/run')) { run = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ handled: true, markdown: 'Model switched.' })); }
     return Promise.resolve(Response.json({ messages: [], active: false, model: 'deepseek/deepseek-chat' }));
   });
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
   const trigger = await screen.findByRole('button', { name: 'deepseek/deepseek-chat' });
+  fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Keep my message' } });
   fireEvent.click(trigger);
   const dialog = await screen.findByRole('dialog', { name: 'Choose a model' });
   await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Search models')));
@@ -358,6 +359,7 @@ it('switches the conversation model from the header picker', async () => {
   fireEvent.click(await screen.findByText('DeepSeek Reasoner'));
   await waitFor(() => expect(run).toBeDefined());
   expect(run).toMatchObject({ conversationId: 'one', text: '/model deepseek/deepseek-reasoner' });
+  expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Keep my message');
   expect(screen.queryByRole('dialog', { name: 'Choose a model' })).toBeNull();
 });
 

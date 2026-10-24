@@ -34,12 +34,15 @@ In any conversation, in every client and channel:
   level.
 - `/model default NAME` sets the default for conversations without their own.
 
-In the Web UI, choosing the model name in the workspace header opens a
+In the Web UI, choosing the model name below the message box opens a
 searchable picker instead of requiring the command. It lists every enabled
 provider's models with what each can do, marks the current one, and offers
 **Follow the default** for conversations that should not pin a model. Choosing
 a model runs the same `/model` command, so commands, channels and the shared
-client remain the single implementation of model switching.
+client remain the single implementation of model switching. Picker commands
+preserve the message draft even if switching fails. Model choices are disabled
+while a turn or command is busy. A provider whose model list fails stays visible
+with its error, including when search or the free-only filter is active.
 
 [magpie](https://github.com/yetone/magpie) serves every provider signed in to it
 from a gateway on this machine. `mob provider add magpie` reads the port from

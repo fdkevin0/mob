@@ -309,14 +309,14 @@ export class ConversationClient {
 		}
 	}
 
-	submit = async (input = this.state.input) => {
+	submit = async (input = this.state.input, { preserveInput = false } = {}) => {
 		if (!this.active || !input.trim() || this.state.busy) return;
 		const text = input.trim();
 		this.generation++;
 		this.pendingSend = undefined;
 		this.recoveryFailure = '';
 		this.chat.clearError();
-		this.update({ input: '', failure: '', commandResult: undefined, recovery: undefined });
+		this.update({ ...(preserveInput ? {} : { input: '' }), failure: '', commandResult: undefined, recovery: undefined });
 		if (!text.startsWith('/') || /[\r\n]/.test(text)) {
 			await this.send(text);
 			return;
@@ -338,7 +338,7 @@ export class ConversationClient {
 				await this.decide(result.action.approvalId ?? '', result.action.approved ?? false, result.action.reason, result.action.remember);
 			else if (result.action) this.options.onAction?.(result.action);
 		} catch (e) {
-			if (this.active && generation === this.generation) this.update({ failure: errorText(e), input: this.state.input || text });
+			if (this.active && generation === this.generation) this.update({ failure: errorText(e), input: preserveInput ? this.state.input : this.state.input || text });
 		} finally {
 			this.running = false;
 			this.update({});

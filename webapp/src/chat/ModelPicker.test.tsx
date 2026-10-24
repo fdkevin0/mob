@@ -92,3 +92,27 @@ it('puts models without a vendor prefix first', () => {
 	expect(f.map(x => x.prefix)).toEqual(['', 'a', 'z']);
 	expect(families('deepseek', [{ id: 'deepseek/deepseek-chat', tools: true }]).map(x => x.prefix)).toEqual(['']);
 });
+
+it('keeps provider failures visible through search and free filters', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([{ provider: 'broken', name: 'Broken provider', models: [], error: 'Cannot load models' }])));
+	render(<Dialog defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
+	await screen.findByRole('alert');
+	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'missing' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Free only (0)' }));
+	expect(screen.getByRole('alert').textContent).toBe('Cannot load models');
+	expect(screen.queryByText(/No .*models match/)).toBeNull();
+});
+
+it('disables choices and explains why when a turn becomes busy with the picker open', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json(models)));
+	const picked = vi.fn();
+	const { rerender } = render(<Dialog defaultOpen><ModelPicker connection={connection} onPick={picked} /></Dialog>);
+	await screen.findByText('DeepSeek Chat');
+	rerender(<Dialog defaultOpen><ModelPicker connection={connection} onPick={picked} disabled /></Dialog>);
+	expect(screen.getByRole('status').textContent).toContain('Wait for the current turn');
+	for (const button of document.querySelectorAll<HTMLButtonElement>('.model-choice')) {
+		expect(button.disabled).toBe(true);
+		fireEvent.click(button);
+	}
+	expect(picked).not.toHaveBeenCalled();
+});

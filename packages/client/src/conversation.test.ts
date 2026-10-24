@@ -631,3 +631,20 @@ it('reloads on changes instead of polling while the change stream is live, and p
 	await vi.advanceTimersByTimeAsync(4100);
 	expect(reads.length).toBeGreaterThanOrEqual(dropped + 2);
 });
+
+it.each([200, 500])('preserves the composer during a picker command returning %s', async (status) => {
+	const client = new MobClient(connection, {
+		fetch: async (url) => {
+			if (String(url).endsWith('/commands/run')) return Response.json(status === 200 ? { handled: true } : { error: 'switch failed' }, { status });
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	session.setInput('Keep my draft');
+	await session.submit('/model demo/echo', { preserveInput: true });
+	expect(session.getSnapshot().input).toBe('Keep my draft');
+	session.setInput('');
+	await session.submit('/model default', { preserveInput: true });
+	expect(session.getSnapshot().input).toBe('');
+});
