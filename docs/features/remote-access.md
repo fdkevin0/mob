@@ -31,8 +31,9 @@ served by the Worker in `worker/`:
   crawlers included, to the landing page, so their links preview the same.
   Telegram caches a preview per URL; after changing the image or tags, send
   the link to @WebpageBot to refresh it.
-- `/logo.png` serves the 512×512 brand image from static assets. It and
-  `/og.png` bypass the Worker; pages still pass through it for
+- `/logo.svg` is the transparent brand artwork; `/logo.png` is its 512×512
+  rendering with a transparent background. Both and `/og.png` are served
+  directly from static assets; pages still pass through the Worker for
   sign-in checks and content security policies. Unknown paths return 404
   instead of redirecting to the landing page.
 - Sign-in is GitHub OAuth through Better Auth, with no passwords. A Cloudflare

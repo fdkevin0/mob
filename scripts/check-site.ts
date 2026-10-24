@@ -34,10 +34,10 @@ try {
 	// Cover both subresource fetches and browser navigations.
 	for (const headers of [{}, { 'Sec-Fetch-Mode': 'navigate' }]) {
 		const request = (path: string) => fetch(origin + path, { redirect: 'manual', headers });
-		for (const name of ['logo.png', 'og.png']) {
+		for (const [name, type] of [['logo.png', 'image/png'], ['logo.svg', 'image/svg+xml'], ['og.png', 'image/png']]) {
 			const response = await request('/' + name);
 			assert.equal(response.status, 200, name);
-			assert.equal(response.headers.get('Content-Type'), 'image/png');
+			assert.equal(response.headers.get('Content-Type'), type);
 			assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile('webapp/public/' + name));
 		}
 		for (const path of ['/', '/demo', '/docs/']) {

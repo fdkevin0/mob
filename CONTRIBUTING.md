@@ -69,6 +69,7 @@ Edit the source and regenerate the affected artifact. Tests reject stale output.
 | Artifact | Source | Regenerate from the repository root |
 | --- | --- | --- |
 | `docs/environment-variables.md` | `apps/mob/src/config.ts` | `bun run generate:configdocs` |
+| `webapp/public/logo.png` | `webapp/public/logo.svg` | `rsvg-convert -o webapp/public/logo.png webapp/public/logo.svg` (librsvg) |
 
 ### Documentation site
 
