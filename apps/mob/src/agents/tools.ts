@@ -4,6 +4,7 @@ import { isAbsolute } from 'node:path';
 import { firstLine, git } from './process';
 import { preset, presets, readers } from './presets';
 import { reviewTools } from './review';
+import { squadTool } from './squad';
 import type { Service } from './service';
 import { outline } from './tree';
 
@@ -77,7 +78,7 @@ export function tools(svc: Service): Tool[] {
 		ownerOnly: true,
 		available: svc.busy,
 		run: async call => { svc.stopTask(String(call.input.task ?? '')); return { stopped: true }; },
-	}, ...reviewTools(svc)];
+	}, ...reviewTools(svc), squadTool(svc)];
 }
 
 /** askStart checks a task_start call and asks the owner to approve it. */

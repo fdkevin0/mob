@@ -11,6 +11,7 @@ import { version } from '../version';
 import { firstLine } from './process';
 import { preset, readers } from './presets';
 import type { Service } from './service';
+import { settleSquad } from './squad';
 import { label } from './tree';
 
 /** subtaskActive bounds the sub-tasks of one task that run or wait at once. */
@@ -265,7 +266,13 @@ const summaryPrompt = (text: string) => `Automatic update from Mob, not written 
 export function settle(svc: Service, id: string) {
 	const t = svc.store.task(id);
 	if (!t?.parent) return;
-	const siblings = svc.store.tasks().filter(c => c.parent === t.parent);
+	const lead = svc.store.task(t.parent);
+	if (lead && lead.conversationId === t.parent && svc.reviewers.has(t.id)) {
+		// A squad's reviewers report to its squad, apart from the task's other sub-tasks.
+		settleSquad(svc, lead);
+		return;
+	}
+	const siblings = svc.store.tasks().filter(c => c.parent === t.parent && !svc.reviewers.has(c.id));
 	if (siblings.some(c => c.status === taskRunning || c.status === taskWaiting)) return;
 	// Each set of ended tasks is reported once, however many end together.
 	siblings.sort((a, b) => a.createdAt - b.createdAt);
