@@ -55,8 +55,9 @@ and the encrypted relay against the built binary.
 Also run `bun run test:client` (headless Node tests/typecheck) and
 `bun run test:tui` (pilot typecheck/tests) when changing the shared client or TUI.
 The integration script exercises both client types, concurrent readers,
-reconnection, detachment, scoped approvals, stale decisions and Stop. CI also
-reports, without blocking, how much of the host scriptc can compile.
+reconnection, detachment, scoped approvals, stale decisions and Stop. The
+`scriptc` workflow reports how much of the host scriptc can compile; it runs
+after host changes reach `main`, weekly and by hand, never on pull requests.
 
 Tests use temporary data directories, local fixtures and fake providers, so
 they need no keys and send nothing to real models, mailboxes or chats.

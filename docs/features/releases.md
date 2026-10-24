@@ -42,9 +42,9 @@ minor version. Other commit types are left out of the changelog.
 - Each stable release updates the `mob` cask in `fdkevin0/homebrew-tap`
   (`brew install fdkevin0/tap/mob`, macOS and Linux). The cask removes the
   quarantine flag because the binary is not notarized.
-- An experimental CI job reports how much of the host
-  [scriptc](https://github.com/vercel-labs/scriptc) can compile natively. It
-  never blocks a merge, and no release contains a scriptc build.
+- An experimental workflow reports how much of the host
+  [scriptc](https://github.com/vercel-labs/scriptc) can compile natively, after
+  host changes reach `main` and weekly. It never blocks a merge, and no release contains a scriptc build.
 
 Repository setup: a `HOMEBREW_TAP_TOKEN` secret that can push to the tap (without
 it the cask is built but not pushed); a `RELEASE_PLEASE_TOKEN` secret so the

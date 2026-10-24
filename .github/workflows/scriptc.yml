@@ -1,0 +1,49 @@
+name: scriptc
+
+# scriptc is an experimental native compiler; its report says how much of the
+# host it can compile. The analysis takes several minutes and never blocks a
+# merge, so it runs after changes to the host reach main, weekly for new
+# scriptc releases, and by hand, not on pull requests.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/mob/**
+      - packages/core/**
+      - packages/client/**
+      - bun.lock
+      - .github/workflows/scriptc.yml
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scriptc
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: scriptc coverage (experimental)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: npm install -g --allow-scripts=scriptc scriptc@0.4.3
+      - name: Coverage
+        run: |
+          set +e
+          scriptc coverage apps/mob/src/main.ts > scriptc.txt 2>&1
+          status=$?
+          { echo '## scriptc coverage'; echo; echo "scriptc exited with $status."; echo; echo '```'; tail -n 200 scriptc.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # A report, not a gate: what scriptc cannot compile yet is in the summary.
+          if [ "$status" -ne 0 ]; then echo "::warning::scriptc cannot compile the host yet; see the job summary"; fi
