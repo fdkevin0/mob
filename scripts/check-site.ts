@@ -56,6 +56,11 @@ try {
 			const response = await request(path);
 			assert.equal(response.headers.get('Cache-Control'), 'private, no-store', path);
 		}
+		// Provider tokens stay on the server: the routes that hand them out are off.
+		for (const path of ['/api/auth/get-access-token', '/api/auth/refresh-token']) {
+			const response = await fetch(origin + path, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify({ providerId: 'cloudflare' }) });
+			assert.equal(response.status, 404, path);
+		}
 		for (const path of ['/missing.png', '/missing-page', '/assets/missing.js', '/docs/missing-page',
 			'/index.html', '/account.html', '/landing.html', '/demo.html']) {
 			const response = await request(path);

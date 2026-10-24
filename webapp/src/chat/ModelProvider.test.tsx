@@ -19,6 +19,8 @@ it('saves a provider on a runner, where a model server on that machine needs no 
 	const saved = vi.fn();
 	render(<ModelProvider connection={{ url: 'http://localhost', token: 't' }} open onOpenChange={() => {}} onSaved={saved} />);
 	expect(screen.getByText(/keeps the key in its providers\.json/)).toBeDefined();
+	// Workers AI through the site's sign-in, like OpenRouter's own sign-in, is the browser runner's alone.
+	expect(screen.queryByRole('option', { name: /Cloudflare Workers AI/ })).toBeNull();
 	// Only the browser runner signs in with OpenRouter itself.
 	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'openrouter' } });
 	expect(screen.queryByRole('button', { name: 'Sign in with OpenRouter' })).toBeNull();
@@ -28,4 +30,12 @@ it('saves a provider on a runner, where a model server on that machine needs no 
 	await waitFor(() => expect(saved).toHaveBeenCalledWith('ollama/qwen3'));
 	expect(posts).toEqual([{ url: 'http://localhost/api/providers', body: { preset: 'ollama', url: '', protocol: 'chat', key: '', model: '' } }]);
 	expect(screen.getByRole('status').textContent).toContain('Conversations now use ollama/qwen3');
+});
+
+it('offers Workers AI of the signed-in Cloudflare account only in the browser', () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
+	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
+	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'cloudflare' } });
+	expect(screen.getByRole('button', { name: 'Use my Cloudflare account' })).toBeDefined();
+	expect(screen.queryByLabelText('API key')).toBeNull();
 });

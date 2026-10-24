@@ -27,7 +27,9 @@ const local = [
 	{ id: 'ollama', name: 'Ollama (on the runner)', noKey: true },
 	{ id: 'lmstudio', name: 'LM Studio (on the runner)', noKey: true },
 ];
-const runnerServices: Service[] = [...browserServices.slice(0, -1), ...local, browserServices[browserServices.length - 1]];
+// Workers AI through the site's proxy needs the site's sign-in, which only the browser runner has.
+const shared = browserServices.filter(s => s.id !== 'cloudflare');
+const runnerServices: Service[] = [...shared.slice(0, -1), ...local, shared[shared.length - 1]];
 
 type Saved = { default: string; providers: { id: string; name?: string; key?: string; chat?: string; anthropic?: string }[] };
 
@@ -73,7 +75,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		} finally { setBusy(false); }
 	}
 	const custom = form.preset === '';
-	const cloudflare = form.preset === 'cloudflare';
+	const cloudflare = browser && form.preset === 'cloudflare';
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="connect-dialog">

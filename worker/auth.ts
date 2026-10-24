@@ -49,6 +49,9 @@ export function createAuth(env: Env, origin: string) {
 				},
 			} : {}),
 		},
+		// Provider tokens never leave the server: the Workers AI proxy reads them
+		// through auth.api, which disabled paths do not block.
+		disabledPaths: ['/get-access-token', '/refresh-token'],
 		account: {
 			// Provider tokens are kept encrypted: the Cloudflare one spends the visitor's account.
 			encryptOAuthTokens: true,
