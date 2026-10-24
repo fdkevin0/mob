@@ -51,6 +51,11 @@ test('the first provider added takes over from the demo default, and a model lis
 	const none = initialProviders();
 	adoptDefault(none, { id: 'work', chat: 'https://llm.example/v1' }, []);
 	expect(none.default).toBeUndefined();
+	const zen = initialProviders();
+	const zenRegistry = new ProviderRegistry(memoryProviders(zen), undefined, false, async () => Response.json({ data: [{ id: 'big-pickle' }, { id: 'mimo-v2.6-flash-free' }, { id: 'claude-x' }] }));
+	const zenProvider = { id: 'opencode', preset: 'opencode', key: 'k' };
+	adoptDefault(zen, zenProvider, await zenRegistry.fetch(zenProvider));
+	expect(zen.default).toBe('opencode/claude-x');
 	const listed = { data: [{ id: 'a/no-tools:free', supported_parameters: ['temperature'] }, { id: 'z/tools:free', supported_parameters: ['tools'] }] };
 	const registry = new ProviderRegistry(memoryProviders({ providers: [{ id: 'openrouter', preset: 'openrouter', key: 'k' }] }), undefined, false, async () => Response.json(listed));
 	const [group] = await registry.list('');

@@ -43,6 +43,9 @@ const fingerprint = (p: Provider) => destination(p) + '\x00' + (p.key ?? '') + '
 /** isFree tells a model that costs nothing to call: priced at zero, or a `:free` variant, which is how OpenRouter names them. */
 const isFree = (i: Info) => (i.cost?.input === 0 && i.cost.output === 0) || i.id.endsWith(':free');
 
+/** hidden drops the models Mob must not offer: OpenCode Zen's free tier, which is for OpenCode's own clients. */
+const hidden = (p: Provider, ids: string[]) => findPreset(p.preset)?.id === 'opencode' ? ids.filter(id => !openCodeFree(id)) : ids;
+
 /** nonChat are fragments of model IDs that do not converse. */
 const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'transcribe', 'rerank', 'audio', 'realtime', 'sora'];
 
@@ -114,8 +117,7 @@ export class ProviderRegistry implements Models {
 		let ids = picks(p, this.listOf(p).ids ?? []);
 		const preset = findPreset(p.preset);
 		if (!ids.length && preset?.catalog) ids = this.catalog.models(preset.catalog).map(i => i.id);
-		if (preset?.id === 'opencode') ids = ids.filter(id => !openCodeFree(id));
-		return ids;
+		return hidden(p, ids);
 	}
 
 	/** info is the catalog's description of a model with the user's overrides; an unknown model is assumed to take tools. */
@@ -252,7 +254,7 @@ export class ProviderRegistry implements Models {
 			if (Array.isArray(m.supported_parameters) && !m.supported_parameters.includes('tools')) noTools.add(id);
 		}
 		this.noTools.set(p.id, noTools);
-		return ids.sort();
+		return hidden(p, ids).sort();
 	}
 }
 
