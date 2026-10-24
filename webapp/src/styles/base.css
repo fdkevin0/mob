@@ -61,8 +61,10 @@ a {
 	padding: 8px 16px;
 	border: 1px solid transparent;
 	border-radius: var(--radius);
-	font-family: var(--mono);
-	font-size: 12px;
+	font-family: var(--sans);
+	font-size: 13px;
+	font-weight: 500;
+	letter-spacing: -0.005em;
 	line-height: 1.5;
 	cursor: pointer;
 	transition:
@@ -81,7 +83,6 @@ a {
 .btn-primary {
 	background: var(--primary);
 	color: var(--primary-foreground);
-	box-shadow: 3px 3px 0 color-mix(in srgb, var(--brand) 20%, transparent);
 }
 .btn-primary:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--primary) 85%, var(--text));
@@ -92,8 +93,9 @@ a {
 	color: var(--text);
 }
 .btn-outline:hover:not(:disabled) {
-	border-color: var(--brand);
-	color: var(--brand);
+	border-color: var(--line-hover);
+	color: var(--text);
+	background: var(--accent);
 }
 .btn-ghost {
 	background: transparent;
@@ -119,10 +121,14 @@ a {
 	padding: 10px 12px;
 	border: 1px solid var(--input);
 	border-radius: var(--radius);
-	background: var(--bg);
+	background: var(--surface);
 	color: var(--text);
 	font-size: 14px;
 	line-height: 1.5;
+}
+.ui-input:focus-visible,
+.ui-textarea:focus-visible {
+	border-color: var(--line-hover);
 }
 .ui-input::placeholder,
 .ui-textarea::placeholder {
@@ -155,6 +161,7 @@ a {
 	padding: 28px;
 	background: var(--panel);
 	border: 1px solid var(--line-strong);
+	border-radius: var(--radius-dialog);
 	box-shadow: 0 30px 90px rgb(0 0 0 / calc(0.8 * var(--shadow)));
 }
 .dialog-title {
@@ -215,6 +222,7 @@ a {
 	max-width: calc(100vw - 24px);
 	padding: 6px;
 	border: 1px solid var(--line-strong);
+	border-radius: var(--radius-card);
 	background: var(--panel);
 	box-shadow: 0 20px 50px rgb(0 0 0 / calc(0.67 * var(--shadow)));
 }
@@ -232,6 +240,7 @@ a {
 }
 .ui-menu-item {
 	padding: 8px 10px;
+	border-radius: var(--radius);
 	font-size: 13px;
 	cursor: pointer;
 }

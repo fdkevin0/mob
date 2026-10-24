@@ -46,7 +46,7 @@ describe('theme', () => {
 
 	it('boot script agrees with applyTheme', () => {
 		const boot = inline('index.html');
-		const meta = document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color', content: '#07080a' }));
+		const meta = document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color', content: '#0c0d0f' }));
 		for (const [saved, light, want] of [
 			[null, false, 'dark'],
 			[null, true, 'light'],
@@ -59,8 +59,8 @@ describe('theme', () => {
 			delete document.documentElement.dataset.theme;
 			new Function(boot)();
 			expect(document.documentElement.dataset.theme).toBe(want);
-			expect(meta.content).toBe(want === 'light' ? '#f4f3ee' : '#07080a');
-			meta.content = '#07080a';
+			expect(meta.content).toBe(want === 'light' ? '#f4f3ee' : '#0c0d0f');
+			meta.content = '#0c0d0f';
 		}
 		meta.remove();
 	});

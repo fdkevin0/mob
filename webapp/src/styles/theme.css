@@ -7,14 +7,16 @@
 
 :root {
 	color-scheme: dark;
-	--bg: #07080a;
-	--panel: #0b0d0f;
-	--line: #1b1f23;
-	--line-strong: #2a3036;
+	--bg: #0c0d0f;
+	--panel: #111316;
+	--surface: #16191c;
+	--surface-raised: #1c2024;
+	--line: #ffffff0d;
+	--line-strong: #ffffff1a;
 	--text: #eef1ea;
 	--muted: #1b1f23;
-	--muted-foreground: #8b9389;
-	--faint: #8b9389;
+	--muted-foreground: #8f978e;
+	--faint: #8f978e;
 	--lime: #c8f560;
 	--cyan: #62e0ea;
 	--amber: #ffb648;
@@ -43,13 +45,19 @@
 	--primary-foreground: #0a0d05;
 	--secondary: #171c17;
 	--secondary-foreground: var(--text);
-	--accent: #c8f56012;
-	--accent-foreground: var(--lime);
+	--accent: #ffffff0a;
+	--accent-foreground: var(--text);
 	--destructive: #ff9696;
 	--border: var(--line-strong);
 	--input: var(--line-strong);
 	--ring: var(--lime);
-	--radius: 0px;
+	/* One radius scale for every page: code and keys, controls (buttons,
+	 * inputs, menu items), cards and menus, dialogs and the composer, pills. */
+	--radius-code: 4px;
+	--radius: 8px;
+	--radius-card: 12px;
+	--radius-dialog: 16px;
+	--radius-pill: 999px;
 }
 
 /* Every page can be light (see src/theme).
@@ -63,9 +71,11 @@
 :root[data-theme='light'] {
 	color-scheme: light;
 	--bg: #f4f3ee;
-	--panel: #fbfaf7;
-	--line: #e2e0d6;
-	--line-strong: #d2d0c4;
+	--panel: #faf9f5;
+	--surface: #fffffd;
+	--surface-raised: #ebe9e1;
+	--line: #1a1c150f;
+	--line-strong: #1a1c151c;
 	--text: #1a1c15;
 	--muted: #ebe9e1;
 	--muted-foreground: #696c60;
@@ -84,7 +94,7 @@
 	--primary: #bdec4f;
 	--primary-foreground: #141a04;
 	--secondary: #ebe9e1;
-	--accent: #4f7a0c12;
+	--accent: #1a1c150a;
 	--destructive: #be3a2c;
 	--ring: #6a9c14;
 }
