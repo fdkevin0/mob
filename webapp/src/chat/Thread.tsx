@@ -24,6 +24,7 @@ export function Thread({
 	connection,
 	id,
 	initial,
+	initialInput,
 	title,
 	onDispatching,
 	onChanged,
@@ -36,12 +37,13 @@ export function Thread({
 	connection: Connection;
 	id: string;
 	initial: Snapshot;
+	initialInput?: string;
 	title?: string;
 	/** onDispatching hears whether a message, command or decision is still on its way to Mob. */
 	onDispatching?: (dispatching: boolean) => void;
 	onChanged: () => void;
 	onAction: (action: Action) => void;
-	onLeave?: (snapshot: Snapshot) => void;
+	onLeave?: (snapshot: Snapshot, input: string) => void;
 	changes?: Changes;
 	/** draft is a message typed before a runner was connected; the first thread opened takes it into its composer. */
 	draft?: string;
@@ -66,7 +68,7 @@ export function Thread({
 		commandResult,
 		dismissCommand,
 		dispatching,
-	} = useConversation({ connection, id, initial, onChanged, onAction, onLeave, changes });
+	} = useConversation({ connection, id, initial, initialInput, onChanged, onAction, onLeave, changes });
 	useEffect(() => {
 		onDispatching?.(dispatching);
 		return () => onDispatching?.(false);
@@ -213,7 +215,8 @@ export function Thread({
 									className="model-button"
 									aria-haspopup="dialog"
 									aria-expanded={choosing}
-									title="This conversation's model; choose another without typing /model"
+									disabled={busy}
+									title={busy ? 'Wait for the current turn to finish before switching models' : "This conversation's model; choose another without typing /model"}
 								>
 									{modelLabel}
 									<ChevronDownIcon />
@@ -224,9 +227,9 @@ export function Thread({
 									connection={connection}
 									current={model}
 									defaultModel={defaultModel}
+									disabled={busy}
 									onPick={(choice) => {
-										setChoosing(false);
-										run(choice ? `/model ${choice}` : '/model default');
+										if (run(choice ? `/model ${choice}` : '/model default')) setChoosing(false);
 									}}
 								/>
 							)}
@@ -304,13 +307,11 @@ const MessageView = memo(function MessageView({
 									<span className="sr-only">{state.label}</span>
 									<ChevronIcon />
 								</summary>
-								{part.state !== 'approval-requested' && (
-									<div className="tool-body">
-										<pre>{JSON.stringify(part.input, null, 2)}</pre>
-										{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
-										{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
-									</div>
-								)}
+								<div className="tool-body">
+									<pre>{JSON.stringify(part.input, null, 2)}</pre>
+									{part.state === 'output-available' && <pre>{JSON.stringify(part.output, null, 2)}</pre>}
+									{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
+								</div>
 								{part.state === 'approval-requested' && (
 									<ApprovalPrompt
 										question={

@@ -87,6 +87,8 @@ owner's turns.
 - An approval request carries the tool name and the input to approve.
   `chat.DescribeApproval` renders it as plain text for channels. The AI SDK
   `tool-approval-request` chunk carries only the approval and call IDs.
+- Before an approval decision, the web UI shows the full tool input above the
+  approval buttons, including all parameters and long command or content text.
 - The web UI and TUI show the request in the conversation; `/approve` and
   `/deny` work in every client. Telegram shows Approve, Always allow and Deny
   buttons; WeChat iLink accepts 批准 and 拒绝, or a bare reply when one request is
@@ -100,6 +102,8 @@ owner's turns.
   orchestration in `@mob/client`. Their controls still send the same approval ID,
   reason and remembered scope to the service. They display service results and failures;
   neither retries stale decisions nor makes authorization policy locally.
+
+![Web approval showing the complete tool input before the decision buttons](../images/app-tool-approval.png)
 
 ## Exactly once
 

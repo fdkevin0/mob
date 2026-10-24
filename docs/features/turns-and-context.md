@@ -30,6 +30,11 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   the owner switch conversations or open a page while a reply streams; only
   while a message, command or decision is still on its way to Mob
   (`dispatching` in the client state) does it hold the other conversations.
+- The web workspace keeps unsent drafts separately for each conversation while
+  switching between them. Drafts stay in memory until the workspace closes or
+  disconnects; they are not written to browser storage. The workspace error
+  banner's **Refresh** retries initialization and the requested conversation,
+  then clears the error on recovery.
 - The web UI and experimental TypeScript TUI use the same `@mob/client`
   conversation state and follow a running turn whenever a snapshot says one is
   active. The client reads the replay itself (`reconnectToStream` and

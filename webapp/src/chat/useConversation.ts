@@ -7,6 +7,7 @@ export function useConversation({
 	connection,
 	id,
 	initial,
+	initialInput = '',
 	onChanged,
 	onAction,
 	onLeave,
@@ -15,17 +16,18 @@ export function useConversation({
 	connection: Connection;
 	id: string;
 	initial: Snapshot;
+	initialInput?: string;
 	onChanged: () => void;
 	onAction?: (action: Action) => void;
 	/** onLeave receives what the conversation showed when it closes or the page is hidden, so reopening it can show that at once. */
-	onLeave?: (snapshot: Snapshot) => void;
+	onLeave?: (snapshot: Snapshot, input: string) => void;
 	changes?: Changes;
 }) {
 	const callbacks = useRef({ onChanged, onAction, onLeave });
 	callbacks.current = { onChanged, onAction, onLeave };
 	const conversation = useMemo(
-		() =>
-			new ConversationClient({
+		() => {
+			const client = new ConversationClient({
 				client: webClient(connection),
 				id,
 				initial,
@@ -35,15 +37,18 @@ export function useConversation({
 				changes,
 				onChanged: () => callbacks.current.onChanged(),
 				onAction: (action) => callbacks.current.onAction?.(action),
-			}),
+			});
+			client.setInput(initialInput);
+			return client;
+		},
 		[connection, id, changes],
 	);
 	const state = useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
 	useEffect(() => {
 		const stop = conversation.start();
 		const leave = () => {
-			const { messages, model, remoteBusy } = conversation.getSnapshot();
-			callbacks.current.onLeave?.({ messages, model, active: remoteBusy });
+			const { messages, model, remoteBusy, input } = conversation.getSnapshot();
+			callbacks.current.onLeave?.({ messages, model, active: remoteBusy }, input);
 		};
 		// A page being hidden may be closing, so what it shows is handed over then too.
 		const hidden = () => {
@@ -58,7 +63,9 @@ export function useConversation({
 	}, [conversation]);
 	const run = useCallback(
 		(text: string) => {
-			void conversation.submit(text);
+			if (conversation.getSnapshot().busy) return false;
+			void conversation.submit(text, { preserveInput: true });
+			return true;
 		},
 		[conversation],
 	);
