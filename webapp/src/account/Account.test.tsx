@@ -120,3 +120,10 @@ it('disconnects Cloudflare while GitHub still signs in', async () => {
 	await waitFor(() => expect(auth.unlinkAccount).toHaveBeenCalledWith({ accountId: 'c' }));
 	await waitFor(() => expect(auth.listAccounts).toHaveBeenCalledTimes(2));
 });
+
+it('says why connecting an account did not finish', async () => {
+	window.history.replaceState(null, '', '/account?error=unable_to_link_account');
+	render(<Account />);
+	expect((await screen.findByRole('alert')).textContent).toMatch(/unable_to_link_account/);
+	expect(window.location.search).toBe('');
+});

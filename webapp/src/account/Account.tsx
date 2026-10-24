@@ -76,6 +76,12 @@ function SignInMethods() {
 		}).catch(e => setError(errorText(e)));
 	}
 	useEffect(() => {
+		// A provider that refused to connect sends the visitor back with ?error=.
+		const failed = new URLSearchParams(window.location.search).get('error');
+		if (failed) {
+			setError(failed === 'account_already_linked_to_different_user' ? 'That account already signs in to another Mob account.' : `Connecting did not finish (${failed}). Try again.`);
+			window.history.replaceState(null, '', window.location.pathname);
+		}
 		load();
 		loadSite().then(site => setCloudflare(!!site.cloudflare)).catch(() => setCloudflare(false));
 	}, []);
