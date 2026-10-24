@@ -10,6 +10,9 @@ import { PlusIcon } from './icons';
 import { ThemePicker } from '../theme/ThemePicker';
 import { cacheScope, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
 
+// home says where a connection keeps conversations.
+const home = (connection: Connection) => (connection.browser ? 'in this browser' : connection.runner ? 'on your runner' : 'on this computer');
+
 const errorText = (error: unknown) =>
 	error instanceof TypeError
 		? 'Mob cannot be reached right now; this shows what this browser kept. Start Mob, then refresh.'
@@ -242,17 +245,20 @@ export function Workspace({
 			>
 				Agents
 			</Button>
-			<Button
-				variant="ghost"
-				className="sidebar-plugins"
-				disabled={busy}
-				onClick={() => {
-					setNavigation(false);
-					setPlugins(true);
-				}}
-			>
-				Plugins & cloud services
-			</Button>
+			{/* Channels and cloud services run in the background, which a browser tab cannot. */}
+			{!connection.browser && (
+				<Button
+					variant="ghost"
+					className="sidebar-plugins"
+					disabled={busy}
+					onClick={() => {
+						setNavigation(false);
+						setPlugins(true);
+					}}
+				>
+					Plugins & cloud services
+				</Button>
+			)}
 			<Button
 				variant="ghost"
 				className="sidebar-plugins"
@@ -265,11 +271,18 @@ export function Workspace({
 				Token usage
 			</Button>
 			<div className="sidebar-footer">
-				<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
-					<span className="status-dot" /> History {connection.runner ? 'on your runner' : 'on this computer'} ·{' '}
-					{background ? 'keeps running' : 'stops with its process'}
-				</p>
-				<label
+				{connection.browser ? (
+					<p title="Mob runs in this tab. Connect a runner for coding agents, the sandbox and messaging channels.">
+						<span className="status-dot" /> History in this browser · stops with this tab
+					</p>
+				) : (
+					<p title={background ? 'Mob keeps running after this window closes' : 'Mob stops with the process that started it'}>
+						<span className="status-dot" /> History {home(connection)} ·{' '}
+						{background ? 'keeps running' : 'stops with its process'}
+					</p>
+				)}
+				{/* The browser runner's history is already in this browser. */}
+				{!connection.browser && <label
 					className="keep-messages"
 					title="Conversation titles are always kept in this browser so Mob opens at once. Messages are kept only when this is on; turning it off forgets them."
 				>
@@ -283,7 +296,7 @@ export function Workspace({
 						}}
 					/>
 					Keep messages on this device
-				</label>
+				</label>}
 				<div className="sidebar-theme">
 					Theme <ThemePicker />
 				</div>
@@ -298,7 +311,7 @@ export function Workspace({
 					</>
 				)}
 				<Button variant="ghost" onClick={disconnect} disabled={busy}>
-					Disconnect
+					{connection.browser ? 'Connect a runner' : 'Disconnect'}
 				</Button>
 			</div>
 		</>
@@ -330,7 +343,7 @@ export function Workspace({
 			<aside className="sidebar">
 				<div className="sidebar-brand">
 					<Logo />
-					<span>{connection.runner ? 'Remote runner' : 'On this computer'}</span>
+					<span>{connection.browser ? 'In this browser' : connection.runner ? 'Remote runner' : 'On this computer'}</span>
 				</div>
 				{links}
 			</aside>
@@ -346,7 +359,7 @@ export function Workspace({
 						<SheetContent>
 							<SheetTitle className="dialog-title">Conversations</SheetTitle>
 							<SheetDescription className="dialog-description">
-								Your history stays {connection.runner ? 'on your runner' : 'on this computer'}.
+								Your history stays {home(connection)}.
 							</SheetDescription>
 							{links}
 						</SheetContent>

@@ -55,11 +55,14 @@ served by the Worker in `worker/`:
   it. The page has its own entry and a content security policy that allows
   only the site itself.
 - `/app` is the web UI. The Worker sends visitors without a session back to
-  `/?signin=app`. Signed-in visitors enter the workspace even when no runner or
-  local Mob is connected yet: they can look around and type a message, and the
-  **Connect a runner** dialog opens only when they do something that needs
-  Mob, such as sending, starting a conversation or opening plugins. It offers
-  **Your own runner** (paired runners, or the Mob address and access token of
+  `/?signin=app`. With no local Mob or runner saved, `/app` runs Mob in the
+  browser (see [Mob in the browser](#mob-in-the-browser)), so a signed-in
+  visitor can start talking at once. **Connect a runner** in the sidebar
+  leaves the browser runner for the workspace without one, where visitors can
+  look around and type a message, and the **Connect a runner** dialog opens
+  when they do something that needs Mob, such as sending, starting a
+  conversation or opening plugins. The choice is remembered until **This
+  browser** is picked again. The dialog offers **This browser**, **Your own runner** (paired runners, or the Mob address and access token of
   Mob on this computer), **Deploy to the cloud**, a free runner in the user's
   account at Render or another host (see
   [Runners in the cloud](#runners-in-the-cloud)), and **Cloud runner**, which is
@@ -239,6 +242,35 @@ No additional cloud secrets are needed. Passkeys add D1 migration
 `bun run test:runner` runs the real
 Worker/D1/Durable Object, the built `mob` binary, runner and browser encryption code
 locally with fake account sessions and an offline demo model.
+
+## Mob in the browser
+
+The public web can run Mob's core service, `@mob/core`, in a dedicated Web
+Worker in the tab (`webapp/src/chat/browser/`), so no runner is needed. The
+page reaches it through a `fetch` that posts each request to the worker and
+streams the response back, the same way the relay is a `fetch` for paired
+runners; the API, the chat stream and the change feed are unchanged. The
+database is the usual SQLite schema on sqlite-wasm, stored in the origin
+private file system (OPFS) with the `opfs-sahpool` VFS, and `providers.json`
+is a setting in that database. Where OPFS is unavailable, such as in some
+private windows, conversations last until the tab closes. One tab at a time
+owns the database; another tab says so until it is reloaded after the first
+one closes.
+
+The browser runner has what needs no process of its own: conversations,
+approvals, memory, commands, token usage and the demo model. Model calls go
+straight from the browser to the provider, so they work only with providers
+that allow cross-origin requests. There is no way to add a provider key in
+the browser yet, so it uses the default OpenCode Zen free tier, or
+`/model demo/echo`. Coding agents, the sandbox, stdio MCP
+servers, messaging channels and schedules need a runner, and Plugins & cloud
+services is hidden. Mob stops when the tab closes.
+
+The worker is built to `/runner/` (not `/assets/`) so the site's Worker can
+give it its own content security policy: it may compile WebAssembly and
+connect to any HTTPS provider, while the `/app` page that holds access tokens
+keeps its narrow `connect-src`. The local web UI that Mob serves itself is
+built without the browser runner.
 
 ## Runners in the cloud
 

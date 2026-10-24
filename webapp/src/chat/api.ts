@@ -1,6 +1,7 @@
 import { MobClient, type Connection as LocalConnection } from '@mob/client';
 import { encryptedFetch } from './remote';
-export type Connection = LocalConnection & { runner?: { id: string; key: string } };
+// A connection reaches Mob on a computer, a paired runner through the relay, or the runner in this browser.
+export type Connection = LocalConnection & { runner?: { id: string; key: string }; browser?: boolean };
 
 export { timeoutFor } from '@mob/client';
 export type { Conversation, ChatMessage, Snapshot } from '@mob/client';
@@ -44,9 +45,16 @@ export function isLocalMob(url: string) {
 // A 401 means the token was replaced, such as by mob token rotate. The event names
 // the rejected token so a late response for an older token cannot sign out a newer one.
 export const unauthorizedEvent = 'mob:unauthorized';
+// The browser runner is built only into the public web; Mob's own pages never load it.
+const browserFetch = (connection: Connection): typeof fetch => async (input, init) => {
+	if (import.meta.env.MODE !== 'public') throw new Error('This Mob has no browser runner.');
+	const runner = await import('./browser/browser');
+	await runner.startBrowser(connection);
+	return runner.browserFetch(input, init);
+};
 export function webClient(connection: Connection) {
 	return new MobClient(connection, {
-		fetch: connection.runner ? encryptedFetch(connection.runner.id, connection.runner.key) : undefined,
+		fetch: connection.browser ? browserFetch(connection) : connection.runner ? encryptedFetch(connection.runner.id, connection.runner.key) : undefined,
 		onUnauthorized: (token) => window.dispatchEvent(new CustomEvent<string>(unauthorizedEvent, { detail: token })),
 	});
 }

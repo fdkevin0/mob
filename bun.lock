@@ -11,10 +11,12 @@
         "@fontsource/geist-mono": "5.3.0",
         "@lobehub/icons-static-svg": "1.95.1",
         "@mob/client": "workspace:*",
+        "@mob/core": "workspace:*",
         "@radix-ui/react-dialog": "1.3.1",
         "@radix-ui/react-dropdown-menu": "2.2.1",
         "@radix-ui/react-slot": "1.5.0",
         "@radix-ui/react-tabs": "1.2.1",
+        "@sqlite.org/sqlite-wasm": "3.53.4-build2",
         "ai": "7.0.142",
         "better-auth": "1.7.11",
         "qrcode.react": "4.2.0",
@@ -115,6 +117,7 @@
     "packages/core": {
       "name": "@mob/core",
       "devDependencies": {
+        "@sqlite.org/sqlite-wasm": "3.53.4-build2",
         "@types/bun": "1.4.3",
       },
     },
@@ -739,6 +742,8 @@
     "@smithy/types": ["@smithy/types@4.19.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-r7jh49VJxGerfAcTQA6gXcKc+98zOp/tqRwzYjgOE+iSQsP6cEU1hq2QzbuipmP68QtYdY9wKEhiCQZIzHgZ4Q=="],
 
     "@speed-highlight/core": ["@speed-highlight/core@1.2.24", "", {}, "sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw=="],
+
+    "@sqlite.org/sqlite-wasm": ["@sqlite.org/sqlite-wasm@3.53.4-build2", "", {}, "sha512-kQVArGJA4z7s56Dm8t+eTBXad4LiohuVj9pfgDNOcxa+Ic5xMrWlLPTq6cT0hw5S4MIvtpsraW+B0wD+IPvC7A=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
