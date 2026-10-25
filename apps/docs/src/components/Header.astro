@@ -24,8 +24,9 @@ import '../../../../webapp/src/components/site/header.css';
 
 <style is:global>
 	:root { --sl-nav-height: 120px; }
-	.page > .header { padding: 0; border: 0; background: transparent; }
-	.docs-tools { background: var(--sl-color-bg-nav); box-sizing: border-box; height: 48px; max-width: 1240px; margin: 0 auto; padding: 6px 28px; display: flex; align-items: center; }
+	/* Docs scrolls text beneath this fixed frame, so the landing gradient needs an opaque backing. */
+	.page > .header { padding: 0; border: 0; background: var(--sl-color-black); }
+	.docs-tools { box-sizing: border-box; height: 48px; max-width: 1240px; margin: 0 auto; padding: 6px 28px; display: flex; align-items: center; }
 	.sl-menu-button { top: calc(var(--sl-nav-height) - 48px + (48px - var(--sl-menu-button-size)) / 2); }
 	@media (max-width: 760px) {
 		:root { --sl-nav-height: 156px; }
