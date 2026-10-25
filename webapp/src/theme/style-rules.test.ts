@@ -44,16 +44,19 @@ function splitTop(value: string, separator: RegExp) {
 // A sharp shadow cast down and to the side. Inset edges and a folded card's
 // straight-down stack are borders, not shadows. The colour and `inset` may sit
 // on either side of the lengths; a blur written as an expression counts as soft.
+// A var() right after the offsets may be the blur or the colour, so a shadow
+// spelled that way is left unclassified.
 const length = /^(-?[\d.]+[a-z]*|(calc|min|max|clamp)\(.*\))$/;
 function hardShadow(shadow: string) {
 	const parts = splitTop(shadow, /\s/);
 	if (parts.includes('inset')) return false;
 	const first = parts.findIndex((part) => length.test(part));
 	if (first < 0) return false;
-	const end = parts.findIndex((part, i) => i > first && !length.test(part));
-	const [x, y, blur = '0'] = parts.slice(first, end < 0 ? undefined : end);
+	const [x, y, next] = parts.slice(first, first + 3);
+	if (y === undefined || !length.test(y) || next?.startsWith('var(')) return false;
+	const blur = next !== undefined && length.test(next) ? next : '0';
 	const zero = (part: string) => /^-?0*\.?0*[a-z]*$/.test(part);
-	return y !== undefined && !zero(x) && !zero(y) && zero(blur);
+	return !zero(x) && !zero(y) && zero(blur);
 }
 
 describe('style rules', () => {
@@ -65,6 +68,7 @@ describe('style rules', () => {
 		expect(hardShadow('inset 2px 0 0 var(--lime)')).toBe(false);
 		expect(hardShadow('4px 4px 0 inset var(--line)')).toBe(false);
 		expect(hardShadow('4px 4px calc(8px) var(--line)')).toBe(false);
+		expect(hardShadow('4px 4px var(--radius) var(--text)')).toBe(false);
 		expect(hardShadow('0 4px 0 -1px var(--surface)')).toBe(false);
 	});
 
