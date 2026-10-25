@@ -390,7 +390,8 @@ it('ends a streamed turn that reached the step limit with Continue, not an error
 
 it('switches the conversation model from the header picker', async () => {
   window.mobDesktop = { connection: async () => ({ url: 'http://localhost', token: 'token' }) };
-  let run: Record<string, unknown> | undefined;
+  let chosen: Record<string, unknown> | undefined;
+  let chatted = false;
   const fetchMock = vi.fn((url: string, options?: RequestInit) => {
     if (url.endsWith('/runtime')) return Promise.resolve(Response.json({ background: false }));
     if (url.endsWith('/config')) return Promise.resolve(Response.json({ defaultModel: 'opencode/mimo-v2.6-flash-free', demo: false }));
@@ -399,9 +400,9 @@ it('switches the conversation model from the header picker', async () => {
       { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', tools: true },
       { id: 'deepseek/deepseek-reasoner', name: 'DeepSeek Reasoner', tools: true, reasoning: true },
     ] }]));
-    if (url.endsWith('/commands/run')) { run = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ handled: false })); }
-    if (url.endsWith('/chat')) return Promise.resolve(new Response('data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }));
-    return Promise.resolve(Response.json({ messages: [], active: false, model: 'deepseek/deepseek-chat' }));
+    if (url.endsWith('/conversations/one/model')) { chosen = JSON.parse(String(options?.body)); return Promise.resolve(Response.json({ model: 'deepseek/deepseek-reasoner' })); }
+    if (url.endsWith('/chat') || url.endsWith('/commands/run')) chatted = true;
+    return Promise.resolve(Response.json({ messages: [], active: false, model: chosen ? 'deepseek/deepseek-reasoner' : 'deepseek/deepseek-chat' }));
   });
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
@@ -415,10 +416,12 @@ it('switches the conversation model from the header picker', async () => {
   await waitFor(() => expect(document.activeElement).toBe(trigger));
   fireEvent.click(trigger);
   fireEvent.click(await screen.findByText('DeepSeek Reasoner'));
-  await waitFor(() => expect(run).toBeDefined());
-  expect(run).toMatchObject({ conversationId: 'one', text: '/model deepseek/deepseek-reasoner' });
+  await waitFor(() => expect(chosen).toEqual({ model: 'deepseek/deepseek-reasoner' }));
+  // Choosing a model is a setting: nothing is said in the conversation, and the draft stays.
+  expect(chatted).toBe(false);
   expect((screen.getByLabelText('Message') as HTMLTextAreaElement).value).toBe('Keep my message');
-  expect(screen.queryByRole('dialog', { name: 'Choose a model' })).toBeNull();
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a model' })).toBeNull());
+  expect(await screen.findByRole('button', { name: 'deepseek/deepseek-reasoner' })).toBeTruthy();
 });
 
 it('opens the conversation sheet and closes it after selecting a conversation', async () => {

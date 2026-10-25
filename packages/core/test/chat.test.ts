@@ -68,13 +68,20 @@ test('a busy conversation refuses a second turn, and stop ends the first', async
 	s.close();
 });
 
-test('transcript commands are answered and recorded', async () => {
+test('transcript commands are answered and recorded; choosing a model is not', async () => {
 	const s = open();
 	const service = new ConversationService(s, demoModels);
 	const c = s.create();
+	const shown = await service.commands.run({ client: 'web', conversationId: c.id, text: '/model' }, true);
+	expect(shown.markdown).toContain('This conversation uses demo/echo');
+	expect((await service.commands.run({ client: 'web', conversationId: c.id, text: '/model demo/echo' }, true)).markdown).toContain('Switched this conversation to demo/echo');
+	expect((await service.commands.run({ client: 'web', conversationId: c.id, text: '/models' }, true)).markdown).toContain('**Current model:** `demo/echo`');
+	expect(s.history(c.id)).toEqual([]);
+	expect(s.conversationModel(c.id)).toBe('demo/echo');
+	expect((await service.commands.run({ client: 'web', conversationId: c.id, text: '/model demo/echo' }, false)).markdown).toContain('Only the owner');
 	const chunks: Record<string, unknown>[] = [];
-	await service.execute({ id: c.id, text: '/model', requestId: newID(), owner: true }, e => { chunks.push(encodeEvent(e)); });
-	expect(chunks.find(c => c.type === 'text-delta')?.delta).toContain('This conversation uses demo/echo');
+	await service.execute({ id: c.id, text: '/compact', requestId: newID(), owner: true }, e => { chunks.push(encodeEvent(e)); });
+	expect(chunks.find(c => c.type === 'text-delta')?.delta).toContain('nothing new to summarize');
 	expect(s.history(c.id)[1].command).toBe(true);
 	const result = await service.commands.run({ client: 'web', conversationId: c.id, text: '/new' }, true);
 	expect(result.action?.kind).toBe('open-conversation');
@@ -82,6 +89,20 @@ test('transcript commands are answered and recorded', async () => {
 		{ value: '/model', label: '/model [NAME | default [NAME]]', detail: "Show or switch this conversation's model" },
 		{ value: '/models', label: '/models [FILTER]', detail: 'List available models' },
 	]);
+	s.close();
+});
+
+test('setModel starts a conversation not started yet and follows the default when empty', () => {
+	const s = open();
+	const service = new ConversationService(s, { ...demoModels, resolve: q => { if (!q.startsWith('demo')) throw new Error('no model matches "' + q + '"'); return new DemoModel(); } });
+	const id = newID();
+	expect(service.model(id)).toBe('demo/echo');
+	expect(service.setModel(id, 'demo/echo')).toBe('demo/echo');
+	expect(s.conversationModel(id)).toBe('demo/echo');
+	expect(s.list()).toEqual([]);
+	expect(service.setModel(id, '')).toBe('demo/echo');
+	expect(s.conversationModel(id)).toBe('');
+	expect(() => service.setModel(id, 'nope/none')).toThrow(expect.objectContaining({ status: 400 }));
 	s.close();
 });
 
@@ -201,7 +222,7 @@ test('a message said again replaces it and everything after it', async () => {
 	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r7', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
 	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r8', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
 	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r8', replace: 'r7' }, () => {})).rejects.toThrow('request already accepted');
-	await expect(service.execute({ id: c.id, text: '/models', requestId: 'r9', replace: 'r8' }, () => {})).rejects.toThrow('cannot replace');
+	await expect(service.execute({ id: c.id, text: '/compact', requestId: 'r9', replace: 'r8' }, () => {})).rejects.toThrow('cannot replace');
 	const stop = new AbortController();
 	stop.abort();
 	await expect(service.start({ id: c.id, text: 'stopped', requestId: 'r10', replace: 'r7' }, stop.signal)).rejects.toThrow();

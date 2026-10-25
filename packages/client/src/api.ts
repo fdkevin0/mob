@@ -61,6 +61,10 @@ export class MobClient {
 	renameConversation(id: string, title: string) {
 		return this.request<{ id: string; title: string }>(`/conversations/${id}/rename`, { title });
 	}
+	/** setModel makes a conversation's later replies use model, or the default when it is empty; it adds nothing to the transcript. */
+	setModel(id: string, model: string) {
+		return this.request<{ model: string }>(`/conversations/${id}/model`, { model });
+	}
 	deleteConversation(id: string) {
 		return this.request<{ deleted: boolean }>(`/conversations/${id}/delete`, {});
 	}

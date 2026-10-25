@@ -120,6 +120,23 @@ export class ConversationClient {
 	};
 	dismissCommand = () => this.update({ commandResult: undefined });
 
+	/**
+	 * setModel chooses the model of this conversation's later replies, or the default when model is empty. A reply
+	 * already running keeps its model, and the draft stays; it reports whether the choice was saved.
+	 */
+	setModel = async (model: string) => {
+		if (!this.active) return false;
+		try {
+			const result = await this.options.client.setModel(this.options.id, model);
+			if (this.active) this.update({ model: result.model, failure: '' });
+			this.options.onChanged?.();
+			return true;
+		} catch (e) {
+			if (this.active) this.update({ failure: errorText(e) });
+			return false;
+		}
+	};
+
 	// Detaching cancels this client's streams, never the service-owned turn.
 	// start/cleanup can repeat (including React StrictMode's effect replay).
 	start = () => {

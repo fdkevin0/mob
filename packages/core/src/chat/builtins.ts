@@ -1,5 +1,6 @@
-// The commands about conversations and models, and the transcript commands
-// (/model, /models, /compact) answered through the chat stream.
+// The commands about conversations and models, and the transcript command
+// /compact answered through the chat stream. Choosing a model changes the
+// conversation's setting only, so /model and /models leave no messages.
 import { parseRef, refString, type Group, type Info } from '../llm/llm';
 import { cell, choices, clientEmail, clientTelegram, clientTUI, clientWeb, clientWeChat, decide as decideAction, openConversation, type Argument, type Command, type CommandCall, type Suggestion } from './commands';
 import { summarize, summaryTokens, transcript, transcriptUsage, type Requests } from './compact';
@@ -53,8 +54,11 @@ export function builtins(s: ConversationService): Command[] {
 	};
 
 	return [
-		{ name: 'model', usage: '/model [NAME | default [NAME]]', summary: "Show or switch this conversation's model", clients: everyClient, transcript: true, args: [modelOrDefault, defaultModel] },
-		{ name: 'models', usage: '/models [FILTER]', summary: 'List available models', clients: everyClient, transcript: true },
+		{
+			name: 'model', usage: '/model [NAME | default [NAME]]', summary: "Show or switch this conversation's model", clients: everyClient, args: [modelOrDefault, defaultModel],
+			run: async call => reply(switchModel(s, call.conversationId, call.rest, call.owner)),
+		},
+		{ name: 'models', usage: '/models [FILTER]', summary: 'List available models', clients: everyClient, run: async call => reply(await models(s, call.conversationId, call.rest, call.signal)) },
 		{ name: 'compact', usage: '/compact', summary: 'Summarize the conversation so far, so later turns read the summary in its place', clients: everyClient, transcript: true },
 		{
 			name: 'new', usage: '/new', summary: 'Start a new conversation', clients: everyClient,
@@ -152,24 +156,19 @@ const modelHelp = '/model shows this conversation\'s model · /model NAME switch
 /** perProvider bounds /models output; a filter narrows a long list. */
 const perProvider = 25;
 
-/** command answers a transcript command and records it with its reply; it is never sent to a model. */
+/** command answers /compact, the transcript command, and records it with its reply; it is never sent to a model. */
 export async function command(s: ConversationService, input: ChatRequest, signal: AbortSignal, emit: (e: Event) => Promise<void>) {
-	// A retried request must not switch models again after later choices.
+	// A retried request must not summarize again.
 	if (s.store.hasRequest(input.requestId)) throw new CommandError(409, 'request already accepted; refresh history');
-	const space = input.text.indexOf(' ');
-	const name = space < 0 ? input.text : input.text.slice(0, space);
-	const args = space < 0 ? '' : input.text.slice(space + 1).trim();
 	let reply = '', used: Requests = [], err: Error | undefined;
 	try {
-		if (name === '/models') reply = await models(s, input.id, args, signal);
-		else if (name === '/compact') [reply, used] = await compact(s, input.id, signal);
-		else reply = switchModel(s, input.id, args, !!input.owner);
+		[reply, used] = await compact(s, input.id, signal);
 	} catch (e) {
 		err = e as Error;
 		used = (e as { requests?: Requests }).requests ?? used;
 	}
 	// A stopped /compact is recorded, with what its summary requests cost before it stopped.
-	const stopped = !!err && signal.aborted && name === '/compact';
+	const stopped = !!err && signal.aborted;
 	if (err && !stopped) throw err;
 	if (stopped) reply = 'Summarizing was stopped; nothing was summarized.';
 	let message: Message;
@@ -231,7 +230,7 @@ export function describe(i: Info) {
 	return traits.join(' · ');
 }
 
-async function models(s: ConversationService, id: string, filter: string, signal: AbortSignal) {
+async function models(s: ConversationService, id: string, filter: string, signal?: AbortSignal) {
 	const current = s.model(id);
 	const currentRef = parseRef(current);
 	const groups: Group[] = await s.models?.list(filter, signal) ?? [];
@@ -261,7 +260,7 @@ function switchModel(s: ConversationService, id: string, args: string, owner: bo
 			const d = describe(s.models!.resolve(current).info);
 			if (d) line += ' — ' + d;
 		} catch (e) { line += ' (unavailable: ' + (e as Error).message + ')'; }
-		if (!s.store.conversationModel(id)) line += ' (the default)';
+		if (!s.store.exists(id) || !s.store.conversationModel(id)) line += ' (the default)';
 		return line + '\n' + modelHelp;
 	}
 	if (!owner) return 'Only the owner of this Mob can switch models.';
@@ -270,16 +269,15 @@ function switchModel(s: ConversationService, id: string, args: string, owner: bo
 	if (target === 'default') {
 		const rest = space < 0 ? '' : args.slice(space + 1).trim();
 		if (!rest) {
-			s.store.setConversationModel(id, '');
+			try { s.setModel(id, ''); } catch (e) { return (e as Error).message; }
 			return 'This conversation now follows the default model, ' + s.models!.default() + '.';
 		}
 		try {
 			return 'The default model is now ' + refString(s.models!.setDefault(rest)) + '. Conversations without their own /model choice use it.';
 		} catch (e) { return (e as Error).message; }
 	}
-	let m;
-	try { m = s.models!.resolve(args); } catch (e) { return (e as Error).message; }
-	s.store.setConversationModel(id, refString(m.ref));
-	const d = describe(m.info);
-	return 'Switched this conversation to ' + refString(m.ref) + (d ? ' — ' + d : '') + '.';
+	let ref;
+	try { ref = s.setModel(id, args); } catch (e) { return (e as Error).message; }
+	const d = describe(s.models!.resolve(ref).info);
+	return 'Switched this conversation to ' + ref + (d ? ' — ' + d : '') + '.';
 }

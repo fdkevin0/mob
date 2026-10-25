@@ -87,6 +87,7 @@ export function Thread({
 		commandResult,
 		dismissCommand,
 		dispatching,
+		setModel,
 	} = useConversation({ connection, id, initial, initialInput, onChanged, onAction, onLeave, changes });
 	useEffect(() => {
 		onDispatching?.(dispatching);
@@ -275,7 +276,9 @@ export function Thread({
 										defaultModel={defaultModel}
 										disabled={busy}
 										onPick={(choice) => {
-											if (run(choice ? `/model ${choice}` : '/model default')) setChoosing(false);
+											void setModel(choice ?? '').then((saved) => {
+												if (saved) setChoosing(false);
+											});
 										}}
 										addProvider={
 											addProvider &&

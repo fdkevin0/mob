@@ -61,7 +61,7 @@ const foldAbove = 12;
 
 /**
  * ModelPicker offers the models of every configured provider for this conversation.
- * It reuses the /model command: choosing a model is the same switch a typed command makes.
+ * Choosing one changes the conversation's model setting, as /model does; neither adds to the transcript.
  */
 export function ModelPicker({
 	connection,

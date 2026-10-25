@@ -54,11 +54,10 @@ or does nothing if all result groups are collapsed. Clicking outside or pressing
 Escape closes it; choosing a model also closes it. It lists every enabled
 provider's models with what each can do, marks the current one, and offers
 **Follow the default** for conversations that should not pin a model. Choosing
-a model runs the same `/model` command, so commands, channels and the shared
-client remain the single implementation of model switching. Picker commands
-preserve the message draft even if switching fails or delivery remains uncertain
-after a dropped connection. Recovery never inserts a picker command into the
-message box. Model choices are disabled
+a model saves the conversation's model setting through
+`POST /api/conversations/{id}/model` (`{model}`, empty for the default), the
+same change `/model` makes; it sends no chat and keeps the message draft. If
+the choice is refused, the picker stays open and the error shows. Model choices are disabled
 while a turn or command is busy. A provider whose model list fails stays visible
 with its error, including when search or the free-only filter is active.
 
@@ -106,9 +105,16 @@ magpie's usage and routing rules see them as Mob's.
 - `conversations.model` holds the `/model` choice; empty follows
   `providers.json`'s `default`. Each assistant message records its model and
   usage, priced from the catalog.
-- `/model` and `/models` are answered by the service for every client and
-  channel, stored in the transcript as `kind='command'` and never sent to a
-  model. Only the owner may switch: the local UI, the Telegram bot's user, the
+- Choosing a model is a setting of the conversation, not part of its
+  transcript: `/model`, `/models` and the web picker add no messages, and the
+  next reply records the model it ran on. `/model` and `/models` are answered by
+  the service for every client and channel through the command registry, and
+  their answers are shown once, not stored. (Conversations from before this
+  change may still hold `/model` commands recorded as `kind='command'`; they are
+  shown as they were and never sent to a model.) `POST
+  /api/conversations/{id}/model` saves the choice for the local UI, starting a
+  conversation not started yet, which stays unlisted until something is said in
+  it. Only the owner may switch: the local UI, the Telegram bot's user, the
   first allowed WeChat user and email's owner address.
 - History is replayed as real tool calls and results, so one model can continue
   another's work. Reasoning from earlier turns is not replayed; it belongs to
