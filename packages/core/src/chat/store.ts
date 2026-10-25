@@ -289,6 +289,8 @@ export class Store {
 	begin(id: string, requestID: string, text: string, model: string, replace = ''): Message {
 		const m: Message = { id: newID(), role: 'assistant', parts: [], model };
 		this.db.transaction(() => {
+			// A request already accepted is refused before anything is cut, even when it is among the messages replaced.
+			if (replace && this.hasRequest(requestID)) throw new Conflict('request already accepted');
 			if (replace) this.cut(id, replace);
 			if (text) {
 				this.db.run("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", requestID, id, JSON.stringify([{ type: 'text', text }]));

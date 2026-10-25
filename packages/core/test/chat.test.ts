@@ -199,6 +199,8 @@ test('a message said again replaces it and everything after it', async () => {
 	await service.execute({ id: c.id, text: 'later', requestId: 'r8' }, () => {});
 	const kept = s.history(c.id).map(m => m.id);
 	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r7', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
+	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r8', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
+	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r8', replace: 'r7' }, () => {})).rejects.toThrow('request already accepted');
 	await expect(service.execute({ id: c.id, text: '/models', requestId: 'r9', replace: 'r8' }, () => {})).rejects.toThrow('cannot replace');
 	const stop = new AbortController();
 	stop.abort();
