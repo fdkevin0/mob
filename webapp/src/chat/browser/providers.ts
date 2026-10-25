@@ -2,6 +2,7 @@
 // so the page saves one provider at a time through the plugin route
 // POST /api/plugins/browser/provider. Only vendors that accept cross-origin
 // requests work here, which is why the free OpenCode Zen tier is not offered.
+import { chromeProvider } from './chrome';
 import { HTTPError, findPreset, providerFromForm, saveProvider, type Plugin, type Provider, type ProviderForm, type ProviderRegistry, type ProvidersFile } from '@mob/core';
 
 /** browserProviders is where the browser runner starts: the offline demo model, until a provider is saved. */
@@ -61,6 +62,10 @@ export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch
 				if (!origin) throw new HTTPError(400, 'Cloudflare models need Mob on usemob.app.');
 				return save({ id: 'cloudflare', name: 'Cloudflare Workers AI', chat: origin + cloudflarePath }, model);
 			},
+		}, {
+			// Chrome's built-in model, which the page has already downloaded.
+			method: 'POST', path: 'chrome',
+			handle: () => save(chromeProvider()),
 		}],
 	};
 }

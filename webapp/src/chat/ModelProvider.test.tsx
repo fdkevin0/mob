@@ -39,3 +39,32 @@ it('offers Workers AI of the signed-in Cloudflare account only in the browser', 
 	expect(screen.getByRole('button', { name: 'Use my Cloudflare account' })).toBeDefined();
 	expect(screen.queryByLabelText('API key')).toBeNull();
 });
+
+it('downloads Chrome’s built-in model before it saves it, only where Chrome has one', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
+	const { unmount } = render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
+	expect(screen.queryByRole('option', { name: /Chrome built-in model/ })).toBeNull();
+	unmount();
+	const create = vi.fn(async (options: { monitor?: (m: { addEventListener: (t: string, l: (e: { loaded: number }) => void) => void }) => void }) => {
+		options.monitor?.({ addEventListener: (_t, l) => l({ loaded: 1 }) });
+		return { destroy: () => {} };
+	});
+	vi.stubGlobal('LanguageModel', { availability: async () => 'downloadable', create });
+	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
+	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'chrome' } });
+	expect(screen.queryByLabelText('API key')).toBeNull();
+	expect(screen.queryByLabelText('Model (optional)')).toBeNull();
+	fireEvent.click(screen.getByRole('button', { name: 'Use Chrome’s model' }));
+	// The save then goes to the browser runner, which only the public web build has.
+	expect((await screen.findByRole('alert')).textContent).toContain('no browser runner');
+	expect(create).toHaveBeenCalledOnce();
+});
+
+it('says so when this device cannot run Chrome’s model', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
+	vi.stubGlobal('LanguageModel', { availability: async () => 'unavailable', create: vi.fn() });
+	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
+	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'chrome' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Use Chrome’s model' }));
+	expect((await screen.findByRole('alert')).textContent).toContain('cannot run its built-in model');
+});

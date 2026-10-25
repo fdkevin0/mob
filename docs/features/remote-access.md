@@ -307,6 +307,22 @@ forwards `GET /models` (Workers AI text generation models, with
 never reaches the page, and without a model named the browser starts on the
 first one that takes tools.
 
+**Chrome built-in model (experimental, offline)** is offered where the
+browser has Chrome's Prompt API (`LanguageModel`, Chrome 148 or later on a
+desktop). It runs Gemini Nano on the device: free, with no key, and offline
+once Chrome has downloaded the model (about 4 GB, once; Chrome downloads only
+after a click, so the dialog starts the download with a progress bar before
+it saves). The Prompt API exists only on pages, not in workers, so the
+provider's base URL is `https://built-in.chrome.invalid/v1`, which never
+reaches the network: the worker answers it like an OpenAI-compatible server
+(`GET /models` lists `gemini-nano`, `POST /chat/completions` streams server-sent
+events) and posts each prompt to the page, which creates a session with the
+conversation so far and streams the reply back (`POST
+/api/plugins/browser/chrome`). Gemini Nano is small and cannot call tools
+reliably, so the provider is saved with `tools: false`: it only replies, and
+cannot use tools or run tasks. It reads and writes English, Spanish and
+Japanese best, and its context is about 6,000 tokens.
+
 Keys are stored unencrypted in the browser's database, in the site's origin
 private file system, like any key a web app keeps. The browser keeps other
 sites out, and the API returns keys only masked, but anyone who can run code
