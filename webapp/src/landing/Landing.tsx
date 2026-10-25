@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { authClient, keepOffer, loadSite, openApp, pendingOffer, returnAfterSignIn, type Site } from './auth';
-import { Logo } from '../components/brand/Logo';
 import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
+import { Segmented } from '../components/ui/segmented';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { SignIn } from './SignIn';
-import { ThemePicker } from '../theme/ThemePicker';
+import { SiteFooter, SiteHeader } from '../components/site/Site';
 import { Story } from './Story';
 
 const installs = {
@@ -49,37 +49,31 @@ export function Landing() {
 	return (
 		<Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(undefined); }}>
 		<div className="landing">
-			<header className="nav"><div className="nav-inner">
-				<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
-				<nav className="nav-links" aria-label="Sections">
-					<a href="#how">How it works</a>
-					<a href="#features">Features</a>
-					<a href="/demo">Demo</a>
-					<a href="#start">Start</a>
-					<a href="/docs/">Docs</a>
-					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
-				</nav>
-				<ThemePicker className="nav-theme" />
-				<div className="nav-account">
-					{session.isPending ? <span className="nav-pending" aria-hidden="true" /> : user ? (
-						<div className="account">
-							<Button className="small" onClick={openApp}>Open Mob</Button>
-							<DropdownMenu>
-							<DropdownMenuTrigger asChild><button className="avatar" aria-label="Account">
-								{user.image ? <img src={user.image} alt="" /> : (user.name || user.email).slice(0, 1).toUpperCase()}
-							</button></DropdownMenuTrigger>
-							<DropdownMenuContent>
-								<DropdownMenuLabel className="ui-menu-label"><strong>{user.name}</strong>{user.email}</DropdownMenuLabel>
-								<DropdownMenuItem className="ui-menu-item" asChild><a href="/account">Account</a></DropdownMenuItem>
-								<DropdownMenuItem className="ui-menu-item" onSelect={() => { void authClient.signOut(); }}>Sign out</DropdownMenuItem>
-							</DropdownMenuContent>
-							</DropdownMenu>
-						</div>
-					) : (
-						<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><Icon name="lock" size={14} /> Sign in</Button>
-					)}
-				</div>
-			</div></header>
+			<SiteHeader floating links={[
+				{ href: '#how', label: 'How it works' },
+				{ href: '#features', label: 'Features' },
+				{ href: '/demo', label: 'Demo' },
+				{ href: '#start', label: 'Start' },
+				{ href: '/docs/', label: 'Docs' },
+			]}>
+				{session.isPending ? <span className="nav-pending" aria-hidden="true" /> : user ? (
+					<>
+						<Button className="small" onClick={openApp}>Open Mob</Button>
+						<DropdownMenu>
+						<DropdownMenuTrigger asChild><button className="avatar" aria-label="Account">
+							{user.image ? <img src={user.image} alt="" /> : (user.name || user.email).slice(0, 1).toUpperCase()}
+						</button></DropdownMenuTrigger>
+						<DropdownMenuContent>
+							<DropdownMenuLabel className="ui-menu-label"><strong>{user.name}</strong>{user.email}</DropdownMenuLabel>
+							<DropdownMenuItem className="ui-menu-item" asChild><a href="/account">Account</a></DropdownMenuItem>
+							<DropdownMenuItem className="ui-menu-item" onSelect={() => { void authClient.signOut(); }}>Sign out</DropdownMenuItem>
+						</DropdownMenuContent>
+						</DropdownMenu>
+					</>
+				) : (
+					<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><Icon name="lock" size={14} /> Sign in</Button>
+				)}
+			</SiteHeader>
 
 			<main>
 				<Story hero={(
@@ -99,11 +93,8 @@ export function Landing() {
 				<section className="start" id="start">
 					<h2>Start in a minute</h2>
 					<div className="install">
-						<div className="install-tabs" role="tablist" aria-label="Ways to install">
-							{(Object.keys(installs) as Install[]).map(name => (
-								<button key={name} type="button" role="tab" aria-selected={install === name} onClick={() => setInstall(name)}>{name}</button>
-							))}
-						</div>
+						<Segmented tabs className="install-tabs" label="Ways to install" value={install} onChange={setInstall}
+							options={(Object.keys(installs) as Install[]).map(name => ({ value: name, label: name }))} />
 						<pre className="terminal" role="tabpanel" aria-label={`Install from ${install}`}><code>
 							{installs[install].lines.map(line => <span key={line}><span className="prompt">$</span>{line}{'\n'}</span>)}
 							<span className="ok">✓</span>Mob is running<span className="cursor" />
@@ -114,16 +105,11 @@ export function Landing() {
 				</section>
 			</main>
 
-			<footer className="footer">
-				<div className="footer-brand"><Logo size={20} /><span>MIT licensed</span></div>
-				<nav aria-label="Project links">
-					<a href="/demo">Demo</a>
-					<a href="/docs/">Docs</a>
-					<a href="https://github.com/fdkevin0/mob/blob/main/CHANGELOG.md" rel="noreferrer">Changelog</a>
-					<a href="https://github.com/fdkevin0/mob/releases" rel="noreferrer">Releases</a>
-					<a href="https://github.com/fdkevin0/mob" rel="noreferrer">GitHub</a>
-				</nav>
-			</footer>
+			<SiteFooter links={[
+				{ href: '/demo', label: 'Demo' },
+				{ href: '/docs/', label: 'Docs' },
+				{ href: 'https://github.com/fdkevin0/mob/blob/main/CHANGELOG.md', label: 'Changelog' },
+			]} />
 
 			{dialog ? <SignIn site={site} siteError={siteError} reason={dialog.reason} returnFocus={signInTrigger} /> : null}
 		</div>

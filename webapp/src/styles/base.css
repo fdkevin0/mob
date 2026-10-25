@@ -303,3 +303,28 @@ a {
 	outline: 2px solid var(--ring);
 	outline-offset: 1px;
 }
+
+.ui-segmented {
+	display: inline-flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--line-strong);
+	border-radius: calc(var(--radius) + 2px);
+}
+.ui-segmented button {
+	height: 28px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--muted-foreground);
+	font-size: 13px;
+	font-weight: 500;
+}
+.ui-segmented button:hover {
+	color: var(--text);
+}
+.ui-segmented button:is([aria-pressed='true'], [aria-selected='true']) {
+	background: var(--surface-raised);
+	color: var(--text);
+}
