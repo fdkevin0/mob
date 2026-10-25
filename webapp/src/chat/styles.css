@@ -744,8 +744,9 @@
 /* Under a reply: its actions, which fade in, and what wrote it and what it took, which stays. */
 .message-foot {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
+	gap: 0 8px;
 	min-height: 28px;
 	margin: -10px 0 -12px;
 }
@@ -754,29 +755,41 @@
 }
 .reply-meta-anchor {
 	position: relative;
+	min-width: 0;
+	max-width: 100%;
 	margin-left: auto;
 }
 .reply-meta {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	height: 28px;
-	padding: 0 8px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 2px 6px;
+	max-width: 100%;
+	min-height: 28px;
+	padding: 4px 8px;
 	border: 0;
 	border-radius: var(--radius);
 	background: none;
 	color: var(--muted-foreground);
-	font: 12px var(--sans);
+	font: 12px/20px var(--sans);
 	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
+	text-align: right;
 	cursor: pointer;
+}
+/* On a narrow screen the label wraps between its parts, and a model ID too long for a line is cut short. */
+.reply-meta > span:not(.brand-icon) {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .reply-meta.quiet {
 	margin-left: auto;
 	cursor: default;
 }
 .reply-meta-dot {
-	margin-right: 6px;
+	margin-left: 6px;
 	opacity: 0.5;
 }
 button.reply-meta:hover,

@@ -47,7 +47,7 @@ export function ReplyMeta({ message, live }: { message: ChatMessage; live: boole
 		return (
 			<span className="reply-meta quiet" title={model}>
 				{brand && <BrandIcon brand={brand} size={14} />}
-				{summary}
+				<span>{summary}</span>
 			</span>
 		);
 	return (
@@ -58,8 +58,8 @@ export function ReplyMeta({ message, live }: { message: ChatMessage; live: boole
 						{brand && <BrandIcon brand={brand} size={14} />}
 						{label.map((part, i) => (
 							<span key={i}>
-								{i > 0 && <span className="reply-meta-dot">·</span>}
 								{part}
+								{i < label.length - 1 && <span className="reply-meta-dot">·</span>}
 							</span>
 						))}
 					</button>
