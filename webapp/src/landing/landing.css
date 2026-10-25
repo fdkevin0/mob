@@ -128,11 +128,6 @@ code { font-family: var(--mono); font-size: .92em; }
 
 /* Footer */
 
-.corner { position: absolute; width: 14px; height: 14px; border-color: var(--lime); border-style: solid; border-width: 0; }
-.corner.tl { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
-.corner.tr { top: -1px; right: -1px; border-top-width: 2px; border-right-width: 2px; }
-.corner.bl { bottom: -1px; left: -1px; border-bottom-width: 2px; border-left-width: 2px; }
-.corner.br { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
 
 /* Sign-in dialog */
 .dialog-icon { color: var(--lime); }

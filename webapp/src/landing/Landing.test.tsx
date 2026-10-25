@@ -13,9 +13,9 @@ vi.mock('./voxel/VoxelCanvas', () => ({ VoxelCanvas: () => null }));
 
 import { Landing } from './Landing';
 
-it('returns focus to the button that opened sign-in from the hero', async () => {
+it.each(['Get started', 'Sign in'])('returns focus to %s after closing sign-in', async name => {
 	render(<Landing />);
-	const trigger = screen.getByRole('button', { name: 'Get started' });
+	const trigger = screen.getByRole('button', { name });
 	fireEvent.click(trigger);
 	const dialog = await screen.findByRole('dialog', { name: 'Sign in to Mob' });
 	await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));

@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react';
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { cn } from '../../lib/utils';
+import './dropdown-menu.css';
 
 export const DropdownMenu = MenuPrimitive.Root;
 export const DropdownMenuTrigger = MenuPrimitive.Trigger;

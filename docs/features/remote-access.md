@@ -9,15 +9,17 @@ changes reach users when they merge, without a release. It has five parts,
 served by the Worker in `worker/`:
 
 The landing, demo, documentation and account pages share Home, Demo, Docs
-and GitHub navigation, a theme picker, and fixed Account and Open Mob links.
+and GitHub navigation, a theme picker, and an Open Mob link followed by a
+login control. Signed-in visitors see their avatar (or initial); its menu
+contains Account and Sign out. Signed-out visitors use the control to sign in.
 The current section is marked; on narrow screens the navigation and theme
 picker occupy a second row instead of disappearing. Docs keeps search inside
 the header, collapsing it to an icon when space is limited; its mobile
 documentation menu also stays in the header, with a quiet outlined button.
 The header uses the same fading background as the landing and demo pages.
 Article content and the desktop sidebar scroll behind that gradient.
-Account opens account management (or sign-in when signed out); Open Mob opens the app
-(or sign-in). Sign out is on the account page. The landing page's Get started
+Account opens account management; Open Mob opens the app (or sign-in).
+Sign out is also available on the account page. The landing page's Get started
 button also opens sign-in directly, with How it works, Features and Install
 links beneath it for navigation within the page.
 

@@ -1,6 +1,8 @@
 import { Logo } from '../brand/Logo';
 import { ThemePicker } from '../../theme/ThemePicker';
-import { siteLinks, accountLinks } from './navigation';
+import type { MouseEventHandler } from 'react';
+import { siteLinks } from './navigation';
+import { UserMenu } from '../../landing/UserMenu';
 import './header.css';
 import './site.css';
 
@@ -9,7 +11,7 @@ export type SiteLink = { href: string; label: string };
 const github = 'https://github.com/fdkevin0/mob';
 
 // React and Astro render the same navigation data and use header.css.
-export function SiteHeader({ current, floating }: { current?: string; floating?: boolean }) {
+export function SiteHeader({ current, floating, onSignIn }: { current?: string; floating?: boolean; onSignIn?: MouseEventHandler<HTMLButtonElement> }) {
 	return (
 		<header className={`site-header${floating ? ' site-header-floating' : ''}`}><div className="site-header-inner">
 			<a href="/" className="site-brand" aria-label="Mob home"><Logo /></a>
@@ -18,7 +20,8 @@ export function SiteHeader({ current, floating }: { current?: string; floating?:
 			</nav>
 			<div className="site-theme"><ThemePicker /></div>
 			<div className="site-account">
-				{accountLinks.map(link => <a key={link.href} href={link.href} aria-current={link.href === current ? 'page' : undefined}>{link.label}</a>)}
+				<a href="/app">Open Mob</a>
+				<UserMenu onSignIn={onSignIn} />
 			</div>
 		</div></header>
 	);

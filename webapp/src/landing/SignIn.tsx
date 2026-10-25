@@ -83,7 +83,6 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 		<DialogContent className="sign-in-dialog" onCloseAutoFocus={event => {
 			if (returnFocus?.current) { event.preventDefault(); returnFocus.current.focus(); }
 		}}>
-			<span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
 			<Icon name="lock" size={28} className="dialog-icon" />
 			<DialogTitle className="dialog-title">Sign in to Mob</DialogTitle>
 			<DialogDescription className="dialog-description">{reason ?? `Use your GitHub${site?.cloudflare ? ' or Cloudflare' : ''} account to open Mob on the web. Your conversations stay on your computer.`}</DialogDescription>

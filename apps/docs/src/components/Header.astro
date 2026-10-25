@@ -1,7 +1,7 @@
 ---
 import Search from '@astrojs/starlight/components/Search.astro';
 import ThemeSelect from './ThemeSelect.astro';
-import { siteLinks, accountLinks } from '../../../../webapp/src/components/site/navigation';
+import { siteLinks } from '../../../../webapp/src/components/site/navigation';
 import { calfHeadSVG } from '../../../../webapp/src/components/brand/calfHead';
 import '../../../../webapp/src/components/site/header.css';
 ---
@@ -17,10 +17,18 @@ import '../../../../webapp/src/components/site/header.css';
 		<div class="docs-search print:hidden"><Search /></div>
 		<div class="site-theme"><ThemeSelect /></div>
 		<div class="site-account">
-			{accountLinks.map(link => <a href={link.href}>{link.label}</a>)}
+			<a href="/app">Open Mob</a>
+			<div id="site-user"><a class="site-user" href="/?signin=account" aria-label="Sign in"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg></a></div>
 		</div>
 	</div>
 </div>
+
+<script>
+	import { createElement } from 'react';
+	import { createRoot } from 'react-dom/client';
+	import { UserMenu } from '../../../../webapp/src/landing/UserMenu';
+	createRoot(document.getElementById('site-user')!).render(createElement(UserMenu));
+</script>
 
 <style is:global>
 	:root { --sl-nav-height: 72px; }

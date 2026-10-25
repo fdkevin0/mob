@@ -50,7 +50,7 @@ export function Landing() {
 	return (
 		<Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(undefined); }}>
 		<div className="landing">
-			<SiteHeader floating current="/" />
+			<SiteHeader floating current="/" onSignIn={showSignIn} />
 
 			<main>
 				<Story hero={(

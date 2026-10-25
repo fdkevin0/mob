@@ -5,8 +5,3 @@ export const siteLinks = [
 	{ href: '/docs/', label: 'Docs' },
 	{ href: 'https://github.com/fdkevin0/mob', label: 'GitHub' },
 ];
-
-export const accountLinks = [
-	{ href: '/account', label: 'Account' },
-	{ href: '/app', label: 'Open Mob' },
-];
