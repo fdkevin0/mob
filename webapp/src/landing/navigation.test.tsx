@@ -9,7 +9,7 @@ const auth = vi.hoisted(() => ({
 vi.mock('./auth', () => ({ authClient: { useSession: () => auth.session, signOut: auth.signOut }, openApp: auth.openApp }));
 import { SiteHeader } from '../components/site/Site';
 
-beforeEach(() => { auth.session = { isPending: false, data: null }; auth.signOut.mockReset(); auth.openApp.mockReset(); });
+beforeEach(() => { localStorage.clear(); auth.session = { isPending: false, data: null }; auth.signOut.mockReset(); auth.openApp.mockReset(); });
 
 it.each(['/', '/demo', '/docs/', '/account'])('keeps the same public navigation on %s', current => {
 	render(<SiteHeader current={current} />);
@@ -29,6 +29,17 @@ it('reserves the user control while session state loads', () => {
 	render(<SiteHeader />);
 	expect(screen.getByRole('button', { name: 'Loading account' }).hasAttribute('disabled')).toBe(true);
 	expect(screen.queryByRole('button', { name: 'Log in' })).toBeNull();
+});
+
+it('shows the last signed-in visitor while the session loads, then follows the answer', () => {
+	localStorage.setItem('mob-account-hint', JSON.stringify({ name: 'Ada', email: 'ada@example.test', image: null }));
+	auth.session = { isPending: true, data: null };
+	const { rerender } = render(<SiteHeader />);
+	expect(screen.getByRole('button', { name: 'Account' }).textContent).toBe('A');
+	auth.session = { isPending: false, data: null };
+	rerender(<SiteHeader />);
+	expect(screen.getByRole('button', { name: 'Log in' })).toBeTruthy();
+	expect(localStorage.getItem('mob-account-hint')).toBeNull();
 });
 
 it('shows the avatar after Open Mob and falls back to an initial if the image fails', () => {

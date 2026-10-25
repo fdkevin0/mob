@@ -1,13 +1,20 @@
-import { useState, type MouseEventHandler } from 'react';
+import { useEffect, useState, type MouseEventHandler } from 'react';
 import { authClient } from '../../landing/auth';
+import { readAccountHint, writeAccountHint } from './accountHint';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 export function UserMenu({ onSignIn }: { onSignIn?: MouseEventHandler<HTMLButtonElement> }) {
 	const session = authClient.useSession();
-	const user = session.data?.user;
+	// While the session check runs, show whoever was signed in last time.
+	const [hint] = useState(readAccountHint);
+	const user = session.isPending ? hint : session.data?.user;
 	const [failedImage, setFailedImage] = useState<string>();
 	const [error, setError] = useState('');
 	const [signingOut, setSigningOut] = useState(false);
+
+	useEffect(() => {
+		if (!session.isPending && !session.error) writeAccountHint(session.data?.user ?? null);
+	}, [session.isPending, session.error, session.data?.user]);
 
 	async function signOut() {
 		setSigningOut(true);

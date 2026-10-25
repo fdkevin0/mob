@@ -19,38 +19,58 @@ import '../../../../webapp/src/components/site/header.css';
 		<div class="site-account">
 			<a class="site-open" href="/app">Open Mob</a>
 			<div id="site-user"><a class="site-user site-login" href="/?signin=account">Log in</a></div>
+			<script is:inline>
+				// The docs load no framework. Inline, so it runs before the header
+				// paints: the last signed-in visitor (the key in
+				// webapp/src/components/site/accountHint.ts) shows at once, then the
+				// session answer replaces it. A signed-in avatar links to the account
+				// page, which has Sign out; everyone else keeps the Log in link.
+				(() => {
+					const key = 'mob-account-hint';
+					const slot = document.getElementById('site-user');
+					const login = slot.firstElementChild;
+					const show = user => {
+						if (!user) return slot.replaceChildren(login);
+						const link = document.createElement('a');
+						link.className = 'site-user';
+						link.href = '/account';
+						link.setAttribute('aria-label', 'Account');
+						link.title = user.name || user.email;
+						const initial = () => { link.textContent = (user.name || user.email).slice(0, 1).toUpperCase(); };
+						if (user.image) {
+							const image = document.createElement('img');
+							image.alt = '';
+							image.src = user.image;
+							image.addEventListener('error', initial, { once: true });
+							link.append(image);
+						} else initial();
+						slot.replaceChildren(link);
+					};
+					try {
+						const hint = JSON.parse(localStorage.getItem(key) || 'null');
+						if (hint && typeof hint.email === 'string') show(hint);
+					} catch {}
+					fetch('/api/auth/get-session', { credentials: 'same-origin' })
+						.then(response => (response.ok ? response.json() : Promise.reject()))
+						.then(session => {
+							const user = session && session.user;
+							try {
+								if (user) localStorage.setItem(key, JSON.stringify({ name: user.name, email: user.email, image: user.image || null }));
+								else localStorage.removeItem(key);
+							} catch {}
+							show(user);
+						})
+						.catch(() => {});
+				})();
+			</script>
 		</div>
 	</div>
 </div>
 
 <script>
-	// The docs load no framework: a signed-in visitor's avatar links to the
-	// account page (which has Sign out); everyone else keeps the Log in link.
 	if (new URLSearchParams(location.search).has('search')) {
 		customElements.whenDefined('site-search').then(() => document.querySelector<HTMLButtonElement>('[data-open-modal]')?.click());
 	}
-	type User = { name?: string; email: string; image?: string | null };
-	fetch('/api/auth/get-session', { credentials: 'same-origin' })
-		.then(response => (response.ok ? response.json() : null))
-		.then((session: { user?: User } | null) => {
-			const user = session?.user;
-			if (!user) return;
-			const link = document.createElement('a');
-			link.className = 'site-user';
-			link.href = '/account';
-			link.setAttribute('aria-label', 'Account');
-			link.title = user.name || user.email;
-			const initial = () => { link.textContent = (user.name || user.email).slice(0, 1).toUpperCase(); };
-			if (user.image) {
-				const image = document.createElement('img');
-				image.alt = '';
-				image.src = user.image;
-				image.addEventListener('error', initial, { once: true });
-				link.append(image);
-			} else initial();
-			document.getElementById('site-user')!.replaceChildren(link);
-		})
-		.catch(() => { /* stay signed out */ });
 </script>
 
 <style is:global>
