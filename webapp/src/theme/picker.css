@@ -1,0 +1,35 @@
+.theme-picker {
+	display: inline-flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--line-strong, var(--sl-color-gray-5));
+	border-radius: 10px;
+}
+.theme-picker label {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 24px;
+	border-radius: 8px;
+	color: var(--muted-foreground, var(--sl-color-gray-3));
+	cursor: pointer;
+}
+.theme-picker input {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+.theme-picker label:hover {
+	color: var(--text, var(--sl-color-gray-1));
+}
+.theme-picker label:has(:checked) {
+	background: var(--accent, var(--sl-color-gray-6));
+	color: var(--text, var(--sl-color-gray-1));
+}
+.theme-picker label:has(:focus-visible) {
+	outline: 2px solid var(--ring, var(--sl-color-accent));
+	outline-offset: 1px;
+}

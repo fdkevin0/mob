@@ -1,0 +1,59 @@
+/* One public header, independent of the React and Starlight page styles. */
+.site-header {
+	--site-bg: #0c0d0f;
+	--site-text: #eef1ea;
+	--site-muted: #8f978e;
+	--site-border: #ffffff1a;
+	--site-accent: #c8f560;
+	--text: var(--site-text);
+	--muted-foreground: var(--site-muted);
+	--line-strong: var(--site-border);
+	--accent: color-mix(in srgb, var(--site-text) 4%, transparent);
+	--ring: var(--site-accent);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	background: linear-gradient(var(--site-bg) 55%, transparent);
+	font-family: 'Geist Variable', sans-serif;
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--site-text);
+}
+[data-theme='light'] .site-header {
+	--site-bg: #f4f3ee;
+	--site-text: #1a1c15;
+	--site-muted: #696c60;
+	--site-border: #1a1c151c;
+	--site-accent: #4f7a0c;
+}
+.site-header-floating { position: fixed; inset: 0 0 auto; }
+.site-header-inner {
+	box-sizing: border-box;
+	max-width: 1240px;
+	height: 72px;
+	margin: 0 auto;
+	padding: 18px 28px;
+	display: grid;
+	grid-template-columns: auto 1fr auto auto;
+	align-items: center;
+	gap: 28px;
+}
+.site-header a { color: inherit; text-decoration: none; white-space: nowrap; }
+.site-header a:focus-visible { outline: 2px solid var(--site-accent); outline-offset: 4px; border-radius: 4px; }
+.site-brand, .site-brand .logo { display: inline-flex; align-items: center; gap: 10px; }
+.site-brand .logo-word { font-size: 22px; font-weight: 650; letter-spacing: -0.04em; line-height: 1; color: inherit; }
+.site-links { display: flex; align-items: center; gap: 24px; color: var(--site-muted); }
+.site-links a { padding: 4px 0; }
+.site-links a:hover, .site-links a[aria-current='page'] { color: var(--site-text); }
+.site-theme { display: flex; }
+.site-account { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+.site-account a { box-sizing: border-box; display: inline-flex; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--site-border); border-radius: 8px; }
+.site-account a:hover, .site-account a[aria-current='page'] { background: color-mix(in srgb, var(--site-text) 6%, transparent); }
+@media (max-width: 760px) {
+	.site-header-inner { height: 108px; padding: 14px 12px; gap: 12px 8px; grid-template-columns: auto 1fr auto auto; }
+	.site-brand { grid-area: 1 / 1 / 2 / 3; }
+	.site-account { grid-area: 1 / 3 / 2 / 5; justify-content: flex-end; }
+	.site-links { grid-area: 2 / 1 / 3 / 4; gap: 12px; font-size: 13px; }
+	.site-theme { grid-area: 2 / 4; justify-content: flex-end; }
+	.site-account a { padding: 6px 10px; }
+}

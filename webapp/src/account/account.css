@@ -31,3 +31,5 @@
 }
 .account-link { font-family: var(--mono); font-size: 13px; color: var(--brand); }
 .account-link:hover { text-decoration: underline; }
+
+.account-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }

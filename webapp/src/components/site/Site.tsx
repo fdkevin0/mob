@@ -1,25 +1,25 @@
-import type { ReactNode } from 'react';
 import { Logo } from '../brand/Logo';
 import { ThemePicker } from '../../theme/ThemePicker';
+import { siteLinks, accountLinks } from './navigation';
+import './header.css';
 import './site.css';
 
-export type SiteLink = { href: string; label: string; current?: boolean };
+export type SiteLink = { href: string; label: string };
 
 const github = 'https://github.com/fdkevin0/mob';
 
-// The header every public page shares: the calf, the page's links, the theme
-// and whatever account actions the page offers. The landing and the demo float
-// it over their stage; other pages keep it stuck to the top.
-export function SiteHeader({ links, floating, children }: { links: SiteLink[]; floating?: boolean; children?: ReactNode }) {
+// React and Astro render the same navigation data and use header.css.
+export function SiteHeader({ current, floating }: { current?: string; floating?: boolean }) {
 	return (
-		<header className={floating ? 'nav nav-floating' : 'nav'}><div className="nav-inner">
-			<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
-			<nav className="nav-links" aria-label="Sections">
-				{links.map(link => <a key={link.href} href={link.href} aria-current={link.current ? 'page' : undefined}>{link.label}</a>)}
-				<a href={github} rel="noreferrer">GitHub</a>
+		<header className={`site-header${floating ? ' site-header-floating' : ''}`}><div className="site-header-inner">
+			<a href="/" className="site-brand" aria-label="Mob home"><Logo /></a>
+			<nav className="site-links" aria-label="Site">
+				{siteLinks.map(link => <a key={link.href} href={link.href} aria-current={link.href === current ? 'page' : undefined}>{link.label}</a>)}
 			</nav>
-			<ThemePicker className="nav-theme" />
-			<div className="nav-account">{children}</div>
+			<div className="site-theme"><ThemePicker /></div>
+			<div className="site-account">
+				{accountLinks.map(link => <a key={link.href} href={link.href} aria-current={link.href === current ? 'page' : undefined}>{link.label}</a>)}
+			</div>
 		</div></header>
 	);
 }

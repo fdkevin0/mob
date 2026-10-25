@@ -28,15 +28,18 @@ export function Account() {
 	}, [session.isPending, user, session.error]);
 
 	if (session.isPending || !user) return (
-		<div className="account-page"><Header /><main className="account-main">
+		<div className="account-page"><SiteHeader current="/account" /><main className="account-main">
 			{session.error ? <p className="form-error" role="alert">Could not load your account. Check your connection and reload the page.</p> : <p className="account-muted">Loading…</p>}
 		</main></div>
 	);
 	return (
 		<div className="account-page">
-			<Header />
+			<SiteHeader current="/account" />
 			<main className="account-main">
-				<h1>Account</h1>
+				<div className="account-title">
+					<h1>Account</h1>
+					<Button variant="ghost" className="small" onClick={() => { void authClient.signOut().finally(() => window.location.assign('/')); }}>Sign out</Button>
+				</div>
 				<section className="account-card account-profile" aria-label="Profile">
 					<span className="avatar large">{user.image ? <img src={user.image} alt="" /> : (user.name || user.email).slice(0, 1).toUpperCase()}</span>
 					<div><strong>{user.name}</strong><span>{user.email}</span></div>
@@ -45,15 +48,6 @@ export function Account() {
 				<Passkeys />
 			</main>
 		</div>
-	);
-}
-
-function Header() {
-	return (
-		<SiteHeader links={[{ href: '/demo', label: 'Demo' }, { href: '/docs/', label: 'Docs' }]}>
-			<Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button>
-			<Button variant="ghost" className="small" onClick={() => { void authClient.signOut().finally(() => window.location.assign('/')); }}>Sign out</Button>
-		</SiteHeader>
 	);
 }
 
@@ -168,7 +162,7 @@ function Passkeys() {
 		setBusy(true); setError(''); setNotice(''); setStale(false);
 		try {
 			const result = await authClient.passkey.addPasskey();
-			if (!result.error) { setNotice('Passkey added. Use it from Sign in on the Mob home page.'); return; }
+			if (!result.error) { setNotice('Passkey added. Use it from Get started on the Mob home page.'); return; }
 			const code = errorCode(result.error);
 			if (code === 'SESSION_NOT_FRESH') { setStale(true); return; }
 			setError(code === 'ERROR_CEREMONY_ABORTED' ? 'Adding the passkey was cancelled.'

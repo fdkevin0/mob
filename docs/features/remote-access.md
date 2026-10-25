@@ -8,6 +8,18 @@ The site at https://usemob.app is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has five parts,
 served by the Worker in `worker/`:
 
+The landing, demo, documentation and account pages share Home, Demo, Docs
+and GitHub navigation, a theme picker, and fixed Account and Open Mob links.
+The current section is marked; on narrow screens the navigation and theme
+picker occupy a second row instead of disappearing. Docs keeps its search
+and mobile documentation menu below the site navigation. Account opens
+account management (or sign-in when signed out); Open Mob opens the app
+(or sign-in). Sign out is on the account page. The landing page's Get started
+button also opens sign-in directly, with How it works, Features and Install
+links beneath it for navigation within the page.
+
+![Shared public navigation on desktop and mobile](../images/public-navigation.png)
+
 - `/` is the landing page, scrolled through in pages over one pinned isometric
   voxel office. Each load lays out a new square open-plan floor of shared
   desks and seats calves on about 70% of them; every calf comes from one

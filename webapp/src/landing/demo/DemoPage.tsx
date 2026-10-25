@@ -16,13 +16,7 @@ const points: { icon: IconName; title: string; text: string }[] = [
 export function DemoPage() {
 	return (
 		<div className="landing demo-page">
-			<SiteHeader floating links={[
-				{ href: '/', label: 'Home' },
-				{ href: '/demo', label: 'Demo', current: true },
-				{ href: '/docs/', label: 'Docs' },
-			]}>
-				<Button variant="outline" className="small" asChild><a href="/app">Open Mob</a></Button>
-			</SiteHeader>
+			<SiteHeader floating current="/demo" />
 
 			<main className="demo-main">
 				<div className="demo-copy">

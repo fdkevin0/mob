@@ -46,6 +46,14 @@ try {
 			assert.match(response.headers.get('Content-Type') ?? '', /^text\/html/);
 			assert.match(response.headers.get('Content-Security-Policy') ?? '', /frame-ancestors 'none'/);
 		}
+		const docs = await (await request('/docs/')).text();
+		const navigation = docs.match(/<nav class="site-links"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? '';
+		assert.deepEqual([...navigation.matchAll(/href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => [match[1], match[2]]), [
+			['/', 'Home'], ['/demo', 'Demo'], ['/docs/', 'Docs'], ['https://github.com/fdkevin0/mob', 'GitHub'],
+		]);
+		assert.match(navigation, /href="\/docs\/" aria-current="page"/);
+		assert.match(docs, /href="\/account">Account<\/a>/);
+		assert.match(docs, /href="\/app">Open Mob<\/a>/);
 		for (const path of ['/app', '/app/', '/account', '/account/']) {
 			const response = await request(path);
 			assert.equal(response.status, 302, path);
