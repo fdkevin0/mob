@@ -3,13 +3,13 @@ import { ProviderRegistry, Server, Store, memoryProviders, type SQL } from '@mob
 import { browserProviders, providerPlugin } from './providers';
 
 const noSQL = {} as SQL;
-function setup(listed: Response | (() => never), exchange?: typeof fetch) {
+function setup(listed: Response | (() => never), exchange?: typeof fetch, origin?: string) {
 	const asked: { url: string; headers: Headers }[] = [];
 	const registry = new ProviderRegistry(memoryProviders(browserProviders()), undefined, false, async (input, init) => {
 		asked.push({ url: String(input), headers: new Headers(init?.headers) });
 		return typeof listed === 'function' ? listed() : listed.clone();
 	});
-	const server = new Server({ store: new Store(noSQL), providers: registry, token: 't', version: 'test' }, [providerPlugin(registry, exchange)]);
+	const server = new Server({ store: new Store(noSQL), providers: registry, token: 't', version: 'test' }, [providerPlugin(registry, exchange, origin)]);
 	const post = (path: string, form: object) => server.fetch(new Request('http://localhost/api/plugins/browser/' + path, { method: 'POST', headers: { Authorization: 'Bearer t' }, body: JSON.stringify(form) }));
 	const save = (form: object) => post('provider', form);
 	return { registry, save, post, asked };
@@ -69,4 +69,14 @@ it('skips a free OpenRouter model that OpenRouter lists without tools', async ()
 	const { registry, save } = setup(Response.json({ data: [{ id: 'a/no-tools:free', supported_parameters: ['temperature'] }, { id: 'z/tools:free', supported_parameters: ['tools', 'temperature'] }] }));
 	await save({ preset: 'openrouter', key: 'sk-or' });
 	expect(registry.default()).toBe('openrouter/z/tools:free');
+});
+
+it('uses Workers AI through the site, without a key, on a model that takes tools', async () => {
+	const listed = Response.json({ data: [{ id: '@cf/meta/llama-small', supported_parameters: [] }, { id: '@cf/qwen/qwen-tools', supported_parameters: ['tools'] }] });
+	const { registry, post, asked } = setup(listed, undefined, 'https://usemob.app');
+	expect(await (await post('cloudflare', {})).json()).toEqual({ default: 'cloudflare/@cf/qwen/qwen-tools', models: 2 });
+	expect(asked[0].url).toBe('https://usemob.app/api/ai/cloudflare/v1/models');
+	expect(asked[0].headers.get('Authorization')).toBeNull();
+	expect(registry.providers().providers[0]).toEqual({ id: 'cloudflare', name: 'Cloudflare Workers AI', chat: 'https://usemob.app/api/ai/cloudflare/v1' });
+	expect((await setup(models()).post('cloudflare', {})).status).toBe(400);
 });

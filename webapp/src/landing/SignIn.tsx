@@ -13,6 +13,14 @@ function GitHubMark() {
 	);
 }
 
+function CloudflareMark() {
+	return (
+		<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+			<path d="M11.2 10.6l.2-.7c.2-.8.1-1.5-.3-2-.4-.5-1-.7-1.7-.8L3.4 7c-.1 0-.1 0-.2-.1v-.1c0-.1.1-.1.2-.2l5.8-.1c.7 0 1.4-.6 1.7-1.3l.4-1c0-.1 0-.1 0-.2A3.8 3.8 0 003.9 4a2.3 2.3 0 00-3.4 2.1c0 .1 0 .3 0 .4A2.6 2.6 0 000 8.8c0 .7.1 1.4.2 1.9 0 .1.1.1.1.1h10.6c.1 0 .2 0 .3-.2zM13 6.9h-.3c-.1 0-.1 0-.1.1l-.2.8c-.2.8-.1 1.5.3 2 .4.5 1 .7 1.7.8l1.2.1c.1 0 .1 0 .1.1v.1c0 .1-.1.1-.2.2l-1.3.1c-.7 0-1.4.6-1.7 1.3l-.1.3c0 .1 0 .1.1.1h4.4c.1 0 .1 0 .1-.1A3 3 0 0013 6.9z" />
+		</svg>
+	);
+}
+
 const passkeys = () => typeof window !== 'undefined' && 'PublicKeyCredential' in window;
 
 // GitHub creates the account, and Turnstile has to pass before its flow starts.
@@ -25,22 +33,23 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 }) {
 	const [token, setToken] = useState('');
 	const [error, setError] = useState('');
-	const [busy, setBusy] = useState<'github' | 'passkey'>();
+	const [busy, setBusy] = useState<'github' | 'cloudflare' | 'passkey'>();
 	const turnstile = useRef<TurnstileHandle>(null);
 
 	const onToken = useCallback((next: string) => setToken(next), []);
 	const onError = useCallback((message: string) => setError(message), []);
 
-	async function github() {
+	async function social(provider: 'github' | 'cloudflare') {
 		if (!token) { setError('Finish the human check first.'); return; }
-		setBusy('github'); setError('');
+		setBusy(provider); setError('');
+		const name = provider === 'github' ? 'GitHub' : 'Cloudflare';
 		let message: string | undefined;
 		try {
 			const result = await authClient.signIn.social(
-				{ provider: 'github', callbackURL: signedInURL, errorCallbackURL: '/?signin=failed' },
+				{ provider, callbackURL: signedInURL, errorCallbackURL: '/?signin=failed' },
 				{ headers: { 'x-captcha-response': token } },
 			);
-			if (result.error) message = result.error.message || 'GitHub sign-in did not start. Try again.';
+			if (result.error) message = result.error.message || `${name} sign-in did not start. Try again.`;
 		} catch {
 			message = 'Could not reach the sign-in service. Check your connection and try again.';
 		}
@@ -77,22 +86,27 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 			<span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
 			<Icon name="lock" size={28} className="dialog-icon" />
 			<DialogTitle className="dialog-title">Sign in to Mob</DialogTitle>
-			<DialogDescription className="dialog-description">{reason ?? 'Use your GitHub account to open Mob on the web. Your conversations stay on your computer.'}</DialogDescription>
+			<DialogDescription className="dialog-description">{reason ?? `Use your GitHub${site?.cloudflare ? ' or Cloudflare' : ''} account to open Mob on the web. Your conversations stay on your computer.`}</DialogDescription>
 			{siteError ? <p className="form-error" role="alert">{siteError}</p> : null}
 			{site && !ready ? <p className="form-error" role="alert">Sign-in is not set up on this site yet.</p> : null}
 			{ready ? (
 				<div className="auth-form">
 					<Turnstile ref={turnstile} siteKey={site.turnstileSiteKey} action="github" onToken={onToken} onError={onError} />
 					{error ? <p className="form-error" role="alert">{error}</p> : null}
-					<Button type="button" className="wide" onClick={github} disabled={!!busy || !token}>
+					<Button type="button" className="wide" onClick={() => void social('github')} disabled={!!busy || !token}>
 						<GitHubMark />{busy === 'github' ? 'Opening GitHub…' : 'Continue with GitHub'}
 					</Button>
+					{site.cloudflare ? (
+						<Button type="button" variant="outline" className="wide" onClick={() => void social('cloudflare')} disabled={!!busy || !token}>
+							<CloudflareMark />{busy === 'cloudflare' ? 'Opening Cloudflare…' : 'Continue with Cloudflare'}
+						</Button>
+					) : null}
 					{passkeys() ? (
 						<Button type="button" variant="outline" className="wide" onClick={passkey} disabled={!!busy}>
 							<Icon name="key" size={14} />{busy === 'passkey' ? 'Waiting for your passkey…' : 'Sign in with a passkey'}
 						</Button>
 					) : null}
-					<p className="fine-print">Mob asks GitHub only for your name, email and avatar. Add a passkey from your account page after signing in with GitHub.</p>
+					<p className="fine-print">Mob asks GitHub only for your name, email and avatar.{site.cloudflare ? ' Cloudflare also lets Mob in this browser run Workers AI models on your Cloudflare account.' : ''} Add a passkey from your account page after signing in.</p>
 				</div>
 			) : !site && !siteError ? <p className="dialog-description">Loading…</p> : null}
 		</DialogContent>

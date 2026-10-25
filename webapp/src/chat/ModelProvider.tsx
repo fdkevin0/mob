@@ -13,6 +13,7 @@ import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from
 type Service = { id: string; name: string; noKey?: boolean };
 const browserServices: Service[] = [
 	{ id: 'openrouter', name: 'OpenRouter (free models)' },
+	{ id: 'cloudflare', name: 'Cloudflare Workers AI (your account)' },
 	{ id: 'openai', name: 'OpenAI' },
 	{ id: 'anthropic', name: 'Anthropic' },
 	{ id: 'deepseek', name: 'DeepSeek' },
@@ -26,7 +27,9 @@ const local = [
 	{ id: 'ollama', name: 'Ollama (on the runner)', noKey: true },
 	{ id: 'lmstudio', name: 'LM Studio (on the runner)', noKey: true },
 ];
-const runnerServices: Service[] = [...browserServices.slice(0, -1), ...local, browserServices[browserServices.length - 1]];
+// Workers AI through the site's proxy needs the site's sign-in, which only the browser runner has.
+const shared = browserServices.filter(s => s.id !== 'cloudflare');
+const runnerServices: Service[] = [...shared.slice(0, -1), ...local, shared[shared.length - 1]];
 
 type Saved = { default: string; providers: { id: string; name?: string; key?: string; chat?: string; anthropic?: string }[] };
 
@@ -56,7 +59,8 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	const noKey = services.find(s => s.id === form.preset)?.noKey;
 	async function save(event: FormEvent) {
 		event.preventDefault();
-		await submit(browser ? '/plugins/browser/provider' : '/providers', form);
+		if (cloudflare) await submit('/plugins/browser/cloudflare', { model: form.model });
+		else await submit(browser ? '/plugins/browser/provider' : '/providers', form);
 	}
 	async function submit(path: string, body: object) {
 		setBusy(true); setError(''); setNotice('');
@@ -71,6 +75,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		} finally { setBusy(false); }
 	}
 	const custom = form.preset === '';
+	const cloudflare = browser && form.preset === 'cloudflare';
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="connect-dialog">
@@ -102,11 +107,15 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 							<Button type="button" variant="outline" className="provider-signin" onClick={() => void startOpenRouter().catch(e => setError(String(e)))}>Sign in with OpenRouter</Button>
 							<p>OpenRouter creates a key for Mob in your account, which you can limit or revoke there. Mob starts on one of its free models, which have daily limits; pick a paid one in the model picker. Or paste a key:</p>
 						</>}
-						<Label htmlFor="provider-key">{noKey ? 'API key (optional)' : 'API key'}</Label>
-						<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required={!noKey} />
+						{cloudflare ? (
+							<p>Mob uses Workers AI of the Cloudflare account you signed in with, or connected on your <a href="/account">account page</a>. Mob keeps the sign-in on its server and never shows the token to this page. Workers AI includes a daily free allowance.</p>
+						) : <>
+							<Label htmlFor="provider-key">{noKey ? 'API key (optional)' : 'API key'}</Label>
+							<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required={!noKey} />
+						</>}
 						<Label htmlFor="provider-model">Model (optional)</Label>
 						<Input id="provider-model" placeholder="The first model the provider lists" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} />
-						<Button disabled={busy}>{busy ? 'Checking…' : 'Save'}</Button>
+						<Button disabled={busy}>{busy ? 'Checking…' : cloudflare ? 'Use my Cloudflare account' : 'Save'}</Button>
 					</fieldset>
 				</form>
 				{notice && <p role="status">{notice}</p>}

@@ -56,7 +56,9 @@ export async function saveProvider(registry: ProviderRegistry, p: Provider, name
 	} catch (e) {
 		listError = (e as Error).message;
 	}
-	const fallback = [p.id === 'openrouter' ? freeModel(registry, p, listed) : '', preferred[p.id], preset?.default].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
+	// Workers AI lists many models that cannot call tools, so one that can comes first.
+	const tools = p.id === 'cloudflare' ? listed.find(id => registry.info(p, id).tools) : '';
+	const fallback = [p.id === 'openrouter' ? freeModel(registry, p, listed) : tools, preferred[p.id], preset?.default].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
 	// A vendor's own ID wins, as OpenRouter's openrouter/auto does; otherwise a Mob reference loses its provider prefix.
 	const typed = named?.trim() ?? '';
 	const model = (listed.includes(typed) ? typed : typed.startsWith(p.id + '/') ? typed.slice(p.id.length + 1) : typed) || fallback;

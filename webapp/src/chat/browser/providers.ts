@@ -17,7 +17,12 @@ const browserAccess = { 'anthropic-dangerous-direct-browser-access': 'true' };
 /** OpenRouterSignIn is what OpenRouter's PKCE sign-in returns to the page: its code, and the verifier the page made. */
 export type OpenRouterSignIn = { code: string; verifier: string };
 
-export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch = (input, init) => fetch(input, init)): Plugin {
+// The Worker lends Workers AI of the visitor's own Cloudflare account through
+// this OpenAI-compatible path; the request carries the sign-in cookie, not a key.
+export const cloudflarePath = '/api/ai/cloudflare/v1';
+
+/** providerPlugin's origin is the site the runner was loaded from, where the Cloudflare route lives. */
+export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch = (input, init) => fetch(input, init), origin = ''): Plugin {
 	const save = (p: Provider, named?: string) => saveProvider(registry, p, named);
 	return {
 		name: 'browser',
@@ -47,6 +52,14 @@ export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch
 				const body = await response.json().catch(() => ({})) as { key?: string };
 				if (!response.ok || !body.key) throw new HTTPError(502, `OpenRouter did not give a key (HTTP ${response.status}). Sign in again.`);
 				return save({ id: 'openrouter', preset: 'openrouter', key: body.key });
+			},
+		}, {
+			// Workers AI of the Cloudflare account the visitor signed in with or connected.
+			method: 'POST', path: 'cloudflare',
+			handle: async req => {
+				const { model } = await req.json().catch(() => ({})) as { model?: string };
+				if (!origin) throw new HTTPError(400, 'Cloudflare models need Mob on usemob.app.');
+				return save({ id: 'cloudflare', name: 'Cloudflare Workers AI', chat: origin + cloudflarePath }, model);
 			},
 		}],
 	};

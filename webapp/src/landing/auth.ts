@@ -6,7 +6,8 @@ export const authClient = createAuthClient({ plugins: [passkeyClient()] });
 // Better Auth errors carry a code when the server or WebAuthn names the failure.
 export const errorCode = (error: { message?: string }) => 'code' in error ? String(error.code) : undefined;
 
-export type Site = { turnstileSiteKey: string; ready: boolean };
+/** Site is /api/site: whether sign-in is set up, and whether Cloudflare can sign in too. */
+export type Site = { turnstileSiteKey: string; ready: boolean; cloudflare?: boolean };
 
 export async function loadSite(): Promise<Site> {
 	const response = await fetch('/api/site');

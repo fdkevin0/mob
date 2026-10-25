@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { authClient, errorCode } from '../landing/auth';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { authClient, errorCode, loadSite } from '../landing/auth';
 import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -18,8 +18,8 @@ function signInAgain() {
 	void authClient.signOut().finally(() => window.location.assign('/?signin=account'));
 }
 
-// The account page lists how the visitor signs in: the GitHub account that
-// created it, and passkeys bound to that account.
+// The account page lists how the visitor signs in: GitHub or Cloudflare, and
+// passkeys bound to the account.
 export function Account() {
 	const session = authClient.useSession();
 	const user = session.data?.user;
@@ -57,11 +57,16 @@ function Header() {
 	);
 }
 
+type Provider = 'github' | 'cloudflare';
+const providerNames: Record<Provider, string> = { github: 'GitHub', cloudflare: 'Cloudflare' };
+
 function SignInMethods() {
 	const [accounts, setAccounts] = useState<Linked[]>();
 	const [login, setLogin] = useState<string>();
+	const [cloudflare, setCloudflare] = useState(false);
+	const [busy, setBusy] = useState<Provider>();
 	const [error, setError] = useState('');
-	useEffect(() => {
+	function load() {
 		authClient.listAccounts().then(result => {
 			if (result.error) { setError(result.error.message || 'Could not load sign-in methods.'); return; }
 			const linked = result.data as Linked[];
@@ -69,20 +74,70 @@ function SignInMethods() {
 			const github = linked.find(account => account.providerId === 'github');
 			if (github) void githubLogin(github.id).then(setLogin);
 		}).catch(e => setError(errorText(e)));
+	}
+	useEffect(() => {
+		// A provider that refused to connect sends the visitor back with ?error=.
+		const failed = new URLSearchParams(window.location.search).get('error');
+		if (failed) {
+			setError(failed === 'account_already_linked_to_different_user' ? 'That account already signs in to another Mob account.' : `Connecting did not finish (${failed}). Try again.`);
+			window.history.replaceState(null, '', window.location.pathname);
+		}
+		load();
+		loadSite().then(site => setCloudflare(!!site.cloudflare)).catch(() => setCloudflare(false));
 	}, []);
-	const github = accounts?.find(account => account.providerId === 'github');
+	const find = (provider: Provider) => accounts?.find(account => account.providerId === provider);
+	// Connecting goes through the provider and comes back here, linked to this account.
+	async function connect(provider: Provider) {
+		setBusy(provider); setError('');
+		try {
+			const result = await authClient.linkSocial({ provider, callbackURL: '/account', errorCallbackURL: '/account' });
+			if (result.error) setError(result.error.message || `${providerNames[provider]} did not open. Try again.`);
+			else return;
+		} catch (e) { setError(errorText(e)); }
+		setBusy(undefined);
+	}
+	// One request at a time: a second Disconnect sent before the list refreshes
+	// would find only the last way to sign in left and be refused.
+	const working = useRef(false);
+	async function disconnect(provider: Provider, account: Linked) {
+		if (working.current || !window.confirm(`Disconnect ${providerNames[provider]}? Mob in the browser stops using its models.`)) return;
+		working.current = true;
+		setBusy(provider); setError('');
+		try {
+			const result = await authClient.unlinkAccount({ accountId: account.id });
+			if (result.error) setError(result.error.code === 'FAILED_TO_UNLINK_LAST_ACCOUNT' ? 'This is how you sign in, so it stays connected.' : result.error.message || 'Could not disconnect.');
+		} catch (e) { setError(errorText(e)); }
+		// The list is read again either way, so the page shows what the server keeps.
+		load();
+		working.current = false;
+		setBusy(undefined);
+	}
+	const rows: Provider[] = cloudflare || find('cloudflare') ? ['github', 'cloudflare'] : ['github'];
+	const connected = rows.filter(find).length;
 	return (
 		<section className="account-card" aria-labelledby="methods-title">
 			<h2 id="methods-title">Sign-in methods</h2>
 			{error ? <p className="form-error" role="alert">{error}</p> : null}
 			<ul className="account-list">
-				<li>
-					<span className="account-item-name">GitHub</span>
-					{login ? <a className="account-link" href={`https://github.com/${login}`} rel="noreferrer">@{login}</a> : null}
-					<span className="account-muted">{accounts === undefined && !error ? 'Loading…' : github ? `Connected ${day(github.createdAt)}` : 'Not connected'}</span>
-				</li>
+				{rows.map(provider => {
+					const account = find(provider);
+					return (
+						<li key={provider}>
+							<span className="account-item-name">{providerNames[provider]}</span>
+							{provider === 'github' && login ? <a className="account-link" href={`https://github.com/${login}`} rel="noreferrer">@{login}</a> : null}
+							<span className="account-muted">{accounts === undefined && !error ? 'Loading…' : account ? `Connected ${day(account.createdAt)}` : 'Not connected'}</span>
+							{accounts !== undefined ? (
+								<span className="account-item-actions">
+									{!account ? <Button type="button" variant="outline" className="small" onClick={() => void connect(provider)} disabled={!!busy}>{busy === provider ? 'Opening…' : 'Connect'}</Button>
+										: connected > 1 ? <Button type="button" variant="ghost" className="small" onClick={() => void disconnect(provider, account)} disabled={!!busy}>Disconnect</Button>
+										: null}
+								</span>
+							) : null}
+						</li>
+					);
+				})}
 			</ul>
-			<p className="account-muted">GitHub created this account and stays connected. Passkeys below sign in to the same account.</p>
+			<p className="account-muted">{rows.length > 1 ? 'Either one signs in to this account. Cloudflare also lets Mob in the browser run Workers AI models on your Cloudflare account; Mob keeps its sign-in encrypted on the server. ' : ''}Passkeys below sign in to the same account.</p>
 		</section>
 	);
 }
