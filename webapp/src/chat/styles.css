@@ -707,6 +707,51 @@
 	padding: 0;
 	border-radius: 8px;
 }
+/* Editing an owner's message replaces its bubble with a box as wide as the bubble may grow. */
+.message-editor {
+	align-self: flex-end;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: min(100%, 600px);
+	padding: 10px 12px 8px 16px;
+	border: 1px solid var(--line-strong);
+	border-radius: 18px;
+	background: var(--surface-raised);
+}
+.message-editor:focus-within {
+	border-color: var(--line-hover);
+}
+.message-editor .ui-textarea {
+	background: transparent;
+	border: 0;
+	border-radius: 0;
+	resize: none;
+	min-height: 28px;
+	padding: 0;
+	font-size: 15px;
+	line-height: 1.6;
+	box-shadow: none;
+}
+.message-editor-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+/* On a narrow screen the note takes its own line, above the buttons. */
+.message-editor-bar .muted {
+	flex: 1 1 240px;
+	font-size: 12px;
+}
+.message-editor-bar .muted + .btn {
+	margin-left: auto;
+}
+.message-editor-bar .btn {
+	min-height: 30px;
+	padding: 0 12px;
+	border-radius: 999px;
+}
 /* A new conversation centres its title, the message box and ways to start; the box drops to the bottom with the first message. */
 .thread-view:has(.thread-empty) .conversation {
 	flex: none;
@@ -1007,7 +1052,8 @@
 	font-size: 15px;
 	line-height: 1.6;
 }
-.composer .ui-textarea:focus-visible {
+.composer .ui-textarea:focus-visible,
+.message-editor .ui-textarea:focus-visible {
 	outline: none;
 }
 .composer-bar {

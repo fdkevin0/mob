@@ -242,6 +242,30 @@ export class Store {
 		this.changes.conversation(id, true);
 	}
 
+	/** replaceable reports whether message from is one the user said in conversation id, which a new message may replace. */
+	replaceable(id: string, from: string) {
+		return !!this.db.get("SELECT 1 FROM messages WHERE id=? AND conversation_id=? AND role='user'", from, id);
+	}
+
+	/**
+	 * cut deletes message from, which the user said in conversation id, and everything said after it, so the user can say
+	 * it again differently or ask for the reply again. Decisions on the deleted replies go with them; facts, remembered
+	 * approvals, schedules and the usage ledger stay. A summary that covered a deleted message no longer holds. It runs
+	 * inside the transaction that records the new message, so a refused message deletes nothing.
+	 */
+	private cut(id: string, from: string) {
+		const row = this.db.get<{ seq: number; parts: string }>("SELECT seq,parts FROM messages WHERE id=? AND conversation_id=? AND role='user'", from, id);
+		if (!row) throw new NotFound('the message to replace is not in this conversation');
+		this.db.run('DELETE FROM approvals WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=? AND seq>=?)', id, row.seq);
+		this.db.run('DELETE FROM messages WHERE conversation_id=? AND seq>=?', id, row.seq);
+		this.db.run("UPDATE conversations SET summary='',summary_through='' WHERE id=? AND summary_through<>'' AND NOT EXISTS(SELECT 1 FROM messages WHERE id=summary_through)", id);
+		// A title taken from the first message follows it when that message is said again.
+		if (!this.db.get('SELECT 1 FROM messages WHERE conversation_id=?', id)) {
+			const text = (JSON.parse(row.parts) as { type: string; text?: string }[]).filter(p => p.type === 'text').map(p => p.text).join('');
+			this.db.run("UPDATE conversations SET title='New conversation' WHERE id=? AND title=?", id, title60(text));
+		}
+	}
+
 	/** waiting lists the conversations with a tool call awaiting the owner's decision. */
 	waiting(): Set<string> {
 		return new Set(this.db.all<{ conversation_id: string }>("SELECT DISTINCT conversation_id FROM approvals WHERE status='pending' AND expires_at>=?", Date.now()).map(r => r.conversation_id));
@@ -261,17 +285,20 @@ export class Store {
 		});
 	}
 
-	/** begin records the user's text and an empty assistant reply by model. */
-	begin(id: string, requestID: string, text: string, model: string): Message {
+	/** begin records the user's text and an empty assistant reply by model, in place of message replace and what followed it when set. */
+	begin(id: string, requestID: string, text: string, model: string, replace = ''): Message {
 		const m: Message = { id: newID(), role: 'assistant', parts: [], model };
 		this.db.transaction(() => {
+			// A request already accepted is refused before anything is cut, even when it is among the messages replaced.
+			if (replace && this.hasRequest(requestID)) throw new Conflict('request already accepted');
+			if (replace) this.cut(id, replace);
 			if (text) {
 				this.db.run("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", requestID, id, JSON.stringify([{ type: 'text', text }]));
 				this.db.run("UPDATE conversations SET title=CASE WHEN title='New conversation' THEN ? ELSE title END,updated_at=? WHERE id=?", title60(text), Date.now(), id);
 			}
 			this.db.run("INSERT INTO messages(id,conversation_id,role,parts,status,model) VALUES(?,?,'assistant','[]','streaming',?)", m.id, id, model);
 		});
-		this.changes.conversation(id, text !== '');
+		this.changes.conversation(id, text !== '' || !!replace);
 		return m;
 	}
 

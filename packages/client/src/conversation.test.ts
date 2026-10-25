@@ -694,3 +694,49 @@ it.each(['', 'Continue'])('keeps the composer %j when Continue cannot be deliver
 	expect(session.getSnapshot().recovery?.text).toBe('Continue');
 	expect(session.getSnapshot().input).toBe(draft);
 });
+
+it('says a message again in place of it and what followed, keeping the draft', async () => {
+	const said = (id: string, role: 'user' | 'assistant', text: string) => ({ id, role, parts: [{ type: 'text' as const, text }] });
+	let history: Snapshot = { ...initial, messages: [said('u1', 'user', 'first'), said('a1', 'assistant', 'one'), said('u2', 'user', 'second'), said('a2', 'assistant', 'two')] };
+	const bodies: Record<string, unknown>[] = [];
+	const client = new MobClient(connection, {
+		fetch: async (url, init) => {
+			if (String(url).endsWith('/chat')) {
+				const body = JSON.parse(String(init?.body));
+				bodies.push(body);
+				history = { ...initial, messages: [...history.messages.slice(0, 2), said(body.requestId, 'user', body.text), said('server-reply', 'assistant', 'edited reply')] };
+				return replyStream('edited reply');
+			}
+			return Response.json(history);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial: history, clientType: 'web' });
+	cleanups.push(session.start());
+	session.setInput('unsent draft');
+	await session.resend('u2', ' second, edited ');
+	expect(bodies.at(-1)).toMatchObject({ id: 'one', replace: 'u2', text: 'second, edited' });
+	expect(session.getSnapshot().messages.map((m) => m.parts[0])).toEqual([
+		{ type: 'text', text: 'first' },
+		{ type: 'text', text: 'one' },
+		{ type: 'text', text: 'second, edited' },
+		expect.objectContaining({ text: 'edited reply' }),
+	]);
+	expect(session.getSnapshot().input).toBe('unsent draft');
+	// Only the owner's messages are said again.
+	await session.resend('a1', 'nope');
+	expect(bodies).toHaveLength(1);
+});
+
+it('leaves an empty draft alone when the service refuses an edit', async () => {
+	const said = (id: string, role: 'user' | 'assistant', text: string) => ({ id, role, parts: [{ type: 'text' as const, text }] });
+	const history: Snapshot = { ...initial, messages: [said('u1', 'user', 'first'), said('a1', 'assistant', 'one')] };
+	const client = new MobClient(connection, {
+		fetch: async (url) => (String(url).endsWith('/chat') ? new Response('conversation is busy; wait or stop the active turn', { status: 409 }) : Response.json(history)),
+	});
+	const session = new ConversationClient({ client, id: 'one', initial: history, clientType: 'web' });
+	cleanups.push(session.start());
+	await session.resend('u1', 'first, edited');
+	await vi.waitFor(() => expect(session.getSnapshot().messages.map((m) => m.id)).toEqual(['u1', 'a1']));
+	expect(session.getSnapshot().input).toBe('');
+	expect(session.getSnapshot().failure).not.toBe('');
+});

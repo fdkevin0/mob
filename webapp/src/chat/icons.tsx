@@ -238,3 +238,8 @@ export const CompactIcon = () => (
 		<path d="M4 9h16M4 15h16M9 3l3 3 3-3M9 21l3-3 3 3" />
 	</Icon>
 );
+export const RetryIcon = () => (
+	<Icon>
+		<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5" />
+	</Icon>
+);

@@ -1,7 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ChatMessage, Snapshot } from './api';
-import { Thread, fences, quiet } from './Thread';
+import { Thread, askedBy, fences, quiet } from './Thread';
 
 const connection = { url: 'http://localhost', token: 'test' };
 afterEach(() => {
@@ -111,4 +111,44 @@ it('points to an approval scrolled out of view from above the message box', () =
 	act(() => report([{ isIntersecting: false }]));
 	fireEvent.click(screen.getByRole('button', { name: /waiting for your approval/ }));
 	expect(scrolled).toHaveBeenCalled();
+});
+
+it('edits the owner’s message in place and retries the last reply, saying the message again', async () => {
+	const bodies: Record<string, unknown>[] = [];
+	const view = show({ messages: [said('user', 'first', 'u1'), said('assistant', 'one', 'a1'), said('user', 'second', 'u2'), said('assistant', 'two', 'a2')] });
+	vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+		if (url.endsWith('/chat')) {
+			bodies.push(JSON.parse(String(init?.body)));
+			return new Response('data: {"type":"start"}\n\ndata: {"type":"finish"}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } });
+		}
+		return Response.json({ messages: [said('user', 'first', 'u1'), said('assistant', 'one', 'a1')], active: false, model: 'demo/echo' });
+	}));
+	// Only the last reply can be asked for again.
+	expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+	expect(screen.getAllByRole('button', { name: 'Edit message' })).toHaveLength(2);
+	fireEvent.click(screen.getAllByRole('button', { name: 'Edit message' })[1]);
+	const editor = screen.getByRole('textbox', { name: 'Edit message' }) as HTMLTextAreaElement;
+	expect(editor.value).toBe('second');
+	expect((within(editor.form!).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
+	fireEvent.keyDown(editor, { key: 'Escape' });
+	expect(screen.queryByRole('textbox', { name: 'Edit message' })).toBeNull();
+	fireEvent.click(screen.getAllByRole('button', { name: 'Edit message' })[1]);
+	const again = screen.getByRole('textbox', { name: 'Edit message' }) as HTMLTextAreaElement;
+	fireEvent.change(again, { target: { value: 'second, better' } });
+	fireEvent.click(within(again.form!).getByRole('button', { name: 'Send' }));
+	await waitFor(() => expect(bodies).toHaveLength(1));
+	expect(bodies[0]).toMatchObject({ replace: 'u2', text: 'second, better' });
+	expect(view.container.textContent).not.toContain('two');
+	await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy());
+	fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+	await waitFor(() => expect(bodies).toHaveLength(2));
+	expect(bodies[1]).toMatchObject({ replace: 'u1', text: 'first' });
+});
+
+it('retries a reply only when it answers the owner’s message, not a command', () => {
+	const command = (m: ChatMessage) => ({ ...m, metadata: { command: true } }) as ChatMessage;
+	expect(askedBy([said('user', 'hi', 'u'), said('assistant', 'hello', 'a')])?.id).toBe('u');
+	expect(askedBy([said('user', 'hi', 'u')])).toBeUndefined();
+	expect(askedBy([command(said('user', '/list', 'u')), command(said('assistant', 'One', 'a'))])).toBeUndefined();
+	expect(askedBy([said('assistant', 'Reminder', 'a')])).toBeUndefined();
 });

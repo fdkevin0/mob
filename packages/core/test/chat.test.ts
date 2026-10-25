@@ -170,3 +170,41 @@ test('a turn reports what its prompt takes of the window, and the service keeps 
 	expect(after.used).toBeLessThan(before.used);
 	s.close();
 });
+
+test('a message said again replaces it and everything after it', async () => {
+	const s = open();
+	const service = new ConversationService(s, demoModels);
+	const c = s.create();
+	await service.execute({ id: c.id, text: 'first', requestId: 'r1' }, () => {});
+	await service.execute({ id: c.id, text: '/remember tea', requestId: 'r2' }, () => {});
+	const pending = s.history(c.id).at(-1)!.parts.find(p => p.state === 'approval-requested');
+	expect(pending).toBeTruthy();
+	s.summarize(c.id, { text: 'they said first', through: s.history(c.id)[1].id });
+	await service.execute({ id: c.id, text: 'second', requestId: 'r3', replace: 'r2' }, () => {});
+	expect(s.history(c.id).map(m => (m.role === 'user' ? textOf(m) : m.role))).toEqual(['first', 'assistant', 'second', 'assistant']);
+	expect(s.waiting().has(c.id)).toBe(false);
+	// The summary covered only what stayed.
+	expect(s.summary(c.id).text).toBe('they said first');
+	await service.execute({ id: c.id, text: 'again', requestId: 'r4', replace: 'r1' }, () => {});
+	expect(s.history(c.id).map(m => (m.role === 'user' ? m.id : m.role))).toEqual(['r4', 'assistant']);
+	expect(s.summary(c.id)).toEqual({ text: '', through: '' });
+	// A title taken from the first message follows it.
+	expect(s.list().find(x => x.id === c.id)?.title).toBe('again');
+	await expect(service.execute({ id: c.id, text: 'x', requestId: 'r5', replace: 'missing' }, () => {})).rejects.toThrow('not in this conversation');
+	await expect(service.execute({ id: c.id, text: 'x', requestId: 'r6', replace: s.history(c.id)[1].id }, () => {})).rejects.toThrow('not in this conversation');
+	s.rename(c.id, 'Mine');
+	await service.execute({ id: c.id, text: 'renamed', requestId: 'r7', replace: 'r4' }, () => {});
+	expect(s.list().find(x => x.id === c.id)?.title).toBe('Mine');
+	// A refused or stopped replacement deletes nothing.
+	await service.execute({ id: c.id, text: 'later', requestId: 'r8' }, () => {});
+	const kept = s.history(c.id).map(m => m.id);
+	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r7', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
+	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r8', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
+	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r8', replace: 'r7' }, () => {})).rejects.toThrow('request already accepted');
+	await expect(service.execute({ id: c.id, text: '/models', requestId: 'r9', replace: 'r8' }, () => {})).rejects.toThrow('cannot replace');
+	const stop = new AbortController();
+	stop.abort();
+	await expect(service.start({ id: c.id, text: 'stopped', requestId: 'r10', replace: 'r7' }, stop.signal)).rejects.toThrow();
+	expect(s.history(c.id).map(m => m.id)).toEqual(kept);
+	s.close();
+});

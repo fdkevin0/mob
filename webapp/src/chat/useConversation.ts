@@ -78,6 +78,7 @@ export function useConversation({
 			void conversation.submit();
 		},
 		proceed: conversation.proceed,
+		resend: conversation.resend,
 		decide: conversation.decide,
 		cancel: conversation.cancel,
 		dismissCommand: conversation.dismissCommand,

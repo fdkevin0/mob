@@ -50,6 +50,18 @@ page covers how a turn runs, how clients follow it, and what limits apply.
   apply everywhere, so they outlive the conversation that saved them, and the
   usage ledger keeps the tokens it spent (Token usage lists it as a deleted
   conversation).
+- A `POST /api/chat` request with `replace` set to the ID of an earlier
+  message the owner sent says that message again: the message and everything
+  after it are deleted, with decisions on the deleted replies, in the same
+  transaction that records the new text, so a refused, repeated or stopped
+  request deletes nothing. Facts, remembered approvals, schedules and
+  the usage ledger stay. A compaction summary that covered a deleted message is
+  dropped, and a title taken from the first message follows it when that is the
+  one replaced. It answers 404 for a message that is not the owner's in that
+  conversation, 400 for a slash command, and 409 while a turn runs or in a
+  coding agent's conversation, whose agent keeps its own session. In the web, **Edit** on the owner's message
+  sends its new text this way, and **Retry** on the last reply sends the
+  message it answered again.
 - The web UI and experimental TypeScript TUI use the same `@mob/client`
   conversation state and follow a running turn whenever a snapshot says one is
   active. The client reads the replay itself (`reconnectToStream` and
