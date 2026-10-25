@@ -44,7 +44,10 @@ try {
 			const response = await request(path);
 			assert.equal(response.status, 200, `${path}: ${response.ok ? '' : await response.text()}`);
 			assert.match(response.headers.get('Content-Type') ?? '', /^text\/html/);
-			assert.match(response.headers.get('Content-Security-Policy') ?? '', /frame-ancestors 'none'/);
+			const policy = response.headers.get('Content-Security-Policy') ?? '';
+			assert.match(policy, /frame-ancestors 'none'/);
+			// The shared header shows the signed-in visitor's avatar from its HTTPS host.
+			assert.match(policy, /img-src [^;]*https:/, path);
 		}
 		const docs = await (await request('/docs/')).text();
 		const navigation = docs.match(/<nav class="site-links"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? '';

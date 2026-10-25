@@ -22,12 +22,14 @@ const landingPolicy = [
 	"frame-ancestors 'none'",
 ].join('; ');
 
-// The demo page replays recorded runs; it needs only its own files.
+// The demo page replays recorded runs; it needs only its own files, plus the
+// signed-in visitor's avatar (an HTTPS URL from GitHub or Cloudflare) in the
+// shared header.
 const demoPolicy = [
 	"default-src 'self'",
 	`script-src 'self' ${themeScript}`,
 	"connect-src 'self'",
-	"img-src 'self' data:",
+	"img-src 'self' data: https:",
 	"style-src 'self' 'unsafe-inline'",
 	"font-src 'self' data:",
 	"object-src 'none'",
