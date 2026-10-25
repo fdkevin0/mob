@@ -7,6 +7,8 @@
 :root {
 	--sl-font: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--sl-font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	/* The shared theme picker reads the app's control radius. */
+	--radius: 8px;
 }
 
 :root[data-theme='dark'] {

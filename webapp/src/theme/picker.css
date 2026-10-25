@@ -3,7 +3,7 @@
 	gap: 2px;
 	padding: 2px;
 	border: 1px solid var(--line-strong, var(--sl-color-gray-5));
-	border-radius: 10px;
+	border-radius: calc(var(--radius) + 2px);
 }
 .theme-picker label {
 	position: relative;
@@ -11,7 +11,7 @@
 	place-items: center;
 	width: 28px;
 	height: 24px;
-	border-radius: 8px;
+	border-radius: var(--radius);
 	color: var(--muted-foreground, var(--sl-color-gray-3));
 	cursor: pointer;
 }
