@@ -1368,8 +1368,10 @@ button.reply-meta:hover,
 	--context-summary: #9085e9;
 	--context-messages: #3987e5;
 	--context-outputs: #199e70;
-	position: fixed;
-	z-index: 50;
+	position: absolute;
+	right: 0;
+	bottom: calc(100% + 8px);
+	z-index: 10;
 	width: min(340px, calc(100vw - 32px));
 	padding: 14px 14px 10px;
 	border: 1px solid var(--line-strong);
