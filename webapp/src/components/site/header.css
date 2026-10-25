@@ -7,6 +7,9 @@
 	color: var(--text);
 }
 .site-header { position: sticky; top: 0; z-index: 10; background: linear-gradient(var(--bg) 55%, transparent); }
+/* The header is the same on every public page, so a page change keeps it in
+ * place while the content below cross-fades. */
+.site-header { view-transition-name: site-header; }
 .site-header-floating { position: fixed; inset: 0 0 auto; }
 .site-header-inner {
 	box-sizing: border-box;

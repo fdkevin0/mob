@@ -103,6 +103,15 @@ framework, so there it links to the account page, which has Sign out too. On
 narrow screens the links, docs search and theme picker move into a side drawer
 (in the documentation, above the documentation tree).
 
+Each page is a separate document with its own policy, so moving between them is
+a full load. Two browser features soften that where they are supported. Every
+page sends a `Speculation-Rules` header naming `/speculation-rules.json`, which
+prerenders `/`, `/demo` and the documentation when the pointer rests on a link
+to them (never `/app`, `/account` or a link with a query), so the click shows
+the page at once. The pages also opt into cross-document view transitions: the
+header stays in place while the content cross-fades, unless the visitor asks
+for reduced motion.
+
 The landing page and workspace share the dark theme, Geist fonts and pixel
 logo. The workspace uses calmer, rounded controls in the local browser, the
 desktop app and `/app`: one rounded message box holds the text, the model

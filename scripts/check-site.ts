@@ -48,7 +48,14 @@ try {
 			assert.match(policy, /frame-ancestors 'none'/);
 			// The shared header shows the signed-in visitor's avatar from its HTTPS host.
 			assert.match(policy, /img-src [^;]*https:/, path);
+			assert.equal(response.headers.get('Speculation-Rules'), '"/speculation-rules.json"', path);
 		}
+		const rules = await request('/speculation-rules.json');
+		assert.equal(rules.headers.get('Content-Type'), 'application/speculationrules+json');
+		// Only the static public pages are prerendered, never a link with a query.
+		assert.deepEqual((await rules.json()).prerender[0].where.or.map((rule: { href_matches: unknown }) => rule.href_matches), [
+			{ pathname: '/', search: '' }, { pathname: '/demo', search: '' }, { pathname: '/docs/*', search: '' },
+		]);
 		const docs = await (await request('/docs/')).text();
 		const navigation = docs.match(/<nav class="site-links"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? '';
 		assert.deepEqual([...navigation.matchAll(/href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => [match[1], match[2]]), [
