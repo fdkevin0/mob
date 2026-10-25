@@ -315,7 +315,12 @@ The shared rendering configuration is in
   not visible. The history returns them in each reply's metadata (`model`,
   `usage`, `stats`). The stream's `start` chunk carries the reply's model, and a
   `message-metadata` chunk at its end carries its model, usage and stats, so a
-  client shows the same thing during and after the reply. Replies saved before
+  client shows the same thing during and after the reply. The web shows, under
+  each reply, its model, its tokens (input and output) and how fast the model
+  wrote; while the reply is written, its model only. Clicking it opens what the
+  reply used (input, output, speed, cache, reasoning, requests, time, cost) and
+  where its time went: first token, writing, tools and the rest. A coding
+  agent's reply shows its time instead of a speed. Replies saved before
   schema 13 have no stats. Exports carry stats and first-token times; older
   exports without them still import.
 - `/usage`, in every client and channel, shows what the conversation used by
