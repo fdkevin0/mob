@@ -3,7 +3,8 @@ import { ThemePicker } from '../../theme/ThemePicker';
 import type { MouseEventHandler } from 'react';
 import { Dialog, DialogTrigger, DialogContent, DialogTitle } from '../ui/dialog';
 import { siteLinks } from './navigation';
-import { UserMenu } from '../../landing/UserMenu';
+import { UserMenu } from './UserMenu';
+import { openApp } from '../../landing/auth';
 import './header.css';
 import './site.css';
 
@@ -32,7 +33,12 @@ export function SiteHeader({ current, floating, onSignIn }: { current?: string; 
 			</nav>
 			<div className="site-theme"><ThemePicker /></div>
 			<div className="site-account">
-				<a href="/app">Open Mob</a>
+				{/* openApp carries a pairing offer kept across sign-in. */}
+				<a href="/app" onClick={event => {
+					if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+					event.preventDefault();
+					openApp();
+				}}>Open Mob</a>
 				<UserMenu onSignIn={onSignIn} />
 			</div>
 		</div></header>

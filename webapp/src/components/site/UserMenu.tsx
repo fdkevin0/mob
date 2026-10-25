@@ -1,6 +1,6 @@
 import { useState, type MouseEventHandler } from 'react';
-import { authClient } from './auth';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { authClient } from '../../landing/auth';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 export function UserMenu({ onSignIn }: { onSignIn?: MouseEventHandler<HTMLButtonElement> }) {
 	const session = authClient.useSession();

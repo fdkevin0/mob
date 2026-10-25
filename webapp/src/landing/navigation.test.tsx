@@ -4,11 +4,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const auth = vi.hoisted(() => ({
 	session: { isPending: false, data: null } as { isPending: boolean; data: null | { user: { name: string; email: string; image: string | null } } },
 	signOut: vi.fn(),
+	openApp: vi.fn(),
 }));
-vi.mock('./auth', () => ({ authClient: { useSession: () => auth.session, signOut: auth.signOut } }));
+vi.mock('./auth', () => ({ authClient: { useSession: () => auth.session, signOut: auth.signOut }, openApp: auth.openApp }));
 import { SiteHeader } from '../components/site/Site';
 
-beforeEach(() => { auth.session = { isPending: false, data: null }; auth.signOut.mockReset(); });
+beforeEach(() => { auth.session = { isPending: false, data: null }; auth.signOut.mockReset(); auth.openApp.mockReset(); });
 
 it.each(['/', '/demo', '/docs/', '/account'])('keeps the same public navigation on %s', current => {
 	render(<SiteHeader current={current} />);
@@ -61,4 +62,10 @@ it('opens the mobile navigation with docs search and theme controls', async () =
 	expect(drawer.getByRole('radiogroup', { name: 'Theme' })).toBeTruthy();
 	fireEvent.click(drawer.getByRole('button', { name: 'Close' }));
 	await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+it('opens the app through openApp so a kept pairing offer survives sign-in', () => {
+	render(<SiteHeader />);
+	fireEvent.click(screen.getByRole('link', { name: 'Open Mob' }));
+	expect(auth.openApp).toHaveBeenCalledOnce();
 });
