@@ -52,6 +52,8 @@ try {
 			['/', 'Home'], ['/demo', 'Demo'], ['/docs/', 'Docs'], ['https://github.com/fdkevin0/mob', 'GitHub'],
 		]);
 		assert.match(navigation, /href="\/docs\/" aria-current="page"/);
+		assert.match(docs, /<div class="site-header docs-header">[\s\S]*?<div class="docs-search print:hidden"><site-search/);
+		assert.doesNotMatch(docs, /class="docs-tools/);
 		assert.match(docs, /href="\/account">Account<\/a>/);
 		assert.match(docs, /href="\/app">Open Mob<\/a>/);
 		for (const path of ['/app', '/app/', '/account', '/account/']) {

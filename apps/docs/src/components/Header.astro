@@ -6,7 +6,7 @@ import { calfHeadSVG } from '../../../../webapp/src/components/brand/calfHead';
 import '../../../../webapp/src/components/site/header.css';
 ---
 
-<div class="site-header">
+<div class="site-header docs-header">
 	<div class="site-header-inner">
 		<a href="/" class="site-brand" aria-label="Mob home">
 			<span class="logo"><Fragment set:html={calfHeadSVG(" width='30' height='30' aria-hidden='true'")} /><span class="logo-word">mob</span></span>
@@ -14,22 +14,43 @@ import '../../../../webapp/src/components/site/header.css';
 		<nav class="site-links" aria-label="Site">
 			{siteLinks.map(link => <a href={link.href} aria-current={link.href === '/docs/' ? 'page' : undefined}>{link.label}</a>)}
 		</nav>
+		<div class="docs-search print:hidden"><Search /></div>
 		<div class="site-theme"><ThemeSelect /></div>
 		<div class="site-account">
 			{accountLinks.map(link => <a href={link.href}>{link.label}</a>)}
 		</div>
 	</div>
 </div>
-<div class="docs-tools print:hidden"><Search /></div>
 
 <style is:global>
-	:root { --sl-nav-height: 120px; }
+	:root { --sl-nav-height: 72px; }
 	/* Docs scrolls text beneath this fixed frame, so the landing gradient needs an opaque backing. */
 	.page > .header { padding: 0; border: 0; background: var(--sl-color-black); }
-	.docs-tools { box-sizing: border-box; height: 48px; max-width: 1240px; margin: 0 auto; padding: 6px 28px; display: flex; align-items: center; }
-	.sl-menu-button { top: calc(var(--sl-nav-height) - 48px + (48px - var(--sl-menu-button-size)) / 2); }
+	.docs-header .site-header-inner { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+	.docs-search { min-width: 0; }
+	.docs-search button[data-open-modal] { height: 36px; }
+	@media (max-width: 900px) {
+		.docs-header .site-header-inner { gap: 12px; }
+		.docs-search { justify-self: end; }
+		.docs-search button[data-open-modal] { width: 32px; justify-content: center; padding: 0; border: 0; background: transparent; }
+		.docs-search button[data-open-modal] > :is(span, kbd) { display: none !important; }
+	}
+	@media (max-width: 799px) {
+		.docs-header .site-header-inner { padding-inline: 12px 52px; }
+		.docs-header .site-links { gap: 12px; }
+		.sl-menu-button { inset-inline-end: 12px; }
+	}
 	@media (max-width: 760px) {
-		:root { --sl-nav-height: 156px; }
-		.docs-tools { padding-inline: 12px; }
+		:root { --sl-nav-height: 108px; }
+		.docs-header .site-header-inner { grid-template-columns: auto 1fr auto auto; padding-inline: 12px; gap: 12px 8px; }
+		.docs-header .site-brand { grid-area: 1 / 1; }
+		.docs-search { grid-area: 1 / 2; justify-self: start; }
+		.docs-header .site-links { font-size: 13px; gap: 8px; }
+		.docs-header .site-theme { padding-inline-end: 40px; }
+		.docs-header .site-account a { padding-inline: 8px; }
+		.sl-menu-button { top: 62px; }
+	}
+	@media (max-width: 359px) {
+		.docs-header .site-links { font-size: 12px; gap: 6px; }
 	}
 </style>
