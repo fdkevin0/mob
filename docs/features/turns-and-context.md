@@ -305,10 +305,12 @@ The shared rendering configuration is in
   reasoning (0 when none came, such as a request that only called tools).
 - Each reply records its model, usage and `stats` (`messages.stats`, schema
   13): `startedAt` and `finishedAt`; `firstTokenMs`, from the start of the
-  turn to its first words; `generationMs`, each request's time from its first
-  words to its end, added up, with `timedOutput`, the output tokens of those
-  requests, so `timedOutput / generationMs` is how fast the model writes;
-  `toolMs`, the time tools ran; and `requests`. A coding agent's reply records
+  turn to the first words of the reply; `generationMs`, each request's time
+  from its first words to its end, added up, with `timedOutput`, the output
+  tokens of those requests, so `timedOutput / generationMs` is how fast the
+  model writes; `toolMs`, the time tools ran; and `requests`. The requests
+  that summarize older messages before the reply, and a prompt sent again
+  after the provider refused it as too long, count among them. A coding agent's reply records
   only `startedAt`, `firstTokenMs` and `finishedAt`, since its own requests are
   not visible. The history returns them in each reply's metadata (`model`,
   `usage`, `stats`). The stream's `start` chunk carries the reply's model, and a

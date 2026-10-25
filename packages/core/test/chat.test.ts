@@ -202,6 +202,39 @@ test('a reply counts a prompt sent again after the provider refused it as too lo
 	s.close();
 });
 
+test('a reply counts and times the requests that summarized older messages for it', async () => {
+	const s = open();
+	const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+	let calls = 0, summaries = 0;
+	// A small window, so older messages are summarized before the model answers.
+	class Small extends DemoModel {
+		override readonly info = { ...new DemoModel().info, context: 12000, output: 1000 };
+		override async stream(...[req, emit]: Parameters<DemoModel['stream']>) {
+			calls++;
+			const summarizing = req.system.startsWith('You keep the summary');
+			if (summarizing) summaries++;
+			await pause(20);
+			await emit('text', summarizing ? 'what was said' : 'ok');
+			await pause(10);
+			return { text: summarizing ? 'what was said' : 'ok', reasoning: '', signature: '', calls: [], usage: { inputTokens: 10, outputTokens: 3 } };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Small() });
+	const c = s.create();
+	const say = (i: number) => service.execute({ id: c.id, text: `part ${i} ` + 'word '.repeat(4000), requestId: newID() }, () => {});
+	for (let i = 0; i < 3; i++) await say(i);
+	calls = summaries = 0;
+	await say(3);
+	expect(summaries).toBeGreaterThan(0);
+	const reply = s.history(c.id).at(-1)!;
+	expect(reply.stats?.requests).toBe(calls);
+	expect(reply.stats?.timedOutput).toBe(3 * calls);
+	const rows = s.exportConversation(c.id).usage.filter(u => u.messageId === reply.id);
+	expect(rows).toHaveLength(calls);
+	for (const row of rows) expect(row.firstTokenMs).toBeGreaterThanOrEqual(15);
+	s.close();
+});
+
 test('a turn reports what its prompt takes of the window, and the service keeps it until the conversation moves on', async () => {
 	const s = open();
 	// A model with a known window that says how many tokens each prompt was.

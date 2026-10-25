@@ -12,8 +12,8 @@ export const summaryNotice = '\n\nSummary of the earlier conversation, whose mes
 /** transcriptOutput is how much of each tool output a summary reads. */
 const transcriptOutput = 2000;
 
-/** Requests are what each model request used, which model ran it and how long it took. */
-export type Requests = { model: string; usage: LLMUsage; tookMs: number }[];
+/** Requests are what each model request used, which model ran it, how long it took and, once it wrote, when its first words came. */
+export type Requests = { model: string; usage: LLMUsage; tookMs: number; firstTokenMs?: number }[];
 
 /** transcriptUsage is what the requests used together, or undefined without any. */
 export function transcriptUsage(r: Requests): LLMUsage | undefined {
@@ -42,15 +42,17 @@ export async function summarize(signal: AbortSignal, model: Model, previous: str
 		if (summary) text = 'Summary so far:\n' + summary + '\n\n' + text;
 		if (context > 0 && tokens(system) + tokens(text) + maxTokens > context) throw new Error(`summarizing would exceed ${info.id}'s context`);
 		const began = Date.now();
+		let first: number | undefined;
+		const used = (u: LLMUsage) => ({ model: refString(model.ref), usage: priced(u, info.cost), tookMs: Date.now() - began, firstTokenMs: first });
 		let result;
 		try {
-			result = await model.stream({ system, messages: [{ role: 'user', text }], maxTokens }, () => {}, signal);
+			result = await model.stream({ system, messages: [{ role: 'user', text }], maxTokens }, () => { first ??= Date.now() - began; }, signal);
 		} catch (e) {
 			const partial = (e as { result?: { usage?: LLMUsage } }).result;
-			if (partial?.usage) usage.push({ model: refString(model.ref), usage: priced(partial.usage, info.cost), tookMs: Date.now() - began });
+			if (partial?.usage) usage.push(used(partial.usage));
 			throw e;
 		}
-		if (result.usage) usage.push({ model: refString(model.ref), usage: priced(result.usage, info.cost), tookMs: Date.now() - began });
+		if (result.usage) usage.push(used(result.usage));
 		if (!result.text.trim()) throw new Error('model wrote an empty summary');
 		summary = result.text.trim();
 		part = '';

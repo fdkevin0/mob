@@ -163,6 +163,15 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		if (through && context > 0 && length >= summaryTokens / 4 && half > 0) {
 			const [, , older] = prompt(history, message.id, half);
 			const [text, requests, err] = await summarize(signal, model, summary.text, until(history, older), length);
+			// The summary's requests are part of the reply: they count, and the
+			// ones that wrote say how fast the model writes. The reply's first
+			// token stays the first word its reader sees.
+			stats.requests! += requests.length;
+			for (const q of requests) {
+				if (q.firstTokenMs === undefined) continue;
+				stats.generationMs! += q.tookMs - q.firstTokenMs;
+				stats.timedOutput! += q.usage.outputTokens;
+			}
 			const usage = transcriptUsage(requests);
 			if (usage) {
 				message.usage = addLLMUsage(message.usage, usage);
@@ -490,7 +499,7 @@ export async function finished(message: Message, emit: (e: Event) => void | Prom
 
 /** recordRequests adds each request to the reply's usage. */
 export function recordRequests(store: Store, requests: Requests, conversationID: string, messageID: string) {
-	for (const q of requests) store.recordUsage(conversationID, messageID, q.model, q.usage, q.tookMs);
+	for (const q of requests) store.recordUsage(conversationID, messageID, q.model, q.usage, q.tookMs, '', q.firstTokenMs ?? 0);
 }
 
 /** runTool runs an offered tool after the beforeTool hooks allow it, and carries out a call a remembered approval covers. */
