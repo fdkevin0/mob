@@ -8,7 +8,7 @@ export type ToWorker =
 	// The page's answers to a prompt of Chrome's built-in model.
 	| { type: 'chrome-text'; id: number; text: string }
 	| { type: 'chrome-end'; id: number }
-	| { type: 'chrome-error'; id: number; error: string };
+	| { type: 'chrome-error'; id: number; error: string; name?: string };
 
 /** ChromeMessage is a turn of the conversation the worker asks the page's built-in model to answer. */
 export type ChromeMessage = { role: 'system' | 'user' | 'assistant'; content: string };

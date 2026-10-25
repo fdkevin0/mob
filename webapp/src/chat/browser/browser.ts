@@ -23,7 +23,7 @@ function start(token: string) {
 				const abort = new AbortController();
 				prompts.set(m.id, abort);
 				promptChrome(m.messages, abort.signal, text => post({ type: 'chrome-text', id: m.id, text }))
-					.then(() => post({ type: 'chrome-end', id: m.id }), e => post({ type: 'chrome-error', id: m.id, error: e instanceof Error ? e.message : String(e) }))
+					.then(() => post({ type: 'chrome-end', id: m.id }), e => post({ type: 'chrome-error', id: m.id, error: e instanceof Error ? e.message : String(e), name: e instanceof Error ? e.name : undefined }))
 					.finally(() => prompts.delete(m.id));
 				return;
 			}

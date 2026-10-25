@@ -3,7 +3,7 @@
 // workers, so the runner's provider calls a base URL that never reaches the
 // network: chromeBridge answers it in the worker, as an OpenAI-compatible
 // server would, and asks the page to prompt the model.
-import type { Provider } from '@mob/core';
+import { OverflowError, type Provider } from '@mob/core';
 import type { ChromeMessage, FromWorker, ToWorker } from './protocol';
 
 // .invalid never resolves, so a request that missed the bridge fails instead of leaving the browser.
@@ -80,6 +80,28 @@ const encoder = new TextEncoder();
 const event = (data: unknown) => encoder.encode('data: ' + (typeof data === 'string' ? data : JSON.stringify(data)) + '\n\n');
 const text = (v: unknown) => (typeof v === 'string' ? v : Array.isArray(v) ? v.map(p => (p as { text?: string })?.text ?? '').join('') : '');
 
+type Wire = { role?: string; content?: unknown; tool_call_id?: string; tool_calls?: { id?: string; function?: { name?: string; arguments?: string } }[] };
+
+// The Prompt API has no tool roles, so earlier tool calls and their results,
+// which another model made in this conversation, become labeled text: the
+// model cannot call tools, but still reads what they returned.
+function plain(wire: Wire[]): ChromeMessage[] {
+	const names = new Map<string, string>();
+	const out: ChromeMessage[] = [];
+	for (const m of wire) {
+		if (m.role === 'system' || m.role === 'user') out.push({ role: m.role, content: text(m.content) });
+		else if (m.role === 'assistant') {
+			const calls = (m.tool_calls ?? []).map(c => {
+				const name = c.function?.name ?? 'tool';
+				if (c.id) names.set(c.id, name);
+				return `[Called tool ${name} with ${c.function?.arguments || '{}'}]`;
+			});
+			out.push({ role: 'assistant', content: [text(m.content), ...calls].filter(Boolean).join('\n') });
+		} else if (m.role === 'tool') out.push({ role: 'user', content: `[Result of tool ${names.get(m.tool_call_id ?? '') ?? 'call'}]\n${text(m.content)}` });
+	}
+	return out;
+}
+
 /**
  * chromeBridge is the worker's side: fetcher serves chromeBase from the page's
  * answers and passes every other request on, and receive takes those answers.
@@ -95,8 +117,7 @@ export function chromeBridge(post: (m: FromWorker) => void) {
 		if (path !== '/chat/completions' || init?.method !== 'POST') return Response.json({ error: { message: 'not found' } }, { status: 404 });
 		const signal = init.signal ?? undefined;
 		signal?.throwIfAborted();
-		const body = JSON.parse(String(init.body)) as { messages?: { role?: string; content?: unknown }[] };
-		const messages = (body.messages ?? []).filter(m => m.role === 'system' || m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: text(m.content) }) as ChromeMessage);
+		const messages = plain((JSON.parse(String(init.body)) as { messages?: Wire[] }).messages ?? []);
 		const id = ++next;
 		const stop = () => { if (open.delete(id)) post({ type: 'chrome-abort', id }); };
 		const stream = new ReadableStream<Uint8Array>({
@@ -118,7 +139,8 @@ export function chromeBridge(post: (m: FromWorker) => void) {
 		if (!c) return;
 		if (m.type === 'chrome-text') { c.enqueue(event({ choices: [{ index: 0, delta: { content: m.text } }] })); return; }
 		open.delete(m.id);
-		if (m.type === 'chrome-error') { c.error(new Error(m.error)); return; }
+		// Chrome refuses a prompt that does not fit its context this way; Mob then retries it shorter.
+		if (m.type === 'chrome-error') { c.error(m.name === 'QuotaExceededError' ? new OverflowError(m.error) : new Error(m.error)); return; }
 		c.enqueue(event({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }));
 		c.enqueue(event('[DONE]'));
 		c.close();

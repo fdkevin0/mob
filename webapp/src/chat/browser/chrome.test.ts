@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { ProviderRegistry, Server, Store, memoryProviders, type SQL } from '@mob/core';
+import { ProviderRegistry, Server, Store, isOverflow, memoryProviders, type SQL } from '@mob/core';
 import { chromeBridge, promptChrome } from './chrome';
 import type { FromWorker } from './protocol';
 import { browserProviders, providerPlugin } from './providers';
@@ -30,7 +30,7 @@ function setup() {
 		prompted.push(m);
 		if (m.type !== 'chrome') return;
 		void promptChrome(m.messages, new AbortController().signal, text => bridge.receive({ type: 'chrome-text', id: m.id, text }))
-			.then(() => bridge.receive({ type: 'chrome-end', id: m.id }), e => bridge.receive({ type: 'chrome-error', id: m.id, error: (e as Error).message }));
+			.then(() => bridge.receive({ type: 'chrome-end', id: m.id }), e => bridge.receive({ type: 'chrome-error', id: m.id, error: (e as Error).message, name: (e as Error).name }));
 	});
 	const network = vi.fn(async () => new Response('network'));
 	const registry = new ProviderRegistry(memoryProviders(browserProviders()), undefined, false, bridge.fetcher(network));
@@ -76,4 +76,34 @@ it('tells the page to stop when the request is cancelled', async () => {
 	abort.abort();
 	expect(posted[1]).toEqual({ type: 'chrome-abort', id: 1 });
 	await expect(response.text()).rejects.toThrow();
+});
+
+it('keeps what earlier tools returned when a conversation switches to Chrome’s model', async () => {
+	const { created } = languageModel(['$123.45']);
+	const { registry, post } = setup();
+	await post('chrome');
+	await registry.resolve('chrome/gemini-nano').stream({
+		system: '',
+		messages: [
+			{ role: 'user', text: 'Read the invoice.' },
+			{ role: 'assistant', text: '', toolCalls: [{ id: 'c1', name: 'read_file', arguments: '{"path":"invoice.txt"}' }] },
+			{ role: 'tool', toolCallId: 'c1', text: 'Total: $123.45' },
+			{ role: 'assistant', text: 'Read it.' },
+			{ role: 'user', text: 'What was the total?' },
+		],
+	}, async () => {});
+	expect(created[0]).toMatchObject({ initialPrompts: [
+		{ role: 'user', content: 'Read the invoice.' },
+		{ role: 'assistant', content: '[Called tool read_file with {"path":"invoice.txt"}]' },
+		{ role: 'user', content: '[Result of tool read_file]\nTotal: $123.45' },
+		{ role: 'assistant', content: 'Read it.' },
+	] });
+});
+
+it('reports a prompt too long for Chrome’s model as an overflow, so Mob retries it shorter', async () => {
+	vi.stubGlobal('LanguageModel', { availability: async () => 'available', create: async () => { throw new DOMException('The input is too large.', 'QuotaExceededError'); } });
+	const { registry, post } = setup();
+	await post('chrome');
+	const error = await registry.resolve('chrome/gemini-nano').stream({ system: '', messages: [{ role: 'user', text: 'Hi' }] }, async () => {}).catch(e => e);
+	expect(isOverflow(error)).toBe(true);
 });

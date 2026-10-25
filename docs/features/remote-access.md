@@ -320,8 +320,11 @@ events) and posts each prompt to the page, which creates a session with the
 conversation so far and streams the reply back (`POST
 /api/plugins/browser/chrome`). Gemini Nano is small and cannot call tools
 reliably, so the provider is saved with `tools: false`: it only replies, and
-cannot use tools or run tasks. It reads and writes English, Spanish and
-Japanese best, and its context is about 6,000 tokens.
+cannot use tools or run tasks. Tool calls and results that another model
+made earlier in the conversation reach it as labeled text, so it can still
+answer from them. It reads and writes English, Spanish and Japanese best,
+and its context is about 6,000 tokens; a prompt Chrome refuses as too long
+(`QuotaExceededError`) is retried shorter, like any context overflow.
 
 Keys are stored unencrypted in the browser's database, in the site's origin
 private file system, like any key a web app keeps. The browser keeps other
