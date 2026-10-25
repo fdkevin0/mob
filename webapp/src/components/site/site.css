@@ -19,8 +19,9 @@
 .footer nav a:hover { color: var(--text); }
 
 @media (max-width: 760px) {
-	.nav-inner { padding: 14px 16px; gap: 10px; }
-	.nav-account { gap: 4px; }
+	.nav-inner { flex-wrap: wrap; padding: 14px 16px; gap: 8px 10px; }
+	/* The actions drop to their own row, at the right, when they no longer fit. */
+	.nav-account { flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-left: auto; }
 	.nav-account .btn.small { padding: 6px 10px; }
 	.nav-links { display: none; }
 	.nav-theme { margin-left: auto; }
