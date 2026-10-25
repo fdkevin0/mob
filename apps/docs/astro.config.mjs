@@ -7,6 +7,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 import inlineScriptHashes from './csp.ts';
+import preloadFonts from './fonts.ts';
 import { pages, repositoryUrl } from './pages.ts';
 
 const groups = ['Start', 'Features', 'Reference', 'Contributing'];
@@ -60,5 +61,6 @@ export default defineConfig({
 			plugins: [starlightLinksValidator()],
 		}),
 		inlineScriptHashes(),
+		preloadFonts(),
 	],
 });

@@ -94,6 +94,18 @@ const docsPolicy = [
 	"frame-ancestors 'none'",
 ].join('; ');
 
+// Hovering a link to another public page prerenders it (in browsers that
+// support speculation rules), so the click shows it at once instead of a full
+// reload. /app and /account answer per visitor and connect on load, and links
+// with a query (sign-in, docs search) change what the page does, so neither is
+// prerendered. Every page names these rules in a Speculation-Rules header.
+const speculationRules = JSON.stringify({
+	prerender: [{
+		where: { or: ['/', '/demo', '/docs/*'].map(pathname => ({ href_matches: { pathname, search: '' } })) },
+		eagerness: 'moderate',
+	}],
+});
+
 // Other files under /docs/media/ (images copied from the repository) are never
 // pages, so an SVG opened directly runs nothing.
 const docsFilePolicy = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox";
@@ -116,6 +128,9 @@ export default {
 			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env), cloudflare: cloudflareReady(env) }, { headers: { 'Cache-Control': 'no-store' } });
 		}
 		if (pathname.startsWith(cloudflareBase + '/')) return cloudflareAI(request, env);
+		if (pathname === '/speculation-rules.json') {
+			return new Response(speculationRules, { headers: { 'Content-Type': 'application/speculationrules+json', 'Cache-Control': 'public, max-age=3600' } });
+		}
 		if (pathname === '/') return page(env, request, '/landing', landingPolicy);
 		if (pathname === '/demo' || pathname === '/demo/') return page(env, request, '/demo', demoPolicy);
 		if (pathname === '/app' || pathname === '/app/') {
@@ -148,6 +163,7 @@ async function docs(env: Env, request: Request) {
 	const response = new Response(asset.body, { status, headers: asset.headers });
 	const html = response.headers.get('Content-Type')?.startsWith('text/html') || response.status >= 300 && response.status < 400;
 	response.headers.set('Content-Security-Policy', html ? docsPolicy : docsFilePolicy);
+	if (html) response.headers.set('Speculation-Rules', '"/speculation-rules.json"');
 	response.headers.set('Referrer-Policy', 'no-referrer');
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	return response;
@@ -173,6 +189,7 @@ async function page(env: Env, request: Request, path: string, policy: string, ca
 	const asset = await env.ASSETS.fetch(new Request(new URL(path, request.url), { headers: request.headers }));
 	const response = new Response(asset.body, asset);
 	response.headers.set('Content-Security-Policy', policy);
+	response.headers.set('Speculation-Rules', '"/speculation-rules.json"');
 	response.headers.set('Referrer-Policy', 'no-referrer');
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('Cache-Control', cache);

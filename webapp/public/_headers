@@ -1,0 +1,7 @@
+# Build output with a content hash in its name never changes, so browsers keep
+# it without asking again. Without this every page load revalidates the fonts,
+# and text first paints in a fallback face, then swaps to Geist.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/docs/_astro/*
+  Cache-Control: public, max-age=31536000, immutable

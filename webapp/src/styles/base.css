@@ -1,4 +1,10 @@
 @import '../theme/picker.css';
+/* Moving between the site's pages (all full loads: each has its own entry and
+ * policy) cross-fades instead of flashing, where the browser supports it. The
+ * docs opt in too (apps/docs/src/theme.css). */
+@media (prefers-reduced-motion: no-preference) {
+	@view-transition { navigation: auto; }
+}
 * {
 	box-sizing: border-box;
 }

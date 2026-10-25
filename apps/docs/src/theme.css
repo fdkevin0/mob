@@ -6,6 +6,11 @@
 /* The app's tokens, for the shared header, account menu and theme picker. */
 @import '../../../webapp/src/styles/tokens.css';
 
+/* Cross-fade to and from the site's other pages (webapp/src/styles/base.css). */
+@media (prefers-reduced-motion: no-preference) {
+	@view-transition { navigation: auto; }
+}
+
 :root {
 	--sl-font: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--sl-font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
