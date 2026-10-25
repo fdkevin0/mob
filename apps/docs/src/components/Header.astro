@@ -45,10 +45,17 @@ import { repositoryUrl } from '../../pages.ts';
 		gap: 1rem;
 		align-items: center;
 	}
+	/* The links need room the header only has on wide screens; below that
+	 * the search box, picker and "Open Mob" are what fit beside the title. */
 	.site-links {
-		display: flex;
+		display: none;
 		gap: 1.25rem;
 		font-size: 14px;
+	}
+	@media (min-width: 72rem) {
+		.site-links {
+			display: flex;
+		}
 	}
 	.site-links a {
 		color: var(--sl-color-gray-3);
