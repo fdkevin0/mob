@@ -12,10 +12,13 @@ The landing, demo, documentation and account pages share Home, Demo, Docs
 and GitHub navigation, a theme picker, and an Open Mob link followed by a
 login control. Signed-in visitors see their avatar (or initial); its menu
 contains Account and Sign out. Signed-out visitors see a Log in button.
-The current section is marked; on narrow screens the navigation and theme
-picker occupy a second row instead of disappearing. Docs keeps search inside
-the header, collapsing it to an icon when space is limited; its mobile
-documentation menu also stays in the header, with a quiet outlined button.
+The current section is marked. On screens narrower than 800px, a single
+64px header keeps the menu button, brand, Open Mob and login control visible.
+The left drawer contains docs search, the site links and a theme picker at
+the bottom. On documentation pages it also contains the documentation tree;
+on other pages the search link opens documentation search. Desktop docs keeps
+search in the header. The mobile article contents expands beside the title
+and scrolls with the article.
 The header uses the same fading background as the landing and demo pages.
 Article content and the desktop sidebar scroll behind that gradient.
 Account opens account management; Open Mob opens the app (or sign-in).

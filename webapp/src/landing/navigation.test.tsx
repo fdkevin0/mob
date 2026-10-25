@@ -51,3 +51,14 @@ it('puts account and sign-out in the avatar menu, and reports sign-out errors', 
 	await waitFor(() => expect(auth.signOut).toHaveBeenCalledOnce());
 	expect((await screen.findByRole('alert')).textContent).toContain('Could not sign out');
 });
+
+it('opens the mobile navigation with docs search and theme controls', async () => {
+	render(<SiteHeader current="/demo" />);
+	fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+	const drawer = within(await screen.findByRole('dialog', { name: 'Navigation' }));
+	expect(drawer.getByRole('link', { name: 'Search docs' }).getAttribute('href')).toBe('/docs/?search');
+	expect(drawer.getByRole('link', { current: 'page' }).textContent).toBe('Demo');
+	expect(drawer.getByRole('radiogroup', { name: 'Theme' })).toBeTruthy();
+	fireEvent.click(drawer.getByRole('button', { name: 'Close' }));
+	await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
