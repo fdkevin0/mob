@@ -1,0 +1,12 @@
+---
+import PageTitle from '@astrojs/starlight/components/PageTitle.astro';
+import MobileTableOfContents from '@astrojs/starlight/components/MobileTableOfContents.astro';
+---
+<PageTitle />
+<div class="article-toc lg:sl-hidden"><MobileTableOfContents /></div>
+<style is:global>
+	:root { --sl-mobile-toc-height: 0rem; }
+	.article-toc { --sl-mobile-toc-height: 3rem; margin-top: 1rem; }
+	.article-toc nav { position: static; border-top: 0; background: transparent; }
+	.article-toc summary { padding-inline: 0; border-bottom: 0; }
+</style>

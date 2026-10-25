@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DemoPage } from './DemoPage';
 
+vi.mock('../auth', () => ({ authClient: { useSession: () => ({ isPending: false, data: null }) } }));
+
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 // Each act flushes one round of renders, so time passes in small steps.

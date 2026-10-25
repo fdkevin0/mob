@@ -95,6 +95,14 @@ served by the Worker in `worker/`:
   `docs/`), copied in at build time, so they change when those files merge.
   It needs no sign-in and has local search.
 
+The landing, demo, documentation and account pages share one header
+(`webapp/src/components/site/`): Home, Demo, Docs and GitHub, a theme picker,
+Open Mob, and a Log in button or the visitor's avatar. On the React pages the
+avatar opens a menu with Account and Sign out; the documentation loads no
+framework, so there it links to the account page, which has Sign out too. On
+narrow screens the links, docs search and theme picker move into a side drawer
+(in the documentation, above the documentation tree).
+
 The landing page and workspace share the dark theme, Geist fonts and pixel
 logo. The workspace uses calmer, rounded controls in the local browser, the
 desktop app and `/app`: one rounded message box holds the text, the model

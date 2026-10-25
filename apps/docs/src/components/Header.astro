@@ -1,108 +1,110 @@
 ---
-// Starlight's header with the site's own right-hand side: the links, theme
-// picker and "Open Mob" button the landing, demo and account pages show
-// (webapp/src/components/site/Site.tsx). The grid that lines the search box up
-// with the content column is Starlight's.
 import Search from '@astrojs/starlight/components/Search.astro';
-import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
 import ThemeSelect from './ThemeSelect.astro';
-import { repositoryUrl } from '../../pages.ts';
+import { siteLinks } from '../../../../webapp/src/components/site/navigation';
+import { calfHeadSVG } from '../../../../webapp/src/components/brand/calfHead';
+import '../../../../webapp/src/components/site/header.css';
 ---
 
-<div class="header">
-	<div class="title-wrapper sl-flex">
-		<SiteTitle />
-	</div>
-	<div class="sl-flex print:hidden">
-		<Search />
-	</div>
-	<div class="sl-hidden md:sl-flex print:hidden right-group">
+<div class="site-header docs-header">
+	<div class="site-header-inner">
+		<a href="/" class="site-brand" aria-label="Mob home">
+			<span class="logo"><Fragment set:html={calfHeadSVG(" width='30' height='30' aria-hidden='true'")} /><span class="logo-word">mob</span></span>
+		</a>
 		<nav class="site-links" aria-label="Site">
-			<a href="/">Home</a>
-			<a href="/demo">Demo</a>
-			<a href={repositoryUrl} rel="noreferrer">GitHub</a>
+			{siteLinks.map(link => <a href={link.href} aria-current={link.href === '/docs/' ? 'page' : undefined}>{link.label}</a>)}
 		</nav>
-		<ThemeSelect />
-		<a class="open-mob" href="/app">Open Mob</a>
+		<div class="docs-search print:hidden"><Search /></div>
+		<div class="site-theme"><ThemeSelect /></div>
+		<div class="site-account">
+			<a class="site-open" href="/app">Open Mob</a>
+			<div id="site-user"><a class="site-user site-login" href="/?signin=account">Log in</a></div>
+			<script is:inline>
+				// The docs load no framework. Inline, so it runs before the header
+				// paints: the last signed-in visitor (the key in
+				// webapp/src/components/site/accountHint.ts) shows at once, then the
+				// session answer replaces it. A signed-in avatar links to the account
+				// page, which has Sign out; everyone else keeps the Log in link.
+				(() => {
+					const key = 'mob-account-hint';
+					const slot = document.getElementById('site-user');
+					const login = slot.firstElementChild;
+					const show = user => {
+						if (!user) return slot.replaceChildren(login);
+						const link = document.createElement('a');
+						link.className = 'site-user';
+						link.href = '/account';
+						link.setAttribute('aria-label', 'Account');
+						link.title = user.name || user.email;
+						const initial = () => { link.textContent = (user.name || user.email).slice(0, 1).toUpperCase(); };
+						if (user.image) {
+							const image = document.createElement('img');
+							image.alt = '';
+							image.src = user.image;
+							image.addEventListener('error', initial, { once: true });
+							link.append(image);
+						} else initial();
+						slot.replaceChildren(link);
+					};
+					try {
+						const hint = JSON.parse(localStorage.getItem(key) || 'null');
+						if (hint && typeof hint.email === 'string') show(hint);
+					} catch {}
+					fetch('/api/auth/get-session', { credentials: 'same-origin' })
+						.then(response => (response.ok ? response.json() : Promise.reject()))
+						.then(session => {
+							const user = session && session.user;
+							try {
+								if (user) localStorage.setItem(key, JSON.stringify({ name: user.name, email: user.email, image: user.image || null }));
+								else localStorage.removeItem(key);
+							} catch {}
+							show(user);
+						})
+						.catch(() => {});
+				})();
+			</script>
+		</div>
 	</div>
 </div>
 
-<style>
-	.header {
-		display: flex;
-		gap: var(--sl-nav-gap);
-		justify-content: space-between;
-		align-items: center;
-		height: 100%;
+<script>
+	if (new URLSearchParams(location.search).has('search')) {
+		customElements.whenDefined('site-search').then(() => document.querySelector<HTMLButtonElement>('[data-open-modal]')?.click());
 	}
-	.title-wrapper {
-		overflow: clip;
-		padding: 0.25rem;
-		margin: -0.25rem;
-		min-width: 0;
-	}
-	.right-group {
-		gap: 1rem;
-		align-items: center;
-	}
-	/* The links need room the header only has on wide screens; below that
-	 * the search box, picker and "Open Mob" are what fit beside the title. */
-	.site-links {
-		display: none;
-		gap: 1.25rem;
-		font-size: 14px;
-	}
-	@media (min-width: 72rem) {
-		.site-links {
-			display: flex;
-		}
-	}
-	.site-links a {
-		color: var(--sl-color-gray-3);
-		text-decoration: none;
-	}
-	.site-links a:hover {
-		color: var(--sl-color-white);
-	}
-	.open-mob {
-		display: inline-flex;
-		align-items: center;
-		min-height: 34px;
-		padding: 6px 12px;
-		border: 1px solid var(--sl-color-gray-5);
-		border-radius: 8px;
-		color: var(--sl-color-white);
-		font-size: 13px;
-		font-weight: 500;
-		text-decoration: none;
-		white-space: nowrap;
-	}
-	.open-mob:hover {
-		background: var(--sl-color-gray-6);
-	}
+</script>
 
+<style is:global>
+	:root { --sl-nav-height: 72px; }
+	.page > .header { padding: 0; border: 0; background: transparent; }
+	.sl-menu-button {
+		border: 1px solid color-mix(in srgb, var(--sl-color-white) 12%, transparent);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--sl-color-white);
+		box-shadow: none;
+	}
+	.sl-menu-button:hover, .sl-menu-button:has(~ :popover-open) { background: color-mix(in srgb, var(--sl-color-white) 6%, transparent); }
+	.sl-menu-button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+	.docs-header .site-header-inner { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+	.docs-search { min-width: 0; }
+	.docs-search button[data-open-modal] { height: 36px; }
 	@media (min-width: 50rem) {
-		:global(:root[data-has-sidebar]) {
-			--__sidebar-pad: calc(2 * var(--sl-nav-pad-x));
-		}
-		:global(:root:not([data-has-toc])) {
-			--__toc-width: 0rem;
-		}
-		.header {
-			--__sidebar-width: max(0rem, var(--sl-content-inline-start, 0rem) - var(--sl-nav-pad-x));
-			--__main-column-fr: calc(
-				(
-						100% + var(--__sidebar-pad, 0rem) - var(--__toc-width, var(--sl-sidebar-width)) -
-							(2 * var(--__toc-width, var(--sl-nav-pad-x))) - var(--sl-content-inline-start, 0rem) -
-							var(--sl-content-width)
-					) / 2
-			);
-			display: grid;
-			grid-template-columns:
-				minmax(calc(var(--__sidebar-width) + max(0rem, var(--__main-column-fr) - var(--sl-nav-gap))), auto)
-				1fr
-				auto;
-			align-content: center;
-		}
+		.sidebar-pane { inset-block-start: 0; scroll-padding-top: var(--sl-nav-height); }
+		.sidebar-content { padding-top: calc(var(--sl-nav-height) + 1rem); }
+	}
+	@media (50rem <= width <= 900px) {
+		.docs-header .site-header-inner { gap: 12px; }
+		.docs-search { justify-self: end; }
+		.docs-search button[data-open-modal] { width: 32px; justify-content: center; padding: 0; border: 0; background: transparent; }
+		.docs-search button[data-open-modal] > :is(span, kbd) { display: none; }
+	}
+	@media (width < 50rem) {
+		:root { --sl-nav-height: 64px; }
+		.docs-header .site-header-inner { grid-template-columns: 1fr auto; padding: 12px 12px 12px 56px; gap: 8px; }
+		.docs-header .docs-search { display: contents; }
+		.docs-header .docs-search button[data-open-modal] { display: none; }
+		.sl-menu-button { inset-inline: 12px auto; width: 36px; height: 36px; top: 14px; }
+		.sidebar-pane { width: min(320px, 85vw); margin: 0; border-right: 1px solid var(--sl-color-gray-5); }
+		.sidebar-pane::backdrop { background: #0006; top: var(--sl-nav-height); }
 	}
 </style>

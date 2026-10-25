@@ -1,0 +1,96 @@
+/* The site's colour, type and radius tokens: shared by the web app and the
+ * documentation site (apps/docs/src/theme.css). Only custom
+ * properties and color-scheme go here. */
+:root {
+	color-scheme: dark;
+	--bg: #0c0d0f;
+	--panel: #111316;
+	--surface: #16191c;
+	--surface-raised: #1c2024;
+	--line: #ffffff0d;
+	--line-strong: #ffffff1a;
+	--text: #eef1ea;
+	--muted: #1b1f23;
+	--muted-foreground: #8f978e;
+	--faint: #8f978e;
+	--lime: #c8f560;
+	--cyan: #62e0ea;
+	--amber: #ffb648;
+	--violet: #a894ff;
+	--white: #f4f6ef;
+	--text-soft: #d7dcd4;
+	--text-dim: #c5cbc3;
+	--line-hover: #ffffff33;
+	--overlay: #050607cc;
+	--sunken: #08090b;
+	--shadow: 1;
+	/* Roles: what you act on, an agent at work, waiting on you, done. */
+	--brand: var(--lime);
+	--run: var(--cyan);
+	--wait: var(--amber);
+	--ok: var(--lime);
+	--sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--background: var(--bg);
+	--foreground: var(--text);
+	--card: var(--panel);
+	--card-foreground: var(--text);
+	--popover: var(--panel);
+	--popover-foreground: var(--text);
+	--primary: var(--lime);
+	--primary-foreground: #0a0d05;
+	--secondary: #171c17;
+	--secondary-foreground: var(--text);
+	--accent: #ffffff0a;
+	--accent-foreground: var(--text);
+	--destructive: #ff9696;
+	--border: var(--line-strong);
+	--input: var(--line-strong);
+	--ring: var(--lime);
+	/* One radius scale for every page: code and keys, controls (buttons,
+	 * inputs, menu items), cards and menus, dialogs and the composer, pills. */
+	--radius-code: 4px;
+	--radius: 8px;
+	--radius-card: 12px;
+	--radius-dialog: 16px;
+	--radius-pill: 999px;
+}
+
+/* Every page can be light (see src/theme).
+ *
+ * Light is "paper": the dark theme's moss-tinted greys turned warm, close to
+ * the calf's cream, so the orange logo sits on it naturally. Lime stays the one
+ * brand colour: --primary keeps it as a bright fill (buttons, progress), while
+ * --lime, used for text, icons and rings on paper, deepens to olive so it reads.
+ * The status hues (cyan, amber, red, violet) drop to their deep ink tones for
+ * the same reason; tints of them come from color-mix, so they follow. */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #f4f3ee;
+	--panel: #faf9f5;
+	--surface: #fffffd;
+	--surface-raised: #ebe9e1;
+	--line: #1a1c150f;
+	--line-strong: #1a1c151c;
+	--text: #1a1c15;
+	--muted: #ebe9e1;
+	--muted-foreground: #696c60;
+	--faint: #696c60;
+	--lime: #4f7a0c;
+	--cyan: #0b6f7c;
+	--amber: #a35300;
+	--violet: #5d43c9;
+	--white: #1a1c15;
+	--text-soft: #2c2f25;
+	--text-dim: #43473b;
+	--line-hover: #1a1c1533;
+	--overlay: #2a2b2066;
+	--sunken: #ebe9e2;
+	--shadow: 0.3;
+	--primary: #bdec4f;
+	--primary-foreground: #141a04;
+	--secondary: #ebe9e1;
+	--accent: #1a1c150a;
+	--destructive: #be3a2c;
+	--ring: #6a9c14;
+}

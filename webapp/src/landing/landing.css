@@ -40,6 +40,8 @@ code { font-family: var(--mono); font-size: .92em; }
 .hero-copy h1 em { font-style: normal; color: var(--lime); }
 .hero-sub { font-size: clamp(16px, 1.6vw, 19px); color: var(--text-dim); margin: 22px 0 30px; max-width: 34ch; line-height: 1.45; }
 .cta { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.landing-sections { display: flex; gap: 20px; margin-top: 20px; font-size: 13px; color: var(--muted-foreground); }
+.landing-sections a:hover { color: var(--text); }
 .scroll-hint { position: absolute; bottom: 28px; font-size: 13px; color: var(--muted-foreground); }
 .scroll-hint span { display: inline-block; animation: nudge 1.6s ease-in-out infinite; }
 @keyframes rise { from { transform: translateY(12px); opacity: 0; } }
@@ -126,13 +128,9 @@ code { font-family: var(--mono); font-size: .92em; }
 
 /* Footer */
 
-.corner { position: absolute; width: 14px; height: 14px; border-color: var(--lime); border-style: solid; border-width: 0; }
-.corner.tl { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
-.corner.tr { top: -1px; right: -1px; border-top-width: 2px; border-right-width: 2px; }
-.corner.bl { bottom: -1px; left: -1px; border-bottom-width: 2px; border-left-width: 2px; }
-.corner.br { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
 
 /* Sign-in dialog */
+.sign-in-provider-icon { display: inline-flex; flex-shrink: 0; font-size: 16px; line-height: 1; }
 .dialog-icon { color: var(--lime); }
 .sign-in-dialog h2 { font-size: 24px; letter-spacing: -0.02em; font-weight: 560; margin: 18px 0 6px; }
 .sign-in-dialog { width: min(420px, calc(100% - 32px)); padding: 34px 30px 30px; }

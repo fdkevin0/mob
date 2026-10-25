@@ -1,25 +1,46 @@
-import type { ReactNode } from 'react';
 import { Logo } from '../brand/Logo';
 import { ThemePicker } from '../../theme/ThemePicker';
+import type { MouseEventHandler } from 'react';
+import { Dialog, DialogTrigger, DialogContent, DialogTitle } from '../ui/dialog';
+import { siteLinks } from './navigation';
+import { UserMenu } from './UserMenu';
+import { openApp } from '../../landing/auth';
+import './header.css';
 import './site.css';
 
-export type SiteLink = { href: string; label: string; current?: boolean };
+export type SiteLink = { href: string; label: string };
 
 const github = 'https://github.com/fdkevin0/mob';
 
-// The header every public page shares: the calf, the page's links, the theme
-// and whatever account actions the page offers. The landing and the demo float
-// it over their stage; other pages keep it stuck to the top.
-export function SiteHeader({ links, floating, children }: { links: SiteLink[]; floating?: boolean; children?: ReactNode }) {
+// React and Astro render the same navigation data and use header.css.
+export function SiteHeader({ current, floating, onSignIn }: { current?: string; floating?: boolean; onSignIn?: MouseEventHandler<HTMLButtonElement> }) {
 	return (
-		<header className={floating ? 'nav nav-floating' : 'nav'}><div className="nav-inner">
-			<a href="/" className="brand" aria-label="Mob home"><Logo /></a>
-			<nav className="nav-links" aria-label="Sections">
-				{links.map(link => <a key={link.href} href={link.href} aria-current={link.current ? 'page' : undefined}>{link.label}</a>)}
-				<a href={github} rel="noreferrer">GitHub</a>
+		<header className={`site-header${floating ? ' site-header-floating' : ''}`}><div className="site-header-inner">
+			<Dialog>
+				<DialogTrigger className="site-menu-button" aria-label="Open navigation"><span aria-hidden="true">☰</span></DialogTrigger>
+				<DialogContent className="site-drawer" aria-describedby={undefined}>
+					<DialogTitle>Navigation</DialogTitle>
+					<a className="site-drawer-search" href="/docs/?search">Search docs</a>
+					<nav className="site-drawer-links" aria-label="Site">
+						{siteLinks.map(link => <a key={link.href} href={link.href} aria-current={link.href === current ? 'page' : undefined}>{link.label}</a>)}
+					</nav>
+					<div className="site-drawer-theme"><ThemePicker /></div>
+				</DialogContent>
+			</Dialog>
+			<a href="/" className="site-brand" aria-label="Mob home"><Logo /></a>
+			<nav className="site-links" aria-label="Site">
+				{siteLinks.map(link => <a key={link.href} href={link.href} aria-current={link.href === current ? 'page' : undefined}>{link.label}</a>)}
 			</nav>
-			<ThemePicker className="nav-theme" />
-			<div className="nav-account">{children}</div>
+			<div className="site-theme"><ThemePicker /></div>
+			<div className="site-account">
+				{/* openApp carries a pairing offer kept across sign-in. */}
+				<a className="site-open" href="/app" onClick={event => {
+					if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+					event.preventDefault();
+					openApp();
+				}}>Open Mob</a>
+				<UserMenu onSignIn={onSignIn} />
+			</div>
 		</div></header>
 	);
 }

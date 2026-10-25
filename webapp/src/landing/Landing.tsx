@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { authClient, keepOffer, loadSite, openApp, pendingOffer, returnAfterSignIn, type Site } from './auth';
-import { Icon } from '../components/brand/Icon';
 import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
 import { Segmented } from '../components/ui/segmented';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { SignIn } from './SignIn';
 import { SiteFooter, SiteHeader } from '../components/site/Site';
 import { Story } from './Story';
@@ -52,31 +50,7 @@ export function Landing() {
 	return (
 		<Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(undefined); }}>
 		<div className="landing">
-			<SiteHeader floating links={[
-				{ href: '#how', label: 'How it works' },
-				{ href: '#features', label: 'Features' },
-				{ href: '/demo', label: 'Demo' },
-				{ href: '#start', label: 'Start' },
-				{ href: '/docs/', label: 'Docs' },
-			]}>
-				{session.isPending ? <span className="nav-pending" aria-hidden="true" /> : user ? (
-					<>
-						<Button className="small" onClick={openApp}>Open Mob</Button>
-						<DropdownMenu>
-						<DropdownMenuTrigger asChild><button className="avatar" aria-label="Account">
-							{user.image ? <img src={user.image} alt="" /> : (user.name || user.email).slice(0, 1).toUpperCase()}
-						</button></DropdownMenuTrigger>
-						<DropdownMenuContent>
-							<DropdownMenuLabel className="ui-menu-label"><strong>{user.name}</strong>{user.email}</DropdownMenuLabel>
-							<DropdownMenuItem className="ui-menu-item" asChild><a href="/account">Account</a></DropdownMenuItem>
-							<DropdownMenuItem className="ui-menu-item" onSelect={() => { void authClient.signOut(); }}>Sign out</DropdownMenuItem>
-						</DropdownMenuContent>
-						</DropdownMenu>
-					</>
-				) : (
-					<Button variant="outline" className="small" aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}><Icon name="lock" size={14} /> Sign in</Button>
-				)}
-			</SiteHeader>
+			<SiteHeader floating current="/" onSignIn={showSignIn} />
 
 			<main>
 				<Story hero={(
@@ -89,6 +63,9 @@ export function Landing() {
 								: <Button aria-haspopup="dialog" aria-expanded={!!dialog} onClick={showSignIn}>Get started</Button>}
 							<Button variant="outline" asChild><a href="https://github.com/fdkevin0/mob" rel="noreferrer">View source</a></Button>
 						</div>
+						<nav className="landing-sections" aria-label="On this page">
+							<a href="#how">How it works</a><a href="#features">Features</a><a href="#start">Install</a>
+						</nav>
 						<a className="scroll-hint" href="#how">Scroll to watch them work <span aria-hidden="true">↓</span></a>
 					</>
 				)} />

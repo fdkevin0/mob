@@ -44,8 +44,25 @@ try {
 			const response = await request(path);
 			assert.equal(response.status, 200, `${path}: ${response.ok ? '' : await response.text()}`);
 			assert.match(response.headers.get('Content-Type') ?? '', /^text\/html/);
-			assert.match(response.headers.get('Content-Security-Policy') ?? '', /frame-ancestors 'none'/);
+			const policy = response.headers.get('Content-Security-Policy') ?? '';
+			assert.match(policy, /frame-ancestors 'none'/);
+			// The shared header shows the signed-in visitor's avatar from its HTTPS host.
+			assert.match(policy, /img-src [^;]*https:/, path);
 		}
+		const docs = await (await request('/docs/')).text();
+		const navigation = docs.match(/<nav class="site-links"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? '';
+		assert.deepEqual([...navigation.matchAll(/href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((match) => [match[1], match[2]]), [
+			['/', 'Home'], ['/demo', 'Demo'], ['/docs/', 'Docs'], ['https://github.com/fdkevin0/mob', 'GitHub'],
+		]);
+		assert.match(navigation, /href="\/docs\/" aria-current="page"/);
+		let headerSearches = 0;
+		await new HTMLRewriter().on('.site-header > .site-header-inner > .docs-search > site-search', {
+			element() { headerSearches++; },
+		}).transform(new Response(docs)).text();
+		assert.equal(headerSearches, 1, 'Docs search belongs inside the shared header');
+		assert.match(docs, /id="site-user"/);
+		assert.match(docs, /href="\/\?signin=account">Log in<\/a>/);
+		assert.match(docs, /class="site-open" href="\/app">Open Mob<\/a>/);
 		for (const path of ['/app', '/app/', '/account', '/account/']) {
 			const response = await request(path);
 			assert.equal(response.status, 302, path);

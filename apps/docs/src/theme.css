@@ -3,6 +3,8 @@
  * account, landing and demo pages read, so one choice holds everywhere. */
 @import '@fontsource-variable/geist';
 @import '@fontsource/geist-mono';
+/* The app's tokens, for the shared header, account menu and theme picker. */
+@import '../../../webapp/src/styles/tokens.css';
 
 :root {
 	--sl-font: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -38,19 +40,10 @@
 	--sl-color-accent-high: #2c4508;
 }
 
-.site-title img {
-	image-rendering: pixelated;
-}
-
-/* The site's component style: the title in the text colour, a quiet tint and
+/* The site's component style: a quiet tint and
  * a lime bar for the current page instead of a solid lime fill, links with a
  * soft underline that turns lime on hover, and the shared radius scale
  * (webapp/src/styles/theme.css). */
-.site-title {
-	color: var(--sl-color-white);
-	font-weight: 650;
-	letter-spacing: -0.04em;
-}
 .sidebar-content a {
 	border-radius: 8px;
 }

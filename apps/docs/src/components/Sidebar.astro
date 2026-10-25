@@ -1,0 +1,33 @@
+---
+// Starlight's sidebar, with the site links and a docs search button above the
+// documentation tree in the mobile drawer. The header keeps its own copy of
+// the links for wide screens, so nothing moves between the two at runtime.
+import Default from '@astrojs/starlight/components/Sidebar.astro';
+import { siteLinks } from '../../../../webapp/src/components/site/navigation';
+---
+
+<div class="drawer-site">
+	<button type="button" class="drawer-search" data-search-docs>Search docs</button>
+	<nav class="drawer-links" aria-label="Site">
+		{siteLinks.map(link => <a href={link.href} aria-current={link.href === '/docs/' ? 'page' : undefined}>{link.label}</a>)}
+	</nav>
+</div>
+<Default />
+
+<script>
+	// Opening the search dialog closes the drawer, which is what a phone wants.
+	// It opens after this click has finished, or the dialog's own outside-click
+	// handler would see this click and close it again.
+	for (const button of document.querySelectorAll('[data-search-docs]')) {
+		button.addEventListener('click', () => setTimeout(() => document.querySelector<HTMLButtonElement>('site-search button[data-open-modal]')?.click()));
+	}
+</script>
+
+<style>
+	.drawer-site { display: flex; flex-direction: column; gap: 16px; padding-bottom: 16px; margin-bottom: 8px; border-bottom: 1px solid var(--sl-color-gray-5); font-size: 14px; }
+	.drawer-links { display: flex; flex-direction: column; gap: 4px; }
+	.drawer-links a, .drawer-search { padding: 8px 12px; border-radius: 8px; color: var(--sl-color-white); text-decoration: none; }
+	.drawer-links a[aria-current='page'] { background: var(--accent); }
+	.drawer-search { border: 1px solid var(--sl-color-gray-5); background: transparent; color: var(--sl-color-gray-3); font: inherit; text-align: start; cursor: pointer; }
+	@media (min-width: 50rem) { .drawer-site { display: none; } }
+</style>

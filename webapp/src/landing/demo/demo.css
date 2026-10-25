@@ -150,7 +150,7 @@ html:has(.demo-page) { scroll-snap-type: none; }
 	.s-stage[data-channel='chat'] .s-chat { visibility: hidden; }
 }
 @media (max-width: 760px) {
-	.demo-main { padding: 80px 16px 24px; }
+	.demo-main { padding: 124px 16px 24px; }
 	.demo-points { grid-template-columns: 1fr; }
 	.demo-controls { justify-content: center; }
 	.demo-page { --demo-h: clamp(560px, 86svh, 760px); }

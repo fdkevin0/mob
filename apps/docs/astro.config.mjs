@@ -37,6 +37,10 @@ export default defineConfig({
 			// The header and theme picker match the rest of the site.
 			components: {
 				Header: './src/components/Header.astro',
+				MobileMenuFooter: './src/components/MobileMenuFooter.astro',
+				PageTitle: './src/components/PageTitle.astro',
+				Sidebar: './src/components/Sidebar.astro',
+				MobileTableOfContents: './src/components/MobileTableOfContents.astro',
 				ThemeSelect: './src/components/ThemeSelect.astro',
 			},
 			expressiveCode: { styleOverrides: { borderRadius: '12px' } },
