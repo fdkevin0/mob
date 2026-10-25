@@ -1,7 +1,7 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ChatMessage, Snapshot } from './api';
-import { Thread, quiet } from './Thread';
+import { Thread, fences, quiet } from './Thread';
 
 const connection = { url: 'http://localhost', token: 'test' };
 afterEach(() => {
@@ -33,6 +33,17 @@ it('shows the owner’s message as typed, with code in a monospace face and no t
 	expect(screen.getAllByRole('button', { name: 'Copy reply' })).toHaveLength(1);
 });
 
+it('reads fenced blocks as Markdown does, so a longer fence keeps the examples inside it', () => {
+	const nested = 'Example:\n````md\n```ts\nconst a = 1;\n```\n````\nafter';
+	expect(fences(nested)).toEqual(['Example:', '```ts\nconst a = 1;\n```', 'after']);
+	expect(fences('~~~\n```\n~~~')).toEqual(['', '```', '']);
+	expect(fences('```ts\nnever closed')).toEqual(['```ts\nnever closed']);
+	expect(fences('Use ```a``` here\n```\nb\n```')).toEqual(['Use ```a``` here', 'b', '']);
+	const view = show({ messages: [said('user', nested)] });
+	expect(view.container.querySelector('.user-text pre')?.textContent).toBe('```ts\nconst a = 1;\n```');
+	expect(view.container.querySelector('.user-text')?.textContent).not.toContain('````');
+});
+
 it('says it is working only while nothing else shows Mob at work', () => {
 	const tool = (state: string) => ({ id: 'a', role: 'assistant', parts: [{ type: 'dynamic-tool', toolName: 'web_fetch', toolCallId: 'c', state, input: {} }] }) as ChatMessage;
 	expect(quiet(said('user', 'hi'))).toBe(false);
@@ -41,6 +52,29 @@ it('says it is working only while nothing else shows Mob at work', () => {
 	expect(quiet(tool('input-available'))).toBe(true);
 	expect(quiet(tool('approval-requested'))).toBe(true);
 	expect(quiet(tool('output-available'))).toBe(false);
+	expect(quiet({ id: 'a', role: 'assistant', parts: [{ type: 'reasoning', text: 'Let me think' }] } as ChatMessage)).toBe(false);
+});
+
+it('keeps saying it is working while a reply only reasons, behind the closed Reasoning row', async () => {
+	const chunks = ['{"type":"start","messageId":"a"}', '{"type":"start-step"}', '{"type":"reasoning-start","id":"r"}', '{"type":"reasoning-delta","id":"r","delta":"Let me think"}'];
+	// The stream stays open: the reply is still reasoning.
+	const stream = new ReadableStream({
+		start(controller) {
+			for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(`data: ${chunk}\n\n`));
+		},
+	});
+	const view = show({});
+	vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+		url.endsWith('/chat')
+			? new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } })
+			: Response.json({ messages: [], active: false, model: 'demo/echo' }),
+	));
+	const box = screen.getByLabelText('Message') as HTMLTextAreaElement;
+	fireEvent.change(box, { target: { value: 'think' } });
+	fireEvent.submit(box.closest('form')!);
+	await waitFor(() => expect(view.container.querySelector('details.reasoning')).toBeTruthy());
+	expect(view.container.querySelector<HTMLDetailsElement>('details.reasoning')?.open).toBe(false);
+	expect(screen.getByRole('status').textContent).toBe('Working…');
 });
 
 it('offers ways to start a new conversation, which fill the message box, and none a browser cannot do', () => {

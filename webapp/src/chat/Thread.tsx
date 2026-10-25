@@ -89,8 +89,8 @@ export function Thread({
 	}, [dispatching, onDispatching]);
 	// The header says when Mob replies here or waits for a decision, as the sidebar does.
 	const waiting = messages.some((m) => m.parts.some((p) => isToolUIPart(p) && p.state === 'approval-requested'));
-	// Working… shows only while nothing else says Mob is at work: before the reply's first words, and between a tool's result and
-	// what Mob does next. Streaming text and a running tool's spinner say it themselves.
+	// Working… shows only while nothing else says Mob is at work: before the reply's first words, while it reasons, and between a
+	// tool's result and what Mob does next. Streaming text and a running tool's spinner say it themselves.
 	const working = busy && !quiet(messages.at(-1));
 	const composer = useRef<HTMLDivElement>(null);
 	const unseen = useUnseenApproval(composer, waiting, messages);
@@ -329,12 +329,13 @@ function CommandLabel({ label }: { label: string }) {
 }
 
 // quiet reports whether the end of a reply already shows Mob at work, or waiting: words arriving, a tool running or asking.
+// Reasoning is not quiet: it streams inside a closed Reasoning row, which looks the same whether it moves or not.
 export function quiet(last: ChatMessage | undefined) {
 	if (last?.role !== 'assistant') return false;
 	const part = last.parts.at(-1);
 	if (!part) return false;
 	if (isToolUIPart(part)) return !part.state.startsWith('output-');
-	return part.type === 'text' || part.type === 'reasoning';
+	return part.type === 'text';
 }
 
 // useUnseenApproval finds the approval card Mob waits on while it is scrolled out of view, so the composer can point to it.
@@ -490,13 +491,13 @@ function toolDetail(input: unknown) {
 function UserText({ text }: { text: string }) {
 	const [open, setOpen] = useState(false);
 	const long = text.split('\n').length > foldLines || text.length > foldLength;
-	const pieces = text.split(/(```[^\n]*\n[\s\S]*?(?:\n```|$))/);
+	const pieces = fences(text);
 	return (
 		<div className="user-text-wrap">
 			<div className="user-text" data-folded={(long && !open) || undefined}>
 				{pieces.map((piece, i) =>
 					i % 2 ? (
-						<pre key={i}>{piece.replace(/^```[^\n]*\n/, '').replace(/\n```$/, '')}</pre>
+						<pre key={i}>{piece}</pre>
 					) : (
 						<span key={i}>
 							{around(piece, i > 0, i < pieces.length - 1)
@@ -513,6 +514,35 @@ function UserText({ text }: { text: string }) {
 			)}
 		</div>
 	);
+}
+// fences splits text into plain runs (even indexes) and the insides of fenced code blocks (odd indexes), as Markdown reads
+// them: a block closes only on a line of the same fence character, at least as long as its opening, so a ```` block can
+// hold ``` examples. An opening fence that never closes stays as typed.
+export function fences(text: string) {
+	const lines = text.split('\n');
+	const pieces: string[] = [];
+	let plain: string[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lines[i]);
+		// A backtick fence's info string cannot hold a backtick, or ```a``` would open a block.
+		if (open && !(open[1][0] === '`' && open[2].includes('`'))) {
+			const fence = open[1];
+			const end = lines.findIndex((line, j) => {
+				if (j <= i) return false;
+				const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+				return !!close && close[1][0] === fence[0] && close[1].length >= fence.length;
+			});
+			if (end > 0) {
+				pieces.push(plain.join('\n'), lines.slice(i + 1, end).join('\n'));
+				plain = [];
+				i = end;
+				continue;
+			}
+		}
+		plain.push(lines[i]);
+	}
+	pieces.push(plain.join('\n'));
+	return pieces;
 }
 // around drops the line breaks next to a fenced block, whose own spacing replaces them.
 function around(text: string, after: boolean, before: boolean) {
