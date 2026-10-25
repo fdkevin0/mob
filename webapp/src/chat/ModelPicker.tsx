@@ -340,12 +340,16 @@ export function ModelPicker({
 			) : null}
 			{(addProvider || (setDefault && chosen)) && (
 				<div className="model-picker-footer">
-					{setDefault && current && withoutEffort(defaultModel ?? '') !== chosen ? (
+					{setDefault && current && defaultModel !== current ? (
 						<Button type="button" variant="ghost" className="model-set-default" onClick={() => setDefault(current)}>
-							Make {currentEntry?.model.name || chosen} the default
+							Make {[currentEntry?.model.name || chosen, effort].filter(Boolean).join(' ')} the default
 						</Button>
 					) : (
-						defaultModel && <span className="model-default">Default: {defaultEntry?.model.name || defaultModel}</span>
+						defaultModel && (
+							<span className="model-default">
+								Default: {defaultEntry ? [defaultEntry.model.name, defaultModel.slice(defaultEntry.ref.length + 1)].filter(Boolean).join(' ') : defaultModel}
+							</span>
+						)
 					)}
 					{addProvider && (
 						<Button type="button" variant={groups?.length === 0 ? 'primary' : 'outline'} className="model-add-provider" onClick={addProvider}>

@@ -140,8 +140,20 @@ it('chooses the current model’s reasoning level and makes it the default', asy
 	fireEvent.click(levels.querySelector('button')!);
 	expect(picked).toHaveBeenLastCalledWith('openai/o3');
 	expect(recentModels()).toEqual(['openai/o3']);
-	fireEvent.click(screen.getByRole('button', { name: 'Make o3 the default' }));
+	fireEvent.click(screen.getByRole('button', { name: 'Make o3 low the default' }));
 	expect(setDefault).toHaveBeenCalledWith('openai/o3:low');
+});
+
+it('offers to make the current reasoning level the default when only the level differs', async () => {
+	const withEfforts = [{ provider: 'openai', name: 'OpenAI', models: [{ id: 'o3', name: 'o3', tools: true, reasoning: true, efforts: ['low', 'high'] }] }];
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json(withEfforts)));
+	const { rerender } = render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} current="openai/o3:high" defaultModel="openai/o3:low" onPick={() => {}} setDefault={() => {}} /></Dialog>);
+	expect(await screen.findByRole('button', { name: 'Make o3 high the default' })).toBeDefined();
+	rerender(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} current="openai/o3" defaultModel="openai/o3:low" onPick={() => {}} setDefault={() => {}} /></Dialog>);
+	expect(screen.getByRole('button', { name: 'Make o3 the default' })).toBeDefined();
+	rerender(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} current="openai/o3:low" defaultModel="openai/o3:low" onPick={() => {}} setDefault={() => {}} /></Dialog>);
+	expect(screen.getByText('Default: o3 low')).toBeDefined();
+	expect(screen.queryByRole('button', { name: /the default$/ })).toBeNull();
 });
 
 it('says which model is the default when the current one already is', async () => {

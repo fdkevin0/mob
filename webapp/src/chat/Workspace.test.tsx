@@ -126,3 +126,23 @@ it('keeps the model trigger open while another client is running a turn, for the
 	expect(button.disabled).toBe(false);
 	expect(button.title).toContain('applies from the next reply');
 });
+
+it('shows the default the service kept when making a model the default fails', async () => {
+	const fetch = vi.fn(async (url: string) => {
+		const path = new URL(url).pathname;
+		if (path === '/api/events') return new Response(null, { status: 404 });
+		if (path === '/api/conversations') return Response.json(list);
+		if (path === '/api/runtime') return Response.json({ background: false });
+		if (path === '/api/config') return Response.json({ defaultModel: 'openai/gpt-5' });
+		if (path === '/api/models') return Response.json([{ provider: 'openai', name: 'OpenAI', models: [{ id: 'o3', name: 'o3', reasoning: true, efforts: ['low', 'high'] }, { id: 'gpt-5', name: 'GPT-5' }] }]);
+		if (path === '/api/commands/run') return Response.json({ error: 'could not write providers.json' }, { status: 500 });
+		return Response.json({ ...snapshot, model: 'openai/o3:high' });
+	});
+	vi.stubGlobal('fetch', fetch);
+	render(<Workspace connection={connection} disconnect={() => {}} />);
+	fireEvent.click(await screen.findByRole('button', { name: 'openai/o3:high' }));
+	fireEvent.click(await screen.findByRole('button', { name: 'Make o3 high the default' }));
+	await waitFor(() => expect(fetch.mock.calls.filter(([url]) => url.endsWith('/config')).length).toBeGreaterThan(1));
+	expect(screen.getByRole('button', { name: 'Make o3 high the default' })).toBeDefined();
+	expect(screen.queryByText(/^Default:/)).toBeNull();
+});
