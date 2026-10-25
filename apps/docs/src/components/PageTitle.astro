@@ -5,8 +5,8 @@ import MobileTableOfContents from '@astrojs/starlight/components/MobileTableOfCo
 <PageTitle />
 <div class="article-toc lg:sl-hidden"><MobileTableOfContents /></div>
 <style is:global>
-	.article-toc { margin-top: 1rem; }
+	:root { --sl-mobile-toc-height: 0rem; }
+	.article-toc { --sl-mobile-toc-height: 3rem; margin-top: 1rem; }
 	.article-toc nav { position: static; border-top: 0; background: transparent; }
 	.article-toc summary { padding-inline: 0; border-bottom: 0; }
-	.main-frame { padding-top: var(--sl-nav-height); }
 </style>

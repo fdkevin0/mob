@@ -76,16 +76,17 @@ import '../../../../webapp/src/components/site/header.css';
 		.sidebar-pane { inset-block-start: 0; scroll-padding-top: var(--sl-nav-height); }
 		.sidebar-content { padding-top: calc(var(--sl-nav-height) + 1rem); }
 	}
-	@media (max-width: 900px) {
+	@media (50rem <= width <= 900px) {
 		.docs-header .site-header-inner { gap: 12px; }
 		.docs-search { justify-self: end; }
 		.docs-search button[data-open-modal] { width: 32px; justify-content: center; padding: 0; border: 0; background: transparent; }
-		.docs-search button[data-open-modal] > :is(span, kbd) { display: none !important; }
+		.docs-search button[data-open-modal] > :is(span, kbd) { display: none; }
 	}
 	@media (width < 50rem) {
 		:root { --sl-nav-height: 64px; }
 		.docs-header .site-header-inner { grid-template-columns: 1fr auto; padding: 12px 12px 12px 56px; gap: 8px; }
-		.docs-header .docs-search { display: none; }
+		.docs-header .docs-search { display: contents; }
+		.docs-header .docs-search button[data-open-modal] { display: none; }
 		.sl-menu-button { inset-inline: 12px auto; width: 36px; height: 36px; top: 14px; }
 		.sidebar-pane { width: min(320px, 85vw); margin: 0; border-right: 1px solid var(--sl-color-gray-5); }
 		.sidebar-pane::backdrop { background: #0006; top: var(--sl-nav-height); }
@@ -94,6 +95,6 @@ import '../../../../webapp/src/components/site/header.css';
 		#mobile-site-navigation a { padding: 8px 12px; color: var(--sl-color-white); text-decoration: none; }
 		#mobile-site-navigation .docs-search { display: block; width: 100%; }
 		#mobile-site-navigation button[data-open-modal] { width: 100%; justify-content: start; padding: 8px 12px; border: 1px solid var(--sl-color-gray-5); }
-		#mobile-site-navigation button[data-open-modal] > span { display: block !important; }
+		#mobile-site-navigation button[data-open-modal] > span { display: block; }
 	}
 </style>
