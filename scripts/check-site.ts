@@ -50,6 +50,16 @@ try {
 			assert.match(policy, /img-src [^;]*https:/, path);
 			assert.equal(response.headers.get('Speculation-Rules'), '"/speculation-rules.json"', path);
 		}
+		// Hashed build output (fonts above all) is kept without revalidation, so a
+		// page change paints in Geist instead of a fallback face (webapp/public/_headers).
+		const font = (await readdir('webapp/dist-public/assets')).find((name) => name.startsWith('geist-latin-wght-normal-'));
+		const docsFont = (await readdir('webapp/dist-public/docs/_astro')).find((name) => name.startsWith('geist-latin-wght-normal.'));
+		for (const path of [`/assets/${font}`, `/docs/_astro/${docsFont}`]) {
+			const response = await request(path);
+			assert.equal(response.status, 200, path);
+			assert.equal(response.headers.get('Cache-Control'), 'public, max-age=31536000, immutable', path);
+		}
+		assert.equal((await request('/_headers')).status, 404);
 		const rules = await request('/speculation-rules.json');
 		assert.equal(rules.headers.get('Content-Type'), 'application/speculationrules+json');
 		// Only the static public pages are prerendered, never a link with a query.

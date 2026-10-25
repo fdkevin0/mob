@@ -110,7 +110,10 @@ prerenders `/`, `/demo` and the documentation when the pointer rests on a link
 to them (never `/app`, `/account` or a link with a query), so the click shows
 the page at once. The pages also opt into cross-document view transitions: the
 header stays in place while the content cross-fades, unless the visitor asks
-for reduced motion.
+for reduced motion. Every page preloads its Latin Geist face, and hashed build
+files (`/assets/*`, `/docs/_astro/*`) are cached as immutable
+(`webapp/public/_headers`), so later pages paint in Geist straight away instead
+of swapping from a fallback font.
 
 The landing page and workspace share the dark theme, Geist fonts and pixel
 logo. The workspace uses calmer, rounded controls in the local browser, the
