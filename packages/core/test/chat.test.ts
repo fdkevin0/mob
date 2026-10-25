@@ -158,5 +158,15 @@ test('a turn reports what its prompt takes of the window, and the service keeps 
 	const next = service.context(c.id, true)!;
 	expect(next.measured).toBe(false);
 	expect(next.parts!.messages).toBeGreaterThan(0);
+	// /compact adds only commands but changes the summary, so the next turn is estimated with it.
+	const compacted = new ConversationService(s, models);
+	await compacted.execute({ id: c.id, text: 'hello again', requestId: newID() }, () => {});
+	const before = compacted.context(c.id, true)!;
+	expect(before.measured).toBe(true);
+	await compacted.execute({ id: c.id, text: '/compact', requestId: newID() }, () => {});
+	const after = compacted.context(c.id, true)!;
+	expect(after.measured).toBe(false);
+	expect(after.summarized).toBeGreaterThan(0);
+	expect(after.used).toBeLessThan(before.used);
 	s.close();
 });
