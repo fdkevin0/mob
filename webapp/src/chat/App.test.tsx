@@ -20,7 +20,7 @@ it('opens chat without key setup and shows the conversation model', async () => 
   vi.stubGlobal('fetch', fetchMock);
   render(<App />);
   await screen.findByLabelText('Message');
-  await waitFor(() => expect(screen.getByText('deepseek/deepseek-chat')).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'deepseek/deepseek-chat' }).querySelector('.model-label')?.textContent).toBe('deepseek-chat'));
   expect(screen.queryByLabelText('API key')).toBeNull();
   expect(fetchMock.mock.calls.some(([, options]) => String(options?.body ?? '').includes('apiKey'))).toBe(false);
 });
@@ -38,7 +38,7 @@ it('promises no model calls only when the conversation uses the demo model', asy
   cleanup();
   model = 'deepseek/deepseek-chat';
   render(<App />);
-  await screen.findByText('deepseek/deepseek-chat');
+  await screen.findByRole('button', { name: 'deepseek/deepseek-chat' });
   expect(screen.queryByText('Demo mode · no model calls')).toBeNull();
 });
 

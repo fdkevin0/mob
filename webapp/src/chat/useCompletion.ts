@@ -5,6 +5,9 @@ import type { Suggestion } from './contracts';
 
 export { lastToken };
 
+// Commands the workspace already offers as buttons stay out of the list a bare / shows; typing their names still completes them.
+const buttons = new Set(['/new', '/list', '/open', '/model', '/models', '/approve', '/deny']);
+
 // useCompletion suggests slash commands and their arguments from the service.
 export function useCompletion({
 	connection,
@@ -36,7 +39,7 @@ export function useCompletion({
 				.then(
 					(list) => {
 						if (live) {
-							setSuggestions(list, input);
+							setSuggestions(input === '/' ? list.filter((s) => !buttons.has(s.value)) : list, input);
 							setSelected(0);
 						}
 					},
