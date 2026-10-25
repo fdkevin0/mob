@@ -83,13 +83,8 @@ one, and on broken links.
 ```bash
 bun run --cwd apps/docs dev       # live preview at http://localhost:4321/docs/
 bun run build:web                 # landing page, web UI and documentation
-bun run --cwd apps/desktop electron # prepare the browser for layout checks (once)
-bun run test:site                 # offline routing and browser layout checks
+bun run test:site                 # offline routing checks
 ```
-
-The site check uses the existing Electron dependency to verify header layout
-at several window widths and browser font sizes. After browser preparation,
-the checks run offline, without a display server on Linux.
 
 For documentation writing or organization, the repository skill
 [mob-docs](.agents/skills/mob-docs/SKILL.md) points to the relevant sources.

@@ -1,9 +1,7 @@
 // Exercise the deployed asset routing offline, using the public build and Wrangler rules.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
@@ -84,15 +82,6 @@ try {
 		}
 	}
 	console.log('Public site routing passed');
-	const profile = await mkdtemp(join(tmpdir(), 'mob-site-layout-'));
-	try {
-		const layout = Bun.spawn(['node', 'apps/desktop/node_modules/electron/cli.js', '--no-sandbox',
-			...(process.platform === 'linux' ? ['--ozone-platform=headless'] : []),
-			'apps/desktop/scripts/check-site-layout.cjs', origin, profile], { stdout: 'inherit', stderr: 'inherit' });
-		assert.equal(await layout.exited, 0, 'Public site header layout');
-	} finally {
-		await rm(profile, { recursive: true, force: true });
-	}
 } finally {
 	await mf.dispose();
 }

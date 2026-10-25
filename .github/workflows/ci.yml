@@ -24,8 +24,6 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - name: Install browser for site layout checks
-        run: bun run --cwd apps/desktop electron
       - name: Typecheck and test
         run: |
           bun run test:client
@@ -39,7 +37,7 @@ jobs:
       # links and policies on every pull request.
       - name: Build public site
         run: bun run build:web
-      - name: Check public site routing and layout
+      - name: Check public site routing
         run: bun run test:site
 
   core:

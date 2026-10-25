@@ -13,9 +13,9 @@ and GitHub navigation, a theme picker, and fixed Account and Open Mob links.
 The current section is marked; on narrow screens the navigation and theme
 picker occupy a second row instead of disappearing. Docs keeps search inside
 the header, collapsing it to an icon when space is limited; its mobile
-documentation menu also stays in the header. Its translucent background blurs
-scrolling content behind the navigation. Account opens
-account management (or sign-in when signed out); Open Mob opens the app
+documentation menu also stays in the header, with a quiet outlined button.
+The header shares the landing and demo background: solid behind controls,
+fading at the bottom. Account opens account management (or sign-in when signed out); Open Mob opens the app
 (or sign-in). Sign out is on the account page. The landing page's Get started
 button also opens sign-in directly, with How it works, Features and Install
 links beneath it for navigation within the page.

@@ -25,11 +25,15 @@ import '../../../../webapp/src/components/site/header.css';
 <style is:global>
 	:root { --sl-nav-height: 72px; }
 	.page > .header { padding: 0; border: 0; background: transparent; }
-	.site-header.docs-header {
-		background: color-mix(in srgb, var(--site-bg) 80%, transparent);
-		-webkit-backdrop-filter: blur(16px);
-		backdrop-filter: blur(16px);
+	.sl-menu-button {
+		border: 1px solid color-mix(in srgb, var(--sl-color-white) 12%, transparent);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--sl-color-white);
+		box-shadow: none;
 	}
+	.sl-menu-button:hover, .sl-menu-button:has(~ :popover-open) { background: color-mix(in srgb, var(--sl-color-white) 6%, transparent); }
+	.sl-menu-button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
 	.docs-header .site-header-inner { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
 	.docs-search { min-width: 0; }
 	.docs-search button[data-open-modal] { height: 36px; }
