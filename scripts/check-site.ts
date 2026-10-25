@@ -49,6 +49,9 @@ try {
 			// The shared header shows the signed-in visitor's avatar from its HTTPS host.
 			assert.match(policy, /img-src [^;]*https:/, path);
 			assert.equal(response.headers.get('Speculation-Rules'), '"/speculation-rules.json"', path);
+			// React pages hold their first paint until the header is mounted, so a
+			// view transition into them has a header to animate (webapp/vite.config.ts).
+			if (path !== '/docs/') assert.match(await response.text(), /<script type="module" blocking="render"/, path);
 		}
 		// Hashed build output (fonts above all) is kept without revalidation, so a
 		// page change paints in Geist instead of a fallback face (webapp/public/_headers).

@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 // The public mode builds the site deployed to Cloudflare Workers (wrangler.jsonc):
@@ -20,12 +21,25 @@ const preloadFonts: Plugin = {
 	},
 };
 
+// Vite rewrites a page's entry script and drops blocking="render" on the way;
+// this puts it back on the built tag for each page whose source asks for it.
+const renderBlocking: Plugin = {
+	name: 'mob:render-blocking',
+	apply: 'build',
+	transformIndexHtml: {
+		order: 'post',
+		handler: (html, { filename }) => readFileSync(filename, 'utf8').includes('blocking="render"')
+			? html.replace(/<script type="module" crossorigin src=/, '<script type="module" blocking="render" crossorigin src=')
+			: html,
+	},
+};
+
 export default defineConfig(({ mode }) => ({
 	root: path.resolve(__dirname),
 	base: '/',
 	resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
 	publicDir: mode === 'public' ? path.resolve(__dirname, 'public') : false,
-	plugins: [react(), tailwindcss(), preloadFonts],
+	plugins: [react(), tailwindcss(), preloadFonts, renderBlocking],
 	server: { host: '127.0.0.1', port: 5173, strictPort: true },
 	// sqlite-wasm finds its .wasm next to its own module, which prebundling would move.
 	optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },

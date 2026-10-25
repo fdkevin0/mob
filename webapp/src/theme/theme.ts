@@ -82,6 +82,12 @@ export function startTheme() {
 		applyTheme(storedTheme());
 		setCurrent(storedTheme());
 	});
+	// A prerendered page ran this before the viewer arrived; the choice may
+	// have changed since, and no storage event reaches a prerender.
+	document.addEventListener('prerenderingchange', () => {
+		applyTheme(storedTheme());
+		setCurrent(storedTheme());
+	});
 }
 
 function subscribe(listener: () => void) {

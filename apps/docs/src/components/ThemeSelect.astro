@@ -49,6 +49,14 @@ const choices = [
 		if (load() === 'auto') apply('auto');
 	});
 
+	// A prerendered page set its theme before the viewer arrived; the choice
+	// may have changed since, so read it again when the page is shown.
+	document.addEventListener('prerenderingchange', () => {
+		const theme = load();
+		document.documentElement.dataset.theme = theme === 'auto' ? scheme() : theme;
+		show(theme);
+	});
+
 	class MobThemePicker extends HTMLElement {
 		connectedCallback() {
 			show(load());
