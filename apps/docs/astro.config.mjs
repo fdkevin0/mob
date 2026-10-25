@@ -34,6 +34,12 @@ export default defineConfig({
 			favicon: '/favicon.svg',
 			social: [{ icon: 'github', label: 'GitHub', href: repositoryUrl }],
 			customCss: ['./src/theme.css'],
+			// The header and theme picker match the rest of the site.
+			components: {
+				Header: './src/components/Header.astro',
+				ThemeSelect: './src/components/ThemeSelect.astro',
+			},
+			expressiveCode: { styleOverrides: { borderRadius: '12px' } },
 			// Starlight sets the other Open Graph and Twitter tags; links to the
 			// docs preview with the landing page's image (webapp/public/og.png).
 			head: [
