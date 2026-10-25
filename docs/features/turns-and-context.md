@@ -317,7 +317,8 @@ The shared rendering configuration is in
   `message-metadata` chunk at its end carries its model, usage and stats, so a
   client shows the same thing during and after the reply. The web shows, under
   each reply, its model, its tokens (input and output) and how fast the model
-  wrote; while the reply is written, its model only. Clicking it opens what the
+  wrote; while the reply is written, its model only. The TUI writes the same
+  under each finished reply in one line, with its time. Clicking it in the web opens what the
   reply used (input, output, speed, cache, reasoning, requests, time, cost) and
   where its time went: first token, writing, tools and the rest. A coding
   agent's reply shows its time instead of a speed. Replies saved before

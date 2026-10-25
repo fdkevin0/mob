@@ -30,6 +30,18 @@ function Tool({ part, details }: { part: ToolPart; details: boolean }) {
 	);
 }
 
+const short = (n: number) => (n >= 1e4 ? `${Math.round(n / 1e3)}k` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
+
+/** replySummary is one line under a finished reply: its model, the tokens it took, how fast the model wrote and how long it took. */
+export function replySummary(message: ChatMessage) {
+	const { model, usage, stats, command } = message.metadata ?? {};
+	if (message.role !== 'assistant' || command || !usage) return '';
+	const parts = [model ? model.slice(model.indexOf('/') + 1) : '', `${short(usage.inputTokens + usage.outputTokens)} tok`];
+	if (stats?.generationMs && stats.timedOutput) parts.push(`${Math.round((stats.timedOutput * 1000) / stats.generationMs)} tok/s`);
+	if (stats?.finishedAt) parts.push(`${((stats.finishedAt - stats.startedAt) / 1000).toFixed(1)}s`);
+	return parts.filter(Boolean).join(' · ');
+}
+
 function Message({ message, details }: { message: ChatMessage; details: boolean }) {
 	return (
 		<box flexDirection="column" flexShrink={0} marginBottom={1}>
@@ -48,6 +60,7 @@ function Message({ message, details }: { message: ChatMessage; details: boolean 
 				return null;
 			})}
 			{message.metadata?.error && <text fg="#fb7185">{safe(message.metadata.error)}</text>}
+			{replySummary(message) && <text fg="#64748b">{safe(replySummary(message))}</text>}
 		</box>
 	);
 }

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { act } from 'react';
 import { testRender } from '@opentui/react/test-utils';
 import { MobClient, type ChatMessage, type Snapshot } from '@mob/client';
-import { App } from '../src/App';
+import { App, replySummary } from '../src/App';
 
 const conversation = { id: 'first', title: 'Offline test', updatedAt: 1 };
 const second = { id: 'second', title: 'Other session', updatedAt: 0 };
@@ -308,4 +308,13 @@ test.each(['conversation', 'always', 'deny'])('terminal approval choice carries 
 			await ui.dispose();
 		});
 	}
+});
+
+test('a finished reply says its model, tokens, speed and time in one line', () => {
+	const reply = (metadata: ChatMessage['metadata']): ChatMessage => ({ id: 'r', role: 'assistant', parts: [], metadata });
+	expect(replySummary(reply({ model: 'anthropic/claude-sonnet-4-5', usage: { inputTokens: 12400, outputTokens: 1800 }, stats: { startedAt: 0, finishedAt: 14200, generationMs: 7400, timedOutput: 385 } })))
+		.toBe('claude-sonnet-4-5 · 14k tok · 52 tok/s · 14.2s');
+	expect(replySummary(reply({ model: 'codex', usage: { inputTokens: 500, outputTokens: 20 } }))).toBe('codex · 520 tok');
+	expect(replySummary(reply({ model: 'demo/echo', command: true, usage: { inputTokens: 1, outputTokens: 1 } }))).toBe('');
+	expect(replySummary(reply({ status: 'complete' }))).toBe('');
 });
