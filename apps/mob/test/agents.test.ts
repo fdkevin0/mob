@@ -262,6 +262,11 @@ test('a task runs in its own worktree', async () => {
 	const history = h.store.history(task.conversationId);
 	const last = history[history.length - 1]!;
 	expect(last.metadata?.model ?? (last as { model?: string }).model).toBe('codex');
+	// An agent's reply records when it began, first wrote and ended, but not its own requests' timing.
+	const stats = last.stats!;
+	expect(stats.firstTokenMs).toBeGreaterThanOrEqual(0);
+	expect(stats.finishedAt).toBeGreaterThanOrEqual(stats.startedAt + stats.firstTokenMs!);
+	expect(stats.generationMs).toBeUndefined();
 	const read = last.parts.find(p => p.type === 'tool-codex_read');
 	expect(read?.state).toBe('output-available');
 	expect(JSON.stringify(read?.output)).toContain('# Readme');

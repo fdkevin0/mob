@@ -649,6 +649,34 @@ it.each([200, 500])('preserves the composer during a directly handled command re
 	expect(session.getSnapshot().input).toBe('');
 });
 
+it('shows the reply\'s model at once and its usage and timing when it ends', async () => {
+	const stats = { startedAt: 1, finishedAt: 900, firstTokenMs: 300, generationMs: 500, timedOutput: 40, requests: 1, toolMs: 0 };
+	const chunks = [
+		{ type: 'start', messageId: 'server-reply', messageMetadata: { model: 'demo/echo', stats: { startedAt: 1 } } },
+		{ type: 'text-start', id: 'text' },
+		{ type: 'text-delta', id: 'text', delta: 'Hi' },
+		{ type: 'text-end', id: 'text' },
+		{ type: 'message-metadata', messageMetadata: { model: 'demo/echo', usage: { inputTokens: 10, outputTokens: 40 }, stats } },
+		{ type: 'finish' },
+	];
+	const client = new MobClient(connection, {
+		fetch: async (url) => {
+			if (String(url).endsWith('/chat')) return new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	const seen: unknown[] = [];
+	cleanups.push(session.subscribe(() => {
+		const reply = session.getSnapshot().messages.find((m) => m.role === 'assistant');
+		if (reply?.metadata) seen.push(structuredClone(reply.metadata));
+	}));
+	await session.submit('hello');
+	expect(seen[0]).toEqual({ model: 'demo/echo', stats: { startedAt: 1 } });
+	expect(seen).toContainEqual({ model: 'demo/echo', usage: { inputTokens: 10, outputTokens: 40 }, stats });
+});
+
 it('chooses a model as a setting, without sending chat or touching the draft', async () => {
 	const posted: { url: string; body: unknown }[] = [];
 	let refuse = false;

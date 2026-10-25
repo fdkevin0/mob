@@ -1,7 +1,7 @@
 // Delegated conversations: an outside agent, such as a coding agent working
 // on a task, writes the replies. Its approvals are the permissions it asks for.
 import type { Usage as LLMUsage } from '../llm/llm';
-import { addLLMUsage, type ContextSnapshot } from './engine';
+import { addLLMUsage, finished, type ContextSnapshot } from './engine';
 import type { Event } from './events';
 import { Aborted, isAbort } from './running';
 import { newID } from './sql';
@@ -52,6 +52,8 @@ export class DelegateTurn {
 	/** stream adds delta to the reply's current text or reasoning. */
 	async stream(kind: 'text' | 'reasoning', delta: string) {
 		if (!delta) return;
+		const stats = this.message.stats;
+		if (stats && stats.firstTokenMs === undefined) stats.firstTokenMs = Date.now() - stats.startedAt;
 		await this.step();
 		let s = this.segments.get(kind);
 		if (!s) {
@@ -137,15 +139,19 @@ export async function runDelegate(signal: AbortSignal, store: Store, delegate: D
 		await emit(e);
 	};
 	const turn = new DelegateTurn(input.id, input.text, input.channel ?? '', store, message, send);
+	// An agent's own model requests are its business: the reply records only when it began, first wrote and ended.
+	message.stats = { startedAt: Date.now() };
 	let runErr: Error | undefined;
 	try {
-		await send({ kind: 'turn-started', messageId: message.id });
+		await send({ kind: 'turn-started', messageId: message.id, metadata: { model: message.model, stats: { ...message.stats } } });
 		await delegate.reply(turn, signal);
 		await turn.endStep();
 	} catch (e) {
 		runErr = e instanceof Error ? e : new Error(String(e));
 	}
 	const status = !runErr ? 'complete' : isAbort(runErr) || signal.aborted ? 'cancelled' : 'error';
+	message.stats!.finishedAt = Date.now();
 	store.save(message, status, runErr?.message ?? '');
+	await finished(message, emit);
 	if (runErr) throw runErr;
 }

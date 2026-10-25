@@ -144,6 +144,44 @@ test('a denial without a reason ends its stream', async () => {
 	s.close();
 });
 
+test('a reply records its model, usage and timing, and streams them as metadata', async () => {
+	const s = open();
+	const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+	// A model that waits before its first words and writes for a while after them.
+	class Timed extends DemoModel {
+		override async stream(...[req, emit]: Parameters<DemoModel['stream']>) {
+			await pause(40);
+			await emit('text', 'Hello ');
+			await pause(60);
+			await emit('text', 'there');
+			return { text: 'Hello there', reasoning: '', signature: '', calls: [], usage: { inputTokens: 900, outputTokens: 12 } };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Timed() });
+	const c = s.create();
+	const chunks: Record<string, any>[] = [];
+	await service.execute({ id: c.id, text: 'hi', requestId: newID() }, e => { chunks.push(encodeEvent(e)); });
+	expect(chunks[0]).toMatchObject({ type: 'start', messageMetadata: { model: 'demo/echo', stats: { startedAt: expect.any(Number) } } });
+	const end = chunks.find(k => k.type === 'message-metadata')!.messageMetadata;
+	expect(end.usage).toMatchObject({ inputTokens: 900, outputTokens: 12 });
+	const stats = end.stats;
+	expect(stats.firstTokenMs).toBeGreaterThanOrEqual(35);
+	expect(stats.generationMs).toBeGreaterThanOrEqual(55);
+	expect(stats.generationMs).toBeLessThan(stats.finishedAt - stats.startedAt);
+	expect([stats.timedOutput, stats.requests, stats.toolMs]).toEqual([12, 1, 0]);
+	// The history says the same as the stream did.
+	const reply = s.history(c.id)[1];
+	expect(reply.metadata).toMatchObject({ model: 'demo/echo', usage: end.usage, stats });
+	const ledger = s.exportConversation(c.id).usage;
+	expect(ledger).toHaveLength(1);
+	expect(ledger[0].firstTokenMs).toBeGreaterThanOrEqual(35);
+	expect(ledger[0].firstTokenMs).toBeLessThan(ledger[0].durationMs);
+	// Stats move with the conversation.
+	const moved = s.importConversation(s.exportConversation(c.id));
+	expect(s.history(moved.id)[1].stats).toEqual(stats);
+	s.close();
+});
+
 test('a turn reports what its prompt takes of the window, and the service keeps it until the conversation moves on', async () => {
 	const s = open();
 	// A model with a known window that says how many tokens each prompt was.

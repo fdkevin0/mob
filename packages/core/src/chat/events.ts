@@ -1,6 +1,6 @@
 // Conversation events, independent of HTTP and SSE, and their AI SDK UI chunks.
 export type EventKind =
-	| 'turn-started' | 'step-started' | 'segment-started' | 'segment-delta' | 'segment-finished' | 'usage' | 'context'
+	| 'turn-started' | 'step-started' | 'segment-started' | 'segment-delta' | 'segment-finished' | 'usage' | 'context' | 'metadata'
 	| 'tool-input' | 'tool-output' | 'tool-failed' | 'approval-requested' | 'step-finished'
 	| 'turn-finished' | 'turn-aborted' | 'turn-failed';
 
@@ -15,6 +15,8 @@ export type Event = {
 	usage?: unknown;
 	/** context is what the turn's prompt takes of the model's window, as a ContextSnapshot. */
 	context?: unknown;
+	/** metadata is merged into the reply's metadata: its model when it starts, its usage and stats when it ends. */
+	metadata?: Record<string, unknown>;
 	toolCallId?: string;
 	toolName?: string;
 	input?: unknown;
@@ -24,7 +26,7 @@ export type Event = {
 
 const chunkType: Record<EventKind, string> = {
 	'turn-started': 'start', 'step-started': 'start-step', 'segment-started': '-start', 'segment-delta': '-delta', 'segment-finished': '-end',
-	usage: 'data-usage', context: 'data-context', 'tool-input': 'tool-input-available', 'tool-output': 'tool-output-available', 'tool-failed': 'tool-output-error',
+	usage: 'data-usage', context: 'data-context', metadata: 'message-metadata', 'tool-input': 'tool-input-available', 'tool-output': 'tool-output-available', 'tool-failed': 'tool-output-error',
 	'approval-requested': 'tool-approval-request', 'step-finished': 'finish-step', 'turn-finished': 'finish', 'turn-aborted': 'abort', 'turn-failed': 'error',
 };
 
@@ -40,6 +42,7 @@ export function encode(e: Event): Record<string, unknown> {
 	const set = (key: string, value: unknown) => { if (value !== undefined && value !== null && value !== '') chunk[key] = value; };
 	set('messageId', e.messageId); set('finishReason', e.reason); set('errorText', e.error); set('id', e.id); set('delta', e.text);
 	if (e.usage !== undefined && e.usage !== null) chunk.data = e.usage;
+	if (e.metadata) chunk.messageMetadata = e.metadata;
 	set('toolCallId', e.toolCallId); set('toolName', e.toolName);
 	if (e.input !== undefined && e.input !== null) chunk.input = e.input;
 	if (e.output !== undefined && e.output !== null) chunk.output = e.output;

@@ -12,10 +12,29 @@ export type Message = {
 	role: string;
 	parts: Part[];
 	metadata?: Record<string, unknown>;
-	/** model answered an assistant message; usage is what its steps cost. Not sent to clients. */
+	/** model answered an assistant message; usage is what its steps cost and stats how long they took. Clients read them in metadata. */
 	model?: string;
 	usage?: ModelUsage;
+	stats?: Stats;
 	command?: boolean;
+};
+
+/**
+ * Stats is how long a reply took, in milliseconds since the epoch or as
+ * durations. firstTokenMs runs from the start to the first text or reasoning;
+ * generationMs adds up each model request's time from its first words to its
+ * end, and timedOutput is the output tokens of those requests, so their ratio
+ * is how fast the model writes. toolMs is the time tools ran. An outside agent
+ * reports none of the request timings.
+ */
+export type Stats = {
+	startedAt: number;
+	finishedAt?: number;
+	firstTokenMs?: number;
+	generationMs?: number;
+	timedOutput?: number;
+	toolMs?: number;
+	requests?: number;
 };
 
 /** wire is the message as clients see it, without the store's own fields. */
@@ -38,9 +57,10 @@ export type Transfer = {
 	model: string;
 	summary: string;
 	summaryThrough: string;
-	messages: { id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string }[];
+	/** stats and firstTokenMs are missing from conversations exported before Mob kept them. */
+	messages: { id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string; stats?: string }[];
 	facts: { fact: string; owner: boolean }[];
-	usage: { messageId: string; session: string; model: string; input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number; cost: number; durationMs: number; createdAt: number }[];
+	usage: { messageId: string; session: string; model: string; input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number; cost: number; durationMs: number; createdAt: number; firstTokenMs?: number }[];
 };
 
 /** TransferError says why a conversation cannot move now. */
@@ -275,11 +295,12 @@ export class Store {
 
 	history(id: string): Message[] {
 		if (!this.exists(id)) throw new NotFound();
-		return this.db.all<{ id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string }>('SELECT id,role,parts,status,error,model,usage,kind FROM messages WHERE conversation_id=? ORDER BY seq', id).map(r => {
+		return this.db.all<{ id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string; stats: string }>('SELECT id,role,parts,status,error,model,usage,kind,stats FROM messages WHERE conversation_id=? ORDER BY seq', id).map(r => {
 			const m: Message = { id: r.id, role: r.role, parts: JSON.parse(r.parts), metadata: { status: r.status } };
 			if (r.error) m.metadata!.error = r.error;
 			if (r.model) { m.model = r.model; m.metadata!.model = r.model; }
 			if (r.usage) { try { m.usage = JSON.parse(r.usage); m.metadata!.usage = m.usage; } catch { /* ignore */ } }
+			if (r.stats) { try { m.stats = JSON.parse(r.stats); m.metadata!.stats = m.stats; } catch { /* ignore */ } }
 			if (r.kind === 'command') { m.command = true; m.metadata!.command = true; }
 			return m;
 		});
@@ -314,7 +335,7 @@ export class Store {
 	}
 
 	save(m: Message, status: string, failure: string) {
-		this.db.run('UPDATE messages SET parts=?,status=?,error=?,usage=? WHERE id=?', JSON.stringify(m.parts), status, failure, m.usage ? JSON.stringify(m.usage) : '', m.id);
+		this.db.run('UPDATE messages SET parts=?,status=?,error=?,usage=?,stats=? WHERE id=?', JSON.stringify(m.parts), status, failure, m.usage ? JSON.stringify(m.usage) : '', m.stats ? JSON.stringify(m.stats) : '', m.id);
 		this.messageChanged(m.id);
 	}
 
@@ -323,11 +344,11 @@ export class Store {
 		const c = this.db.get<{ title: string; model: string; summary: string; summary_through: string }>('SELECT title,model,summary,summary_through FROM conversations WHERE id=?', id);
 		if (!c) throw new NotFound();
 		if (this.db.get("SELECT 1 FROM approvals WHERE conversation_id=? AND status='pending'", id)) throw new TransferError('This conversation waits for an approval; answer it before moving the conversation.');
-		const messages = this.db.all<Transfer['messages'][number]>('SELECT id,role,parts,status,error,model,usage,kind FROM messages WHERE conversation_id=? ORDER BY seq', id);
+		const messages = this.db.all<Transfer['messages'][number]>('SELECT id,role,parts,status,error,model,usage,kind,stats FROM messages WHERE conversation_id=? ORDER BY seq', id);
 		const facts = this.db.all<{ fact: string; owner: number }>('SELECT fact,owner FROM memories WHERE conversation_id=? ORDER BY rowid', id).map(r => ({ fact: r.fact, owner: !!r.owner }));
-		const usage = this.db.all<{ message_id: string; session: string; model: string; input: number; output: number; reasoning: number; cache_read: number; cache_write: number; cost: number; duration_ms: number; created_at: number }>(
-			'SELECT message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at FROM usage WHERE conversation_id=? ORDER BY seq', id,
-		).map(u => ({ messageId: u.message_id, session: u.session, model: u.model, input: u.input, output: u.output, reasoning: u.reasoning, cacheRead: u.cache_read, cacheWrite: u.cache_write, cost: u.cost, durationMs: u.duration_ms, createdAt: u.created_at }));
+		const usage = this.db.all<{ message_id: string; session: string; model: string; input: number; output: number; reasoning: number; cache_read: number; cache_write: number; cost: number; duration_ms: number; created_at: number; first_token_ms: number }>(
+			'SELECT message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at,first_token_ms FROM usage WHERE conversation_id=? ORDER BY seq', id,
+		).map(u => ({ messageId: u.message_id, session: u.session, model: u.model, input: u.input, output: u.output, reasoning: u.reasoning, cacheRead: u.cache_read, cacheWrite: u.cache_write, cost: u.cost, durationMs: u.duration_ms, createdAt: u.created_at, firstTokenMs: u.first_token_ms }));
 		return { v: 1, title: c.title, model: c.model, summary: c.summary, summaryThrough: c.summary_through, messages, facts, usage };
 	}
 
@@ -341,9 +362,9 @@ export class Store {
 		const str = (v: unknown) => typeof v === 'string';
 		const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 		const valid = t?.v === 1 && str(t.title) && str(t.model) && str(t.summary) && str(t.summaryThrough) && Array.isArray(t.messages) && Array.isArray(t.facts) && Array.isArray(t.usage) &&
-			t.messages.every(m => ['id', 'role', 'parts', 'status', 'error', 'model', 'usage', 'kind'].every(k => str((m as Record<string, unknown>)[k])) && (m.role === 'user' || m.role === 'assistant')) &&
+			t.messages.every(m => ['id', 'role', 'parts', 'status', 'error', 'model', 'usage', 'kind'].every(k => str((m as Record<string, unknown>)[k])) && (m.stats === undefined || str(m.stats)) && (m.role === 'user' || m.role === 'assistant')) &&
 			t.facts.every(f => str(f.fact) && typeof f.owner === 'boolean') &&
-			t.usage.every(u => str(u.messageId) && str(u.session) && str(u.model) && [u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt].every(num));
+			t.usage.every(u => str(u.messageId) && str(u.session) && str(u.model) && [u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt].every(num) && (u.firstTokenMs === undefined || num(u.firstTokenMs)));
 		if (!valid) throw new TransferError('This is not a conversation Mob can import.');
 		for (const m of t.messages) { try { if (!Array.isArray(JSON.parse(m.parts))) throw 0; } catch { throw new TransferError('This is not a conversation Mob can import.'); } }
 		const c = { id: newID(), title: t.title || 'New conversation', updatedAt: Date.now() };
@@ -354,7 +375,7 @@ export class Store {
 				const id = this.hasRequest(m.id) || ids.has(m.id) ? newID() : m.id;
 				ids.set(m.id, id);
 				const [status, error] = m.status === 'streaming' ? ['interrupted', 'The reply was still being written when the conversation moved.'] : [m.status, m.error];
-				this.db.run('INSERT INTO messages(id,conversation_id,role,parts,status,error,model,usage,kind) VALUES(?,?,?,?,?,?,?,?,?)', id, c.id, m.role, withoutFiles(m.parts), status, error, m.model, m.usage, m.kind);
+				this.db.run('INSERT INTO messages(id,conversation_id,role,parts,status,error,model,usage,kind,stats) VALUES(?,?,?,?,?,?,?,?,?,?)', id, c.id, m.role, withoutFiles(m.parts), status, error, m.model, m.usage, m.kind, m.stats ?? '');
 			}
 			// A summary is kept only while the message it runs through came along.
 			if (t.summary && ids.has(t.summaryThrough)) this.db.run('UPDATE conversations SET summary=?,summary_through=? WHERE id=?', t.summary, ids.get(t.summaryThrough)!, c.id);
@@ -363,8 +384,8 @@ export class Store {
 				this.saveFact(newID(), c.id, f.fact, f.owner);
 			}
 			for (const u of t.usage) {
-				this.db.run('INSERT INTO usage(conversation_id,message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-					c.id, ids.get(u.messageId) ?? u.messageId, u.session, u.model, u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt);
+				this.db.run('INSERT INTO usage(conversation_id,message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at,first_token_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+					c.id, ids.get(u.messageId) ?? u.messageId, u.session, u.model, u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt, u.firstTokenMs ?? 0);
 			}
 		});
 		this.changes.conversation(c.id, true);
@@ -564,9 +585,9 @@ export class Store {
 	}
 
 	// Usage.
-	recordUsage(conversationID: string, messageID: string, model: string, u: ModelUsage, tookMs: number, session = '') {
-		this.db.run('INSERT INTO usage(conversation_id,message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-			conversationID, messageID, session, model, u.inputTokens, u.outputTokens, u.reasoningTokens ?? 0, u.cacheReadTokens ?? 0, u.cacheWriteTokens ?? 0, u.cost ?? 0, Math.round(tookMs), Date.now());
+	recordUsage(conversationID: string, messageID: string, model: string, u: ModelUsage, tookMs: number, session = '', firstTokenMs = 0) {
+		this.db.run('INSERT INTO usage(conversation_id,message_id,session,model,input,output,reasoning,cache_read,cache_write,cost,duration_ms,created_at,first_token_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+			conversationID, messageID, session, model, u.inputTokens, u.outputTokens, u.reasoningTokens ?? 0, u.cacheReadTokens ?? 0, u.cacheWriteTokens ?? 0, u.cost ?? 0, Math.round(tookMs), Date.now(), Math.round(firstTokenMs));
 	}
 
 	/** conversationUsage sums what each of the conversations ids used; conversations that recorded none are left out. */

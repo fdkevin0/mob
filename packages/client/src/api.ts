@@ -11,7 +11,11 @@ export type Conversation = {
 	/** waiting is set while a tool call in it awaits the owner's decision. */
 	waiting?: boolean;
 };
-export type ChatMessage = UIMessage<{ status?: string; error?: string; model?: string; command?: boolean }>;
+/** ReplyUsage is what a reply's model requests used; outputTokens includes reasoning. */
+export type ReplyUsage = { inputTokens: number; outputTokens: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number };
+/** ReplyStats is how long a reply took; timedOutput / generationMs is how fast its model wrote. */
+export type ReplyStats = { startedAt: number; finishedAt?: number; firstTokenMs?: number; generationMs?: number; timedOutput?: number; toolMs?: number; requests?: number };
+export type ChatMessage = UIMessage<{ status?: string; error?: string; model?: string; command?: boolean; usage?: ReplyUsage; stats?: ReplyStats }>;
 export type Snapshot = { messages: ChatMessage[]; active: boolean; model: string };
 export type ClientType = 'web' | 'tui';
 
