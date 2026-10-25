@@ -53,7 +53,7 @@ export const tasks: Task[] = [
 	{
 		id: 't1', parent: 'mob', agent: 'codex', label: 'Codex', model: 'gpt-5.5-codex', title: 'Fix the flaky checkout test', branch: 'mob/flaky-t1',
 		steps: 3, tools: ['read', 'edit', 'execute'], cost: 0.19, tokens: 141_000, start: 1.5, end: Infinity, diff: '+14 −6 · checkout/clock.go, total_test.go', result: '50 of 50 runs pass',
-		waits: { at: 6.2, step: 2, tool: 'Run command · in the sandbox', text: '$ go test ./checkout/... -count=50 -race', then: 2.8 },
+		waits: { at: 6.2, step: 2, tool: 'codex_execute', text: '$ go test ./checkout/... -count=50 -race', then: 2.8 },
 		log: [
 			{ at: 0.5, text: 'Started Claude Agent on the CI history' },
 			{ at: 3.6, text: 'Found it: the test reads the wall clock' },

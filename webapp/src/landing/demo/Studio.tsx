@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { Calf } from '../../components/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from '../../chat/brandIcons';
 import { ApprovalPrompt } from '../../chat/ApprovalPrompt';
-import { Links } from '../../chat/AgentTree';
+import { approvalQuestion, Links, tools } from '../../chat/AgentTree';
 import { Message, MessageContent, MessageResponse } from '../../components/ai-elements/message';
 import { AlertIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, HandIcon, MessageIcon, SparkIcon, StopIcon } from '../../chat/icons';
 import { aimAt, Cursor, type Aim } from './Cursor';
@@ -30,12 +30,6 @@ const statuses: Record<Status, { label: string; icon?: ReactNode }> = {
 	stopped: { label: 'Stopped', icon: <StopIcon /> },
 	idle: { label: 'Done', icon: <CheckIcon /> },
 };
-
-const Avatar = ({ task }: { task: Task }) => {
-	const brand = runtimeBrand(task.agent);
-	return <span className="o-avatar">{task.agent === 'mob' ? <Calf size={16} /> : brand ? <BrandIcon brand={brand} size={14} /> : null}</span>;
-};
-const Pill = ({ v }: { v: View }) => <span className="o-status" data-status={v.status}>{statuses[v.status].icon}{v.checking ? 'Checking' : statuses[v.status].label}</span>;
 
 const asker = tasks.find(t => t.waits)!;
 const flop = tasks.find(t => t.failed)!;
@@ -104,7 +98,7 @@ function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run;
 											{waiting ? (
 												<div ref={channel === 'web' ? el => { approveRef.current = el?.querySelector('button') ?? null; } : undefined}>
 													<ApprovalPrompt
-														question={`${task.label} wants to run a command in the sandbox.`}
+														question={approvalQuestion(task.label, asker.waits!.tool)}
 														request={asker.waits!.text}
 														busy={false}
 														decide={(approved, _reason, remember) => acts.decide(!approved ? 'deny' : remember === 'always' ? 'always' : 'allow')}
@@ -180,31 +174,40 @@ function Phone({ run, views, channel, acts, approveRef, sendRef }: { run: Run; v
 	);
 }
 
+// An agent's card: the app's agent card (webapp/src/chat/AgentTree.tsx), plus
+// what the demo shows when a card is opened, its log and its diff.
 function Row({ v, depth, open, run, acts, onStop, onInstruct, notes }: { v: View; depth: number; open: boolean; run: Run; acts: Acts; onStop: (id: string) => void; onInstruct: (id: string, text: string) => void; notes: string[] }) {
 	const { task, status } = v;
 	const [text, setText] = useState('');
-	const send = (e: FormEvent) => { e.preventDefault(); if (text.trim()) { onInstruct(task.id, text.trim()); setText(''); } };
+	const [instructing, setInstructing] = useState(false);
+	const send = (e: FormEvent) => { e.preventDefault(); if (text.trim()) { onInstruct(task.id, text.trim()); setText(''); setInstructing(false); } };
 	const live = status === 'running' || status === 'waiting';
-	const expanded = open || v.asking;
+	const model = modelBrand(task.model, task.agent);
+	const runtime = runtimeBrand(task.agent);
+	const shown = task.tools.filter(t => tools[t]).slice(0, 4);
+	// Clicking a card opens its log; its buttons do their own thing.
+	const click = (e: MouseEvent) => { if (!(e.target as Element).closest('button, input, form, .agent-approval')) acts.select(task.id); };
 	return (
 		<li className="s-node" data-status={status} data-id={task.id} style={{ '--depth': depth } as CSSProperties}>
-			<div className="o-card s-card" data-node={task.id} aria-current={open || undefined} data-status={status}>
-				<button type="button" className="s-head" aria-expanded={expanded} onClick={() => acts.select(task.id)}>
-					<Avatar task={task} />
-					<span className="s-name"><strong>{task.label}</strong><small>{task.title}</small></span>
-					<Pill v={v} />
-				</button>
-				<div className="o-plan"><span style={{ width: `${(v.done / task.steps) * 100}%` }} /></div>
-				<p className="s-meta">{task.branch ? <code>{task.branch}</code> : <span>{task.model}</span>}<span>{money(v.cost)} · {count(v.tokens)} · {clock(v.seconds)}</span></p>
+			<article className="agent-card s-card" data-node={task.id} data-status={status} aria-current={open || undefined} onClick={click}>
+				<header>
+					<span className={task.agent === 'mob' ? 'agent-avatar mob' : 'agent-avatar'}>{task.agent === 'mob' ? <Calf size={18} /> : runtime ? <BrandIcon brand={runtime} size={18} /> : null}</span>
+					<div className="agent-name">
+						<button type="button" aria-expanded={open} onClick={() => acts.select(task.id)}>{task.label}</button>
+						<small className="agent-model">{model && <BrandIcon brand={model} size={12} />}{task.model}</small>
+					</div>
+					<span className="agent-status" data-status={status}>{statuses[status].icon}{v.checking ? 'Checking' : statuses[status].label}</span>
+				</header>
+				<p className="agent-task">
+					{shown.length ? <span className="agent-tools">{shown.map(t => <span key={t}>{tools[t]}</span>)}</span> : null}
+					{task.title}
+				</p>
+				{task.branch ? <p className="agent-branch-name">{project} · {task.branch}</p> : null}
+				<div className="agent-plan"><span style={{ width: `${(v.done / task.steps) * 100}%` }} /></div>
 				{v.asking ? (
-					<div className="o-approval">
-						<p>{asker.waits!.tool}</p>
-						<pre>{asker.waits!.text}</pre>
-						<div>
-							<button type="button" className="o-btn approve" onClick={() => acts.decide('allow')}>Approve</button>
-							<button type="button" className="o-btn" onClick={() => acts.decide('always')}>Always allow</button>
-							<button type="button" className="o-btn deny" onClick={() => acts.decide('deny')}>Deny</button>
-						</div>
+					<div className="agent-approval">
+						<ApprovalPrompt question={approvalQuestion(task.label, asker.waits!.tool)} request={asker.waits!.text} busy={false}
+							decide={(approved, _reason, remember) => acts.decide(!approved ? 'deny' : remember === 'always' ? 'always' : 'allow')} />
 					</div>
 				) : null}
 				{open ? (
@@ -214,16 +217,26 @@ function Row({ v, depth, open, run, acts, onStop, onInstruct, notes }: { v: View
 							{status === 'running' ? <li className="o-typing">working…</li> : null}
 						</ol>
 						{task.diff && status === 'review' ? <p className="s-diff">task_diff <code>{task.diff}</code></p> : null}
-						{task.agent !== 'mob' ? (
-							<form className="o-inline" onSubmit={send}>
-								<input aria-label={`Instruction for ${task.label}`} placeholder="Tell the agent…" value={text} onChange={e => setText(e.target.value)} />
-								<button type="submit" className="o-btn" aria-label="Send instruction" disabled={!text.trim()}><MessageIcon /></button>
-								{live ? <button type="button" className="o-btn" aria-label={`Stop ${task.label}`} title="Stop the agent; its branch stays" onClick={() => onStop(task.id)}><StopIcon /></button> : null}
-							</form>
-						) : null}
 					</div>
 				) : null}
-			</div>
+				{instructing ? (
+					<form className="agent-inline" onSubmit={send}>
+						<input aria-label={`Instruction for ${task.label}`} placeholder="Tell the agent…" value={text} onChange={e => setText(e.target.value)} autoFocus />
+						<button type="submit" className="agent-button approve" disabled={!text.trim()}>Send</button>
+					</form>
+				) : null}
+				<footer>
+					<span className="agent-spent"><strong>{money(v.cost)} · {count(v.tokens)} tokens</strong> · {v.done}/{task.steps} steps · {clock(v.seconds)}</span>
+					<span className="agent-actions">
+						{task.agent !== 'mob' ? (
+							<button type="button" className="agent-open" aria-label={`Instruct ${task.label}`} aria-pressed={instructing} title="Tell the agent what to do next" onClick={() => setInstructing(!instructing)}><MessageIcon /></button>
+						) : null}
+						{live && task.agent !== 'mob' ? (
+							<button type="button" className="agent-open" aria-label={`Stop ${task.label}`} title="Stop the agent; its branch stays" onClick={() => onStop(task.id)}><StopIcon /></button>
+						) : null}
+					</span>
+				</footer>
+			</article>
 		</li>
 	);
 }
