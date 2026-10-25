@@ -24,8 +24,12 @@ import '../../../../webapp/src/components/site/header.css';
 
 <style is:global>
 	:root { --sl-nav-height: 72px; }
-	/* Docs scrolls text beneath this fixed frame, so the landing gradient needs an opaque backing. */
-	.page > .header { padding: 0; border: 0; background: var(--sl-color-black); }
+	.page > .header { padding: 0; border: 0; background: transparent; }
+	.site-header.docs-header {
+		background: color-mix(in srgb, var(--site-bg) 80%, transparent);
+		-webkit-backdrop-filter: blur(16px);
+		backdrop-filter: blur(16px);
+	}
 	.docs-header .site-header-inner { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
 	.docs-search { min-width: 0; }
 	.docs-search button[data-open-modal] { height: 36px; }
@@ -35,8 +39,8 @@ import '../../../../webapp/src/components/site/header.css';
 		.docs-search button[data-open-modal] { width: 32px; justify-content: center; padding: 0; border: 0; background: transparent; }
 		.docs-search button[data-open-modal] > :is(span, kbd) { display: none !important; }
 	}
-	@media (max-width: 799px) {
-		.docs-header .site-header-inner { padding-inline: 12px 52px; }
+	@media (width < 50rem) {
+		.docs-header .site-header-inner { padding-inline: 12px calc(var(--sl-menu-button-size) + 20px); }
 		.docs-header .site-links { gap: 12px; }
 		.sl-menu-button { inset-inline-end: 12px; }
 	}
@@ -46,11 +50,12 @@ import '../../../../webapp/src/components/site/header.css';
 		.docs-header .site-brand { grid-area: 1 / 1; }
 		.docs-search { grid-area: 1 / 2; justify-self: start; }
 		.docs-header .site-links { font-size: 13px; gap: 8px; }
-		.docs-header .site-theme { padding-inline-end: 40px; }
+		.docs-header .site-theme { padding-inline-end: calc(var(--sl-menu-button-size) + 8px); }
 		.docs-header .site-account a { padding-inline: 8px; }
-		.sl-menu-button { top: 62px; }
+		.sl-menu-button { top: calc(78px - var(--sl-menu-button-size) / 2); }
 	}
 	@media (max-width: 359px) {
-		.docs-header .site-links { font-size: 12px; gap: 6px; }
+		.docs-header .site-header-inner { column-gap: 4px; }
+		.docs-header .site-links { font-size: 12px; gap: 0; justify-content: space-between; }
 	}
 </style>

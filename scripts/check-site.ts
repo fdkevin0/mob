@@ -1,7 +1,9 @@
 // Exercise the deployed asset routing offline, using the public build and Wrangler rules.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
@@ -52,8 +54,11 @@ try {
 			['/', 'Home'], ['/demo', 'Demo'], ['/docs/', 'Docs'], ['https://github.com/fdkevin0/mob', 'GitHub'],
 		]);
 		assert.match(navigation, /href="\/docs\/" aria-current="page"/);
-		assert.match(docs, /<div class="site-header docs-header">[\s\S]*?<div class="docs-search print:hidden"><site-search/);
-		assert.doesNotMatch(docs, /class="docs-tools/);
+		let headerSearches = 0;
+		await new HTMLRewriter().on('.site-header > .site-header-inner > .docs-search > site-search', {
+			element() { headerSearches++; },
+		}).transform(new Response(docs)).text();
+		assert.equal(headerSearches, 1, 'Docs search belongs inside the shared header');
 		assert.match(docs, /href="\/account">Account<\/a>/);
 		assert.match(docs, /href="\/app">Open Mob<\/a>/);
 		for (const path of ['/app', '/app/', '/account', '/account/']) {
@@ -79,6 +84,15 @@ try {
 		}
 	}
 	console.log('Public site routing passed');
+	const profile = await mkdtemp(join(tmpdir(), 'mob-site-layout-'));
+	try {
+		const layout = Bun.spawn(['node', 'apps/desktop/node_modules/electron/cli.js', '--no-sandbox',
+			...(process.platform === 'linux' ? ['--ozone-platform=headless'] : []),
+			'apps/desktop/scripts/check-site-layout.cjs', origin, profile], { stdout: 'inherit', stderr: 'inherit' });
+		assert.equal(await layout.exited, 0, 'Public site header layout');
+	} finally {
+		await rm(profile, { recursive: true, force: true });
+	}
 } finally {
 	await mf.dispose();
 }
