@@ -1,5 +1,6 @@
-/* The /demo page: a copy of the app's look, scoped under d-, o-, s- and im-
-   classes. Values follow webapp/src/chat/styles.css. */
+/* The /demo page. The conversation uses the app's own chat components and
+   webapp/src/chat/styles.css; the window, phone and agent tree around it are
+   scoped under d-, o-, s- and im- classes. */
 /* The landing's paged scroll snaps to its footer here, the only snap point,
    so the demo page scrolls freely. */
 html:has(.demo-page) { scroll-snap-type: none; }
@@ -36,69 +37,23 @@ html:has(.demo-page) { scroll-snap-type: none; }
 
 .d-head { flex-shrink: 0; padding: 12px 22px; font-size: 13px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .d-scroll { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 10%, transparent) transparent; }
-.d-thread { max-width: 640px; margin: 0 auto; padding: 10px 24px 24px; display: flex; flex-direction: column; gap: 22px; }
-.d-user { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 85%; animation: d-in .3s ease-out; }
-.d-bubble { margin: 0; padding: 10px 16px; border-radius: 18px; background: var(--surface-raised); line-height: 1.5; }
-.d-via { font-size: 11px; color: var(--cyan); font-family: var(--mono); }
-.d-assistant { display: flex; flex-direction: column; gap: 6px; }
-.d-assistant > * { animation: d-in .3s ease-out; }
+.d-via { align-self: flex-end; font-size: 12px; color: var(--cyan); }
 @keyframes d-in { from { opacity: 0; transform: translateY(6px); } }
 
-.d-thinking { margin: 0; font-size: 14px; background: linear-gradient(90deg, var(--muted-foreground) 0%, var(--text) 50%, var(--muted-foreground) 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: d-shimmer 2s linear infinite; }
-@keyframes d-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
-.d-reasoning { font-size: 13px; color: var(--muted-foreground); }
-.d-reasoning summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; }
-.d-reasoning summary::-webkit-details-marker, .d-tool summary::-webkit-details-marker { display: none; }
-.d-reasoning[open] summary svg { transform: rotate(90deg); }
-.d-reasoning p { margin: 8px 0 4px 20px; padding-left: 12px; border-left: 1px solid var(--line-strong); line-height: 1.5; }
-
-.d-tool { font-size: 13px; border-radius: 12px; }
-.d-tool-title { color: var(--text); font-weight: 500; white-space: nowrap; }
-.d-tool-detail { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--mono); font-size: 12px; }
-.d-tool-status { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: var(--surface-raised); }
-.d-tool.done .d-tool-status { color: var(--lime); }
-.d-tool.failed .d-tool-status { color: var(--destructive); }
-.d-tool.waiting .d-tool-status { color: var(--amber); }
-.d-tool.waiting { padding: 10px 16px 16px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--amber) 20%, transparent); animation: d-in .3s ease-out, d-glow 2s ease-in-out infinite; }
 @keyframes d-glow { 50% { border-color: color-mix(in srgb, var(--amber) 45%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 3%, transparent); } }
-.d-approval { margin-left: 30px; }
-.d-approval-q { margin: 0 0 10px; font-size: 14px; }
-.d-preview { margin: 0 0 12px; background: var(--bg); }
-.d-preview .add { color: var(--lime); }
-.d-preview .del { color: var(--destructive); }
-.d-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.d-btn { min-height: 34px; padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: none; color: var(--text); font: 500 13px var(--sans); cursor: pointer; transition: background .15s, border-color .15s, transform .1s; }
-.d-btn:hover { background: var(--accent); border-color: color-mix(in srgb, var(--text) 20%, transparent); }
-.d-btn:active { transform: scale(.97); }
-.d-btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
-.d-btn.primary:hover { background: color-mix(in srgb, var(--primary) 85%, var(--text)); }
-.d-btn.ghost { border-color: transparent; color: var(--muted-foreground); }
 
-.d-answer { font-size: 15px; line-height: 1.7; margin-top: 4px; }
-.d-answer p { margin: 0 0 10px; }
-.d-answer code { padding: 1px 5px; border-radius: 5px; background: var(--surface-raised); font-size: 13px; }
-.d-answer strong { font-weight: 600; }
-.d-answer table { width: 100%; margin: 4px 0 12px; border-collapse: collapse; font-size: 13px; animation: d-in .3s ease-out; }
-.d-answer th { text-align: left; font-weight: 500; color: var(--muted-foreground); }
-.d-answer th, .d-answer td { padding: 6px 10px; border-bottom: 1px solid var(--line-strong); }
-.d-answer td:last-child, .d-answer th:last-child { text-align: right; font-family: var(--mono); font-size: 12px; }
 @keyframes d-pulse { 50% { opacity: .3; } }
 
 .d-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; }
 .d-empty h3 { margin: 0; font-size: 24px; font-weight: 560; letter-spacing: -0.03em; }
 
-.d-composer { flex-shrink: 0; width: 100%; max-width: 688px; margin: 0 auto; padding: 8px 24px 18px; }
-.d-composer > .d-input, .d-composer > .d-bar { background: var(--surface); border: 1px solid var(--line-strong); }
-.d-input { padding: 12px 16px 2px; border-bottom: 0 !important; border-radius: 22px 22px 0 0; min-height: 44px; font-size: 15px; line-height: 1.6; }
-.d-input.typing { border-color: color-mix(in srgb, var(--text) 18%, transparent) !important; }
+/* The app's composer, with the goal typed into it instead of a text box. */
+.d-input { min-height: 28px; padding: 4px 0; font-size: 15px; line-height: 1.6; }
+.s-chat .composer:has(.typing) { border-color: var(--line-hover); }
+.s-chat .conversation-content > .group, .s-chat .assistant-content > * { animation: d-in .3s ease-out; }
+.s-chat td code { white-space: nowrap; }
 .d-placeholder { color: var(--muted-foreground); }
 .d-caret { display: inline-block; width: 2px; height: 1.1em; margin-left: 1px; vertical-align: -.2em; background: var(--lime); animation: d-pulse .9s steps(2) infinite; }
-.d-bar { display: flex; align-items: center; justify-content: space-between; padding: 2px 10px 10px 16px; border-top: 0 !important; border-radius: 0 0 22px 22px; box-shadow: 0 8px 30px rgb(0 0 0 / calc(0.3 * var(--shadow))); }
-.d-model { font-size: 12px; color: var(--muted-foreground); }
-.d-send { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); transition: background .15s, transform .1s; }
-.d-send:disabled { background: var(--surface-raised); color: var(--muted-foreground); }
-.spinner { width: 12px; height: 12px; border: 2px solid var(--line-strong); border-top-color: var(--text); border-radius: 50%; animation: d-spin .8s linear infinite; }
-@keyframes d-spin { to { transform: rotate(360deg); } }
 
 /* Mob in a chat app, on a phone that slides in front of the app. Not any one
    app's look: Mob talks to several. */
@@ -143,25 +98,12 @@ html:has(.demo-page) { scroll-snap-type: none; }
 .demo-cursor.press g { animation: d-press .22s ease-out; }
 @keyframes d-press { 50% { scale: .8; } }
 
-
 .s-wrap { max-width: 1180px; margin: 0 auto; }
 .s-stage { position: relative; }
 /* The conversation on the left, the agents it started on the right. */
 .s-app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); grid-template-rows: minmax(0, 1fr); }
 .s-chat { min-width: 0; display: flex; flex-direction: column; transition: opacity .5s, filter .5s; }
-.s-chat .d-thread { padding: 6px 22px 20px; gap: 18px; }
-.s-chat .d-composer { padding: 6px 18px 16px; }
 .s-chat .d-empty h3 { font-size: 20px; }
-.s-say { margin: 2px 0; font-size: 14.5px; line-height: 1.6; }
-.s-task { border-radius: 10px; }
-.s-task-row { display: flex; align-items: center; gap: 10px; width: calc(100% + 20px); padding: 6px 10px; margin: 0 -10px; border: 0; border-radius: 8px; background: none; color: var(--muted-foreground); font: inherit; text-align: left; cursor: pointer; }
-.s-task-row:hover { background: var(--accent); color: var(--text); }
-.s-task-row > svg:last-child { margin-left: auto; flex-shrink: 0; }
-.d-tool.waiting.s-task { padding: 8px 14px 14px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--amber) 20%, transparent); animation: d-in .3s ease-out, d-glow 2s ease-in-out infinite; }
-.d-tool.waiting .s-task-row { margin: 0 0 4px; padding: 4px 0; width: 100%; }
-.d-approval { margin-left: 30px; }
-.d-answer { font-size: 14.5px; }
-.d-answer td:nth-child(2), .d-answer th:nth-child(2) { white-space: nowrap; }
 
 .s-agents { position: relative; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--sunken); }
 .o-head { flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 18px 8px; }
@@ -250,11 +192,10 @@ html:has(.demo-page) { scroll-snap-type: none; }
 	.demo-controls { justify-content: center; }
 	.demo-page { --demo-h: clamp(560px, 86svh, 760px); }
 	.d-titlebar .d-url { display: none; }
-	.s-chat .d-thread, .s-chat .d-composer { padding-left: 12px; padding-right: 12px; }
-	.d-approval { margin-left: 0; }
+	.s-chat .conversation-content, .s-chat .composer-area { padding-left: 12px; padding-right: 12px; }
 	.s-tree { padding: 4px 12px 60px; }
 	.o-head { padding: 10px 12px 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
-	.d-window, .d-phone, .demo-cursor, .d-assistant > *, .d-user, .im-msg, .s-node, .s-chat { transition: none; animation: none; }
+	.d-window, .d-phone, .demo-cursor, .s-chat .group, .s-chat .assistant-content > *, .im-msg, .s-node, .s-chat { transition: none; animation: none; }
 }

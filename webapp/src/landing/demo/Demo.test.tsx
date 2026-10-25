@@ -23,7 +23,7 @@ it('moves the conversation and the agents together, and takes an approval from t
 	const agents = within(screen.getByRole('region', { name: 'Agents' }));
 	expect(chat.getByText(/wants to run a command in the sandbox/)).toBeTruthy();
 	expect(agents.getByText('Run command · in the sandbox')).toBeTruthy();
-	fireEvent.click(chat.getByRole('button', { name: 'Approve' }));
+	fireEvent.click(chat.getByRole('button', { name: 'Allow once' }));
 	// The agent card stops asking as soon as the conversation answers.
 	expect(agents.queryByText('Run command · in the sandbox')).toBeNull();
 	await wait(14_000);

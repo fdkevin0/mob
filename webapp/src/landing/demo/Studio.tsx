@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { Calf } from '../../components/brand/Logo';
-import { BrandIcon, runtimeBrand } from '../../chat/brandIcons';
-import { AlertIcon, ArrowUpIcon, CheckIcon, ChevronIcon, HandIcon, MessageIcon, SparkIcon, StopIcon } from '../../chat/icons';
+import { BrandIcon, modelBrand, runtimeBrand } from '../../chat/brandIcons';
+import { ApprovalPrompt } from '../../chat/ApprovalPrompt';
+import { Message, MessageContent, MessageResponse } from '../../components/ai-elements/message';
+import { AlertIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, HandIcon, MessageIcon, SparkIcon, StopIcon } from '../../chat/icons';
 import { aimAt, Cursor, type Aim } from './Cursor';
 import { begin, branches, clock, count, decide, finish, goal, money, project, report, reported, stop, tasks, typed, view, waitingFor, type Decision, type Run, type Status, type Task, type View } from './orchestra';
 import { Button } from '../../components/ui/button';
 import { Segmented } from '../../components/ui/segmented';
+import '../../chat/styles.css';
 import './demo.css';
 
 // One replay, two views of it: the conversation where you asked, on the web
@@ -33,32 +36,6 @@ const Avatar = ({ task }: { task: Task }) => {
 };
 const Pill = ({ v }: { v: View }) => <span className="o-status" data-status={v.status}>{statuses[v.status].icon}{v.checking ? 'Checking' : statuses[v.status].label}</span>;
 
-// A little Markdown: **bold**, `code`, and | tables |.
-function inline(text: string) {
-	return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/).map((part, i) =>
-		part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong>
-		: part.startsWith('`') && part.endsWith('`') && part.length > 2 ? <code key={i}>{part.slice(1, -1)}</code>
-		: part);
-}
-function Markdown({ text }: { text: string }) {
-	const lines = text.split('\n');
-	const blocks: ReactNode[] = [];
-	for (let i = 0; i < lines.length;) {
-		if (lines[i].startsWith('|')) {
-			const rows: string[][] = [];
-			for (; i < lines.length && lines[i].startsWith('|'); i++) rows.push(lines[i].split('|').slice(1, -1).map(c => c.trim()));
-			blocks.push(
-				<table key={`t${i}`}><thead><tr>{rows[0].map(c => <th key={c}>{c}</th>)}</tr></thead>
-				<tbody>{rows.slice(1).map(r => <tr key={r[0]}>{r.map((c, j) => <td key={j}>{inline(c)}</td>)}</tr>)}</tbody></table>,
-			);
-		} else {
-			if (lines[i]) blocks.push(<p key={`p${i}`}>{inline(lines[i])}</p>);
-			i++;
-		}
-	}
-	return <>{blocks}</>;
-}
-
 const asker = tasks.find(t => t.waits)!;
 const flop = tasks.find(t => t.failed)!;
 const fixer = tasks.find(t => t.parent === flop.parent && t.start > flop.end)!;
@@ -69,7 +46,7 @@ function answer(run: Run, views: Map<string, View | undefined>) {
 	const total = [...views.values()].reduce((sum, v) => sum + (v?.cost ?? 0), 0);
 	const r = report(run, total);
 	const rows = branches.map((t, i) => `| \`${t.branch}\` | ${t.label} | ${r.results[i]} | ${money(views.get(t.id)?.cost ?? 0)} |`);
-	return { web: [r.lead, '| Branch | Agent | Result | Cost |', ...rows, r.closing].join('\n'), brief: r.brief };
+	return { web: [r.lead, '', '| Branch | Agent | Result | Cost |', '| --- | --- | --- | ---: |', ...rows, '', r.closing].join('\n'), brief: r.brief };
 }
 
 // Follows new messages only while the reader is at the bottom, so scrolling
@@ -84,6 +61,8 @@ function useFollow(...deps: unknown[]) {
 
 type Acts = { decide: (d: Decision) => void; select: (id: string) => void };
 
+// The web app's own conversation pieces, played back: the same message,
+// tool call, approval and composer markup as webapp/src/chat/Thread.tsx.
 function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run; views: Map<string, View | undefined>; channel: Channel; acts: Acts; approveRef: RefObject<HTMLButtonElement | null>; sendRef: RefObject<HTMLButtonElement | null> }) {
 	const follow = useFollow(run.t, run.decided);
 	const { t } = run;
@@ -97,57 +76,60 @@ function WebChat({ run, views, channel, acts, approveRef, sendRef }: { run: Run;
 				{t < 0 ? (
 					<div className="d-empty"><Calf size={40} /><h3>What should the calves do?</h3></div>
 				) : (
-					<div className="d-thread">
-						<div className="d-user">
+					<div className="conversation-content flex flex-col">
+						<Message from="user">
 							{channel === 'chat' ? <span className="d-via">via chat app</span> : null}
-							<p className="d-bubble">{goal}</p>
-						</div>
-						<div className="d-assistant">
-							{t < THINK ? <p className="d-thinking">Thinking…</p> : (
-								<details className="d-reasoning"><summary><ChevronIcon /> Thought for 2s</summary><p>Two independent changes, so two agents on two branches. Both need tests before I call them done.</p></details>
-							)}
-							{t >= THINK ? <p className="s-say">On it. I've split this into two tasks:</p> : null}
-							{branches.filter(task => views.get(task.id) && t >= THINK).map(task => {
-								const v = views.get(task.id)!;
-								const kind = v.status === 'review' ? 'done' : v.status === 'failed' || v.status === 'stopped' ? 'failed' : v.status === 'waiting' ? 'waiting' : 'running';
-								return (
-									<div key={task.id} className={`d-tool ${kind} s-task`}>
-										<button type="button" className="s-task-row" onClick={() => acts.select(task.id)} title="Show it in the tree">
-											<span className="d-tool-status">{kind === 'running' ? <span className="spinner" aria-hidden="true" /> : statuses[v.status].icon}</span>
-											<span className="d-tool-title">Start agent</span>
-											<span className="d-tool-detail">{task.label} · {task.title}</span>
-											<span className="sr-only">{statuses[v.status].label}</span>
-											<ChevronIcon />
-										</button>
-										{task === asker && asking ? (
-											<div className="d-approval">
-												<p className="d-approval-q">{task.label} wants to run a command in the sandbox.</p>
-												<pre className="d-preview">{asker.waits!.text}</pre>
-												<div className="d-approval-actions">
-													<button type="button" className="d-btn primary" ref={channel === 'web' ? approveRef : undefined} onClick={() => acts.decide('allow')}>Approve</button>
-													<button type="button" className="d-btn" onClick={() => acts.decide('allow')}>Allow in this conversation</button>
-													<button type="button" className="d-btn" onClick={() => acts.decide('always')}>Always allow</button>
-													<button type="button" className="d-btn ghost" onClick={() => acts.decide('deny')}>Deny</button>
+							<MessageContent className="user-bubble"><p className="user-text">{goal}</p></MessageContent>
+						</Message>
+						<Message from="assistant">
+							<MessageContent className="assistant-content">
+								{t < THINK ? <p className="thinking" role="status">Working…</p> : (
+									<details className="reasoning"><summary><ChevronIcon /> Reasoning</summary><p className="reasoning-content">Two independent changes, so two agents on two branches. Both need tests before I call them done.</p></details>
+								)}
+								{t >= THINK ? <MessageResponse mode="static">On it. I've split this into two tasks:</MessageResponse> : null}
+								{branches.filter(task => views.get(task.id) && t >= THINK).map(task => {
+									const v = views.get(task.id)!;
+									const kind = v.status === 'review' ? 'done' : v.status === 'failed' || v.status === 'stopped' ? 'failed' : v.status === 'waiting' ? 'waiting' : 'running';
+									const waiting = task === asker && asking;
+									return (
+										<details key={task.id} className={`tool-call ${kind}`} open={Boolean(waiting)}>
+											<summary title="Show it in the tree" onClick={e => { e.preventDefault(); acts.select(task.id); }}>
+												<span className="tool-status" title={statuses[v.status].label}>{statuses[v.status].icon}</span>
+												<span className="tool-title">Start agent</span>
+												<span className="tool-detail">{task.label} · {task.title}</span>
+												<span className="sr-only">{statuses[v.status].label}</span>
+												<ChevronIcon />
+											</summary>
+											{waiting ? (
+												<div ref={channel === 'web' ? el => { approveRef.current = el?.querySelector('button') ?? null; } : undefined}>
+													<ApprovalPrompt
+														question={`${task.label} wants to run a command in the sandbox.`}
+														request={asker.waits!.text}
+														busy={false}
+														decide={(approved, _reason, remember) => acts.decide(!approved ? 'deny' : remember === 'always' ? 'always' : 'allow')}
+													/>
 												</div>
-											</div>
-										) : null}
-									</div>
-								);
-							})}
-							{views.get(flop.id)?.status === 'failed' && t >= flop.end + 0.3 ? <p className="s-say">The retry tests caught a declined card being retried. {fixer.label} is fixing it.</p> : null}
-							{t >= end - 3 && t < end ? <p className="d-thinking">Checking the branches with task_diff and task_check…</p> : null}
-							{t >= end ? <div className="d-answer"><Markdown text={answer(run, views).web} /></div> : null}
-						</div>
+											) : null}
+										</details>
+									);
+								})}
+								{views.get(flop.id)?.status === 'failed' && t >= flop.end + 0.3 ? <MessageResponse mode="static">{`The retry tests caught a declined card being retried. ${fixer.label} is fixing it.`}</MessageResponse> : null}
+								{t >= end - 3 && t < end ? <p className="thinking" role="status">Checking the branches with task_diff and task_check…</p> : null}
+								{t >= end ? <MessageResponse mode="static">{answer(run, views).web}</MessageResponse> : null}
+							</MessageContent>
+						</Message>
 					</div>
 				)}
 			</div>
-			<div className="d-composer">
-				<div className={`d-input${composing ? ' typing' : ''}`}>
-					{composing && typed(run) ? <span>{goal.slice(0, typed(run))}<i className="d-caret" /></span> : <span className="d-placeholder">Message Mob, or type / for commands</span>}
-				</div>
-				<div className="d-bar">
-					<span className="d-model">claude-sonnet-5-5 ⌄</span>
-					<button type="button" className="d-send" ref={channel === 'web' ? sendRef : undefined} aria-label="Send" disabled={!composing || !typed(run)} tabIndex={-1}><ArrowUpIcon /></button>
+			<div className="composer-area">
+				<div className="composer">
+					<div className={`d-input${composing ? ' typing' : ''}`}>
+						{composing && typed(run) ? <span>{goal.slice(0, typed(run))}<i className="d-caret" /></span> : <span className="d-placeholder">Message Mob, or type / for commands</span>}
+					</div>
+					<div className="composer-bar">
+						<span className="btn btn-ghost model-button"><BrandIcon brand={modelBrand('claude-sonnet-5-5', '')!} size={14} /><span className="model-label">claude-sonnet-5-5</span><ChevronDownIcon /></span>
+						<Button className="send-button" ref={channel === 'web' ? sendRef : undefined} aria-label="Send" disabled={!composing || !typed(run)} tabIndex={-1}><ArrowUpIcon /></Button>
+					</div>
 				</div>
 			</div>
 		</section>

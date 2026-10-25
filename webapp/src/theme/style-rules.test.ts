@@ -17,7 +17,7 @@ const sheets = ['webapp/src', 'apps/docs/src'].flatMap((dir) =>
 // components; lower a count when you remove one, never raise it.
 const legacyRadii: Record<string, number> = {
 	'webapp/src/chat/styles.css': 31,
-	'webapp/src/landing/demo/demo.css': 17,
+	'webapp/src/landing/demo/demo.css': 11,
 };
 const scale = /^(0|4px|8px|12px|16px|50%|999px|var\(--radius(-code|-card|-dialog|-pill)?\))$/;
 
