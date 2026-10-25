@@ -320,7 +320,7 @@ The shared rendering configuration is in
   wrote; while the reply is written, its model only. The TUI writes the same
   under each finished reply in one line, with its time. Clicking it in the web opens what the
   reply used (input, output, speed, cache, reasoning, requests, time, cost) and
-  where its time went: first token, writing, tools and the rest. A coding
+  where its time went: writing, tools and the rest, with the wait for its first words beside them. A coding
   agent's reply shows its time instead of a speed. Replies saved before
   schema 13 have no stats. Exports carry stats and first-token times; older
   exports without them still import.

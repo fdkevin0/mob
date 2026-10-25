@@ -615,10 +615,12 @@
 .conversation-content > .is-assistant + .is-user {
 	margin-top: 12px;
 }
-/* The browser skips layout and paint for messages scrolled out of view, so long conversations stay smooth. */
+/* The browser skips layout and paint for messages scrolled out of view, so long conversations stay smooth.
+   A reply's footer reaches a little below the message; the clip leaves room for it. */
 .conversation-content > .group:not(:nth-last-child(-n + 3)) {
 	content-visibility: auto;
 	contain-intrinsic-size: auto 120px;
+	overflow-clip-margin: 16px;
 }
 .conversation-content [data-streamdown] {
 	line-height: 1.75;
@@ -788,14 +790,11 @@ button.reply-meta:hover,
 }
 /* Where a reply's time went: categorical slots from the theme. */
 .reply-details {
-	--reply-first: var(--muted-foreground);
 	--reply-writing: var(--lime);
 	--reply-tools: var(--cyan);
 	--reply-other: var(--line-strong);
-	position: absolute;
-	right: 0;
-	bottom: calc(100% + 8px);
-	z-index: 10;
+	position: fixed;
+	z-index: 50;
 	width: min(340px, calc(100vw - 32px));
 	padding: 14px;
 	border: 1px solid var(--line-strong);
@@ -855,9 +854,6 @@ button.reply-meta:hover,
 .reply-time-bar span {
 	min-width: 2px;
 	border-radius: 4px;
-}
-.reply-time-first {
-	background: var(--reply-first);
 }
 .reply-time-writing {
 	background: var(--reply-writing);
@@ -1372,10 +1368,8 @@ button.reply-meta:hover,
 	--context-summary: #9085e9;
 	--context-messages: #3987e5;
 	--context-outputs: #199e70;
-	position: absolute;
-	right: 0;
-	bottom: calc(100% + 8px);
-	z-index: 10;
+	position: fixed;
+	z-index: 50;
 	width: min(340px, calc(100vw - 32px));
 	padding: 14px 14px 10px;
 	border: 1px solid var(--line-strong);

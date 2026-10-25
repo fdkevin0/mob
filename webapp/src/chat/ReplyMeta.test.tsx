@@ -31,8 +31,20 @@ it('says under a reply which model wrote it, its tokens and speed, and opens the
 	fireEvent.click(button);
 	const details = screen.getByRole('dialog', { name: 'claude-sonnet-4-5' });
 	expect(details.textContent).toContain('anthropic · reasoning medium');
-	for (const text of ['Input12k', 'Output1.8k', 'Speed52 tok/s', 'First token 0.9s', 'Writing 7.4s', 'Tools 4.2s', 'Other 1.7s', 'Cache read9.6k (77%)', 'Reasoning tokens420', 'Model requests3', 'Total time14s', 'Cost$0.031'])
+	for (const text of ['Input12k', 'Output1.8k', 'Speed52 tok/s', 'Writing 7.4s', 'Tools 4.2s', 'Other 2.6s', 'First token0.9s', 'Cache read9.6k (77%)', 'Reasoning tokens420', 'Model requests3', 'Total time14s', 'Cost$0.031'])
 		expect(details.textContent).toContain(text);
+	// The details open beside the conversation, not inside the message, which may be clipped while off screen.
+	expect(details.closest('.message, .conversation-content')).toBeNull();
+});
+
+it('keeps the wait for the first words out of the time bar, since summaries and tools may run within it', () => {
+	// A 10s reply: a summary written for 5s before the first visible words at 8s, then 2s of writing.
+	const overlapping = { startedAt: 0, finishedAt: 10_000, firstTokenMs: 8_000, generationMs: 7_000, timedOutput: 140, requests: 2 };
+	render(<ReplyMeta message={reply({ model: 'openai/gpt-5', usage: { inputTokens: 900, outputTokens: 140 }, stats: overlapping })} live={false} />);
+	fireEvent.click(screen.getByRole('button'));
+	const legend = [...screen.getByRole('dialog').querySelectorAll('.reply-time-legend li')].map((li) => li.textContent);
+	expect(legend).toEqual(['Writing 7.0s', 'Other 3.0s']);
+	expect(screen.getByRole('dialog').textContent).toContain('First token8.0s');
 });
 
 it('names the model alone while the reply is written, and an agent reply shows its time', () => {
