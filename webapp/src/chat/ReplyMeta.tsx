@@ -66,7 +66,7 @@ export function ReplyMeta({ message, live }: { message: ChatMessage; live: boole
 				</DialogTrigger>
 				{open && (
 					<DialogPortal>
-						<DialogContent ref={panel} className="reply-details" onOpenAutoFocus={(e) => e.preventDefault()}>
+						<DialogContent ref={panel} className="reply-details">
 							<ReplyDetails model={model} usage={usage} stats={stats} perSecond={perSecond} />
 						</DialogContent>
 					</DialogPortal>

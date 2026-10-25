@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { ReplyMeta, modelName, speed } from './ReplyMeta';
 import type { ChatMessage } from './api';
@@ -35,6 +35,18 @@ it('says under a reply which model wrote it, its tokens and speed, and opens the
 		expect(details.textContent).toContain(text);
 	// The details open beside the conversation, not inside the message, which may be clipped while off screen.
 	expect(details.closest('.message, .conversation-content')).toBeNull();
+});
+
+it('moves focus into the details when they open, and back to the footer on Escape', async () => {
+	render(<ReplyMeta message={reply({ model: 'openai/gpt-5', usage, stats })} live={false} />);
+	const button = screen.getByRole('button');
+	button.focus();
+	fireEvent.click(button);
+	const details = screen.getByRole('dialog');
+	expect(details.contains(document.activeElement)).toBe(true);
+	fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+	expect(screen.queryByRole('dialog')).toBeNull();
+	await waitFor(() => expect(document.activeElement).toBe(button));
 });
 
 it('keeps the wait for the first words out of the time bar, since summaries and tools may run within it', () => {
