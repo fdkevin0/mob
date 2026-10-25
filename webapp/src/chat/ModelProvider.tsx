@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import type { OpenRouterSignIn, ProviderForm } from './browser/providers';
 import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from './browser/openrouter';
+import { chromeModelSupported, prepareChromeModel } from './browser/chrome';
 
 // The presets a browser can call: vendors that need a key. OpenRouter leads,
 // since its sign-in is the browser's way to free models. The model list
@@ -14,6 +15,7 @@ type Service = { id: string; name: string; noKey?: boolean };
 const browserServices: Service[] = [
 	{ id: 'openrouter', name: 'OpenRouter (free models)' },
 	{ id: 'cloudflare', name: 'Cloudflare Workers AI (your account)' },
+	{ id: 'chrome', name: 'Chrome built-in model (experimental, offline)' },
 	{ id: 'openai', name: 'OpenAI' },
 	{ id: 'anthropic', name: 'Anthropic' },
 	{ id: 'deepseek', name: 'DeepSeek' },
@@ -27,8 +29,8 @@ const local = [
 	{ id: 'ollama', name: 'Ollama (on the runner)', noKey: true },
 	{ id: 'lmstudio', name: 'LM Studio (on the runner)', noKey: true },
 ];
-// Workers AI through the site's proxy needs the site's sign-in, which only the browser runner has.
-const shared = browserServices.filter(s => s.id !== 'cloudflare');
+// Workers AI through the site's proxy needs the site's sign-in, and Chrome's model the page itself, which only the browser runner has.
+const shared = browserServices.filter(s => s.id !== 'cloudflare' && s.id !== 'chrome');
 const runnerServices: Service[] = [...shared.slice(0, -1), ...local, shared[shared.length - 1]];
 
 type Saved = { default: string; providers: { id: string; name?: string; key?: string; chat?: string; anthropic?: string }[] };
@@ -43,6 +45,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
 	const [notice, setNotice] = useState('');
+	const [progress, setProgress] = useState<number>();
 	useEffect(() => {
 		if (!open) return;
 		setError(''); setNotice('');
@@ -55,12 +58,25 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		void submit('/plugins/browser/openrouter', signIn);
 	}, [open, signIn]);
 	const browser = !!connection.browser;
-	const services = browser ? browserServices : runnerServices;
+	const services = browser ? browserServices.filter(s => s.id !== 'chrome' || chromeModelSupported()) : runnerServices;
 	const noKey = services.find(s => s.id === form.preset)?.noKey;
 	async function save(event: FormEvent) {
 		event.preventDefault();
-		if (cloudflare) await submit('/plugins/browser/cloudflare', { model: form.model });
+		if (chrome) await useChrome();
+		else if (cloudflare) await submit('/plugins/browser/cloudflare', { model: form.model });
 		else await submit(browser ? '/plugins/browser/provider' : '/providers', form);
+	}
+	// Chrome downloads its model only after a click, so the download starts here, before the save.
+	async function useChrome() {
+		setBusy(true); setError(''); setNotice('');
+		try {
+			await prepareChromeModel(loaded => setProgress(Math.round(loaded * 100)));
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+			setBusy(false);
+			return;
+		} finally { setProgress(undefined); }
+		await submit('/plugins/browser/chrome', {});
 	}
 	async function submit(path: string, body: object) {
 		setBusy(true); setError(''); setNotice('');
@@ -76,6 +92,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	}
 	const custom = form.preset === '';
 	const cloudflare = browser && form.preset === 'cloudflare';
+	const chrome = browser && form.preset === 'chrome';
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="connect-dialog">
@@ -107,15 +124,19 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 							<Button type="button" variant="outline" className="provider-signin" onClick={() => void startOpenRouter().catch(e => setError(String(e)))}>Sign in with OpenRouter</Button>
 							<p>OpenRouter creates a key for Mob in your account, which you can limit or revoke there. Mob starts on one of its free models, which have daily limits; pick a paid one in the model picker. Or paste a key:</p>
 						</>}
-						{cloudflare ? (
+						{chrome ? (
+							<p>Chrome runs Gemini Nano on this device: free, private, and offline once downloaded. The first use downloads it once, about 4 GB, and needs Chrome 148 or later on a desktop. It is a small model that reads and writes English, Spanish and Japanese best, and it can only reply: it cannot use tools or run tasks.</p>
+						) : cloudflare ? (
 							<p>Mob uses Workers AI of the Cloudflare account you signed in with, or connected on your <a href="/account">account page</a>. Mob keeps the sign-in on its server and never shows the token to this page. Workers AI includes a daily free allowance.</p>
 						) : <>
 							<Label htmlFor="provider-key">{noKey ? 'API key (optional)' : 'API key'}</Label>
 							<Input id="provider-key" type="password" autoComplete="off" value={form.key} onChange={e => setForm({ ...form, key: e.target.value })} required={!noKey} />
 						</>}
-						<Label htmlFor="provider-model">Model (optional)</Label>
-						<Input id="provider-model" placeholder="The first model the provider lists" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} />
-						<Button disabled={busy}>{busy ? 'Checking…' : cloudflare ? 'Use my Cloudflare account' : 'Save'}</Button>
+						{!chrome && <>
+							<Label htmlFor="provider-model">Model (optional)</Label>
+							<Input id="provider-model" placeholder="The first model the provider lists" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} />
+						</>}
+						<Button disabled={busy}>{progress !== undefined ? `Downloading the model… ${progress}%` : busy ? 'Checking…' : chrome ? 'Use Chrome’s model' : cloudflare ? 'Use my Cloudflare account' : 'Save'}</Button>
 					</fieldset>
 				</form>
 				{notice && <p role="status">{notice}</p>}

@@ -4,6 +4,7 @@
 import init from '@sqlite.org/sqlite-wasm';
 import { ProviderRegistry, Server, Store, type ProvidersFile, type ProvidersStorage } from '@mob/core';
 import { openWasm } from '@mob/core/sqlite/wasm';
+import { chromeBridge } from './chrome';
 import type { FromWorker, ToWorker } from './protocol';
 import { browserProviders, providerPlugin } from './providers';
 
@@ -12,6 +13,7 @@ declare const self: { postMessage(message: FromWorker, transfer: Transferable[])
 
 const post = (message: FromWorker, transfer: Transferable[] = []) => self.postMessage(message, transfer);
 const providersKey = 'providers.json';
+const chrome = chromeBridge(message => post(message));
 
 // providers.json is a setting of the browser's own database.
 function storedProviders(store: Store): ProvidersStorage {
@@ -49,7 +51,8 @@ async function start(token: string) {
 		persistent = false;
 	}
 	const store = new Store(openWasm(db), 'web').open();
-	const providers = new ProviderRegistry(storedProviders(store));
+	// Chrome's built-in model answers through the page; every other provider is fetched as usual.
+	const providers = new ProviderRegistry(storedProviders(store), undefined, false, chrome.fetcher((input, init) => fetch(input, init)));
 	const server = new Server({ store, providers, token, version: 'web' }, [providerPlugin(providers, undefined, location.origin)]);
 	return { server, persistent };
 }
@@ -97,6 +100,11 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
 			return;
 		case 'abort':
 			running.get(m.id)?.abort();
+			return;
+		case 'chrome-text':
+		case 'chrome-end':
+		case 'chrome-error':
+			chrome.receive(m);
 			return;
 	}
 };

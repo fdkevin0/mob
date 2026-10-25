@@ -1,6 +1,7 @@
 // The page side of the browser runner: one worker per tab, reached as a fetch.
 // The client sees an ordinary Mob service at browserURL.
 import type { Connection } from '../api';
+import { promptChrome } from './chrome';
 import type { FromWorker, ToWorker } from './protocol';
 
 type Pending = { head: (r: Response) => void; fail: (e: Error) => void; stream?: ReadableStreamDefaultController<Uint8Array> };
@@ -11,12 +12,22 @@ let next = 0;
 function start(token: string) {
 	const worker = new Worker(new URL('./runner.worker.ts', import.meta.url), { type: 'module', name: 'mob-runner' });
 	const pending = new Map<number, Pending>();
+	const prompts = new Map<number, AbortController>();
 	const ready = new Promise<{ persistent: boolean }>((resolve, reject) => {
 		worker.addEventListener('error', e => reject(new Error(e.message || 'The browser runner could not start.')), { once: true });
 		worker.addEventListener('message', (event: MessageEvent<FromWorker>) => {
 			const m = event.data;
 			if (m.type === 'ready') { resolve({ persistent: m.persistent }); return; }
 			if (m.type === 'failed') { reject(new Error(m.error)); return; }
+			if (m.type === 'chrome') {
+				const abort = new AbortController();
+				prompts.set(m.id, abort);
+				promptChrome(m.messages, abort.signal, text => post({ type: 'chrome-text', id: m.id, text }))
+					.then(() => post({ type: 'chrome-end', id: m.id }), e => post({ type: 'chrome-error', id: m.id, error: e instanceof Error ? e.message : String(e), name: e instanceof Error ? e.name : undefined }))
+					.finally(() => prompts.delete(m.id));
+				return;
+			}
+			if (m.type === 'chrome-abort') { prompts.get(m.id)?.abort(); return; }
 			const p = pending.get(m.id);
 			if (!p) return;
 			switch (m.type) {

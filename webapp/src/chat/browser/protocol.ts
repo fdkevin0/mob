@@ -4,7 +4,14 @@
 export type ToWorker =
 	| { type: 'init'; token: string }
 	| { type: 'request'; id: number; url: string; method: string; headers: [string, string][]; body: ArrayBuffer | null }
-	| { type: 'abort'; id: number };
+	| { type: 'abort'; id: number }
+	// The page's answers to a prompt of Chrome's built-in model.
+	| { type: 'chrome-text'; id: number; text: string }
+	| { type: 'chrome-end'; id: number }
+	| { type: 'chrome-error'; id: number; error: string; name?: string };
+
+/** ChromeMessage is a turn of the conversation the worker asks the page's built-in model to answer. */
+export type ChromeMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 export type FromWorker =
 	| { type: 'ready'; persistent: boolean }
@@ -12,4 +19,7 @@ export type FromWorker =
 	| { type: 'head'; id: number; status: number; headers: [string, string][] }
 	| { type: 'chunk'; id: number; chunk: Uint8Array }
 	| { type: 'end'; id: number }
-	| { type: 'error'; id: number; error: string };
+	| { type: 'error'; id: number; error: string }
+	// Prompts of Chrome's built-in model, which only the page can call.
+	| { type: 'chrome'; id: number; messages: ChromeMessage[] }
+	| { type: 'chrome-abort'; id: number };
