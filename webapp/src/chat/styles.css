@@ -615,10 +615,12 @@
 .conversation-content > .is-assistant + .is-user {
 	margin-top: 12px;
 }
-/* The browser skips layout and paint for messages scrolled out of view, so long conversations stay smooth. */
+/* The browser skips layout and paint for messages scrolled out of view, so long conversations stay smooth.
+   A reply's footer reaches a little below the message; the clip leaves room for it. */
 .conversation-content > .group:not(:nth-last-child(-n + 3)) {
 	content-visibility: auto;
 	contain-intrinsic-size: auto 120px;
+	overflow-clip-margin: 16px;
 }
 .conversation-content [data-streamdown] {
 	line-height: 1.75;
@@ -738,6 +740,186 @@
 	width: 28px;
 	padding: 0;
 	border-radius: 8px;
+}
+/* Under a reply: its actions, which fade in, and what wrote it and what it took, which stays. */
+.message-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 8px;
+	min-height: 28px;
+	margin: -10px 0 -12px;
+}
+.message-foot .message-actions {
+	margin: 0;
+}
+.reply-meta-anchor {
+	position: relative;
+	min-width: 0;
+	max-width: 100%;
+	margin-left: auto;
+}
+.reply-meta {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 2px 6px;
+	max-width: 100%;
+	min-height: 28px;
+	padding: 4px 8px;
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--muted-foreground);
+	font: 12px/20px var(--sans);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	cursor: pointer;
+}
+/* On a narrow screen the label wraps between its parts, and a model ID too long for a line is cut short. */
+.reply-meta > span:not(.brand-icon) {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.reply-meta.quiet {
+	margin-left: auto;
+	cursor: default;
+}
+.reply-meta-dot {
+	margin-left: 6px;
+	opacity: 0.5;
+}
+button.reply-meta:hover,
+.reply-meta[data-state='open'] {
+	background: var(--surface-raised);
+	color: var(--text-dim);
+}
+.reply-meta:focus-visible {
+	outline: 2px solid var(--line-hover);
+	outline-offset: 1px;
+}
+/* Where a reply's time went: categorical slots from the theme. */
+.reply-details {
+	--reply-writing: var(--lime);
+	--reply-tools: var(--cyan);
+	--reply-other: var(--line-strong);
+	position: fixed;
+	z-index: 50;
+	width: min(340px, calc(100vw - 32px));
+	padding: 14px;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--radius-card);
+	background: var(--surface);
+	box-shadow: 0 16px 48px rgb(0 0 0 / calc(0.45 * var(--shadow)));
+	font-size: 13px;
+	outline: none;
+}
+.reply-details-top {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+.reply-details-title {
+	margin: 0;
+	font-size: 13.5px;
+	font-weight: 600;
+}
+.reply-details-sub {
+	margin: 0;
+	color: var(--muted-foreground);
+	font-size: 12px;
+}
+.reply-details-time {
+	margin-left: auto;
+	color: var(--muted-foreground);
+	font-size: 12px;
+}
+.reply-tiles {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 6px;
+	margin: 0 0 12px;
+}
+.reply-tiles div {
+	padding: 8px 10px;
+	border-radius: var(--radius);
+	background: var(--surface-raised);
+}
+.reply-tiles dt {
+	color: var(--muted-foreground);
+	font-size: 11.5px;
+}
+.reply-tiles dd {
+	margin: 2px 0 0;
+	font-size: 15px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+.reply-time-bar {
+	display: flex;
+	gap: 2px;
+	height: 8px;
+}
+.reply-time-bar span {
+	min-width: 2px;
+	border-radius: 4px;
+}
+.reply-time-writing {
+	background: var(--reply-writing);
+}
+.reply-time-tools {
+	background: var(--reply-tools);
+}
+.reply-time-other {
+	background: var(--reply-other);
+}
+.reply-time-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 14px;
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+	color: var(--text-dim);
+	font-size: 12px;
+}
+.reply-time-legend li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.reply-swatch {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+}
+.reply-time-value {
+	color: var(--muted-foreground);
+	font-variant-numeric: tabular-nums;
+}
+.reply-rows {
+	display: grid;
+	gap: 5px;
+	margin: 12px 0 0;
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+}
+.reply-rows div {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+.reply-rows dt {
+	color: var(--muted-foreground);
+}
+.reply-rows dd {
+	margin: 0;
+	color: var(--text-dim);
+	font-variant-numeric: tabular-nums;
 }
 /* Editing an owner's message replaces its bubble with a box as wide as the bubble may grow. */
 .message-editor {
@@ -1401,6 +1583,16 @@
 	.context-foot {
 		margin: 10px -18px 0;
 		padding: 9px 18px 0;
+	}	.reply-details {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		width: auto;
+		padding: 18px 18px max(18px, env(safe-area-inset-bottom));
+		border-radius: 16px 16px 0 0;
+		border-width: 1px 0 0;
+		box-shadow: 0 -16px 48px rgb(0 0 0 / calc(0.45 * var(--shadow)));
 	}
 }
 .command-result {

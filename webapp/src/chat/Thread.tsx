@@ -18,6 +18,7 @@ import { Dialog, DialogTrigger } from '../components/ui/dialog';
 import { api, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
+import { ReplyMeta } from './ReplyMeta';
 import { BrandIcon, modelBrand } from './brandIcons';
 import { ContextMeter, useContextUsage } from './ContextMeter';
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, RenameIcon, RetryIcon, SpinnerIcon, StopIcon } from './icons';
@@ -503,7 +504,21 @@ const MessageView = memo(function MessageView({
 					)
 				)}
 			</MessageContent>
-			{!animating && (
+			{!user && !message.metadata?.command && (message.metadata?.model || message.metadata?.usage) ? (
+				<div className="message-foot">
+					{!animating && (
+						<div className="message-actions">
+							<CopyButton message={message} what="reply" />
+							{asked && !busy && (
+								<Button type="button" variant="ghost" aria-label="Retry" title="Ask for this reply again" onClick={() => void resend(asked.id, textOf(asked))}>
+									<RetryIcon />
+								</Button>
+							)}
+						</div>
+					)}
+					<ReplyMeta message={message} live={animating} />
+				</div>
+			) : !animating && (
 				<div className="message-actions">
 					<CopyButton message={message} what={user ? 'message' : 'reply'} />
 					{user && !busy && !message.metadata?.command && (

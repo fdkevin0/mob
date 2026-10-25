@@ -4,7 +4,7 @@ import { encryptedFetch } from './remote';
 export type Connection = LocalConnection & { runner?: { id: string; key: string }; browser?: boolean };
 
 export { timeoutFor } from '@mob/client';
-export type { Conversation, ChatMessage, Snapshot } from '@mob/client';
+export type { Conversation, ChatMessage, ReplyStats, ReplyUsage, Snapshot } from '@mob/client';
 export type { Config } from './contracts';
 
 declare global {
