@@ -1,0 +1,98 @@
+---
+// The site's three-way theme picker (webapp/src/theme/ThemePicker.tsx) in
+// place of Starlight's select. It reads and writes the same localStorage key
+// ('starlight-theme': 'light', 'dark' or '' for the system), so a choice made
+// here holds on the landing page and in the app too. Starlight's ThemeProvider
+// has already set data-theme before this renders.
+const name = `theme-${Math.random().toString(36).slice(2, 8)}`;
+const choices = [
+	{ value: 'auto', label: 'System', icon: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>' },
+	{ value: 'light', label: 'Light', icon: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>' },
+	{ value: 'dark', label: 'Dark', icon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>' },
+];
+---
+
+<mob-theme-picker>
+	<div role="radiogroup" aria-label="Theme" class="theme-picker">
+		{choices.map((choice) => (
+			<label title={choice.label}>
+				<input type="radio" name={name} value={choice.value} aria-label={choice.label} />
+				<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={choice.icon} />
+			</label>
+		))}
+	</div>
+</mob-theme-picker>
+
+<script>
+	type Theme = 'auto' | 'dark' | 'light';
+	const key = 'starlight-theme';
+	const parse = (value: unknown): Theme => (value === 'dark' || value === 'light' ? value : 'auto');
+	const load = (): Theme => {
+		try { return parse(localStorage.getItem(key)); } catch { return 'auto'; }
+	};
+	const scheme = () => (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+
+	// Every picker on the page (header and mobile menu) shows the same choice.
+	function show(theme: Theme) {
+		document.querySelectorAll<HTMLInputElement>('mob-theme-picker input').forEach((input) => {
+			input.checked = input.value === theme;
+		});
+	}
+	function apply(theme: Theme) {
+		document.documentElement.dataset.theme = theme === 'auto' ? scheme() : theme;
+		try { localStorage.setItem(key, theme === 'auto' ? '' : theme); } catch {}
+		show(theme);
+	}
+
+	matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+		if (load() === 'auto') apply('auto');
+	});
+
+	class MobThemePicker extends HTMLElement {
+		connectedCallback() {
+			show(load());
+			this.addEventListener('change', (event) => {
+				if (event.target instanceof HTMLInputElement) apply(parse(event.target.value));
+			});
+		}
+	}
+	customElements.define('mob-theme-picker', MobThemePicker);
+</script>
+
+<style>
+	.theme-picker {
+		display: inline-flex;
+		gap: 2px;
+		padding: 2px;
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 10px;
+	}
+	label {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 24px;
+		border-radius: 8px;
+		color: var(--sl-color-gray-3);
+		cursor: pointer;
+	}
+	input {
+		position: absolute;
+		inset: 0;
+		margin: 0;
+		opacity: 0;
+		cursor: pointer;
+	}
+	label:hover {
+		color: var(--sl-color-white);
+	}
+	label:has(:checked) {
+		background: var(--sl-color-gray-6);
+		color: var(--sl-color-white);
+	}
+	label:has(:focus-visible) {
+		outline: 2px solid var(--sl-color-accent);
+		outline-offset: 1px;
+	}
+</style>
