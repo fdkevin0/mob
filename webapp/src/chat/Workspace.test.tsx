@@ -112,7 +112,7 @@ it('shows every approval parameter before the decision buttons', async () => {
 	expect(pre.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-it('disables the model trigger while another client is running a turn', async () => {
+it('keeps the model trigger open while another client is running a turn, for the next reply', async () => {
 	vi.stubGlobal('fetch', vi.fn(async (url: string) => {
 		if (url.endsWith('/events')) return new Response(null, { status: 404 });
 		if (url.endsWith('/conversations')) return Response.json(list);
@@ -123,6 +123,6 @@ it('disables the model trigger while another client is running a turn', async ()
 	}));
 	render(<Workspace connection={connection} disconnect={() => {}} />);
 	const button = await screen.findByRole('button', { name: 'Demo mode · no model calls' }) as HTMLButtonElement;
-	expect(button.disabled).toBe(true);
-	expect(button.title).toContain('Wait for the current turn');
+	expect(button.disabled).toBe(false);
+	expect(button.title).toContain('applies from the next reply');
 });

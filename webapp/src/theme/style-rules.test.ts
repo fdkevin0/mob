@@ -16,7 +16,7 @@ const sheets = ['webapp/src', 'apps/docs/src'].flatMap((dir) =>
 // them move onto the scale as the demo starts rendering the real chat
 // components; lower a count when you remove one, never raise it.
 const legacyRadii: Record<string, number> = {
-	'webapp/src/chat/styles.css': 31,
+	'webapp/src/chat/styles.css': 28,
 	'webapp/src/landing/demo/demo.css': 7,
 };
 const scale = /^(0|4px|8px|12px|16px|50%|999px|var\(--radius(-code|-card|-dialog|-pill)?\))$/;

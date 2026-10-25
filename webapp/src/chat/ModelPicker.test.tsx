@@ -1,10 +1,11 @@
 import { Dialog, DialogTrigger } from '../components/ui/dialog';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ModelPicker, families } from './ModelPicker';
+import { ModelPicker, families, recentModels, refOf, withoutEffort } from './ModelPicker';
 
 afterEach(() => {
 	cleanup();
+	localStorage.clear();
 	vi.unstubAllGlobals();
 });
 
@@ -31,21 +32,32 @@ it('offers every provider, filters by query and reports the chosen model', async
 	const picked = vi.fn();
 	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} defaultModel="opencode/mimo-v2.6-flash-free" onPick={picked} /></Dialog>);
 	await screen.findByText('DeepSeek Chat');
-	expect(screen.getByText('deepseek/deepseek-reasoner')).toBeDefined();
-	expect(screen.getByText(/131k context/)).toBeDefined();
+	expect(screen.getByRole('button', { name: 'DeepSeek Chat' }).textContent).toContain('131k');
+	expect(screen.getByRole('button', { name: 'opencode/mimo-v2.6-flash-free' })).toBeDefined();
 	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'reasoner' } });
 	expect(screen.queryByText('DeepSeek Chat')).toBeNull();
 	fireEvent.click(screen.getByText('DeepSeek Reasoner'));
 	expect(picked).toHaveBeenCalledWith('deepseek/deepseek-reasoner');
+	expect(recentModels()).toEqual(['deepseek/deepseek-reasoner']);
+});
+
+it('names a provider’s model as provider/model, whether or not the provider lists the prefix', () => {
+	expect(refOf('openai', { id: 'gpt-5', tools: true })).toBe('openai/gpt-5');
+	expect(refOf('deepseek', { id: 'deepseek/deepseek-chat', tools: true })).toBe('deepseek/deepseek-chat');
+	expect(withoutEffort('openai/o3:high')).toBe('openai/o3');
+	expect(withoutEffort('openrouter/meta/llama:free')).toBe('openrouter/meta/llama:free');
 });
 
 it('offers the default and marks the current model', async () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json(models)));
 	const picked = vi.fn();
 	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} current="deepseek/deepseek-chat" defaultModel="opencode/mimo-v2.6-flash-free" onPick={picked} /></Dialog>);
-	await screen.findByText('DeepSeek Chat');
-	const current = screen.getByText('DeepSeek Chat').closest('button');
-	expect(current?.getAttribute('aria-current')).toBe('true');
+	const current = await screen.findByRole('button', { name: 'DeepSeek Chat' });
+	expect(current.getAttribute('aria-current')).toBe('true');
+	// The card beside the list tells about the current model until another is pointed at.
+	expect(screen.getByRole('complementary', { name: 'About DeepSeek Chat' }).textContent).toContain('131,072');
+	fireEvent.mouseEnter(screen.getByRole('button', { name: 'DeepSeek Reasoner' }));
+	expect(screen.getByRole('complementary', { name: 'About DeepSeek Reasoner' }).textContent).toContain('deepseek/deepseek-reasoner');
 	fireEvent.click(screen.getByText(/Follow the default/));
 	expect(picked).toHaveBeenCalledWith(undefined);
 });
@@ -62,14 +74,14 @@ it('marks free models and shows only them when asked', async () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json(withFree)));
 	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
 	await screen.findByText('DeepSeek Chat');
-	expect(screen.getAllByText('Free')).toHaveLength(2);
-	fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
-	const filter = screen.getByRole('checkbox', { name: 'Free only' });
+	expect(document.querySelectorAll('.model-free')).toHaveLength(2);
+	const filter = screen.getByRole('button', { name: 'Free' });
 	fireEvent.click(filter);
-	expect((filter as HTMLInputElement).checked).toBe(true);
+	expect(filter.getAttribute('aria-pressed')).toBe('true');
 	expect(screen.queryByText('DeepSeek Chat')).toBeNull();
 	expect(screen.queryByText('openai/gpt-x')).toBeNull();
-	expect(screen.getByText('meta/llama:free', { selector: '.model-id' })).toBeDefined();
+	expect(screen.getByRole('button', { name: 'meta/llama:free' })).toBeDefined();
+	expect(screen.queryByText(/Follow the default/)).toBeNull();
 	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'gpt' } });
 	expect(screen.getByText('No free models match “gpt”.')).toBeDefined();
 });
@@ -82,7 +94,6 @@ it('groups a provider’s models by vendor prefix and narrows to one provider', 
 	const anthropic = screen.getByText('anthropic').closest('details')!;
 	expect(anthropic.open).toBe(false);
 	expect(screen.getByText('meta').closest('details')!.open).toBe(true);
-	fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
 	fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openrouter' } });
 	expect(screen.queryByText('DeepSeek Chat')).toBeNull();
 	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'm1' } });
@@ -100,24 +111,45 @@ it('keeps provider failures visible through search and free filters', async () =
 	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
 	await screen.findByRole('alert');
 	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'missing' } });
-	fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
-	fireEvent.click(screen.getByLabelText('Free only'));
+	fireEvent.click(screen.getByRole('button', { name: 'Free' }));
 	expect(screen.getByRole('alert').textContent).toBe('Cannot load models');
 	expect(screen.queryByText(/No .*models match/)).toBeNull();
 });
 
-it('disables choices and explains why when a turn becomes busy with the picker open', async () => {
+it('lists recent choices first and keeps them in this browser only', async () => {
+	localStorage.setItem('mob-recent-models', JSON.stringify(['deepseek/deepseek-reasoner', 'gone/model']));
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json(models)));
+	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
+	const recent = await screen.findByRole('region', { name: 'Recent' });
+	expect([...recent.querySelectorAll('.model-choice')].map((b) => b.getAttribute('aria-label'))).toEqual(['DeepSeek Reasoner']);
+	fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'deep' } });
+	expect(screen.queryByRole('region', { name: 'Recent' })).toBeNull();
+});
+
+it('chooses the current model’s reasoning level and makes it the default', async () => {
+	const withEfforts = [{ provider: 'openai', name: 'OpenAI', models: [{ id: 'o3', name: 'o3', tools: true, reasoning: true, efforts: ['low', 'high'] }, { id: 'gpt-5', tools: true }] }];
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json(withEfforts)));
 	const picked = vi.fn();
-	const { rerender } = render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} onPick={picked} /></Dialog>);
-	await screen.findByText('DeepSeek Chat');
-	rerender(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} onPick={picked} disabled /></Dialog>);
-	expect(screen.getByRole('status').textContent).toContain('Wait for the current turn');
-	for (const button of document.querySelectorAll<HTMLButtonElement>('.model-choice')) {
-		expect(button.disabled).toBe(true);
-		fireEvent.click(button);
-	}
-	expect(picked).not.toHaveBeenCalled();
+	const setDefault = vi.fn();
+	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} current="openai/o3:low" defaultModel="openai/gpt-5" onPick={picked} setDefault={setDefault} /></Dialog>);
+	const levels = await screen.findByRole('group', { name: 'Reasoning' });
+	expect(screen.getByRole('button', { name: 'o3' }).getAttribute('aria-current')).toBe('true');
+	expect(screen.getByRole('button', { name: 'low' }).getAttribute('aria-pressed')).toBe('true');
+	fireEvent.click(screen.getByRole('button', { name: 'high' }));
+	expect(picked).toHaveBeenLastCalledWith('openai/o3:high');
+	fireEvent.click(levels.querySelector('button')!);
+	expect(picked).toHaveBeenLastCalledWith('openai/o3');
+	expect(recentModels()).toEqual(['openai/o3']);
+	fireEvent.click(screen.getByRole('button', { name: 'Make o3 the default' }));
+	expect(setDefault).toHaveBeenCalledWith('openai/o3:low');
+});
+
+it('says which model is the default when the current one already is', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json(models)));
+	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} current="deepseek/deepseek-chat" defaultModel="deepseek/deepseek-chat" onPick={() => {}} setDefault={() => {}} /></Dialog>);
+	expect(await screen.findByText('Default: DeepSeek Chat')).toBeDefined();
+	expect(screen.queryByRole('button', { name: /the default$/ })).toBeNull();
+	expect(screen.queryByRole('group', { name: 'Reasoning' })).toBeNull();
 });
 
 it('dismisses without blocking the composer and never submits it while filtering', async () => {
@@ -140,7 +172,6 @@ it('dismisses without blocking the composer and never submits it while filtering
 	for (const button of screen.getByRole('dialog').querySelectorAll('button')) {
 		expect(button.type).toBe('button');
 	}
-	fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
 	fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'deepseek' } });
 	expect(fireEvent.keyDown(screen.getByLabelText('Search models'), { key: 'Enter' })).toBe(false);
 	expect(submitted).not.toHaveBeenCalled();
@@ -176,18 +207,6 @@ it('navigates choices with arrows and selects a search result with Enter, except
 	picked.mockClear();
 	fireEvent.keyDown(search, { key: 'Enter' });
 	expect(picked).not.toHaveBeenCalled();
-});
-
-it('keeps model details available through an accessible disclosure', async () => {
-	vi.stubGlobal('fetch', vi.fn(async () => Response.json(models)));
-	render(<Dialog modal={false} defaultOpen><ModelPicker connection={connection} onPick={() => {}} /></Dialog>);
-	await screen.findByText('DeepSeek Chat');
-	const summary = screen.getByLabelText('Details for DeepSeek Chat');
-	const details = summary.closest('details')!;
-	expect(details.open).toBe(false);
-	fireEvent.click(summary);
-	expect(details.open).toBe(true);
-	expect(details.textContent).toContain('131k context');
 });
 
 it('selects the first expanded search result and does nothing when all result groups are collapsed', async () => {
