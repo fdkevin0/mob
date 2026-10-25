@@ -43,23 +43,38 @@ In any conversation, in every client and channel:
   level.
 - `/model default NAME` sets the default for conversations without their own.
 
-In the Web UI, choosing the model name below the message input opens a compact,
-searchable picker above the button, without a backdrop or blocking the conversation.
-Search stays fixed above the scrolling content. The filter button reveals
-provider and free-only filters, which scroll with the model rows so short windows
-can still reach the results; each model’s details control reveals its
-full ID and capabilities. Arrow keys move between visible choices and Enter
-selects one; Enter in a nonempty search selects its first result in an expanded group,
-or does nothing if all result groups are collapsed. Clicking outside or pressing
-Escape closes it; choosing a model also closes it. It lists every enabled
-provider's models with what each can do, marks the current one, and offers
-**Follow the default** for conversations that should not pin a model. Choosing
-a model saves the conversation's model setting through
-`POST /api/conversations/{id}/model` (`{model}`, empty for the default), the
-same change `/model` makes; it sends no chat and keeps the message draft. If
-the choice is refused, the picker stays open and the error shows. Model choices are disabled
-while a turn or command is busy. A provider whose model list fails stays visible
-with its error, including when search or the free-only filter is active.
+In the Web UI, choosing the model name below the message input opens a
+searchable picker above the button, without a backdrop or blocking the
+conversation; on a phone it opens as a sheet from the bottom of the screen. The
+button shows the model's name and, when one is chosen, its reasoning level.
+
+- Search and the **Reasoning**, **Vision**, **Tools** and **Free** chips narrow
+  the list; with more than one provider, a provider menu narrows it to one.
+- Each row shows the model's logo, name, what it can do and its context window,
+  and marks the current model. Rows are grouped by provider, and a long
+  provider list such as OpenRouter folds by vendor.
+- **Follow the default** (with the default model's name) and **Recent**, the
+  last few models chosen in this browser, come first when nothing is filtered.
+  Recent choices are kept in this browser only.
+- On a wide window, a card beside the list tells about the model under the
+  pointer or focus, or else the current one: its full ID, context, maximum
+  output, reasoning levels, input kinds, tools and price.
+- When the current model takes reasoning levels, a **Reasoning** control under
+  the list picks one (`provider/model:level`) or the model's default.
+- The footer offers **Make … the default** (the same as `/model default NAME`)
+  or names the default, and **Add a model provider**.
+
+Arrow keys move between visible choices and Enter selects one; Enter in a
+nonempty search selects its first result in an expanded group, or does nothing
+if all result groups are collapsed. Clicking outside or pressing Escape closes
+it; choosing a model also closes it. Choosing a model saves the conversation's
+model setting through `POST /api/conversations/{id}/model` (`{model}`, empty
+for the default), the same change `/model` makes; it sends no chat and keeps
+the message draft. If the choice is refused, the picker stays open and the
+error shows. The model can be changed while a reply is being written: that
+reply keeps its model and the choice applies from the next one. A provider
+whose model list fails stays visible with its error, including when search or a
+filter is active.
 
 [magpie](https://github.com/yetone/magpie) serves every provider signed in to it
 from a gateway on this machine. `mob provider add magpie` reads the port from

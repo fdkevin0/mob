@@ -61,11 +61,11 @@ export function useConversation({
 			leave();
 		};
 	}, [conversation]);
+	// run starts a command unless the conversation is busy, and settles once the command has run, whether or not it worked.
 	const run = useCallback(
-		(text: string) => {
+		(text: string): false | Promise<void> => {
 			if (conversation.getSnapshot().busy) return false;
-			void conversation.submit(text, { preserveInput: true });
-			return true;
+			return conversation.submit(text, { preserveInput: true });
 		},
 		[conversation],
 	);

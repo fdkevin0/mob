@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { isToolUIPart } from 'ai';
 import type { Changes } from '@mob/client';
 import { useConversation } from './useConversation';
@@ -18,7 +18,7 @@ import { Dialog, DialogTrigger } from '../components/ui/dialog';
 import { api, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
-import { ReplyMeta } from './ReplyMeta';
+import { ReplyMeta, modelName } from './ReplyMeta';
 import { BrandIcon, modelBrand } from './brandIcons';
 import { ContextMeter, useContextUsage } from './ContextMeter';
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, RenameIcon, RetryIcon, SpinnerIcon, StopIcon } from './icons';
@@ -110,22 +110,27 @@ export function Thread({
 	const context = useContextUsage(connection, id, messages, model, busy);
 	const [choosing, setChoosing] = useState(false);
 	const [defaultModel, setDefaultModel] = useState<string>();
-	useEffect(() => {
-		let live = true;
+	const live = useRef(true);
+	const loadDefault = useCallback(() => {
 		api<{ defaultModel?: string }>(connection, '/config')
 			.then((config) => {
-				if (live) setDefaultModel(config.defaultModel);
+				if (live.current) setDefaultModel(config.defaultModel);
 			})
 			.catch(() => {
 				/* the header stays usable without the default model */
 			});
-		return () => {
-			live = false;
-		};
 	}, [connection]);
+	useEffect(() => {
+		live.current = true;
+		loadDefault();
+		return () => {
+			live.current = false;
+		};
+	}, [loadDefault]);
 	const demo = model?.startsWith('demo/');
 	// A model shows by its name, with its provider in the tooltip and its family's logo.
-	const modelLabel = demo ? 'Demo mode · no model calls' : model ? model.slice(model.indexOf('/') + 1) : 'Connecting…';
+	const effort = model && !demo ? model.slice(model.indexOf('/') + 1).slice(modelName(model).length + 1) : '';
+	const modelLabel = demo ? 'Demo mode · no model calls' : model ? modelName(model) : 'Connecting…';
 	const brand = model && !demo ? modelBrand(model, '') : undefined;
 	const empty = messages.length === 0 && !busy;
 	const textarea = useRef<HTMLTextAreaElement>(null);
@@ -262,11 +267,11 @@ export function Thread({
 										aria-label={model && !demo ? model : undefined}
 										aria-haspopup="dialog"
 										aria-expanded={choosing}
-										disabled={busy}
-										title={busy ? 'Wait for the current turn to finish before switching models' : `${model && !demo ? model + ' · ' : ''}This conversation's model; choose another without typing /model`}
+										title={`${model && !demo ? model + ' · ' : ''}This conversation's model; a new choice applies from the next reply`}
 									>
 										{brand && <BrandIcon brand={brand} size={14} />}
 										<span className="model-label">{modelLabel}</span>
+										{effort && <span className="model-effort-tag">{effort}</span>}
 										<ChevronDownIcon />
 									</Button>
 								</DialogTrigger>
@@ -275,7 +280,15 @@ export function Thread({
 										connection={connection}
 										current={model}
 										defaultModel={defaultModel}
-										disabled={busy}
+										setDefault={
+											busy
+												? undefined
+												: (ref) => {
+														// The default shown is the one the service has once the command has run, saved or not.
+														const done = run(`/model default ${ref}`);
+														if (done) void done.then(loadDefault);
+													}
+										}
 										onPick={(choice) => {
 											void setModel(choice ?? '').then((saved) => {
 												if (saved) setChoosing(false);
@@ -297,7 +310,7 @@ export function Thread({
 								context={context.context}
 								usage={context.usage}
 								busy={busy}
-								compact={() => run('/compact')}
+								compact={() => run('/compact') !== false}
 								openUsage={openUsage}
 							/>
 							{busy ? (

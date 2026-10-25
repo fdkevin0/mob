@@ -243,3 +243,21 @@ export const RetryIcon = () => (
 		<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5" />
 	</Icon>
 );
+// Model capabilities in the model picker: reasoning, images and tools.
+export const BrainIcon = () => (
+	<Icon size={14}>
+		<path d="M9 4a3 3 0 0 0-3 3v.5A3 3 0 0 0 4 10.3 3 3 0 0 0 5 15a3 3 0 0 0 4 4.5V4z" />
+		<path d="M15 4a3 3 0 0 1 3 3v.5a3 3 0 0 1 2 2.8 3 3 0 0 1-1 4.7 3 3 0 0 1-4 4.5V4z" />
+	</Icon>
+);
+export const EyeIcon = () => (
+	<Icon size={14}>
+		<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+		<circle cx="12" cy="12" r="3" />
+	</Icon>
+);
+export const WrenchIcon = () => (
+	<Icon size={14}>
+		<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" />
+	</Icon>
+);
