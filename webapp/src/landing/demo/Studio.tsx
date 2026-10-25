@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { Calf } from '../../components/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from '../../chat/brandIcons';
 import { ApprovalPrompt } from '../../chat/ApprovalPrompt';
+import { Links } from '../../chat/AgentTree';
 import { Message, MessageContent, MessageResponse } from '../../components/ai-elements/message';
 import { AlertIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, HandIcon, MessageIcon, SparkIcon, StopIcon } from '../../chat/icons';
 import { aimAt, Cursor, type Aim } from './Cursor';
@@ -187,7 +188,7 @@ function Row({ v, depth, open, run, acts, onStop, onInstruct, notes }: { v: View
 	const expanded = open || v.asking;
 	return (
 		<li className="s-node" data-status={status} data-id={task.id} style={{ '--depth': depth } as CSSProperties}>
-			<div className="o-card s-card" aria-current={open || undefined} data-status={status}>
+			<div className="o-card s-card" data-node={task.id} aria-current={open || undefined} data-status={status}>
 				<button type="button" className="s-head" aria-expanded={expanded} onClick={() => acts.select(task.id)}>
 					<Avatar task={task} />
 					<span className="s-name"><strong>{task.label}</strong><small>{task.title}</small></span>
@@ -238,6 +239,7 @@ export function Studio() {
 	const [cursor, setCursor] = useState<Aim>();
 	const stage = useRef<HTMLDivElement>(null);
 	const tree = useRef<HTMLDivElement>(null);
+	const canvas = useRef<HTMLDivElement>(null);
 	const approveRef = useRef<HTMLButtonElement>(null);
 	const sendRef = useRef<HTMLButtonElement>(null);
 	const end = reported(run);
@@ -318,6 +320,11 @@ export function Studio() {
 	const ordered: Task[] = [];
 	const walk = (id?: string) => tasks.filter(t => t.parent === id).forEach(t => { ordered.push(t); walk(t.id); });
 	walk(undefined);
+	// The app's agent tree draws the lines between cards, so they follow a card
+	// that opens or grows.
+	const visible = ordered.filter(t => views.get(t.id));
+	const edges = visible.filter(t => t.parent && views.get(t.parent)).map((t): [string, string, string] => [t.parent!, t.id, views.get(t.id)!.status]);
+	const version = visible.map(t => `${t.id}:${views.get(t.id)!.status}`).join() + `|${open ?? ''}|${Object.values(notes).flat().length}`;
 
 	return (
 		<div className="s-wrap">
@@ -350,6 +357,8 @@ export function Studio() {
 							</header>
 							<div className="s-tree" ref={tree}>
 								{shown.length ? (
+									<div className="agents-canvas" ref={canvas}>
+									<Links canvas={canvas} edges={edges} version={version} />
 									<ul>
 										{ordered.filter(t => views.get(t.id)).map(t => (
 											<Row key={t.id} v={views.get(t.id)!} depth={depth(t)} open={open === t.id} run={run} acts={acts} notes={notes[t.id] ?? []}
@@ -357,6 +366,7 @@ export function Studio() {
 												onInstruct={(id, text) => setNotes(x => ({ ...x, [id]: [...(x[id] ?? []), `You: ${text}`, 'Got it, carrying on with that.'] }))} />
 										))}
 									</ul>
+									</div>
 								) : <p className="s-idle">No agents yet. Ask for something and Mob will hand out the work here, in <code>{project}</code>.</p>}
 							</div>
 							{done ? <p className="s-report" role="status" data-partial={!all || undefined}>{all ? <CheckIcon /> : <AlertIcon />} {done.banner} · {money(total)}</p> : null}

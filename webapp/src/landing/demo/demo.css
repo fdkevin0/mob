@@ -51,7 +51,6 @@ html:has(.demo-page) { scroll-snap-type: none; }
 .d-input { min-height: 28px; padding: 4px 0; font-size: 15px; line-height: 1.6; }
 .s-chat .composer:has(.typing) { border-color: var(--line-hover); }
 .s-chat .conversation-content > .group, .s-chat .assistant-content > * { animation: d-in .3s ease-out; }
-.s-chat td code { white-space: nowrap; }
 .d-placeholder { color: var(--muted-foreground); }
 .d-caret { display: inline-block; width: 2px; height: 1.1em; margin-left: 1px; vertical-align: -.2em; background: var(--lime); animation: d-pulse .9s steps(2) infinite; }
 
@@ -119,12 +118,10 @@ html:has(.demo-page) { scroll-snap-type: none; }
 .s-tree ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .s-idle { margin: 30px 10px; color: var(--muted-foreground); font-size: 13px; line-height: 1.6; text-align: center; }
 /* Each agent hangs under the one that started it. */
-.s-node { --indent: 22px; position: relative; padding-left: calc(var(--depth) * var(--indent)); animation: d-in .35s ease-out; }
-.s-node:not([style*='--depth: 0'])::before { content: ''; position: absolute; left: calc(var(--depth) * var(--indent) - 12px); top: -8px; height: 30px; width: 11px; border-left: 1px solid var(--link, color-mix(in srgb, var(--muted-foreground) 40%, transparent)); border-bottom: 1px solid var(--link, color-mix(in srgb, var(--muted-foreground) 40%, transparent)); border-bottom-left-radius: 6px; }
-.s-node[data-status='running'] { --link: color-mix(in srgb, var(--cyan) 80%, transparent); }
-.s-node[data-status='waiting'] { --link: color-mix(in srgb, var(--amber) 80%, transparent); }
-.s-node[data-status='failed'] { --link: color-mix(in srgb, var(--destructive) 70%, transparent); }
-.s-node[data-status='review'] { --link: color-mix(in srgb, var(--lime) 60%, transparent); }
+/* Indented like the app's tree, so the line to a later sibling runs clear of
+   the cards above it. Fades in without moving, so the lines stay put. */
+.s-node { --indent: 40px; position: relative; padding-left: calc(var(--depth) * var(--indent)); animation: d-fade .35s ease-out; }
+@keyframes d-fade { from { opacity: 0; } }
 .o-card { position: relative; width: 100%; padding: 8px 10px 8px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); font-size: 12.5px; transition: border-color .2s, box-shadow .2s; }
 .o-card:hover { border-color: color-mix(in srgb, var(--text) 20%, transparent); }
 .o-card[aria-current='true'] { border-color: color-mix(in srgb, var(--text) 30%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 5%, transparent); }

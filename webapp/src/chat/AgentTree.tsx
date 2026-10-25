@@ -401,8 +401,9 @@ export function link(parent: Box, child: Box, fan: boolean): { d: string; x: num
 	};
 }
 
-// Links draws who started whom between the cards shown in canvas.
-function Links({ canvas, edges, version }: { canvas: RefObject<HTMLDivElement | null>; edges: [string, string, string][]; version: string }) {
+// Links draws who started whom between the cards shown in canvas. The /demo
+// page draws its replayed tree with it too.
+export function Links({ canvas, edges, version }: { canvas: RefObject<HTMLDivElement | null>; edges: [string, string, string][]; version: string }) {
 	const [links, setLinks] = useState<Link[]>([]);
 	const [size, setSize] = useState({ width: 0, height: 0 });
 	useLayoutEffect(() => {
