@@ -34,7 +34,7 @@ export function SiteHeader({ current, floating, onSignIn }: { current?: string; 
 			<div className="site-theme"><ThemePicker /></div>
 			<div className="site-account">
 				{/* openApp carries a pairing offer kept across sign-in. */}
-				<a href="/app" onClick={event => {
+				<a className="site-open" href="/app" onClick={event => {
 					if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 					event.preventDefault();
 					openApp();

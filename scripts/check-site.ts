@@ -59,7 +59,7 @@ try {
 		assert.equal(headerSearches, 1, 'Docs search belongs inside the shared header');
 		assert.match(docs, /id="site-user"/);
 		assert.match(docs, /href="\/\?signin=account">Log in<\/a>/);
-		assert.match(docs, /href="\/app">Open Mob<\/a>/);
+		assert.match(docs, /class="site-open" href="\/app">Open Mob<\/a>/);
 		for (const path of ['/app', '/app/', '/account', '/account/']) {
 			const response = await request(path);
 			assert.equal(response.status, 302, path);

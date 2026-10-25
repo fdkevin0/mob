@@ -30,6 +30,8 @@
 .site-account { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
 .site-account a { box-sizing: border-box; display: inline-flex; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 8px; }
 .site-account a:hover, .site-account a[aria-current='page'] { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.site-account a.site-open { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.site-account a.site-open:hover { background: color-mix(in srgb, var(--primary) 85%, var(--text)); }
 .site-menu-button { display: none; }
 .site-drawer.dialog-panel {
 	inset: 0 auto 0 0; transform: none; width: min(320px, 85vw); max-width: none;
