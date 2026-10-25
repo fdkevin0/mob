@@ -98,6 +98,24 @@ test('the conversation list marks conversations waiting for a decision, and says
 	expect(list.find(c => c.id === other.id)).toBeUndefined();
 });
 
+test('the owner chooses a conversation model as a setting, which adds no messages', async () => {
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const token = 't'.repeat(64);
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token, version: 'test' });
+	const call = (method: string, path: string, body?: unknown) =>
+		server.fetch(new Request('http://127.0.0.1:8787' + path, { method, body: body && JSON.stringify(body), headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }));
+	const id = 'c'.repeat(32);
+	expect(await (await call('POST', `/api/conversations/${id}/model`, { model: 'demo/echo' })).json()).toEqual({ model: 'demo/echo' });
+	expect(store.conversationModel(id)).toBe('demo/echo');
+	expect(store.history(id)).toEqual([]);
+	expect(await (await call('GET', '/api/conversations')).json()).toEqual([]);
+	expect(await (await call('POST', `/api/conversations/${id}/model`, { model: '' })).json()).toEqual({ model: 'demo/echo' });
+	expect(store.conversationModel(id)).toBe('');
+	expect((await call('POST', `/api/conversations/${id}/model`, { model: 'nowhere/none' })).status).toBe(400);
+	expect((await call('POST', `/api/conversations/${id}/model`, { model: 3 })).status).toBe(400);
+	expect((await call('POST', '/api/conversations/not-an-id/model', { model: 'demo/echo' })).status).toBe(404);
+});
+
 test('a client starts a conversation with its first message, and the owner renames and deletes it', async () => {
 	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
 	const token = 't'.repeat(64);

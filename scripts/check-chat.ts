@@ -210,8 +210,10 @@ try {
   const reply = await turn(id, { text: '你好，Mob', requestId: 'hello' });
   assert(reply?.parts.some(p => p.type === 'text' && p.text.includes('你好，Mob')));
   assert.equal((await request('/chat', { id, text: 'repeat', requestId: 'hello' })).status, 409);
-  const models = await turn(id, { text: '/models', requestId: 'models' });
-  assert(models?.parts.some(p => p.type === 'text' && p.text.includes('**`demo/echo`** (current)')), '/models did not list the current model');
+  const models = await (await request('/commands/run', { client: 'web', conversationId: id, text: '/models' })).json() as { handled: boolean; markdown: string };
+  assert(models.handled && models.markdown.includes('**`demo/echo`** (current)'), '/models did not list the current model');
+  const chosen = await (await request(`/conversations/${id}/model`, { model: 'demo/echo' })).json() as { model: string };
+  assert.equal(chosen.model, 'demo/echo', 'choosing a model did not answer the model chosen');
   const suggestions = await (await request('/commands/complete', { client: 'web', conversationId: id, text: '/model d' })).json() as { value: string }[];
   assert.deepEqual(suggestions.map(s => s.value), ['default', 'demo/echo'], '/model did not complete its argument');
   const listed = await (await request('/commands/run', { client: 'web', conversationId: id, text: '/list' })).json() as { handled: boolean; markdown: string };

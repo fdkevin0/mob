@@ -69,10 +69,26 @@ export class ConversationService {
 		this.hooks.beforeTurn.push(turn => this.recall(turn));
 	}
 
-	/** model is the reference a conversation's next turn uses. */
+	/** model is the reference a conversation's next turn uses; one not started yet uses the default. */
 	model(id: string): string {
-		const ref = this.store.conversationModel(id);
+		const ref = this.store.exists(id) ? this.store.conversationModel(id) : '';
 		return ref || !this.models ? ref : this.models.default();
+	}
+
+	/**
+	 * setModel makes the conversation's later turns use the model query names,
+	 * or the default when it is empty, starting a conversation not started yet.
+	 * It is a setting, not part of the transcript: no message records it.
+	 */
+	setModel(id: string, query: string): string {
+		if (!this.models) throw new CommandError(503, 'No model is configured.');
+		let ref = '';
+		if (query) {
+			try { ref = refString(this.models.resolve(query).ref); } catch (e) { throw new CommandError(400, (e as Error).message); }
+		}
+		this.store.ensure(id);
+		this.store.setConversationModel(id, ref);
+		return this.model(id);
 	}
 
 	/** execute runs a turn until it finishes or signal aborts, calling emit with each event; clients can also follow it through watch. */

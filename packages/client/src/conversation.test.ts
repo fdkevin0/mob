@@ -649,6 +649,82 @@ it.each([200, 500])('preserves the composer during a directly handled command re
 	expect(session.getSnapshot().input).toBe('');
 });
 
+it('chooses a model as a setting, without sending chat or touching the draft', async () => {
+	const posted: { url: string; body: unknown }[] = [];
+	let refuse = false;
+	const client = new MobClient(connection, {
+		fetch: async (url, options) => {
+			if (options?.method === 'POST') posted.push({ url: String(url), body: JSON.parse(String(options.body)) });
+			if (String(url).endsWith('/model')) return refuse ? Response.json({ error: 'no model matches "x"' }, { status: 400 }) : Response.json({ model: 'demo/echo' });
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	session.setInput('Keep my draft');
+	expect(await session.setModel('demo/echo')).toBe(true);
+	expect(posted).toEqual([{ url: expect.stringContaining('/conversations/one/model'), body: { model: 'demo/echo' } }]);
+	expect(session.getSnapshot()).toMatchObject({ model: 'demo/echo', input: 'Keep my draft', messages: [] });
+	refuse = true;
+	expect(await session.setModel('x')).toBe(false);
+	expect(session.getSnapshot().failure).toContain('no model matches');
+});
+
+it('holds Send and a second choice until a slow model choice is saved', async () => {
+	const chats: unknown[] = [];
+	let save!: () => void;
+	const client = new MobClient(connection, {
+		fetch: async (url, options) => {
+			if (String(url).endsWith('/model')) {
+				await new Promise<void>((resolve) => (save = resolve));
+				return Response.json(JSON.parse(String(options?.body)));
+			}
+			if (String(url).endsWith('/chat')) chats.push(JSON.parse(String(options?.body)));
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	session.setInput('Keep my draft');
+	const first = session.setModel('demo/echo');
+	expect(session.getSnapshot()).toMatchObject({ busy: true, dispatching: true });
+	expect(await session.setModel('demo/other')).toBe(false);
+	await session.submit();
+	expect(chats).toEqual([]);
+	await vi.waitFor(() => expect(save).toBeDefined());
+	save();
+	expect(await first).toBe(true);
+	expect(session.getSnapshot()).toMatchObject({ model: 'demo/echo', busy: false, dispatching: false, input: 'Keep my draft' });
+});
+
+it('ends on the service’s model when another client chooses one while this save is answering', async () => {
+	let saved = initial.model;
+	let answer!: () => void;
+	const client = new MobClient(connection, {
+		fetch: async (url, options) => {
+			if (String(url).endsWith('/model')) {
+				const { model } = JSON.parse(String(options?.body));
+				saved = model;
+				await new Promise<void>((resolve) => (answer = resolve));
+				return Response.json({ model });
+			}
+			return Response.json({ ...initial, model: saved });
+		},
+	});
+	let changed!: (change: { conversation: string }) => void;
+	const changes = { live: true, subscribe: (listener: typeof changed) => ((changed = listener), () => {}) } as unknown as Changes;
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web', changes });
+	cleanups.push(session.start());
+	const choice = session.setModel('demo/b');
+	await vi.waitFor(() => expect(answer).toBeDefined());
+	saved = 'demo/c';
+	changed({ conversation: 'one' });
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	answer();
+	expect(await choice).toBe(true);
+	await vi.waitFor(() => expect(session.getSnapshot().model).toBe('demo/c'));
+});
+
 for (const outcome of ['absent', 'accepted', 'offline'] as const) {
 	it.each(['', 'Keep my draft', '/model demo/echo'])('preserves picker draft %j when chat delivery is ' + outcome, async (draft) => {
 		let sent: { requestId: string; text: string } | undefined;

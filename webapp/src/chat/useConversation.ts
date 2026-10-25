@@ -82,5 +82,6 @@ export function useConversation({
 		decide: conversation.decide,
 		cancel: conversation.cancel,
 		dismissCommand: conversation.dismissCommand,
+		setModel: conversation.setModel,
 	};
 }

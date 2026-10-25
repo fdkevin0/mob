@@ -291,6 +291,12 @@ export class Server extends ConversationService {
 			s.store.rename(p.id, title);
 			return json(200, { id: p.id, title });
 		});
+		// Choosing a model is a setting of the conversation, for its later replies; it adds nothing to the transcript.
+		r.handle('POST /api/conversations/{id}/model', async (req, p) => {
+			const input = await body<{ model?: unknown }>(req, 4 << 10, ['model']);
+			if (typeof input.model !== 'string') throw new HTTPError(400, 'model must be a provider/model reference, or empty for the default.');
+			return json(200, { model: s.setModel(p.id, input.model.trim()) });
+		});
 		r.handle('POST /api/conversations/{id}/delete', (_, p) => {
 			if (s.isActive(p.id)) throw new HTTPError(409, 'Mob is still replying in this conversation; stop it before deleting the conversation.');
 			s.store.remove(p.id);
