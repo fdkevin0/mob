@@ -125,7 +125,8 @@ export class ConversationClient {
 	 * setModel chooses the model of this conversation's later replies, or the default when model is empty. A reply
 	 * already running keeps its model, and the draft stays; it reports whether the choice was saved. Until the
 	 * service has the choice the conversation is busy, so a message cannot reach the old model ahead of it, and
-	 * another choice is refused, so answers cannot arrive out of order.
+	 * another choice is refused, so answers cannot arrive out of order. Reloads wait for the save, and one follows it,
+	 * so a choice made meanwhile in another client wins over this one's late answer.
 	 */
 	setModel = async (model: string) => {
 		if (!this.active || this.choosing) return false;
@@ -142,6 +143,7 @@ export class ConversationClient {
 		} finally {
 			this.choosing = false;
 			this.update({});
+			void this.reload();
 		}
 	};
 
@@ -214,6 +216,7 @@ export class ConversationClient {
 			this.state.approvalBusy ||
 			this.following ||
 			this.running ||
+			this.choosing ||
 			(this.pendingSend && !this.pendingSend.settled)
 		) {
 			this.stale = true;
@@ -232,6 +235,7 @@ export class ConversationClient {
 				this.state.approvalBusy ||
 				this.following ||
 				this.running ||
+				this.choosing ||
 				(this.pendingSend && !this.pendingSend.settled)
 			) {
 				this.stale = true;

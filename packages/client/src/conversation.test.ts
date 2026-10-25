@@ -697,6 +697,34 @@ it('holds Send and a second choice until a slow model choice is saved', async ()
 	expect(session.getSnapshot()).toMatchObject({ model: 'demo/echo', busy: false, dispatching: false, input: 'Keep my draft' });
 });
 
+it('ends on the service’s model when another client chooses one while this save is answering', async () => {
+	let saved = initial.model;
+	let answer!: () => void;
+	const client = new MobClient(connection, {
+		fetch: async (url, options) => {
+			if (String(url).endsWith('/model')) {
+				const { model } = JSON.parse(String(options?.body));
+				saved = model;
+				await new Promise<void>((resolve) => (answer = resolve));
+				return Response.json({ model });
+			}
+			return Response.json({ ...initial, model: saved });
+		},
+	});
+	let changed!: (change: { conversation: string }) => void;
+	const changes = { live: true, subscribe: (listener: typeof changed) => ((changed = listener), () => {}) } as unknown as Changes;
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web', changes });
+	cleanups.push(session.start());
+	const choice = session.setModel('demo/b');
+	await vi.waitFor(() => expect(answer).toBeDefined());
+	saved = 'demo/c';
+	changed({ conversation: 'one' });
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	answer();
+	expect(await choice).toBe(true);
+	await vi.waitFor(() => expect(session.getSnapshot().model).toBe('demo/c'));
+});
+
 for (const outcome of ['absent', 'accepted', 'offline'] as const) {
 	it.each(['', 'Keep my draft', '/model demo/echo'])('preserves picker draft %j when chat delivery is ' + outcome, async (draft) => {
 		let sent: { requestId: string; text: string } | undefined;
