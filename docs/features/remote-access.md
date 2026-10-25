@@ -8,26 +8,6 @@ The site at https://usemob.app is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has five parts,
 served by the Worker in `worker/`:
 
-The landing, demo, documentation and account pages share Home, Demo, Docs
-and GitHub navigation, a theme picker, and an Open Mob link followed by a
-login control. Signed-in visitors see their avatar (or initial); its menu
-contains Account and Sign out. Signed-out visitors see a Log in button.
-The current section is marked. On screens narrower than 800px, a single
-64px header keeps the menu button, brand, Open Mob and login control visible.
-The left drawer contains docs search, the site links and a theme picker at
-the bottom. On documentation pages it also contains the documentation tree;
-on other pages the search link opens documentation search. Desktop docs keeps
-search in the header. The mobile article contents expands beside the title
-and scrolls with the article.
-The header uses the same fading background as the landing and demo pages.
-Article content and the desktop sidebar scroll behind that gradient.
-Account opens account management; Open Mob opens the app (or sign-in).
-Sign out is also available on the account page. The landing page's Get started
-button also opens sign-in directly, with How it works, Features and Install
-links beneath it for navigation within the page.
-
-![Shared public navigation on desktop and mobile](../images/public-navigation.png)
-
 - `/` is the landing page, scrolled through in pages over one pinned isometric
   voxel office. Each load lays out a new square open-plan floor of shared
   desks and seats calves on about 70% of them; every calf comes from one
@@ -114,6 +94,14 @@ links beneath it for navigation within the page.
   pages are this repository's Markdown (`README.md`, `CONTRIBUTING.md` and
   `docs/`), copied in at build time, so they change when those files merge.
   It needs no sign-in and has local search.
+
+The landing, demo, documentation and account pages share one header
+(`webapp/src/components/site/`): Home, Demo, Docs and GitHub, a theme picker,
+Open Mob, and a Log in button or the visitor's avatar. On the React pages the
+avatar opens a menu with Account and Sign out; the documentation loads no
+framework, so there it links to the account page, which has Sign out too. On
+narrow screens the links, docs search and theme picker move into a side drawer
+(in the documentation, above the documentation tree).
 
 The landing page and workspace share the dark theme, Geist fonts and pixel
 logo. The workspace uses calmer, rounded controls in the local browser, the
