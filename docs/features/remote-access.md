@@ -11,7 +11,7 @@ served by the Worker in `worker/`:
 The landing, demo, documentation and account pages share Home, Demo, Docs
 and GitHub navigation, a theme picker, and an Open Mob link followed by a
 login control. Signed-in visitors see their avatar (or initial); its menu
-contains Account and Sign out. Signed-out visitors use the control to sign in.
+contains Account and Sign out. Signed-out visitors see a Log in button.
 The current section is marked; on narrow screens the navigation and theme
 picker occupy a second row instead of disappearing. Docs keeps search inside
 the header, collapsing it to an icon when space is limited; its mobile

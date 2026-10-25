@@ -1,6 +1,5 @@
 import { useState, type MouseEventHandler } from 'react';
 import { authClient } from './auth';
-import { Icon } from '../components/brand/Icon';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 
 export function UserMenu({ onSignIn }: { onSignIn?: MouseEventHandler<HTMLButtonElement> }) {
@@ -23,8 +22,8 @@ export function UserMenu({ onSignIn }: { onSignIn?: MouseEventHandler<HTMLButton
 		}
 	}
 
-	if (!user) return <button type="button" className="site-user" aria-label={session.isPending ? 'Loading account' : 'Sign in'} title={session.isPending ? 'Loading account' : 'Sign in'} disabled={session.isPending} aria-haspopup={onSignIn ? 'dialog' : undefined}
-		onClick={onSignIn ?? (() => window.location.assign('/?signin=account'))}><Icon name="lock" size={16} /></button>;
+	if (!user) return <button type="button" className="site-user site-login" aria-label={session.isPending ? 'Loading account' : 'Log in'} title={session.isPending ? 'Loading account' : 'Log in'} disabled={session.isPending} aria-haspopup={onSignIn ? 'dialog' : undefined}
+		onClick={onSignIn ?? (() => window.location.assign('/?signin=account'))}>Log in</button>;
 
 	return (
 		<DropdownMenu modal={false}>

@@ -13,7 +13,7 @@ vi.mock('./voxel/VoxelCanvas', () => ({ VoxelCanvas: () => null }));
 
 import { Landing } from './Landing';
 
-it.each(['Get started', 'Sign in'])('returns focus to %s after closing sign-in', async name => {
+it.each(['Get started', 'Log in'])('returns focus to %s after closing sign-in', async name => {
 	render(<Landing />);
 	const trigger = screen.getByRole('button', { name });
 	fireEvent.click(trigger);

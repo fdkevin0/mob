@@ -18,7 +18,7 @@ it.each(['/', '/demo', '/docs/', '/account'])('keeps the same public navigation 
 	]);
 	expect(screen.queryByRole('link', { name: 'Account' })).toBeNull();
 	expect(screen.getByRole('link', { name: 'Open Mob' }).getAttribute('href')).toBe('/app');
-	expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+	expect(screen.getByRole('button', { name: 'Log in' })).toBeTruthy();
 	if (current !== '/account') expect(screen.getByRole('link', { current: 'page' }).getAttribute('href')).toBe(current);
 	expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeTruthy();
 });
@@ -27,7 +27,7 @@ it('reserves the user control while session state loads', () => {
 	auth.session.isPending = true;
 	render(<SiteHeader />);
 	expect(screen.getByRole('button', { name: 'Loading account' }).hasAttribute('disabled')).toBe(true);
-	expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+	expect(screen.queryByRole('button', { name: 'Log in' })).toBeNull();
 });
 
 it('shows the avatar after Open Mob and falls back to an initial if the image fails', () => {

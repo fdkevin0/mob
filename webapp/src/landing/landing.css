@@ -130,6 +130,7 @@ code { font-family: var(--mono); font-size: .92em; }
 
 
 /* Sign-in dialog */
+.sign-in-provider-icon { display: inline-flex; flex-shrink: 0; font-size: 16px; line-height: 1; }
 .dialog-icon { color: var(--lime); }
 .sign-in-dialog h2 { font-size: 24px; letter-spacing: -0.02em; font-weight: 560; margin: 18px 0 6px; }
 .sign-in-dialog { width: min(420px, calc(100% - 32px)); padding: 34px 30px 30px; }
