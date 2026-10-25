@@ -670,6 +670,33 @@ it('chooses a model as a setting, without sending chat or touching the draft', a
 	expect(session.getSnapshot().failure).toContain('no model matches');
 });
 
+it('holds Send and a second choice until a slow model choice is saved', async () => {
+	const chats: unknown[] = [];
+	let save!: () => void;
+	const client = new MobClient(connection, {
+		fetch: async (url, options) => {
+			if (String(url).endsWith('/model')) {
+				await new Promise<void>((resolve) => (save = resolve));
+				return Response.json(JSON.parse(String(options?.body)));
+			}
+			if (String(url).endsWith('/chat')) chats.push(JSON.parse(String(options?.body)));
+			return Response.json(initial);
+		},
+	});
+	const session = new ConversationClient({ client, id: 'one', initial, clientType: 'web' });
+	cleanups.push(session.start());
+	session.setInput('Keep my draft');
+	const first = session.setModel('demo/echo');
+	expect(session.getSnapshot()).toMatchObject({ busy: true, dispatching: true });
+	expect(await session.setModel('demo/other')).toBe(false);
+	await session.submit();
+	expect(chats).toEqual([]);
+	await vi.waitFor(() => expect(save).toBeDefined());
+	save();
+	expect(await first).toBe(true);
+	expect(session.getSnapshot()).toMatchObject({ model: 'demo/echo', busy: false, dispatching: false, input: 'Keep my draft' });
+});
+
 for (const outcome of ['absent', 'accepted', 'offline'] as const) {
 	it.each(['', 'Keep my draft', '/model demo/echo'])('preserves picker draft %j when chat delivery is ' + outcome, async (draft) => {
 		let sent: { requestId: string; text: string } | undefined;

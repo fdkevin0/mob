@@ -35,6 +35,7 @@ export class ConversationClient {
 	private state: ConversationState;
 	private running = false;
 	private deciding = false;
+	private choosing = false;
 	private following = false;
 	private followRetry = 0;
 	private recoveryFailure = '';
@@ -122,10 +123,14 @@ export class ConversationClient {
 
 	/**
 	 * setModel chooses the model of this conversation's later replies, or the default when model is empty. A reply
-	 * already running keeps its model, and the draft stays; it reports whether the choice was saved.
+	 * already running keeps its model, and the draft stays; it reports whether the choice was saved. Until the
+	 * service has the choice the conversation is busy, so a message cannot reach the old model ahead of it, and
+	 * another choice is refused, so answers cannot arrive out of order.
 	 */
 	setModel = async (model: string) => {
-		if (!this.active) return false;
+		if (!this.active || this.choosing) return false;
+		this.choosing = true;
+		this.update({});
 		try {
 			const result = await this.options.client.setModel(this.options.id, model);
 			if (this.active) this.update({ model: result.model, failure: '' });
@@ -134,6 +139,9 @@ export class ConversationClient {
 		} catch (e) {
 			if (this.active) this.update({ failure: errorText(e) });
 			return false;
+		} finally {
+			this.choosing = false;
+			this.update({});
 		}
 	};
 
@@ -178,12 +186,13 @@ export class ConversationClient {
 
 	private update(patch: Partial<ConversationState>) {
 		const streaming = this.chat.status === 'submitted' || this.chat.status === 'streaming';
-		this.state = { ...this.state, ...patch, streaming, dispatching: this.running || this.deciding || this.chat.status === 'submitted' };
+		this.state = { ...this.state, ...patch, streaming, dispatching: this.running || this.deciding || this.choosing || this.chat.status === 'submitted' };
 		this.state.busy =
 			streaming ||
 			this.state.approvalBusy ||
 			this.state.remoteBusy ||
 			this.running ||
+			this.choosing ||
 			this.following ||
 			(!!this.pendingSend && !this.state.recovery);
 		this.listeners.forEach((listener) => listener());
