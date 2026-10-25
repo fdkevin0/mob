@@ -257,6 +257,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				await send({ kind: 'segment-delta', segment: kind, id: ids.get(kind), text: delta });
 			};
 			let [result, err] = await stream(model, req, emitDelta, signal);
+			stats.requests!++;
 			// A refused prompt is made smaller and sent once more in the turn.
 			if (err && isOverflow(err) && !retried && ids.size === 0) {
 				retried = true;
@@ -264,10 +265,10 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 					read = req.messages.length;
 					began = Date.now();
 					[result, err] = await stream(model, req, emitDelta, signal);
+					stats.requests!++;
 				}
 			}
 			const ended = Date.now();
-			stats.requests!++;
 			if (err && isOverflow(err)) err = Object.assign(new Error(err.message + '; /compact summarizes the conversation to make room'), { cause: err });
 			for (const kind of ['reasoning', 'text'] as const) {
 				const id = ids.get(kind);

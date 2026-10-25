@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConversationService, DemoModel, Store, defaultTools, emptyHooks, encodeEvent, newID, prompt, rank, run, textOf, words, type Event, type Models } from '../src';
+import { ConversationService, DemoModel, Store, defaultTools, emptyHooks, encodeEvent, newID, OverflowError, prompt, rank, run, textOf, words, type Event, type Models } from '../src';
 import { openBun } from '../src/sqlite/bun';
 
 const temp = () => join(mkdtempSync(join(tmpdir(), 'mob-core-')), 'chat.sqlite');
@@ -179,6 +179,26 @@ test('a reply records its model, usage and timing, and streams them as metadata'
 	// Stats move with the conversation.
 	const moved = s.importConversation(s.exportConversation(c.id));
 	expect(s.history(moved.id)[1].stats).toEqual(stats);
+	s.close();
+});
+
+test('a reply counts a prompt sent again after the provider refused it as too long', async () => {
+	const s = open();
+	const c = s.create();
+	let calls = 0;
+	// A model that answers at once, except that it refuses the second turn's first prompt.
+	class Refusing extends DemoModel {
+		override async stream(...[, emit]: Parameters<DemoModel['stream']>) {
+			if (++calls === 2) throw new OverflowError('prompt is too long');
+			await emit('text', 'ok');
+			return { text: 'ok', reasoning: '', signature: '', calls: [], usage: { inputTokens: 10, outputTokens: 1 } };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Refusing() });
+	await service.execute({ id: c.id, text: 'earlier '.repeat(4000), requestId: newID() }, () => {});
+	await service.execute({ id: c.id, text: 'and now', requestId: newID() }, () => {});
+	expect(calls).toBe(3);
+	expect(s.history(c.id).at(-1)!.stats?.requests).toBe(2);
 	s.close();
 });
 
