@@ -87,6 +87,7 @@ export class ConversationClient {
 				return {
 					body: {
 						id,
+						...(body?.replace ? { replace: body.replace } : {}),
 						requestId: last?.id,
 						text: last?.parts
 							.filter((p) => p.type === 'text')
@@ -362,11 +363,28 @@ export class ConversationClient {
 		await this.send('Continue', true);
 	};
 
-	private async send(text: string, preserveInput: boolean) {
+	/**
+	 * resend says message id again as text: the service replaces it and everything after it with the new turn. Editing a
+	 * message resends its new text; retrying a reply resends the message it answered. The draft in the editor stays.
+	 */
+	resend = async (id: string, text: string) => {
+		const index = this.chat.messages.findIndex((m) => m.id === id && m.role === 'user');
+		if (!this.active || !text.trim() || this.state.busy || index < 0) return;
+		this.generation++;
+		this.pendingSend = undefined;
+		this.recoveryFailure = '';
+		this.chat.clearError();
+		this.update({ failure: '', commandResult: undefined, recovery: undefined });
+		// The replaced messages leave at once; if the service refuses, the reload after sending brings them back.
+		this.chat.messages = this.chat.messages.slice(0, index);
+		await this.send(text.trim(), false, id);
+	};
+
+	private async send(text: string, preserveInput: boolean, replace?: string) {
 		const pending = { requestId: generateId(), text, inputRevision: this.inputRevision, preserveInput, settled: false, uncertain: false };
 		this.pendingSend = pending;
 		try {
-			await this.chat.sendMessage({ id: pending.requestId, role: 'user', parts: [{ type: 'text', text }] });
+			await this.chat.sendMessage({ id: pending.requestId, role: 'user', parts: [{ type: 'text', text }] }, replace ? { body: { replace } } : undefined);
 		} finally {
 			pending.settled = true;
 			if (!pending.uncertain) this.pendingSend = undefined;

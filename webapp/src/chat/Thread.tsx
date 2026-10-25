@@ -20,7 +20,7 @@ import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
 import { BrandIcon, modelBrand } from './brandIcons';
 import { ContextMeter, useContextUsage } from './ContextMeter';
-import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, SpinnerIcon, StopIcon } from './icons';
+import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, RenameIcon, RetryIcon, SpinnerIcon, StopIcon } from './icons';
 
 // What a new conversation offers to start with; a choice fills the message box, and nothing is sent until the owner sends it.
 const starters = [
@@ -81,6 +81,7 @@ export function Thread({
 		submit,
 		run,
 		proceed,
+		resend,
 		decide,
 		cancel,
 		commandResult,
@@ -169,6 +170,8 @@ export function Thread({
 							busy={busy}
 							decide={decide}
 							proceed={proceed}
+							resend={resend}
+							asked={index === messages.length - 1 ? askedBy(messages) : undefined}
 						/>
 					))}
 					{busy && remoteBusy && !streaming && !approvalBusy ? (
@@ -368,6 +371,19 @@ function useUnseenApproval(composer: RefObject<HTMLDivElement | null>, waiting: 
 }
 
 type Decide = (approvalId: string, approved: boolean, reason?: string, remember?: string) => Promise<void> | void;
+type Resend = (id: string, text: string) => Promise<void> | void;
+
+// askedBy is the owner's message the last reply answers, which retrying says again; commands and their replies are not retried.
+export function askedBy(messages: ChatMessage[]): ChatMessage | undefined {
+	const [reply, asked] = messages.slice(-2).reverse();
+	if (reply?.role !== 'assistant' || asked?.role !== 'user' || reply.metadata?.command || asked.metadata?.command) return undefined;
+	return asked;
+}
+const textOf = (message: ChatMessage) =>
+	message.parts
+		.filter((part) => part.type === 'text')
+		.map((part) => part.text)
+		.join('\n\n');
 
 // MessageView renders one message. It is memoized so that streaming a reply re-renders only that reply,
 // not the whole history: the client keeps unchanged messages as the same objects.
@@ -378,6 +394,8 @@ const MessageView = memo(function MessageView({
 	busy,
 	decide,
 	proceed,
+	resend,
+	asked,
 }: {
 	message: ChatMessage;
 	animating: boolean;
@@ -385,7 +403,25 @@ const MessageView = memo(function MessageView({
 	busy: boolean;
 	decide: Decide;
 	proceed: () => void;
+	resend: Resend;
+	/** asked is the owner's message this reply answers, when it is the last reply and can be asked for again. */
+	asked?: ChatMessage;
 }) {
+	const [editing, setEditing] = useState(false);
+	const user = message.role === 'user';
+	if (editing)
+		return (
+			<Message from={message.role}>
+				<MessageEditor
+					text={textOf(message)}
+					cancel={() => setEditing(false)}
+					send={(text) => {
+						setEditing(false);
+						void resend(message.id, text);
+					}}
+				/>
+			</Message>
+		);
 	return (
 		<Message from={message.role}>
 			<p className="sr-only">{message.role === 'user' ? 'You' : 'Mob'}</p>
@@ -464,10 +500,74 @@ const MessageView = memo(function MessageView({
 					)
 				)}
 			</MessageContent>
-			{!animating && <CopyButton message={message} what={message.role === 'user' ? 'message' : 'reply'} />}
+			{!animating && (
+				<div className="message-actions">
+					<CopyButton message={message} what={user ? 'message' : 'reply'} />
+					{user && !busy && !message.metadata?.command && (
+						<Button type="button" variant="ghost" aria-label="Edit message" title="Edit message" onClick={() => setEditing(true)}>
+							<RenameIcon />
+						</Button>
+					)}
+					{asked && !busy && (
+						<Button type="button" variant="ghost" aria-label="Retry" title="Ask for this reply again" onClick={() => void resend(asked.id, textOf(asked))}>
+							<RetryIcon />
+						</Button>
+					)}
+				</div>
+			)}
 		</Message>
 	);
 });
+
+// MessageEditor edits an owner's message in place. Sending says it again: Mob's replies after it give way to a new one.
+function MessageEditor({ text, cancel, send }: { text: string; cancel: () => void; send: (text: string) => void }) {
+	const [value, setValue] = useState(text);
+	const box = useRef<HTMLTextAreaElement>(null);
+	useLayoutEffect(() => {
+		const el = box.current;
+		if (!el) return;
+		el.style.height = 'auto';
+		el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+	}, [value]);
+	useEffect(() => {
+		const el = box.current;
+		el?.focus();
+		el?.setSelectionRange(el.value.length, el.value.length);
+	}, []);
+	const changed = value.trim() !== '' && value.trim() !== text.trim();
+	return (
+		<form
+			className="message-editor"
+			onSubmit={(e) => {
+				e.preventDefault();
+				if (changed) send(value);
+			}}
+		>
+			<Textarea
+				ref={box}
+				aria-label="Edit message"
+				value={value}
+				onChange={(e) => setValue(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === 'Escape') cancel();
+					else if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+						e.preventDefault();
+						e.currentTarget.form?.requestSubmit();
+					}
+				}}
+			/>
+			<div className="message-editor-bar">
+				<span className="muted">Mob’s replies after this message are replaced.</span>
+				<Button type="button" variant="ghost" onClick={cancel}>
+					Cancel
+				</Button>
+				<Button type="submit" disabled={!changed}>
+					Send
+				</Button>
+			</div>
+		</form>
+	);
+}
 
 // toolState turns an AI SDK tool state into what the row shows: running, waiting for approval, done or failed.
 function toolState(state: string): { kind: string; label: string; icon: ReactNode } {
@@ -581,21 +681,19 @@ function CopyButton({ message, what }: { message: { parts: { type: string; text?
 	if (!text) return null;
 	const label = result === 'copied' ? 'Copied' : result === 'failed' ? 'Copy failed' : `Copy ${what}`;
 	return (
-		<div className="message-actions">
-			<Button
-				type="button"
-				variant="ghost"
-				aria-label={label}
-				title={label}
-				onClick={() => {
-					// Writing fails when the page is not focused or the browser denies clipboard access.
-					Promise.resolve(navigator.clipboard?.writeText(text) ?? Promise.reject())
-						.then(() => setResult('copied'))
-						.catch(() => setResult('failed'));
-				}}
-			>
-				{result === 'copied' ? <CheckIcon /> : result === 'failed' ? <CrossIcon /> : <CopyIcon />}
-			</Button>
-		</div>
+		<Button
+			type="button"
+			variant="ghost"
+			aria-label={label}
+			title={label}
+			onClick={() => {
+				// Writing fails when the page is not focused or the browser denies clipboard access.
+				Promise.resolve(navigator.clipboard?.writeText(text) ?? Promise.reject())
+					.then(() => setResult('copied'))
+					.catch(() => setResult('failed'));
+			}}
+		>
+			{result === 'copied' ? <CheckIcon /> : result === 'failed' ? <CrossIcon /> : <CopyIcon />}
+		</Button>
 	);
 }

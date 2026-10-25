@@ -373,10 +373,10 @@ export class Server extends ConversationService {
 		let input: ChatRequest;
 		try {
 			// Only a defence against runaway bodies: the model's context bounds a message.
-			input = await body<ChatRequest>(req, chatBody, ['id', 'text', 'requestId', 'approval']);
+			input = await body<ChatRequest>(req, chatBody, ['id', 'text', 'requestId', 'approval', 'replace']);
 		} catch { return text(400, 'invalid chat request'); }
 		// Holders of the local token run this Mob.
-		input = { id: input.id, text: input.text ?? '', requestId: input.requestId ?? '', approval: input.approval, owner: true };
+		input = { id: input.id, text: input.text ?? '', requestId: input.requestId ?? '', approval: input.approval, replace: input.replace, owner: true };
 		let running: Running;
 		try {
 			// The turn belongs to the service now, but a replaced token still ends it.

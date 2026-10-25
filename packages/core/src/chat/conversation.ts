@@ -9,6 +9,7 @@ import { emptyHooks, estimate, run, type Agent, type ContextSnapshot, type Hooks
 import type { Event } from './events';
 import { modelOutput, save, type Saver } from './output';
 import { Running } from './running';
+import { NotFound } from './sql';
 import { rememberAlways, rememberConversation, type Decision, type Store, type Summary } from './store';
 import { ToolRegistry, defaultTools, sandboxTool, scopeOf, type Sandbox } from './tools';
 
@@ -31,6 +32,8 @@ export type ChatRequest = {
 	text: string;
 	requestId: string;
 	approval?: Answer;
+	/** replace is a message the user said earlier in the conversation: it and everything after it give way to this one. */
+	replace?: string;
 	/** owner is set by transports for the person who runs Mob. Never decoded from a request body. */
 	owner?: boolean;
 	/** channel names the messaging app a channel's turn answers in. Never decoded from a request body. */
@@ -106,6 +109,7 @@ export class ConversationService {
 		input = { ...input, text: input.text.trim() };
 		const a = input.approval;
 		if (input.id?.length !== 32 || (!a && (!input.text || !input.requestId || input.requestId.length > 100)) ||
+			(input.replace !== undefined && (a || typeof input.replace !== 'string' || !input.replace || input.replace.length > 100)) ||
 			(a && (input.text !== '' || a.id?.length !== 32 || (a.reason ?? '').length > 2000 || (a.approved && !!a.reason) || !rememberable(a)))) {
 			throw new CommandError(400, 'invalid conversation, text, request ID, or approval');
 		}
@@ -126,6 +130,14 @@ export class ConversationService {
 			}
 		}
 		if (this.active.has(input.id) || this.closing) throw new CommandError(409, 'conversation is busy; wait or stop the active turn');
+		if (input.replace) {
+			// A coding agent keeps its own session, which a rewritten history here would no longer match.
+			if (delegate) throw new CommandError(409, 'a coding agent’s conversation cannot be rewritten; send a new message instead');
+			try { this.store.truncate(input.id, input.replace); } catch (e) {
+				if (e instanceof NotFound) throw new CommandError(404, 'the message to replace is not in this conversation');
+				throw e;
+			}
+		}
 		// A turn has no deadline: it ends when it finishes or is stopped, and
 		// each model call and tool bounds its own wait.
 		const running = new Running();

@@ -143,3 +143,18 @@ test('a conversation not written in yet has its context estimated, and an unknow
 	expect(context.used).toBeGreaterThan(0);
 	expect((await get('/api/conversations/nope/context')).status).toBe(404);
 });
+
+test('a chat request can say an earlier message again', async () => {
+	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-server-')), 'mob.sqlite'))).open();
+	const token = 't'.repeat(64);
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token, version: 'test' });
+	const call = (method: string, path: string, body?: unknown) =>
+		server.fetch(new Request('http://127.0.0.1:8787' + path, { method, body: body && JSON.stringify(body), headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }));
+	const id = 'c'.repeat(32);
+	await (await call('POST', '/api/chat', { id, text: 'first', requestId: 'r1' })).text();
+	await (await call('POST', '/api/chat', { id, text: 'edited', requestId: 'r2', replace: 'r1' })).text();
+	const { messages } = await (await call('GET', `/api/conversations/${id}`)).json() as { messages: { id: string; role: string }[] };
+	expect(messages.map(m => m.role === 'user' ? m.id : m.role)).toEqual(['r2', 'assistant']);
+	expect((await call('POST', '/api/chat', { id, text: 'again', requestId: 'r3', replace: 'r1' })).status).toBe(404);
+	expect((await call('POST', '/api/chat', { id, text: 'again', requestId: 'r4', replace: 7 })).status).toBe(400);
+});

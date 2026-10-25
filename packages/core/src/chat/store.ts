@@ -242,6 +242,27 @@ export class Store {
 		this.changes.conversation(id, true);
 	}
 
+	/**
+	 * truncate deletes message from, which the user said in conversation id, and everything said after it, so the user can
+	 * say it again differently or ask for the reply again. Decisions on the deleted replies go with them; facts, remembered
+	 * approvals, schedules and the usage ledger stay. A summary that covered a deleted message no longer holds.
+	 */
+	truncate(id: string, from: string) {
+		const row = this.db.get<{ seq: number; parts: string }>("SELECT seq,parts FROM messages WHERE id=? AND conversation_id=? AND role='user'", from, id);
+		if (!row) throw new NotFound();
+		this.db.transaction(() => {
+			this.db.run('DELETE FROM approvals WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=? AND seq>=?)', id, row.seq);
+			this.db.run('DELETE FROM messages WHERE conversation_id=? AND seq>=?', id, row.seq);
+			this.db.run("UPDATE conversations SET summary='',summary_through='' WHERE id=? AND summary_through<>'' AND NOT EXISTS(SELECT 1 FROM messages WHERE id=summary_through)", id);
+			// A title taken from the first message follows it when that message is said again.
+			if (!this.db.get('SELECT 1 FROM messages WHERE conversation_id=?', id)) {
+				const text = (JSON.parse(row.parts) as { type: string; text?: string }[]).filter(p => p.type === 'text').map(p => p.text).join('');
+				this.db.run("UPDATE conversations SET title='New conversation' WHERE id=? AND title=?", id, title60(text));
+			}
+		});
+		this.changes.conversation(id, true);
+	}
+
 	/** waiting lists the conversations with a tool call awaiting the owner's decision. */
 	waiting(): Set<string> {
 		return new Set(this.db.all<{ conversation_id: string }>("SELECT DISTINCT conversation_id FROM approvals WHERE status='pending' AND expires_at>=?", Date.now()).map(r => r.conversation_id));
