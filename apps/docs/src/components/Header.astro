@@ -50,7 +50,7 @@ import '../../../../webapp/src/components/site/header.css';
 						const hint = JSON.parse(localStorage.getItem(key) || 'null');
 						if (hint && typeof hint.email === 'string') show(hint);
 					} catch {}
-					fetch('/api/auth/get-session', { credentials: 'same-origin' })
+					const refresh = () => fetch('/api/auth/get-session', { credentials: 'same-origin' })
 						.then(response => (response.ok ? response.json() : Promise.reject()))
 						.then(session => {
 							const user = session && session.user;
@@ -61,6 +61,11 @@ import '../../../../webapp/src/components/site/header.css';
 							show(user);
 						})
 						.catch(() => {});
+					refresh();
+					// A page prerendered on hover, or kept in the back-forward cache,
+					// asked before the visitor may have signed in or out elsewhere.
+					document.addEventListener('prerenderingchange', refresh);
+					addEventListener('pageshow', event => { if (event.persisted) refresh(); });
 				})();
 			</script>
 		</div>

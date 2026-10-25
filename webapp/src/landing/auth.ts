@@ -3,6 +3,14 @@ import { passkeyClient } from '@better-auth/passkey/client';
 
 export const authClient = createAuthClient({ plugins: [passkeyClient()] });
 
+// A page prerendered on hover, or kept in the back-forward cache, checked the
+// session before the visitor may have signed in or out on another page; ask
+// again when it is shown. The docs header does the same (apps/docs/src/components/Header.astro).
+if (typeof document !== 'undefined') {
+	document.addEventListener('prerenderingchange', () => authClient.$store.notify('$sessionSignal'));
+	addEventListener('pageshow', (event) => { if (event.persisted) authClient.$store.notify('$sessionSignal'); });
+}
+
 // Better Auth errors carry a code when the server or WebAuthn names the failure.
 export const errorCode = (error: { message?: string }) => 'code' in error ? String(error.code) : undefined;
 

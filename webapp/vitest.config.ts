@@ -9,6 +9,6 @@ export default defineConfig({
 	test: {
 		environment: 'happy-dom',
 		setupFiles: [path.resolve(__dirname, 'src/test-setup.ts')],
-		include: [path.resolve(__dirname, 'src/{account,chat,landing,theme}/**/*.test.{ts,tsx}')],
+		include: [path.resolve(__dirname, 'src/{account,chat,components,landing,theme}/**/*.test.{ts,tsx}')],
 	},
 });
