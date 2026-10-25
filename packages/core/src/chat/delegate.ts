@@ -1,7 +1,7 @@
 // Delegated conversations: an outside agent, such as a coding agent working
 // on a task, writes the replies. Its approvals are the permissions it asks for.
 import type { Usage as LLMUsage } from '../llm/llm';
-import { addLLMUsage } from './engine';
+import { addLLMUsage, type ContextSnapshot } from './engine';
 import type { Event } from './events';
 import { Aborted, isAbort } from './running';
 import { newID } from './sql';
@@ -81,6 +81,13 @@ export class DelegateTurn {
 		this.message.usage = addLLMUsage(this.message.usage, u);
 		this.store.recordUsage(this.conversationId, this.message.id, model, u, tookMs, session);
 		await this.send({ kind: 'usage', usage: u });
+	}
+
+	/** context passes on what the agent says its session holds of a window of size tokens. */
+	async context(model: string, used: number, size: number) {
+		if (!(used >= 0) || !(size >= 0)) return;
+		const context: ContextSnapshot = { model, window: size, reserve: 0, limit: size, used, measured: true, agent: true };
+		await this.send({ kind: 'context', context });
 	}
 
 	hasTool(id: string) { return !!this.part(id); }

@@ -233,3 +233,8 @@ export const TrashIcon = () => (
 		<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
 	</Icon>
 );
+export const CompactIcon = () => (
+	<Icon size={14}>
+		<path d="M4 9h16M4 15h16M9 3l3 3 3-3M9 21l3-3 3 3" />
+	</Icon>
+);

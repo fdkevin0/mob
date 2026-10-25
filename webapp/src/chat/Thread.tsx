@@ -19,6 +19,7 @@ import { api, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
 import { BrandIcon, modelBrand } from './brandIcons';
+import { ContextMeter, useContextUsage } from './ContextMeter';
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, SpinnerIcon, StopIcon } from './icons';
 
 // What a new conversation offers to start with; a choice fills the message box, and nothing is sent until the owner sends it.
@@ -45,6 +46,7 @@ export function Thread({
 	draft,
 	clearDraft,
 	addProvider,
+	openUsage,
 }: {
 	connection: Connection;
 	id: string;
@@ -62,6 +64,8 @@ export function Thread({
 	clearDraft?: () => void;
 	/** addProvider opens the Model provider dialog from the model picker. */
 	addProvider?: () => void;
+	/** openUsage shows the Token usage page. */
+	openUsage?: () => void;
 }) {
 	const {
 		model,
@@ -100,6 +104,7 @@ export function Thread({
 		clearDraft?.();
 	}, []);
 	const completion = useCompletion({ connection, id, input, setInput });
+	const context = useContextUsage(connection, id, messages, model, busy);
 	const [choosing, setChoosing] = useState(false);
 	const [defaultModel, setDefaultModel] = useState<string>();
 	useEffect(() => {
@@ -280,15 +285,24 @@ export function Thread({
 								)}
 							</Dialog>
 						</div>
-						{busy ? (
-							<Button type="button" className="send-button" aria-label="Stop" title="Stop" onClick={() => void cancel()}>
-								<StopIcon />
-							</Button>
-						) : (
-							<Button className="send-button" aria-label="Send" title="Send (Enter)" disabled={!input.trim()}>
-								<ArrowUpIcon />
-							</Button>
-						)}
+						<div className="composer-actions">
+							<ContextMeter
+								context={context.context}
+								usage={context.usage}
+								busy={busy}
+								compact={() => run('/compact')}
+								openUsage={openUsage}
+							/>
+							{busy ? (
+								<Button type="button" className="send-button" aria-label="Stop" title="Stop" onClick={() => void cancel()}>
+									<StopIcon />
+								</Button>
+							) : (
+								<Button className="send-button" aria-label="Send" title="Send (Enter)" disabled={!input.trim()}>
+									<ArrowUpIcon />
+								</Button>
+							)}
+						</div>
 					</div>
 				</form>
 				{empty && !input && (

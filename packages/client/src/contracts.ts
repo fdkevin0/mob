@@ -172,6 +172,40 @@ export type UsageSummary = {
   turns: number;
   models: ModelUsage[];
 };
+/** ContextParts splits a prompt's tokens by what they are. */
+export type ContextParts = {
+  system: number;
+  tools: number;
+  summary: number;
+  messages: number;
+  outputs: number;
+};
+/**
+ * ContextSnapshot is what a conversation's prompt takes of its model's context window
+ * (GET /api/conversations/{id}/context, and the data-context part while a turn runs).
+ * limit is the window less what is kept for the reply; history beyond it is summarized.
+ * A window of zero is unknown.
+ */
+export type ContextSnapshot = {
+  model: string;
+  window: number;
+  reserve: number;
+  limit: number;
+  used: number;
+  /** measured is set once the provider counted the prompt; used is an estimate until then. */
+  measured: boolean;
+  parts?: ContextParts;
+  tools?: number;
+  /** summarized counts the earlier messages read as a summary; omitted is set when older ones are left out without one. */
+  summarized?: number;
+  omitted?: boolean;
+  /** agent is set when an outside coding agent reported the numbers, without parts. */
+  agent?: boolean;
+};
+export type ConversationContext = {
+  context: ContextSnapshot | null;
+  usage?: UsageSummary;
+};
 export type PlanEntry = {
   content: string;
   status: string;

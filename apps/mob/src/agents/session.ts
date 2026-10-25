@@ -455,7 +455,9 @@ export class Session {
 				if ((u.status === 'completed' || u.status === 'failed') && !turn.hasTool(u.toolCallId)) await turn.tool(u.toolCallId, c.name, c.input);
 				return this.finish(turn, u.toolCallId, u.status, u.content, u.rawOutput);
 			}
-			case 'usage_update': return this.costed(u.cost);
+			case 'usage_update':
+				this.costed(u.cost);
+				return turn.context(this.model || this.preset.name, u.used, u.size);
 			case 'config_option_update': {
 				const model = modelOption(u.configOptions);
 				if (model) this.model = model;

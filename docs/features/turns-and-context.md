@@ -183,6 +183,30 @@ The shared rendering configuration is in
   model has already read, never those of the step just run. A second refusal,
   or nothing to free, ends the turn and suggests `/compact`.
 
+## Showing the context
+
+- The web composer shows, beside Send, how much of what a turn can send the
+  conversation's prompt takes: a ring and a percentage of the limit (the
+  window less the reply's reserve, where history starts to be summarized),
+  grey until 75%, amber from 75% and red from 90%. On a phone it shows the
+  ring alone. A model whose window is unknown shows its tokens only.
+- Opening it shows what the prompt holds: instructions and tool definitions,
+  the summary of earlier messages, messages, tool outputs, the free room and
+  the reply's reserve; how many earlier messages are read as a summary;
+  **Compact now** (`/compact`); and the conversation's total tokens and cost,
+  which lead to the Token usage page.
+- While a turn runs, the engine reports a `ContextSnapshot` as a `data-context`
+  stream part (id `context`, replaced as it goes): estimated once history is
+  fitted, then after each step from the provider's count, its parts scaled to
+  that count. `GET /api/conversations/{id}/context` returns the last turn's
+  report while its reply is the latest message and the model is unchanged;
+  otherwise it estimates the next turn's prompt without calling the model,
+  writing no summary and running no hook besides saved facts, so history the
+  window cannot hold shows as more than 100%. It also returns the
+  conversation's `UsageSummary`.
+- A coding agent's conversation shows what the agent reports over ACP
+  (`usage_update` `used` and `size`), without parts or Compact now.
+
 ## Clearing old tool outputs
 
 - Tool outputs are replaced, oldest first, with a short note naming the tool

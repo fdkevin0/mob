@@ -106,35 +106,22 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		await send({ kind: 'turn-started', messageId: message.id });
 		let history = store.history(conversationID);
 		const req = turn.request;
-		// Without a known limit the driver picks the reply size; history still
-		// leaves room for one of outputCap.
-		let reserve = outputCap;
-		if (info.output && info.output > 0) { req.maxTokens = Math.min(info.output, outputCap); reserve = req.maxTokens; }
+		const { reserve, maxTokens } = replyRoom(info);
+		if (maxTokens !== undefined) req.maxTokens = maxTokens;
 		const context = info.context ?? 0;
-		if (context > 0 && reserve > Math.floor(context / 4)) {
-			reserve = Math.floor(context / 4);
-			req.maxTokens = Math.min(req.maxTokens ?? 0, reserve);
-		}
 		// offered are the tools declared to the model. Deferred tools wait until
 		// tool_search loads them, unless the conversation has loaded or called
 		// them before; staged are those tool_search loaded in this step,
 		// declared once the step's calls have run.
 		const offered = new Map<string, Tool>();
-		let waiting: Tool[] = [], loaded: Tool[] = [], staged: Tool[] = [];
+		let { declared, waiting, loaded } = offer(info, agent, history), staged: Tool[] = [];
 		req.tools = [];
+		for (const t of declared) {
+			offered.set(t.name, t);
+			req.tools.push(declaration(t));
+			if (t.prompt) req.system += ' ' + t.prompt;
+		}
 		if (info.tools) {
-			const used = usedTools(history);
-			const names = new Set<string>();
-			for (const t of agent.tools) {
-				if (names.has(t.name)) throw new Error('tool offered twice: ' + t.name);
-				names.add(t.name);
-				if (t.exposure === 'hidden') continue;
-				if (t.exposure === 'deferred' && !used.has(t.name)) { waiting.push(t); continue; }
-				if (t.exposure === 'deferred') loaded.push(t);
-				offered.set(t.name, t);
-				req.tools.push(declaration(t));
-				if (t.prompt) req.system += ' ' + t.prompt;
-			}
 			const entries = agent.entries ?? [];
 			if (waiting.length || entries.length) {
 				const load = (tools: Tool[]) => {
@@ -156,6 +143,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		let budget = limit - tokens(req.system) - toolTokens(req.tools) - tokens(omittedNotice);
 		if (note) budget -= tokens(note);
 		let summary: Summary = store.summary(conversationID);
+		const full = history;
 		// room is what a summary may take beside the latest message, which every prompt keeps.
 		const [last] = prompt(history, message.id, 1);
 		const room = budget - promptTokens(last);
@@ -199,7 +187,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		// size is the prompt's tokens: estimated at first, then as the provider
 		// counted the last step, plus estimates for what was added since.
 		let size = tokens(req.system) + toolTokens(req.tools) + promptTokens(req.messages);
-		let declared = toolTokens(req.tools);
+		let declaredTokens = toolTokens(req.tools);
 		// read is how many of the messages the model has seen. groups are the
 		// tool outputs that can be cleared to make room, oldest first.
 		let read = 0, groups = each(req.messages, saved);
@@ -228,6 +216,9 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 			size = tokens(req.system) + toolTokens(req.tools) + promptTokens(req.messages);
 			return true;
 		};
+		// Clients show what the prompt takes of the window: estimated now, then as measured after each step.
+		const sendContext = () => send({ kind: 'context', context: contextOf(info, refString(model.ref), reserve, req, summary.text, size, measured, covered(full, summary.through), !!through) });
+		await sendContext();
 		let retried = false;
 		const seenCalls = new Set<string>();
 		const steps = agent.steps && agent.steps > 0 ? agent.steps : defaultSteps;
@@ -352,12 +343,122 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 			}
 			staged = [];
 			const n = toolTokens(req.tools);
-			if (n !== declared) { size += n - declared; declared = n; }
+			if (n !== declaredTokens) { size += n - declaredTokens; declaredTokens = n; }
+			await sendContext();
 			await send({ kind: 'step-finished' });
 			if (pending || !result.calls.length) return;
 		}
 		throw new StepLimit(`tool step limit reached (${steps}); send another message to continue`);
 	}
+}
+
+/** replyRoom is what a turn keeps of the window for the reply, and the reply size it asks for. Without a known limit the driver picks the reply size; history still leaves room for one of outputCap. */
+function replyRoom(info: Info): { reserve: number; maxTokens?: number } {
+	let reserve = outputCap, maxTokens: number | undefined;
+	if (info.output && info.output > 0) { maxTokens = Math.min(info.output, outputCap); reserve = maxTokens; }
+	const context = info.context ?? 0;
+	if (context > 0 && reserve > Math.floor(context / 4)) {
+		reserve = Math.floor(context / 4);
+		maxTokens = Math.min(maxTokens ?? 0, reserve);
+	}
+	return { reserve, maxTokens };
+}
+
+/** offer splits the agent's tools into those a turn declares from the start and the deferred ones waiting for tool_search; loaded are deferred tools the conversation used before, so declared again. */
+function offer(info: Info, agent: Agent, history: Message[]) {
+	const declared: Tool[] = [], waiting: Tool[] = [], loaded: Tool[] = [];
+	if (!info.tools) return { declared, waiting, loaded };
+	const used = usedTools(history);
+	const names = new Set<string>();
+	for (const t of agent.tools) {
+		if (names.has(t.name)) throw new Error('tool offered twice: ' + t.name);
+		names.add(t.name);
+		if (t.exposure === 'hidden') continue;
+		if (t.exposure === 'deferred' && !used.has(t.name)) { waiting.push(t); continue; }
+		if (t.exposure === 'deferred') loaded.push(t);
+		declared.push(t);
+	}
+	return { declared, waiting, loaded };
+}
+
+/** ContextParts splits a prompt's tokens by what they are. */
+export type ContextParts = { system: number; tools: number; summary: number; messages: number; outputs: number };
+
+/**
+ * ContextSnapshot is what a conversation's prompt takes of its model's
+ * context window. limit is what a prompt may use, the window less what is
+ * kept for the reply; history beyond it is summarized. A window of zero is
+ * unknown, and then so is the limit.
+ */
+export type ContextSnapshot = {
+	model: string;
+	window: number;
+	reserve: number;
+	limit: number;
+	used: number;
+	/** measured is set once the provider counted the prompt; used is an estimate until then. */
+	measured: boolean;
+	parts?: ContextParts;
+	tools?: number;
+	/** summarized counts the earlier messages the prompt reads as a summary; omitted is set when it leaves older ones out without one. */
+	summarized?: number;
+	omitted?: boolean;
+	/** agent is set when an outside agent reported used and window, without parts. */
+	agent?: boolean;
+};
+
+/** contextOf describes req as a snapshot of size tokens; measured parts are scaled to the provider's count. */
+function contextOf(info: Info, model: string, reserve: number, req: Request, summary: string, size: number, measured: boolean, summarized: number, omitted: boolean): ContextSnapshot {
+	const s = summaryCost(summary);
+	let messages = 0, outputs = 0;
+	for (const m of req.messages) {
+		if (m.role === 'tool') outputs += promptTokens([m]);
+		else messages += promptTokens([m]);
+	}
+	const parts: ContextParts = { system: Math.max(tokens(req.system) - s, 0), tools: toolTokens(req.tools), summary: s, messages, outputs };
+	const total = parts.system + parts.tools + parts.summary + parts.messages + parts.outputs;
+	const scale = measured && total > 0 ? size / total : 1;
+	for (const k of Object.keys(parts) as (keyof ContextParts)[]) parts[k] = Math.round(parts[k] * scale);
+	const window = info.context ?? 0;
+	const snapshot: ContextSnapshot = { model, window, reserve: window > 0 ? reserve : 0, limit: window > 0 ? window - reserve : 0, used: Math.round(size), measured, parts, tools: req.tools?.length ?? 0 };
+	if (summarized) snapshot.summarized = summarized;
+	if (omitted) snapshot.omitted = true;
+	return snapshot;
+}
+
+/** covered counts the messages a summary through id covers, leaving out commands, which models never read. */
+function covered(history: Message[], id: string) {
+	const i = id ? history.findIndex(m => m.id === id) : -1;
+	return i < 0 ? 0 : history.slice(0, i + 1).filter(m => !m.command).length;
+}
+
+/**
+ * estimate is what the next turn's prompt would take of model's window, without
+ * calling it. No summary is written and no hook runs: system carries what hooks
+ * would add, and history the window cannot hold shows as more than the limit.
+ */
+export function estimate(store: Store, model: Model, agent: Agent, conversationID: string, system: string): ContextSnapshot {
+	const info = model.info;
+	// A conversation a client named but has not written in yet is empty.
+	const fresh = !store.exists(conversationID);
+	const history = fresh ? [] : store.history(conversationID);
+	const summary = fresh ? { text: '', through: '' } : store.summary(conversationID);
+	const req: Request = { system: systemPrompt + (agent.prompt ? '\n' + agent.prompt : '') + system, messages: [] };
+	const { declared, waiting } = offer(info, agent, history);
+	req.tools = declared.map(declaration);
+	for (const t of declared) if (t.prompt) req.system += ' ' + t.prompt;
+	const entries = agent.entries ?? [];
+	if (info.tools && (waiting.length || entries.length)) {
+		req.tools.push(declaration(toolSearch(() => waiting, () => [], entries, () => {})));
+		req.system += ' ' + searchPrompt(waiting, entries);
+	}
+	if (summary.text) req.system += summaryNotice + summary.text;
+	const context = info.context ?? 0;
+	// Without a known window a turn reads the most recent messages; with one, everything since the summary.
+	let through: string;
+	[req.messages, , through] = prompt(since(history, summary.through), '', context > 0 ? Number.MAX_SAFE_INTEGER : 0);
+	const size = tokens(req.system) + toolTokens(req.tools) + promptTokens(req.messages);
+	return contextOf(info, refString(model.ref), replyRoom(info).reserve, req, summary.text, size, false, covered(history, summary.through), !!through);
 }
 
 /** declaration is the part of a tool the model sees. */

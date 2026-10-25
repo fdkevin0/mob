@@ -454,6 +454,7 @@ export function Workspace({
 							draft={prompt}
 							clearDraft={() => setPrompt('')}
 							addProvider={() => setProvider(true)}
+							openUsage={() => page('usage')}
 						/>
 					</div>
 				) : (
