@@ -89,6 +89,35 @@ bun run test:site                 # offline routing checks against the public bu
 For documentation writing or organization, the repository skill
 [mob-docs](.agents/skills/mob-docs/SKILL.md) points to the relevant sources.
 
+## UI style
+
+The app, landing page, demo, account page and documentation share one look: a
+quiet rounded workspace, with pixel art kept for the calves.
+
+- Colours, radii and fonts are tokens in `webapp/src/styles/theme.css` (the
+  docs palette is in `apps/docs/src/theme.css`). Other stylesheets use the
+  tokens; a new colour becomes a token or a named custom property first.
+- Radii come from one scale: `--radius-code` (4px) for code and keys,
+  `--radius` (8px) for buttons, inputs and menu items, `--radius-card` (12px)
+  for cards and menus, `--radius-dialog` (16px) for dialogs and the composer,
+  and `--radius-pill` or 50% for pills and dots.
+- Shadows are soft and only lift what floats (menus, dialogs, the chat card);
+  no hard offset shadows.
+- Text is Geist Sans. Geist Mono is for code, terminal output, paths and
+  machine values, not for labels, kickers or buttons.
+- Lime marks a signal (the primary action, the current item, success), not
+  decoration. Only the calves are pixel art; other icons are line icons
+  (`webapp/src/components/brand/Icon.tsx`).
+- Reuse the shared pieces: `SiteHeader`/`SiteFooter` and `Segmented` in
+  `webapp/src/components`, `ThemePicker` in `webapp/src/theme`, and the `.btn`,
+  `.ui-input`, `.ui-menu` and `.dialog-panel` classes in
+  `webapp/src/styles/base.css`. Every page supports System, Light and Dark.
+
+`webapp/src/theme/style-rules.test.ts` (part of `bun run test:webapp`) checks
+the colour, radius and shadow rules over every stylesheet. The chat styles and
+the demo's copy of them still carry older radii, counted in that test; lower
+the count when you move one onto the scale.
+
 ## Changes
 
 - `main` changes only through pull requests, squash-merged: each pull request
