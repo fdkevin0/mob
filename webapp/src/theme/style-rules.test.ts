@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 // The site-wide UI rules from CONTRIBUTING.md ("UI style"), checked over every
 // stylesheet of the web app and the docs site.
 const root = path.resolve(__dirname, '../../..');
-const tokenFiles = new Set(['webapp/src/styles/theme.css', 'apps/docs/src/theme.css']);
+const tokenFiles = new Set(['webapp/src/styles/tokens.css', 'webapp/src/styles/theme.css', 'apps/docs/src/theme.css']);
 const sheets = ['webapp/src', 'apps/docs/src'].flatMap((dir) =>
 	readdirSync(path.join(root, dir), { recursive: true, encoding: 'utf8' })
 		.filter((file) => file.endsWith('.css'))

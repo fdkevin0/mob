@@ -2,7 +2,7 @@
 	display: inline-flex;
 	gap: 2px;
 	padding: 2px;
-	border: 1px solid var(--line-strong, var(--sl-color-gray-5));
+	border: 1px solid var(--line-strong);
 	border-radius: calc(var(--radius) + 2px);
 }
 .theme-picker label {
@@ -12,7 +12,7 @@
 	width: 28px;
 	height: 24px;
 	border-radius: var(--radius);
-	color: var(--muted-foreground, var(--sl-color-gray-3));
+	color: var(--muted-foreground);
 	cursor: pointer;
 }
 .theme-picker input {
@@ -23,13 +23,13 @@
 	cursor: pointer;
 }
 .theme-picker label:hover {
-	color: var(--text, var(--sl-color-gray-1));
+	color: var(--text);
 }
 .theme-picker label:has(:checked) {
-	background: var(--accent, var(--sl-color-gray-6));
-	color: var(--text, var(--sl-color-gray-1));
+	background: var(--accent);
+	color: var(--text);
 }
 .theme-picker label:has(:focus-visible) {
-	outline: 2px solid var(--ring, var(--sl-color-accent));
+	outline: 2px solid var(--ring);
 	outline-offset: 1px;
 }
