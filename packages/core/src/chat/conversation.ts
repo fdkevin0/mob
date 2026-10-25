@@ -130,13 +130,13 @@ export class ConversationService {
 			}
 		}
 		if (this.active.has(input.id) || this.closing) throw new CommandError(409, 'conversation is busy; wait or stop the active turn');
+		// The replaced messages are deleted only with the new one recorded, so a refused or stopped turn deletes nothing.
 		if (input.replace) {
 			// A coding agent keeps its own session, which a rewritten history here would no longer match.
 			if (delegate) throw new CommandError(409, 'a coding agent’s conversation cannot be rewritten; send a new message instead');
-			try { this.store.truncate(input.id, input.replace); } catch (e) {
-				if (e instanceof NotFound) throw new CommandError(404, 'the message to replace is not in this conversation');
-				throw e;
-			}
+			// A command answers about the conversation as it is, so it cannot also rewrite it.
+			if (isCommand) throw new CommandError(400, 'a command cannot replace a message; send it as a new message');
+			if (!this.store.replaceable(input.id, input.replace)) throw new CommandError(404, 'the message to replace is not in this conversation');
 		}
 		// A turn has no deadline: it ends when it finishes or is stopped, and
 		// each model call and tool bounds its own wait.
@@ -190,9 +190,10 @@ export class ConversationService {
 		const label = delegate ? delegate.label(input.id) : refString(model!.ref);
 		let message;
 		try {
-			message = this.store.begin(input.id, input.requestId, input.text, label);
+			message = this.store.begin(input.id, input.requestId, input.text, label, input.replace);
 		} catch (e) {
 			if (this.store.hasRequest(input.requestId)) throw new CommandError(409, 'request already accepted; refresh history');
+			if (e instanceof NotFound) throw new CommandError(404, e.message);
 			throw e;
 		}
 		if (delegate) {

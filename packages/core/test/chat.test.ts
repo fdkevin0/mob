@@ -195,5 +195,14 @@ test('a message said again replaces it and everything after it', async () => {
 	s.rename(c.id, 'Mine');
 	await service.execute({ id: c.id, text: 'renamed', requestId: 'r7', replace: 'r4' }, () => {});
 	expect(s.list().find(x => x.id === c.id)?.title).toBe('Mine');
+	// A refused or stopped replacement deletes nothing.
+	await service.execute({ id: c.id, text: 'later', requestId: 'r8' }, () => {});
+	const kept = s.history(c.id).map(m => m.id);
+	await expect(service.execute({ id: c.id, text: 'dup', requestId: 'r7', replace: 'r8' }, () => {})).rejects.toThrow('request already accepted');
+	await expect(service.execute({ id: c.id, text: '/models', requestId: 'r9', replace: 'r8' }, () => {})).rejects.toThrow('cannot replace');
+	const stop = new AbortController();
+	stop.abort();
+	await expect(service.start({ id: c.id, text: 'stopped', requestId: 'r10', replace: 'r7' }, stop.signal)).rejects.toThrow();
+	expect(s.history(c.id).map(m => m.id)).toEqual(kept);
 	s.close();
 });

@@ -726,3 +726,17 @@ it('says a message again in place of it and what followed, keeping the draft', a
 	await session.resend('a1', 'nope');
 	expect(bodies).toHaveLength(1);
 });
+
+it('leaves an empty draft alone when the service refuses an edit', async () => {
+	const said = (id: string, role: 'user' | 'assistant', text: string) => ({ id, role, parts: [{ type: 'text' as const, text }] });
+	const history: Snapshot = { ...initial, messages: [said('u1', 'user', 'first'), said('a1', 'assistant', 'one')] };
+	const client = new MobClient(connection, {
+		fetch: async (url) => (String(url).endsWith('/chat') ? new Response('conversation is busy; wait or stop the active turn', { status: 409 }) : Response.json(history)),
+	});
+	const session = new ConversationClient({ client, id: 'one', initial: history, clientType: 'web' });
+	cleanups.push(session.start());
+	await session.resend('u1', 'first, edited');
+	await vi.waitFor(() => expect(session.getSnapshot().messages.map((m) => m.id)).toEqual(['u1', 'a1']));
+	expect(session.getSnapshot().input).toBe('');
+	expect(session.getSnapshot().failure).not.toBe('');
+});

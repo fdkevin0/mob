@@ -377,7 +377,7 @@ export class ConversationClient {
 		this.update({ failure: '', commandResult: undefined, recovery: undefined });
 		// The replaced messages leave at once; if the service refuses, the reload after sending brings them back.
 		this.chat.messages = this.chat.messages.slice(0, index);
-		await this.send(text.trim(), false, id);
+		await this.send(text.trim(), true, id);
 	};
 
 	private async send(text: string, preserveInput: boolean, replace?: string) {
