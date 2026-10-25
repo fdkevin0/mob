@@ -97,7 +97,8 @@ const statuses: Record<string, { label: string; icon?: ReactNode }> = {
 	idle: { label: 'Idle' },
 };
 
-const tools: Record<string, ReactNode> = {
+// tools shows the kinds of work an agent did, here and on the /demo page.
+export const tools: Record<string, ReactNode> = {
 	execute: <TerminalIcon />,
 	edit: <PencilIcon />,
 	delete: <PencilIcon />,
@@ -133,10 +134,26 @@ export type Act = {
 // shownApprovals bounds the decisions a card offers; the rest wait in the conversation.
 const shownApprovals = 2;
 
+// What an agent asks to do, in words: a coding agent's tool is named
+// runtime_kind, such as claude_execute.
+const asks: Record<string, string> = {
+	execute: 'run a command',
+	edit: 'edit files',
+	delete: 'delete files',
+	move: 'move files',
+	read: 'read files',
+	search: 'search files',
+	fetch: 'fetch a page',
+};
+export function approvalQuestion(label: string, tool: string) {
+	const ask = asks[tool.slice(tool.lastIndexOf('_') + 1)];
+	return ask ? `${label} wants to ${ask}.` : `${label} wants to use ${tool}.`;
+}
+
 function Decision({ node, approval, act, busy }: { node: AgentNode; approval: AgentApproval; act: Act; busy: boolean }) {
 	return (
 		<div className="agent-approval">
-			<ApprovalPrompt question={`Allow ${approval.tool}?`} request={approval.text} whole={approval.whole} busy={busy}
+			<ApprovalPrompt question={approvalQuestion(node.label, approval.tool)} request={approval.text} whole={approval.whole} busy={busy}
 				decide={(approved, reason, remember) => void act.decide(node.conversationId, approval.id, approved, { reason, remember })} />
 		</div>
 	);
@@ -401,8 +418,9 @@ export function link(parent: Box, child: Box, fan: boolean): { d: string; x: num
 	};
 }
 
-// Links draws who started whom between the cards shown in canvas.
-function Links({ canvas, edges, version }: { canvas: RefObject<HTMLDivElement | null>; edges: [string, string, string][]; version: string }) {
+// Links draws who started whom between the cards shown in canvas. The /demo
+// page draws its replayed tree with it too.
+export function Links({ canvas, edges, version }: { canvas: RefObject<HTMLDivElement | null>; edges: [string, string, string][]; version: string }) {
 	const [links, setLinks] = useState<Link[]>([]);
 	const [size, setSize] = useState({ width: 0, height: 0 });
 	useLayoutEffect(() => {

@@ -21,11 +21,11 @@ it('moves the conversation and the agents together, and takes an approval from t
 	await wait(11_000);
 	const chat = within(screen.getByRole('region', { name: 'The conversation' }));
 	const agents = within(screen.getByRole('region', { name: 'Agents' }));
-	expect(chat.getByText(/wants to run a command in the sandbox/)).toBeTruthy();
-	expect(agents.getByText('Run command · in the sandbox')).toBeTruthy();
-	fireEvent.click(chat.getByRole('button', { name: 'Approve' }));
+	expect(chat.getByText('Codex wants to run a command.')).toBeTruthy();
+	expect(agents.getByText('Codex wants to run a command.')).toBeTruthy();
+	fireEvent.click(chat.getByRole('button', { name: 'Allow once' }));
 	// The agent card stops asking as soon as the conversation answers.
-	expect(agents.queryByText('Run command · in the sandbox')).toBeNull();
+	expect(agents.queryByText('Codex wants to run a command.')).toBeNull();
 	await wait(14_000);
 	expect(agents.getByRole('status').textContent).toMatch(/Both branches are ready to merge/);
 	expect(chat.getByText(/Want me to open the pull requests/)).toBeTruthy();
@@ -37,7 +37,9 @@ it('takes a denial from the agent card and from a chat app', async () => {
 	await wait(11_000);
 	const phone = within(screen.getByLabelText('Mob in a chat app'));
 	expect(phone.getByText(/Codex wants to run a command/)).toBeTruthy();
-	fireEvent.click(within(screen.getByRole('region', { name: 'Agents' })).getByRole('button', { name: 'Deny' }));
+	const tree = within(screen.getByRole('region', { name: 'Agents' }));
+	fireEvent.click(tree.getByRole('button', { name: 'Deny…' }));
+	fireEvent.click(tree.getByRole('button', { name: 'Deny' }));
 	expect(phone.getByText('✗ Denied')).toBeTruthy();
 	await wait(14_000);
 	expect(phone.getByText(/run it before you merge mob\/flaky-t1/)).toBeTruthy();
@@ -48,7 +50,6 @@ it('reports a stopped agent as stopped, not ready to merge', async () => {
 	fireEvent.click(screen.getByRole('button', { name: 'Web app' }));
 	await wait(11_000);
 	const agents = within(screen.getByRole('region', { name: 'Agents' }));
-	fireEvent.click(agents.getByRole('button', { name: /Codex/ }));
 	fireEvent.click(agents.getByRole('button', { name: 'Stop Codex' }));
 	await wait(14_000);
 	expect(agents.getByRole('status').textContent).toMatch(/1 of 2 branches ready to merge/);

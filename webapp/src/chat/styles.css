@@ -624,6 +624,38 @@
 	line-height: 1.75;
 	font-size: 15px;
 }
+/* Tables read as part of the reply: rows between hairlines under a quiet
+ * header, values such as branch names kept on one line. */
+.conversation-content [data-streamdown='table-wrapper'] {
+	gap: 4px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.conversation-content [data-streamdown='table-wrapper'] > div:last-child {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.conversation-content [data-streamdown='table-header'] {
+	background: transparent;
+}
+.conversation-content [data-streamdown='table-header-cell'],
+.conversation-content [data-streamdown='table-cell'] {
+	padding: 6px 10px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.conversation-content [data-streamdown='table-header-cell'] {
+	font-weight: 500;
+	color: var(--muted-foreground);
+}
+.conversation-content [data-streamdown='table-row'] {
+	border-bottom: 1px solid var(--line-strong);
+}
+.conversation-content [data-streamdown='table-cell'] code {
+	white-space: nowrap;
+}
 .user-bubble {
 	background: var(--surface-raised);
 	border-radius: 18px;
