@@ -162,11 +162,11 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		const half = Math.floor((budget - length - tokens(summaryNotice)) / 2);
 		if (through && context > 0 && length >= summaryTokens / 4 && half > 0) {
 			const [, , older] = prompt(history, message.id, half);
-			const [text, requests, err] = await summarize(signal, model, summary.text, until(history, older), length);
+			const [text, requests, err, attempts] = await summarize(signal, model, summary.text, until(history, older), length);
 			// The summary's requests are part of the reply: they count, and the
 			// ones that wrote say how fast the model writes. The reply's first
 			// token stays the first word its reader sees.
-			stats.requests! += requests.length;
+			stats.requests! += attempts;
 			for (const q of requests) {
 				if (q.firstTokenMs === undefined) continue;
 				stats.generationMs! += q.tookMs - q.firstTokenMs;

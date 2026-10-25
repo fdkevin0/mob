@@ -202,7 +202,8 @@ test('a reply counts a prompt sent again after the provider refused it as too lo
 	s.close();
 });
 
-test('a reply counts and times the requests that summarized older messages for it', async () => {
+// A summary's request counts whether or not the provider reported its usage.
+test.each([true, false])('a reply counts and times the requests that summarized older messages for it (summary usage reported: %p)', async (reported) => {
 	const s = open();
 	const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 	let calls = 0, summaries = 0;
@@ -216,7 +217,8 @@ test('a reply counts and times the requests that summarized older messages for i
 			await pause(20);
 			await emit('text', summarizing ? 'what was said' : 'ok');
 			await pause(10);
-			return { text: summarizing ? 'what was said' : 'ok', reasoning: '', signature: '', calls: [], usage: { inputTokens: 10, outputTokens: 3 } };
+			const usage = summarizing && !reported ? undefined : { inputTokens: 10, outputTokens: 3 };
+			return { text: summarizing ? 'what was said' : 'ok', reasoning: '', signature: '', calls: [], usage };
 		}
 	}
 	const service = new ConversationService(s, { ...demoModels, resolve: () => new Small() });
@@ -228,9 +230,10 @@ test('a reply counts and times the requests that summarized older messages for i
 	expect(summaries).toBeGreaterThan(0);
 	const reply = s.history(c.id).at(-1)!;
 	expect(reply.stats?.requests).toBe(calls);
-	expect(reply.stats?.timedOutput).toBe(3 * calls);
+	const measured = reported ? calls : calls - summaries;
+	expect(reply.stats?.timedOutput).toBe(3 * measured);
 	const rows = s.exportConversation(c.id).usage.filter(u => u.messageId === reply.id);
-	expect(rows).toHaveLength(calls);
+	expect(rows).toHaveLength(measured);
 	for (const row of rows) expect(row.firstTokenMs).toBeGreaterThanOrEqual(15);
 	s.close();
 });

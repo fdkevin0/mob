@@ -25,9 +25,10 @@ export function transcriptUsage(r: Requests): LLMUsage | undefined {
 /**
  * summarize folds messages into previous with model, as many messages at a
  * time as fit its window, in a summary of at most limit tokens, and returns
- * the new summary, what each of its requests used, and why it failed if it did.
+ * the new summary, what each of its requests used, why it failed if it did,
+ * and how many requests it made, those without usage included.
  */
-export async function summarize(signal: AbortSignal, model: Model, previous: string, messages: Message[], limit: number): Promise<[string, Requests, Error | undefined]> {
+export async function summarize(signal: AbortSignal, model: Model, previous: string, messages: Message[], limit: number): Promise<[string, Requests, Error | undefined, number]> {
 	const info = model.info;
 	const context = info.context ?? 0;
 	let maxTokens = Math.min(summaryTokens, limit);
@@ -35,7 +36,7 @@ export async function summarize(signal: AbortSignal, model: Model, previous: str
 	// About three words take four tokens.
 	const system = compactPrompt + ` Use at most about ${Math.floor(maxTokens * 3 / 8)} words.`;
 	const usage: Requests = [];
-	let summary = previous, part = '';
+	let summary = previous, part = '', attempts = 0;
 	const flush = async () => {
 		if (!part) return;
 		let text = 'Conversation:\n' + part + '\nWrite the summary.';
@@ -45,6 +46,7 @@ export async function summarize(signal: AbortSignal, model: Model, previous: str
 		let first: number | undefined;
 		const used = (u: LLMUsage) => ({ model: refString(model.ref), usage: priced(u, info.cost), tookMs: Date.now() - began, firstTokenMs: first });
 		let result;
+		attempts++;
 		try {
 			result = await model.stream({ system, messages: [{ role: 'user', text }], maxTokens }, () => { first ??= Date.now() - began; }, signal);
 		} catch (e) {
@@ -79,9 +81,9 @@ export async function summarize(signal: AbortSignal, model: Model, previous: str
 		}
 		await flush();
 	} catch (e) {
-		return ['', usage, e instanceof Error ? e : new Error(String(e))];
+		return ['', usage, e instanceof Error ? e : new Error(String(e)), attempts];
 	}
-	return [summary, usage, undefined];
+	return [summary, usage, undefined, attempts];
 }
 
 /** transcript is a stored message as a summary reads it: who said what, and what tools were called with and returned, their outputs cut short. */
