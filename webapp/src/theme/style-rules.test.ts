@@ -26,33 +26,46 @@ function declarations(file: string) {
 	return [...css.matchAll(/([-\w]+)\s*:\s*([^;{}]*?)\s*(?=[;}])/g)].map(([, prop, value]) => ({ prop, value }));
 }
 
-function splitTop(value: string) {
+function splitTop(value: string, separator: RegExp) {
 	const parts: string[] = [];
 	let depth = 0;
 	let start = 0;
 	for (let i = 0; i < value.length; i++) {
 		if (value[i] === '(') depth++;
 		else if (value[i] === ')') depth--;
-		else if (value[i] === ',' && depth === 0) {
+		else if (depth === 0 && separator.test(value[i])) {
 			parts.push(value.slice(start, i));
 			start = i + 1;
 		}
 	}
-	return [...parts, value.slice(start)].map((part) => part.trim());
+	return [...parts, value.slice(start)].map((part) => part.trim()).filter(Boolean);
 }
 
 // A sharp shadow cast down and to the side. Inset edges and a folded card's
-// straight-down stack are borders, not shadows.
+// straight-down stack are borders, not shadows. The colour and `inset` may sit
+// on either side of the lengths; a blur written as an expression counts as soft.
+const length = /^(-?[\d.]+[a-z]*|(calc|min|max|clamp)\(.*\))$/;
 function hardShadow(shadow: string) {
-	const m = /^(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?(?:\s+(-?[\d.]+)(?:px)?)?/.exec(shadow);
-	return Boolean(m && Number(m[1]) && Number(m[2]) && !Number(m[3] ?? 0));
+	const parts = splitTop(shadow, /\s/);
+	if (parts.includes('inset')) return false;
+	const first = parts.findIndex((part) => length.test(part));
+	if (first < 0) return false;
+	const end = parts.findIndex((part, i) => i > first && !length.test(part));
+	const [x, y, blur = '0'] = parts.slice(first, end < 0 ? undefined : end);
+	const zero = (part: string) => /^-?0*\.?0*[a-z]*$/.test(part);
+	return y !== undefined && !zero(x) && !zero(y) && zero(blur);
 }
 
 describe('style rules', () => {
 	it('flags hard shadows', () => {
 		expect(hardShadow('4px 4px 0 rgb(0 0 0)')).toBe(true);
 		expect(hardShadow('0 30px 80px rgb(0 0 0)')).toBe(false);
+		expect(hardShadow('var(--text) 4px 4px 0')).toBe(true);
+		expect(hardShadow('rgb(0 0 0 / 0.4) 4px 4px')).toBe(true);
 		expect(hardShadow('inset 2px 0 0 var(--lime)')).toBe(false);
+		expect(hardShadow('4px 4px 0 inset var(--line)')).toBe(false);
+		expect(hardShadow('4px 4px calc(8px) var(--line)')).toBe(false);
+		expect(hardShadow('0 4px 0 -1px var(--surface)')).toBe(false);
 	});
 
 	it('finds the stylesheets', () => {
@@ -92,7 +105,7 @@ describe('style rules', () => {
 		const hard = sheets.flatMap((file) =>
 			declarations(file)
 				.filter(({ prop }) => prop === 'box-shadow')
-				.flatMap(({ value }) => splitTop(value).map((shadow) => ({ file, shadow }))),
+				.flatMap(({ value }) => splitTop(value, /,/).map((shadow) => ({ file, shadow }))),
 		).filter(({ shadow }) => hardShadow(shadow));
 		expect(hard.map(({ file, shadow }) => `${file}: ${shadow}`)).toEqual([]);
 	});
