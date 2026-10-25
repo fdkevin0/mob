@@ -37,6 +37,10 @@ import '../../../../webapp/src/components/site/header.css';
 	.docs-header .site-header-inner { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
 	.docs-search { min-width: 0; }
 	.docs-search button[data-open-modal] { height: 36px; }
+	@media (min-width: 50rem) {
+		.sidebar-pane { inset-block-start: 0; scroll-padding-top: var(--sl-nav-height); }
+		.sidebar-content { padding-top: calc(var(--sl-nav-height) + 1rem); }
+	}
 	@media (max-width: 900px) {
 		.docs-header .site-header-inner { gap: 12px; }
 		.docs-search { justify-self: end; }
