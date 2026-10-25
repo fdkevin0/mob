@@ -300,7 +300,24 @@ The shared rendering configuration is in
   for each request when a summary is written in parts. Replies
   saved before 2026-10-20 were counted from the usage saved on them, one
   request each, with no duration. The reply's own usage (the `data-usage`
-  stream events and its `usage` metadata) is unchanged.
+  stream events and its `usage` metadata) is unchanged. Since schema 13 each
+  row also has `first_token_ms`, from the request's start to its first text or
+  reasoning (0 when none came, such as a request that only called tools).
+- Each reply records its model, usage and `stats` (`messages.stats`, schema
+  13): `startedAt` and `finishedAt`; `firstTokenMs`, from the start of the
+  turn to the first words of the reply; `generationMs`, each request's time
+  from its first words to its end, added up, with `timedOutput`, the output
+  tokens of those requests, so `timedOutput / generationMs` is how fast the
+  model writes; `toolMs`, the time tools ran; and `requests`. The requests
+  that summarize older messages before the reply, and a prompt sent again
+  after the provider refused it as too long, count among them. A coding agent's reply records
+  only `startedAt`, `firstTokenMs` and `finishedAt`, since its own requests are
+  not visible. The history returns them in each reply's metadata (`model`,
+  `usage`, `stats`). The stream's `start` chunk carries the reply's model, and a
+  `message-metadata` chunk at its end carries its model, usage and stats, so a
+  client shows the same thing during and after the reply. Replies saved before
+  schema 13 have no stats. Exports carry stats and first-token times; older
+  exports without them still import.
 - `/usage`, in every client and channel, shows what the conversation used by
   model: input, cache reads and writes, output, reasoning, requests and cost,
   then the total, the share of input read from the cache, the number of

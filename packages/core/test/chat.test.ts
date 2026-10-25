@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConversationService, DemoModel, Store, defaultTools, emptyHooks, encodeEvent, newID, prompt, rank, run, textOf, words, type Event, type Models } from '../src';
+import { ConversationService, DemoModel, Store, defaultTools, emptyHooks, encodeEvent, newID, OverflowError, prompt, rank, run, textOf, words, type Event, type Models } from '../src';
 import { openBun } from '../src/sqlite/bun';
 
 const temp = () => join(mkdtempSync(join(tmpdir(), 'mob-core-')), 'chat.sqlite');
@@ -141,6 +141,100 @@ test('a denial without a reason ends its stream', async () => {
 	const chunks: unknown[] = [];
 	await running.follow(0, (_, e) => { chunks.push(encodeEvent(e)); });
 	expect(chunks).toEqual([{ type: 'finish', finishReason: 'stop' }]);
+	s.close();
+});
+
+test('a reply records its model, usage and timing, and streams them as metadata', async () => {
+	const s = open();
+	const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+	// A model that waits before its first words and writes for a while after them.
+	class Timed extends DemoModel {
+		override async stream(...[req, emit]: Parameters<DemoModel['stream']>) {
+			await pause(40);
+			await emit('text', 'Hello ');
+			await pause(60);
+			await emit('text', 'there');
+			return { text: 'Hello there', reasoning: '', signature: '', calls: [], usage: { inputTokens: 900, outputTokens: 12 } };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Timed() });
+	const c = s.create();
+	const chunks: Record<string, any>[] = [];
+	await service.execute({ id: c.id, text: 'hi', requestId: newID() }, e => { chunks.push(encodeEvent(e)); });
+	expect(chunks[0]).toMatchObject({ type: 'start', messageMetadata: { model: 'demo/echo', stats: { startedAt: expect.any(Number) } } });
+	const end = chunks.find(k => k.type === 'message-metadata')!.messageMetadata;
+	expect(end.usage).toMatchObject({ inputTokens: 900, outputTokens: 12 });
+	const stats = end.stats;
+	expect(stats.firstTokenMs).toBeGreaterThanOrEqual(35);
+	expect(stats.generationMs).toBeGreaterThanOrEqual(55);
+	expect(stats.generationMs).toBeLessThan(stats.finishedAt - stats.startedAt);
+	expect([stats.timedOutput, stats.requests, stats.toolMs]).toEqual([12, 1, 0]);
+	// The history says the same as the stream did.
+	const reply = s.history(c.id)[1];
+	expect(reply.metadata).toMatchObject({ model: 'demo/echo', usage: end.usage, stats });
+	const ledger = s.exportConversation(c.id).usage;
+	expect(ledger).toHaveLength(1);
+	expect(ledger[0].firstTokenMs).toBeGreaterThanOrEqual(35);
+	expect(ledger[0].firstTokenMs).toBeLessThan(ledger[0].durationMs);
+	// Stats move with the conversation.
+	const moved = s.importConversation(s.exportConversation(c.id));
+	expect(s.history(moved.id)[1].stats).toEqual(stats);
+	s.close();
+});
+
+test('a reply counts a prompt sent again after the provider refused it as too long', async () => {
+	const s = open();
+	const c = s.create();
+	let calls = 0;
+	// A model that answers at once, except that it refuses the second turn's first prompt.
+	class Refusing extends DemoModel {
+		override async stream(...[, emit]: Parameters<DemoModel['stream']>) {
+			if (++calls === 2) throw new OverflowError('prompt is too long');
+			await emit('text', 'ok');
+			return { text: 'ok', reasoning: '', signature: '', calls: [], usage: { inputTokens: 10, outputTokens: 1 } };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Refusing() });
+	await service.execute({ id: c.id, text: 'earlier '.repeat(4000), requestId: newID() }, () => {});
+	await service.execute({ id: c.id, text: 'and now', requestId: newID() }, () => {});
+	expect(calls).toBe(3);
+	expect(s.history(c.id).at(-1)!.stats?.requests).toBe(2);
+	s.close();
+});
+
+// A summary's request counts whether or not the provider reported its usage.
+test.each([true, false])('a reply counts and times the requests that summarized older messages for it (summary usage reported: %p)', async (reported) => {
+	const s = open();
+	const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+	let calls = 0, summaries = 0;
+	// A small window, so older messages are summarized before the model answers.
+	class Small extends DemoModel {
+		override readonly info = { ...new DemoModel().info, context: 12000, output: 1000 };
+		override async stream(...[req, emit]: Parameters<DemoModel['stream']>) {
+			calls++;
+			const summarizing = req.system.startsWith('You keep the summary');
+			if (summarizing) summaries++;
+			await pause(20);
+			await emit('text', summarizing ? 'what was said' : 'ok');
+			await pause(10);
+			const usage = summarizing && !reported ? undefined : { inputTokens: 10, outputTokens: 3 };
+			return { text: summarizing ? 'what was said' : 'ok', reasoning: '', signature: '', calls: [], usage };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Small() });
+	const c = s.create();
+	const say = (i: number) => service.execute({ id: c.id, text: `part ${i} ` + 'word '.repeat(4000), requestId: newID() }, () => {});
+	for (let i = 0; i < 3; i++) await say(i);
+	calls = summaries = 0;
+	await say(3);
+	expect(summaries).toBeGreaterThan(0);
+	const reply = s.history(c.id).at(-1)!;
+	expect(reply.stats?.requests).toBe(calls);
+	const measured = reported ? calls : calls - summaries;
+	expect(reply.stats?.timedOutput).toBe(3 * measured);
+	const rows = s.exportConversation(c.id).usage.filter(u => u.messageId === reply.id);
+	expect(rows).toHaveLength(measured);
+	for (const row of rows) expect(row.firstTokenMs).toBeGreaterThanOrEqual(15);
 	s.close();
 });
 

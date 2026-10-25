@@ -9,7 +9,7 @@ import { clearOutputs, each, type Outputs } from './prune';
 import { Aborted, StepLimit, isAbort } from './running';
 import { searchName, searchPrompt, toolSearch, type Entry, type SearchResult } from './search';
 import { newID } from './sql';
-import { textOf, type Message, type Part, type Store, type Summary } from './store';
+import { textOf, type Message, type Part, type Stats, type Store, type Summary } from './store';
 import { AbortTool, AwaitingApproval, Granted, ToolCall, type Tool } from './tools';
 
 /** outputCap bounds a reply below the model's own limit, so that a model with a huge limit still leaves room for history. */
@@ -87,6 +87,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		}
 		await emit(e);
 	};
+	const stats: Stats = message.stats = { startedAt: Date.now(), generationMs: 0, timedOutput: 0, toolMs: 0, requests: 0 };
 	let runErr: Error | undefined;
 	try {
 		await loop();
@@ -98,12 +99,14 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		status = isAbort(runErr) || signal.aborted ? 'cancelled' : runErr instanceof StepLimit ? 'step-limit' : 'error';
 		failure = runErr.message;
 	}
+	stats.finishedAt = Date.now();
 	try { store.save(message, status, failure); } catch (e) { runErr = runErr ? new AggregateError([runErr, e], runErr.message) : e as Error; }
+	await finished(message, emit);
 	for (const after of agent.hooks.afterTurn) await after(turn, message, runErr);
 	if (runErr) throw runErr;
 
 	async function loop() {
-		await send({ kind: 'turn-started', messageId: message.id });
+		await send({ kind: 'turn-started', messageId: message.id, metadata: { model: message.model, stats: { ...stats } } });
 		let history = store.history(conversationID);
 		const req = turn.request;
 		const { reserve, maxTokens } = replyRoom(info);
@@ -159,7 +162,16 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		const half = Math.floor((budget - length - tokens(summaryNotice)) / 2);
 		if (through && context > 0 && length >= summaryTokens / 4 && half > 0) {
 			const [, , older] = prompt(history, message.id, half);
-			const [text, requests, err] = await summarize(signal, model, summary.text, until(history, older), length);
+			const [text, requests, err, attempts] = await summarize(signal, model, summary.text, until(history, older), length);
+			// The summary's requests are part of the reply: they count, and the
+			// ones that wrote say how fast the model writes. The reply's first
+			// token stays the first word its reader sees.
+			stats.requests! += attempts;
+			for (const q of requests) {
+				if (q.firstTokenMs === undefined) continue;
+				stats.generationMs! += q.tookMs - q.firstTokenMs;
+				stats.timedOutput! += q.usage.outputTokens;
+			}
 			const usage = transcriptUsage(requests);
 			if (usage) {
 				message.usage = addLLMUsage(message.usage, usage);
@@ -236,7 +248,12 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 			const indices = new Map<string, number>(), ids = new Map<string, string>();
 			const seen = read;
 			read = req.messages.length;
+			let began = Date.now(), first = 0;
 			const emitDelta = async (kind: 'text' | 'reasoning', delta: string) => {
+				if (!first) {
+					first = Date.now();
+					stats.firstTokenMs ??= first - stats.startedAt;
+				}
 				let index = indices.get(kind);
 				if (index === undefined) {
 					index = message.parts.length;
@@ -248,16 +265,19 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				message.parts[index].text += delta;
 				await send({ kind: 'segment-delta', segment: kind, id: ids.get(kind), text: delta });
 			};
-			const began = Date.now();
 			let [result, err] = await stream(model, req, emitDelta, signal);
+			stats.requests!++;
 			// A refused prompt is made smaller and sent once more in the turn.
 			if (err && isOverflow(err) && !retried && ids.size === 0) {
 				retried = true;
 				if (shrink(step, seen)) {
 					read = req.messages.length;
+					began = Date.now();
 					[result, err] = await stream(model, req, emitDelta, signal);
+					stats.requests!++;
 				}
 			}
+			const ended = Date.now();
 			if (err && isOverflow(err)) err = Object.assign(new Error(err.message + '; /compact summarizes the conversation to make room'), { cause: err });
 			for (const kind of ['reasoning', 'text'] as const) {
 				const id = ids.get(kind);
@@ -266,8 +286,13 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 			if (result.usage) {
 				const u = priced(result.usage, info.cost);
 				message.usage = addLLMUsage(message.usage, u);
+				// Only a request whose first words were seen tells how fast the model writes.
+				if (first) {
+					stats.generationMs! += ended - first;
+					stats.timedOutput! += u.outputTokens;
+				}
 				try {
-					store.recordUsage(conversationID, message.id, refString(model.ref), u, Date.now() - began);
+					store.recordUsage(conversationID, message.id, refString(model.ref), u, ended - began, '', first ? first - began : 0);
 					await send({ kind: 'usage', usage: u });
 				} catch (e) { err ??= e as Error; }
 			}
@@ -307,6 +332,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				let output: unknown, toolErr: Error | undefined;
 				if (parseErr) toolErr = new Error('tool arguments must be a JSON object');
 				else {
+					const ran = Date.now();
 					try {
 						output = await runTool(agent, offered, new ToolCall(call, conversationID, input, part, message, store, send, signal, agent.owner ? offered.get(call.name) : undefined));
 					} catch (e) {
@@ -314,6 +340,8 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 						if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Aborted();
 						if (e instanceof AbortTool) throw e.cause instanceof Error ? e.cause : new Error(String(e.cause));
 						toolErr = e instanceof Error ? e : new Error(String(e));
+					} finally {
+						stats.toolMs! += Date.now() - ran;
 					}
 				}
 				if (toolErr) {
@@ -464,9 +492,14 @@ export function estimate(store: Store, model: Model, agent: Agent, conversationI
 /** declaration is the part of a tool the model sees. */
 const declaration = (t: Tool): LLMTool => ({ name: t.name, description: t.description, parameters: t.parameters });
 
+/** finished tells clients what the saved reply ran on, used and took; a client that has gone misses nothing the history does not have. */
+export async function finished(message: Message, emit: (e: Event) => void | Promise<void>) {
+	try { await emit({ kind: 'metadata', metadata: { model: message.model, usage: message.usage && { ...message.usage }, stats: message.stats && { ...message.stats } } }); } catch { /* the history says the same */ }
+}
+
 /** recordRequests adds each request to the reply's usage. */
 export function recordRequests(store: Store, requests: Requests, conversationID: string, messageID: string) {
-	for (const q of requests) store.recordUsage(conversationID, messageID, q.model, q.usage, q.tookMs);
+	for (const q of requests) store.recordUsage(conversationID, messageID, q.model, q.usage, q.tookMs, '', q.firstTokenMs ?? 0);
 }
 
 /** runTool runs an offered tool after the beforeTool hooks allow it, and carries out a call a remembered approval covers. */
