@@ -35,7 +35,7 @@ it('saves a provider on a runner, where a model server on that machine needs no 
 });
 
 it('lists connected providers first, marking the default, and opens one to replace its key', async () => {
-	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: 'deepseek/deepseek-chat', providers: [{ id: 'openai', key: 'sk-…a1b2' }, { id: 'deepseek', key: 'sk-…c3d4' }] })));
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: 'deepseek/deepseek-chat', providers: [{ id: 'openai', preset: 'openai', key: 'sk-…a1b2' }, { id: 'deepseek', preset: 'deepseek', key: 'sk-…c3d4' }] })));
 	render(<ModelProvider connection={{ url: 'http://localhost', token: 't' }} open onOpenChange={() => {}} />);
 	const connected = await screen.findByRole('region', { name: 'Connected' });
 	const rows = within(connected).getAllByRole('button');
@@ -66,6 +66,21 @@ it('replaces the key of a connected custom API at its own endpoint', async () =>
 	fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 	await screen.findByRole('status');
 	expect(posts).toEqual([{ preset: '', url: 'https://llm.example.com', protocol: 'anthropic', key: 'sk-new', model: '' }]);
+});
+
+it('leaves a provider named on the command line to the command line, so saving never replaces another', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: 'work/m1', providers: [
+		{ id: 'work', key: 'sk-…w1', chat: 'https://relay.example/v1' },
+		{ id: 'custom', name: 'Custom', key: 'sk-…c1', chat: 'https://llm.example.com/v1' },
+		{ id: 'openai', preset: 'openai', chat: 'https://proxy.example/v1', key: 'sk-…o1' },
+	] })));
+	render(<ModelProvider connection={{ url: 'http://localhost', token: 't' }} open onOpenChange={() => {}} />);
+	const connected = await screen.findByRole('region', { name: 'Connected' });
+	// Only the custom API opens: work has its own ID, and this OpenAI its own address, which the form would lose.
+	expect(within(connected).getAllByRole('button').map((b) => b.querySelector('.provider-name')!.textContent)).toEqual(['Custom']);
+	expect(within(connected).getByText(/sk-…w1 · m1 · change it with mob provider add/)).toBeDefined();
+	fireEvent.click(screen.getByRole('button', { name: /^OpenAI/ }));
+	expect(screen.getByLabelText('API key').getAttribute('placeholder')).toBe('Paste your key');
 });
 
 it('signs in with OpenRouter in the browser, or takes a pasted key', () => {

@@ -59,7 +59,7 @@ const runnerGroups = (where: string): Group[] => [
 	},
 ];
 
-type SavedProvider = { id: string; name?: string; key?: string; chat?: string; anthropic?: string };
+type SavedProvider = { id: string; name?: string; preset?: string; key?: string; chat?: string; anthropic?: string };
 type Saved = { default: string; providers: SavedProvider[] };
 
 function Logo({ service, size = 20 }: { service?: Service; size?: number }) {
@@ -153,10 +153,14 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	}
 	const connected = saved?.providers ?? [];
 	const defaultProvider = saved?.default.slice(0, saved.default.indexOf('/'));
-	// A connected provider opens as its tile, as its preset, or else as a custom API with its endpoint.
-	const serviceOf = (p: SavedProvider): Service => {
+	// A connected provider opens where this dialog would save it again under the same ID: a preset as it is, at
+	// the preset's own address, or the custom API, with its endpoint. Others, such as one named on the command
+	// line, are changed there, since saving them here would replace a different provider.
+	const editable = (p: SavedProvider): Service | undefined => {
+		if (p.id === 'custom' && !p.preset) return { ...custom, name: p.name || custom.name };
 		const preset = findPreset(p.id);
-		return services.find((s) => s.id === p.id) ?? (preset ? { id: p.id, name: p.name || preset.name, tagline: '', noKey: preset.noKey } : { ...custom, name: p.name || custom.name });
+		if (!preset || p.preset !== p.id || p.chat || p.anthropic) return undefined;
+		return services.find((s) => s.id === p.id) ?? { id: p.id, name: p.name || preset.name, tagline: '', noKey: preset.noKey };
 	};
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,19 +176,29 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 								<h3 id="providers-connected">Connected</h3>
 								<ul className="provider-connected">
 									{connected.map((p) => {
-										const service = serviceOf(p);
+										const service = editable(p);
 										const isDefault = p.id === defaultProvider;
+										const look = service ?? services.find((s) => s.id === (p.preset || p.id));
+										const row = (
+											<>
+												<Logo service={look} />
+												<span className="provider-text">
+													<span className="provider-name">{p.name || look?.name || p.id}</span>
+													<span className="provider-sub">{[p.key, isDefault && saved?.default.slice(p.id.length + 1), !service && 'change it with mob provider add'].filter(Boolean).join(' · ') || 'No key'}</span>
+												</span>
+												{isDefault && <span className="provider-badge">Default</span>}
+											</>
+										);
 										return (
 											<li key={p.id}>
-												<button type="button" onClick={() => choose(service, p)}>
-													<Logo service={service} />
-													<span className="provider-text">
-														<span className="provider-name">{p.name || service.name}</span>
-														<span className="provider-sub">{[p.key, isDefault && saved?.default.slice(p.id.length + 1)].filter(Boolean).join(' · ') || 'No key'}</span>
-													</span>
-													{isDefault && <span className="provider-badge">Default</span>}
-													<ChevronIcon />
-												</button>
+												{service ? (
+													<button type="button" onClick={() => choose(service, p)}>
+														{row}
+														<ChevronIcon />
+													</button>
+												) : (
+													<div className="provider-fixed">{row}</div>
+												)}
 											</li>
 										);
 									})}
@@ -196,7 +210,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 								<h3>{group.title}</h3>
 								<div className="provider-grid">
 									{group.services.map((service) => (
-										<button key={service.id || 'custom'} type="button" className="provider-tile" onClick={() => choose(service, service.id ? connected.find((p) => p.id === service.id) : undefined)}>
+										<button key={service.id || 'custom'} type="button" className="provider-tile" onClick={() => choose(service, connected.find((p) => service.id && p.id === service.id && editable(p)))}>
 											<Logo service={service} />
 											<span className="provider-text">
 												<span className="provider-name">{service.name}</span>
