@@ -7,13 +7,19 @@ import codex from '@lobehub/icons-static-svg/icons/codex-color.svg?raw';
 import deepseek from '@lobehub/icons-static-svg/icons/deepseek-color.svg?raw';
 import gemini from '@lobehub/icons-static-svg/icons/gemini-color.svg?raw';
 import grok from '@lobehub/icons-static-svg/icons/grok.svg?raw';
-import kimi from '@lobehub/icons-static-svg/icons/kimi-color.svg?raw';
+import kimiColor from '@lobehub/icons-static-svg/icons/kimi-color.svg?raw';
 import mistral from '@lobehub/icons-static-svg/icons/mistral-color.svg?raw';
 import openai from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 import qwen from '@lobehub/icons-static-svg/icons/qwen-color.svg?raw';
 import zhipu from '@lobehub/icons-static-svg/icons/zhipu-color.svg?raw';
 
+// Kimi's K is drawn white, for dark backgrounds only; it takes the text colour instead.
+const kimi = kimiColor.replace('fill="#fff"', 'fill="currentColor"');
+
 type Brand = { name: string; svg: string };
+
+/** vendorLogos are the model vendors' logos, for places that name a vendor rather than a model. */
+export const vendorLogos = { openai, anthropic, deepseek, gemini, kimi, zhipu };
 
 // Runtimes are the coding agents Mob starts, by preset name.
 const runtimes: Record<string, Brand> = {

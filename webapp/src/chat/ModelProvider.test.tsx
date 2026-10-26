@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelProvider } from './ModelProvider';
 
@@ -18,24 +18,49 @@ it('saves a provider on a runner, where a model server on that machine needs no 
 	}));
 	const saved = vi.fn();
 	render(<ModelProvider connection={{ url: 'http://localhost', token: 't' }} open onOpenChange={() => {}} onSaved={saved} />);
-	expect(screen.getByText(/keeps the key in its providers\.json/)).toBeDefined();
+	expect(screen.getByText(/keys kept in its providers\.json/)).toBeDefined();
 	// Workers AI through the site's sign-in, like OpenRouter's own sign-in, is the browser runner's alone.
-	expect(screen.queryByRole('option', { name: /Cloudflare Workers AI/ })).toBeNull();
-	// Only the browser runner signs in with OpenRouter itself.
-	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'openrouter' } });
+	expect(screen.queryByRole('button', { name: /Workers AI/ })).toBeNull();
+	// Only the browser runner signs in with OpenRouter itself; a runner takes its key, with a link to make one.
+	fireEvent.click(screen.getByRole('button', { name: /^OpenRouter/ }));
 	expect(screen.queryByRole('button', { name: 'Sign in with OpenRouter' })).toBeNull();
-	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'ollama' } });
+	expect(screen.getByRole('link', { name: /Get a key/ }).getAttribute('href')).toBe('https://openrouter.ai/keys');
+	fireEvent.click(screen.getByRole('button', { name: 'All providers' }));
+	fireEvent.click(screen.getByRole('button', { name: /^Ollama/ }));
 	expect((screen.getByLabelText('API key (optional)') as HTMLInputElement).required).toBe(false);
-	fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+	fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 	await waitFor(() => expect(saved).toHaveBeenCalledWith('ollama/qwen3'));
 	expect(posts).toEqual([{ url: 'http://localhost/api/providers', body: { preset: 'ollama', url: '', protocol: 'chat', key: '', model: '' } }]);
-	expect(screen.getByRole('status').textContent).toContain('Conversations now use ollama/qwen3');
+	expect(screen.getByRole('status').textContent).toContain('now use ollama/qwen3');
+});
+
+it('lists connected providers first, marking the default, and opens one to replace its key', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: 'deepseek/deepseek-chat', providers: [{ id: 'openai', key: 'sk-…a1b2' }, { id: 'deepseek', key: 'sk-…c3d4' }] })));
+	render(<ModelProvider connection={{ url: 'http://localhost', token: 't' }} open onOpenChange={() => {}} />);
+	const connected = await screen.findByRole('region', { name: 'Connected' });
+	const rows = within(connected).getAllByRole('button');
+	expect(rows.map((r) => r.querySelector('.provider-text')!.textContent)).toEqual(['OpenAIsk-…a1b2', 'DeepSeeksk-…c3d4 · deepseek-chat']);
+	expect(within(rows[1]).getByText('Default')).toBeDefined();
+	expect(within(rows[0]).queryByText('Default')).toBeNull();
+	fireEvent.click(rows[1]);
+	expect(screen.getByRole('heading', { name: 'DeepSeek' })).toBeDefined();
+	expect(screen.getByLabelText('API key').getAttribute('placeholder')).toContain('sk-…c3d4');
+});
+
+it('signs in with OpenRouter in the browser, or takes a pasted key', () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
+	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
+	expect(screen.getByRole('region', { name: 'Free to start' })).toBeDefined();
+	fireEvent.click(screen.getByRole('button', { name: /^OpenRouter/ }));
+	expect(screen.getByRole('button', { name: 'Sign in with OpenRouter' })).toBeDefined();
+	expect(screen.getByRole('button', { name: 'Connect with this key' })).toBeDefined();
+	expect(screen.getByText(/Kept in this browser only/)).toBeDefined();
 });
 
 it('offers Workers AI of the signed-in Cloudflare account only in the browser', () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
 	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
-	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'cloudflare' } });
+	fireEvent.click(screen.getByRole('button', { name: /^Workers AI/ }));
 	expect(screen.getByRole('button', { name: 'Use my Cloudflare account' })).toBeDefined();
 	expect(screen.queryByLabelText('API key')).toBeNull();
 });
@@ -43,7 +68,7 @@ it('offers Workers AI of the signed-in Cloudflare account only in the browser', 
 it('downloads Chrome’s built-in model before it saves it, only where Chrome has one', async () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
 	const { unmount } = render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
-	expect(screen.queryByRole('option', { name: /Chrome built-in model/ })).toBeNull();
+	expect(screen.queryByRole('button', { name: /Chrome built-in/ })).toBeNull();
 	unmount();
 	const create = vi.fn(async (options: { monitor?: (m: { addEventListener: (t: string, l: (e: { loaded: number }) => void) => void }) => void }) => {
 		options.monitor?.({ addEventListener: (_t, l) => l({ loaded: 1 }) });
@@ -51,10 +76,10 @@ it('downloads Chrome’s built-in model before it saves it, only where Chrome ha
 	});
 	vi.stubGlobal('LanguageModel', { availability: async () => 'downloadable', create });
 	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
-	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'chrome' } });
+	fireEvent.click(screen.getByRole('button', { name: /^Chrome built-in/ }));
 	expect(screen.queryByLabelText('API key')).toBeNull();
-	expect(screen.queryByLabelText('Model (optional)')).toBeNull();
-	fireEvent.click(screen.getByRole('button', { name: 'Use Chrome’s model' }));
+	expect(screen.queryByLabelText('Model ID (optional)')).toBeNull();
+	fireEvent.click(screen.getByRole('button', { name: 'Download and use' }));
 	// The save then goes to the browser runner, which only the public web build has.
 	expect((await screen.findByRole('alert')).textContent).toContain('no browser runner');
 	expect(create).toHaveBeenCalledOnce();
@@ -64,7 +89,7 @@ it('says so when this device cannot run Chrome’s model', async () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
 	vi.stubGlobal('LanguageModel', { availability: async () => 'unavailable', create: vi.fn() });
 	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
-	fireEvent.change(screen.getByLabelText('Service'), { target: { value: 'chrome' } });
-	fireEvent.click(screen.getByRole('button', { name: 'Use Chrome’s model' }));
+	fireEvent.click(screen.getByRole('button', { name: /^Chrome built-in/ }));
+	fireEvent.click(screen.getByRole('button', { name: 'Download and use' }));
 	expect((await screen.findByRole('alert')).textContent).toContain('cannot run its built-in model');
 });
