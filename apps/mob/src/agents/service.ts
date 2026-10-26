@@ -6,6 +6,7 @@ import {
 } from '@mob/core';
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
+import { advance, begin, blueprint, recover } from './blueprints';
 import { firstLine, git, slug, start, type Conn } from './process';
 import { preset, presets, readers, type Preset } from './presets';
 import { Session } from './session';
@@ -14,8 +15,12 @@ import type { Squad } from './squad';
 import { children, Hub, settle } from './subtasks';
 import { tree } from './tree';
 
-/** Project is a git repository tasks work on. Projects are saved in the "projects" setting. */
-export type Project = { name: string; path: string };
+/**
+ * Project is a git repository tasks work on. Projects are saved in the
+ * "projects" setting. blueprint is how its tasks go from done to ready, the
+ * default one when empty; checks are the commands Mob runs on their work.
+ */
+export type Project = { name: string; path: string; blueprint?: string; checks?: string[] };
 
 /** startWait is how long a message waits for an agent that is starting. */
 const startWait = 30_000;
@@ -106,8 +111,8 @@ export class Service implements Delegate, Tasks {
 			// A reviewer's report reaches the owner with its squad's.
 			return;
 		} else if (t.status === taskReview && turn.wrote()) {
-			// Mob's model checks the work first and tells the owner what it found.
-			if (this.review(t)) return;
+			// The task's blueprint, or Mob's model, checks the work first and tells the owner what it found.
+			if (advance(this, t)) return;
 			n.text = '**Task done:** ' + title + '\nBranch `' + t.branch + '`';
 			const u = this.store.conversationUsage(t.conversationId).get(t.conversationId);
 			if (u) n.text += ' · ' + brief(u);
@@ -226,6 +231,20 @@ export class Service implements Delegate, Tasks {
 		return p;
 	}
 
+	/** setProject changes project name's blueprint or checks, as change says. */
+	setProject(name: string, change: Pick<Project, 'blueprint' | 'checks'>): Project {
+		if (change.blueprint) blueprint(change.blueprint);
+		const list = this.projects();
+		const i = list.findIndex(p => p.name === name);
+		if (i < 0) throw new Error(`no project is called ${name}`);
+		const p: Project = { ...list[i]!, ...change };
+		if (!p.blueprint) delete p.blueprint;
+		if (!p.checks?.length) delete p.checks;
+		list[i] = p;
+		this.store.saveSetting('projects', list);
+		return p;
+	}
+
 	/** removeProject forgets project name; its tasks and worktrees stay. */
 	removeProject(name: string) {
 		const list = this.projects();
@@ -247,13 +266,19 @@ export class Service implements Delegate, Tasks {
 
 	// Tasks.
 
-	/** startTask makes a worktree of project for a new task and hands prompt to the agent in a turn that runs on its own. parent is the conversation that started it, if any. */
-	async startTask(parent: string, project: string, agent: string, title: string, prompt: string): Promise<Task> {
+	/**
+	 * startTask makes a worktree of project for a new task and hands prompt to
+	 * the agent in a turn that runs on its own. parent is the conversation that
+	 * started it, if any. A task Mob's conversation started goes through
+	 * blueprint, or its project's; a sub-task is its parent task's to check.
+	 */
+	async startTask(parent: string, project: string, agent: string, title: string, prompt: string, blueprintName = ''): Promise<Task> {
 		const p = this.project(project) ?? await this.addProject(project);
 		const a = preset(agent);
 		title = title.trim() || firstLine(prompt, 60);
+		const flow = parent && !this.owns(parent) ? begin(blueprintName || p.blueprint || '') : undefined;
 		const { dir, branch } = await this.worktree(p, title);
-		return this.launch({ project: p.name, agent: a.name, title, worktree: dir, branch, status: taskRunning, parent: parent || undefined }, prompt);
+		return this.launch({ project: p.name, agent: a.name, title, worktree: dir, branch, status: taskRunning, parent: parent || undefined, ...flow ? { flow } : {} }, prompt);
 	}
 
 	/** startReader starts a read-only task in the worktree and branch of task base, such as to review its work, and hands prompt to the agent. parent is the conversation that started it. */
@@ -291,8 +316,11 @@ export class Service implements Delegate, Tasks {
 		await this.conversations.start({ id: t.conversationId, text, requestId: newID(), owner: true }, signal);
 	}
 
-	/** recover records the tasks that were running or waiting when Mob last stopped as stopped: their agents ended with it. */
-	recover() { this.store.stopTasks(); }
+	/** recover records the tasks that were running or waiting when Mob last stopped as stopped: their agents ended with it, as did the blueprint stages Mob was running. */
+	recover() {
+		this.store.stopTasks();
+		recover(this);
+	}
 
 	/** stopTask stops task id's turn and its agent. */
 	stopTask(id: string) {

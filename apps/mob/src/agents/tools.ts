@@ -1,6 +1,7 @@
 // What Mob's model and the owner use to manage tasks: tools and commands.
 import { CommandError, cell, interactive, type Command, type Task, type Tool } from '@mob/core';
 import { isAbsolute } from 'node:path';
+import { blueprint, blueprints, defaultBlueprint, steps } from './blueprints';
 import { firstLine, git } from './process';
 import { preset, presets, readers } from './presets';
 import { reviewTools } from './review';
@@ -9,7 +10,7 @@ import type { Service } from './service';
 import { outline } from './tree';
 
 /** managerPrompt makes Mob's own model the owner's project manager. */
-const managerPrompt = "You are also the owner's project manager. Hand coding work in a project (changes, fixes, investigations, reviews) to a coding agent with task_start instead of doing it yourself; each task works on its own branch. Use tasks to report progress and what waits for the owner's decision, task_message to pass on instructions, and task_stop to stop a task. Before telling the owner a task is done, check its work: task_diff shows what it changed, and task_check runs the tests or build in its worktree.";
+const managerPrompt = "You are also the owner's project manager. Hand coding work in a project (changes, fixes, investigations, reviews) to a coding agent with task_start instead of doing it yourself; each task works on its own branch. Use tasks to report progress and what waits for the owner's decision, task_message to pass on instructions, and task_stop to stop a task. Each task you start follows a blueprint: once its agent is done, Mob itself runs the project's checks, has another agent review the work, sends what fails back to the agent, and tells the owner when it is ready, so do not check or review it again unless the owner asks. A task of the manual blueprint is yours to check when Mob asks: task_diff shows what it changed, and task_check runs the tests or build in its worktree.";
 
 /** replyLimit bounds the latest reply tasks shows for each task, in characters. */
 const replyLimit = 600;
@@ -18,7 +19,7 @@ export const object = (properties: Record<string, unknown>, ...required: string[
 	({ type: 'object', properties, additionalProperties: false, ...required.length ? { required } : {} });
 export const text = (description: string) => ({ type: 'string', description });
 
-type StartInput = { project?: string; prompt?: string; title?: string; agent?: string; share?: string };
+type StartInput = { project?: string; prompt?: string; title?: string; agent?: string; share?: string; blueprint?: string };
 
 /** tools let Mob's model start, follow, instruct and stop tasks. */
 export function tools(svc: Service): Tool[] {
@@ -32,6 +33,7 @@ export function tools(svc: Service): Tool[] {
 			title: text('A short title for the task'),
 			agent: { type: 'string', enum: agents, description: 'The coding agent; default ' + agents[0] },
 			share: text(`A task's ID: work read-only in that task's worktree and branch instead of a new one, seeing its uncommitted changes, such as to review it; project is then that task's. Only ${readers().join(' and ')} can`),
+			blueprint: { type: 'string', enum: blueprints.map(b => b.name), description: "How the work goes from done to ready to review; default the project's blueprint. " + blueprints.map(b => `${b.name}: ${steps(b)}.`).join(' ') },
 		}, 'prompt'),
 		prompt: managerPrompt,
 		ownerOnly: true,
@@ -44,13 +46,13 @@ export function tools(svc: Service): Tool[] {
 				const base = svc.store.task(input.share);
 				if (!base) throw new Error(`no task ${input.share}`);
 				t = await svc.startReader(call.conversationId, base, input.agent, input.title, input.prompt);
-			} else t = await svc.startTask(call.conversationId, input.project, input.agent, input.title, input.prompt);
+			} else t = await svc.startTask(call.conversationId, input.project, input.agent, input.title, input.prompt, input.blueprint);
 			return { task: t.id, conversation: t.conversationId, branch: t.branch, worktree: t.worktree, status: 'started; the agent works on its own and its conversation shows its progress' };
 		},
 		scope: raw => {
 			const v = JSON.parse(raw) as StartInput;
 			// Reading a task's worktree is approved task by task.
-			return v.share ? `${v.project ?? ''} ${v.agent ?? ''} read-only ${v.share}` : `${v.project ?? ''} ${v.agent ?? ''}`;
+			return v.share ? `${v.project ?? ''} ${v.agent ?? ''} read-only ${v.share}` : `${v.project ?? ''} ${v.agent ?? ''} ${v.blueprint ?? ''}`.trimEnd();
 		},
 	}, {
 		name: 'tasks',
@@ -97,13 +99,15 @@ export async function askStart(svc: Service, input: StartInput, ask: (input: unk
 		return ask({ project: base.project, agent: a.name, title, prompt, share: base.id, workspace: 'read-only in ' + base.worktree });
 	}
 	const project = input.project ?? '';
-	let path = svc.project(project)?.path;
+	const saved = svc.project(project);
+	let path = saved?.path;
 	if (!path) {
 		if (!isAbsolute(project)) throw new Error(`no project is called ${JSON.stringify(project)}; saved projects: ${svc.projects().map(p => p.name).join(', ')}. Give the absolute path of a git repository instead`);
 		try { await git(project, 'rev-parse', '--show-toplevel'); } catch (e) { throw new Error(`${project} is not a git repository: ${(e as Error).message}`); }
 		path = project;
 	}
-	return ask({ project: path, agent: a.name, title, prompt });
+	const b = blueprint(input.blueprint || saved?.blueprint || '');
+	return ask({ project: path, agent: a.name, title, prompt, blueprint: b.name, steps: steps(b) });
 }
 
 /** overview is what tasks returns. */
@@ -118,6 +122,7 @@ export function overview(svc: Service, project: string) {
 		if (reply) entry.latestReply = reply;
 		if (t.outcome) { entry.outcome = t.outcome; entry.result = t.result; }
 		if (t.plan?.length) entry.plan = t.plan;
+		if (t.flow) entry.blueprint = t.flow;
 		const u = used.get(t.conversationId);
 		if (u) entry.usage = u;
 		return entry;
@@ -127,14 +132,14 @@ export function overview(svc: Service, project: string) {
 
 /** commands list and save projects and list tasks. */
 export function commands(svc: Service): Command[] {
-	const usage = '/projects [add PATH [NAME] | remove NAME]';
+	const usage = '/projects [add PATH [NAME] | remove NAME | blueprint NAME BLUEPRINT | check NAME COMMAND | checks NAME [clear]]';
 	return [{
-		name: 'projects', usage, summary: 'Show the projects coding agents work on, or add or remove one', clients: interactive, ownerOnly: true,
-		run: async ({ fields: f }) => {
+		name: 'projects', usage, summary: "Show the projects coding agents work on, add or remove one, or set its blueprint and checks", clients: interactive, ownerOnly: true,
+		run: async ({ fields: f, rest }) => {
 			if (!f.length) {
 				const list = svc.projects();
 				if (!list.length) return { markdown: 'No projects yet. Add a git repository with `/projects add PATH`.' };
-				return { markdown: '| Project | Path |\n| --- | --- |\n' + list.map(p => `| ${cell(p.name)} | \`${p.path}\` |\n`).join('') };
+				return { markdown: '| Project | Path | Blueprint | Checks |\n| --- | --- | --- | --- |\n' + list.map(p => `| ${cell(p.name)} | \`${p.path}\` | ${p.blueprint || defaultBlueprint} | ${p.checks?.map(c => '`' + cell(c) + '`').join('<br>') || 'none'} |\n`).join('') };
 			}
 			try {
 				if (f[0] === 'add' && (f.length === 2 || f.length === 3)) {
@@ -145,9 +150,31 @@ export function commands(svc: Service): Command[] {
 					svc.removeProject(f[1]!);
 					return { markdown: 'Removed project ' + f[1] + '; its tasks and branches stay.' };
 				}
+				if (f[0] === 'blueprint' && f.length === 3) {
+					const p = svc.setProject(f[1]!, { blueprint: f[2] === defaultBlueprint ? '' : f[2]! });
+					const b = blueprint(p.blueprint ?? '');
+					return { markdown: `New tasks in ${p.name} follow the ${b.title} blueprint: ${steps(b)}.` };
+				}
+				// A check is set only here, by the owner: Mob runs it without asking, so a model must not be able to choose it.
+				if (f[0] === 'check' && f.length >= 3) {
+					const command = rest.replace(/^check\s+\S+\s+/, '').trim();
+					const p = svc.project(f[1]!);
+					if (!p || p.name !== f[1]) throw new Error(`no project is called ${f[1]}`);
+					const checks = [...p.checks ?? [], command];
+					svc.setProject(p.name, { checks });
+					return { markdown: `Mob runs ${checks.length === 1 ? 'this check' : 'these checks'} on ${p.name}'s finished tasks, in order:\n\n${checks.map(c => '- `' + c + '`').join('\n')}` };
+				}
+				if (f[0] === 'checks' && (f.length === 2 || (f.length === 3 && f[2] === 'clear'))) {
+					const p = f.length === 3 ? svc.setProject(f[1]!, { checks: [] }) : svc.project(f[1]!);
+					if (!p || p.name !== f[1]) throw new Error(`no project is called ${f[1]}`);
+					return { markdown: p.checks?.length ? `Checks of ${p.name}, run in order:\n\n${p.checks.map(c => '- `' + c + '`').join('\n')}` : `${p.name} has no checks; add one with \`/projects check ${p.name} COMMAND\`.` };
+				}
 			} catch (e) { throw new CommandError(400, (e as Error).message); }
 			throw new CommandError(400, 'usage: ' + usage);
 		},
+	}, {
+		name: 'blueprints', usage: '/blueprints', summary: "Show the blueprints tasks follow from done to ready to review", clients: interactive, ownerOnly: true,
+		run: async () => ({ markdown: blueprints.map(b => `- **${b.title}** (\`${b.name}\`${b.name === defaultBlueprint ? ', the default' : ''}): ${steps(b)}.`).join('\n') + '\n\nSet a project\'s with `/projects blueprint NAME BLUEPRINT`.' }),
 	}, {
 		name: 'tasks', usage: '/tasks [PROJECT]', summary: 'Show coding agent tasks and what they are doing', clients: interactive, ownerOnly: true,
 		run: async ({ fields }) => {

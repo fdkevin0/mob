@@ -5,11 +5,12 @@ import { CommandError, newID, taskRunning, taskWaiting, type Task, type Tool } f
 import { readers, preset } from './presets';
 import { announce, base, reviewLimit } from './review';
 import type { Service } from './service';
+import { judge } from './blueprints';
 import { report, subtaskActive } from './subtasks';
 import { object, text } from './tools';
 
 /** aspects are what a squad's reviewers each look at, by name. */
-const aspects: Record<string, string> = {
+export const aspects: Record<string, string> = {
 	correctness: 'correctness: bugs, wrong results, unhandled errors and edge cases, races, and whether the change does what the task asked',
 	tests: "tests: whether tests cover the change and its edge cases, and whether they are sound (no fixed sleeps or timing, no testing a mock instead of the code); run the project's tests if that changes no files",
 	hygiene: 'code hygiene: duplication, dead code, needless complexity, naming, and code that does not read like the code around it',
@@ -30,6 +31,8 @@ export type Squad = {
 	reviewers: string[];
 	/** starting is set until every reviewer has started, so the first to end does not end the review alone. */
 	starting: boolean;
+	/** flow is set when the task's blueprint asked for the review, which round of how many. */
+	flow?: { round: number; rounds: number };
 };
 
 type SquadInput = { task: string; project?: string; agent?: string; aspects?: string[]; worktree?: string };
@@ -90,10 +93,10 @@ export function reviewable(svc: Service, id: string): Task {
 }
 
 /** startSquad starts an approved squad's reviewers. */
-export async function startSquad(svc: Service, conversation: string, input: Required<SquadInput>) {
+export async function startSquad(svc: Service, conversation: string, input: Required<SquadInput>, flow?: Squad['flow']) {
 	const t = reviewable(svc, input.task);
 	// Taken before anything is awaited, so approvals decided together cannot both start a squad for the same task.
-	const sq: Squad = { conversation, reviewers: [], starting: true };
+	const sq: Squad = { conversation, reviewers: [], starting: true, ...flow ? { flow } : {} };
 	svc.squads.set(t.id, sq);
 	let from: string;
 	try { from = await base(svc, t); } catch (e) { svc.squads.delete(t.id); throw e; }
@@ -146,7 +149,8 @@ export function settleSquad(svc: Service, t: Task) {
 	svc.squads.delete(t.id);
 	// Their reports are in hand, so their agents can go.
 	svc.reap(reviewers);
-	void validate(svc, t, sq, reviewers);
+	if (sq.flow) void judge(svc, t, sq, reviewers).catch(e => console.warn(`judge the review of task ${t.id}: ${(e as Error).message}`));
+	else void validate(svc, t, sq, reviewers);
 }
 
 /** validate has Mob's model check the reports of task t's ended squad, in the conversation that asked for it, and tells the owner what it concludes. */

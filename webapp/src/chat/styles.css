@@ -2880,6 +2880,15 @@ button.reply-meta:hover,
 	color: var(--destructive);
 	background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
+.agent-status[data-stage='verify'],
+.agent-status[data-stage='review'] {
+	color: var(--run);
+	background: color-mix(in srgb, var(--run) 8%, transparent);
+}
+.agent-status[data-stage='stuck'] {
+	color: var(--wait);
+	background: color-mix(in srgb, var(--wait) 10%, transparent);
+}
 .agent-status .spinner {
 	width: 10px;
 	height: 10px;
@@ -3113,6 +3122,29 @@ button.reply-meta:hover,
 }
 .agent-outcome[data-outcome='blocked'] strong {
 	color: var(--destructive);
+}
+.agent-stage {
+	display: flex;
+	gap: 6px;
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: var(--muted-foreground);
+}
+.agent-stage strong {
+	flex-shrink: 0;
+	font-weight: 600;
+	text-transform: capitalize;
+}
+.agent-stage span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.agent-stage[data-stage='ready'] strong {
+	color: var(--ok);
+}
+.agent-stage[data-stage='stuck'] strong {
+	color: var(--wait);
 }
 .agent-actions {
 	display: inline-flex;

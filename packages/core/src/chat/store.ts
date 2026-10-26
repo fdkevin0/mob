@@ -106,9 +106,20 @@ export type Task = {
 	outcome?: string;
 	result?: string;
 	plan?: PlanEntry[];
+	/** flow is where a task Mob's conversation started is in its blueprint; unset for other tasks. */
+	flow?: Flow;
 	createdAt: number;
 	updatedAt: number;
 };
+/** FlowCheck is how one of a project's checks went on a task's work. */
+export type FlowCheck = { command: string; passed: boolean; exitCode?: number; seconds: number };
+/**
+ * Flow is where a task is in its blueprint: the stage it is at (build, verify,
+ * review, ready, or stuck when it cannot go on without the owner), the review
+ * round, how often failing checks were sent back this round, what the checks
+ * and the review last said, and why it is stuck.
+ */
+export type Flow = { blueprint: string; stage: string; round: number; tries: number; checks?: FlowCheck[]; review?: string; note?: string };
 export const taskRunning = 'running', taskWaiting = 'waiting', taskReview = 'review', taskStopped = 'stopped', taskFailed = 'failed';
 /** How an agent says its work ended: done and holds up; needs the changes its result lists; cannot go on without a decision or something it lacks. */
 export const outcomePassed = 'passed', outcomeRework = 'rework', outcomeBlocked = 'blocked';
@@ -149,8 +160,8 @@ const usageOf = (row: UsageRow): Usage => ({
 	cacheReadTokens: row.cr ?? 0, cacheWriteTokens: row.cw ?? 0, cost: row.c ?? 0, durationMs: row.d ?? 0, requests: row.n ?? 0,
 });
 
-const taskColumns = 'id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,read_only,outcome,result,plan,created_at,updated_at';
-type TaskRow = { id: string; conversation_id: string; project: string; agent: string; title: string; worktree: string; branch: string; session: string; status: string; parent_id: string; read_only: number; outcome: string; result: string; plan: string; created_at: number; updated_at: number };
+const taskColumns = 'id,conversation_id,project,agent,title,worktree,branch,session,status,parent_id,read_only,outcome,result,plan,flow,created_at,updated_at';
+type TaskRow = { id: string; conversation_id: string; project: string; agent: string; title: string; worktree: string; branch: string; session: string; status: string; parent_id: string; read_only: number; outcome: string; result: string; plan: string; flow: string; created_at: number; updated_at: number };
 function taskOf(r: TaskRow): Task {
 	const t: Task = { id: r.id, conversationId: r.conversation_id, project: r.project, agent: r.agent, title: r.title, worktree: r.worktree, branch: r.branch, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at };
 	if (r.session) t.session = r.session;
@@ -158,6 +169,7 @@ function taskOf(r: TaskRow): Task {
 	if (r.read_only) t.readOnly = true;
 	if (r.outcome) { t.outcome = r.outcome; t.result = r.result; }
 	if (r.plan) t.plan = JSON.parse(r.plan);
+	if (r.flow) t.flow = JSON.parse(r.flow);
 	return t;
 }
 
@@ -651,7 +663,7 @@ export class Store {
 		const task: Task = { ...t, id: newID(), conversationId: newID(), createdAt: now, updatedAt: now };
 		this.db.transaction(() => {
 			this.db.run('INSERT INTO conversations(id,title,updated_at) VALUES(?,?,?)', task.conversationId, title60(task.agent + ': ' + task.title), now);
-			this.db.run(`INSERT INTO tasks(${taskColumns}) VALUES(?,?,?,?,?,?,?,?,?,?,?,'','','',?,?)`, task.id, task.conversationId, task.project, task.agent, task.title, task.worktree, task.branch, task.session ?? '', task.status, task.parent ?? '', task.readOnly ? 1 : 0, now, now);
+			this.db.run(`INSERT INTO tasks(${taskColumns}) VALUES(?,?,?,?,?,?,?,?,?,?,?,'','','',?,?,?)`, task.id, task.conversationId, task.project, task.agent, task.title, task.worktree, task.branch, task.session ?? '', task.status, task.parent ?? '', task.readOnly ? 1 : 0, task.flow ? JSON.stringify(task.flow) : '', now, now);
 		});
 		this.changes.conversation(task.conversationId, true);
 		this.changes.tasks();
@@ -685,6 +697,7 @@ export class Store {
 		this.db.run('UPDATE conversations SET updated_at=? WHERE id=?', Date.now(), conversationID);
 		this.changes.conversation(conversationID, true);
 	}
+	setTaskFlow(id: string, flow: Flow) { this.db.run('UPDATE tasks SET flow=?,updated_at=? WHERE id=?', JSON.stringify(flow), Date.now(), id); this.changes.tasks(); }
 	setTaskPlan(id: string, plan: PlanEntry[]) { this.db.run('UPDATE tasks SET plan=?,updated_at=? WHERE id=?', JSON.stringify(plan), Date.now(), id); this.changes.tasks(); }
 	/** lastReply is the last text of the conversation's latest reply. */
 	lastReply(conversationID: string) { return this.lastText(this.db.get<{ parts: string }>("SELECT parts FROM messages WHERE conversation_id=? AND role='assistant' ORDER BY seq DESC LIMIT 1", conversationID)); }
