@@ -75,7 +75,7 @@ commands, approvals, delivery records and replies behave the same everywhere.
   same text is sent plain.
 - Captions are read as the message's text. Photos, files, voice and other media
   are not read; a message with only media is answered with a note saying so.
-- Approvals show Approve, Always allow and Deny buttons; a tap is handled as the
+- Approvals show Approve, Allow in conversation, Always allow and Deny buttons; a tap is handled as the
   `/approve` or `/deny` message it stands for, and its row is removed once that
   approval is decided or found stale. A tap while that conversation's turn runs
   leaves the row in place. Approval buttons use the conversation saved with the
@@ -95,19 +95,21 @@ commands, approvals, delivery records and replies behave the same everywhere.
   Telegram's 64-byte limit rides on a short token kept in memory, and a tap on
   a token from before a restart answers that the button expired, with the
   menu.
-  - `/start` and `/help` answer with a short note and a menu: New
-    conversation, Conversations, Model, Compact and Remembered approvals. The
-    command list stays in the bot's `/` menu.
-  - Conversations (`/list`, or `/open` alone) shows the 20 most recent
-    conversations as buttons, the current one marked ✓, plus New
-    conversation; a tap switches the bot to that conversation and says so.
-  - `/model` and `/models` offer the models the registry suggests (and
-    following the default) as buttons; `/grants` and `/revoke` alone offer
-    Forget buttons for every remembered approval (up to the 100 buttons a
-    message holds) and for all of them.
-  - A tap on one of a list's choices, New conversation under the
-    conversation list included, removes that list's buttons, since the list
-    no longer stands.
+  - `/start` and `/help` offer New conversation, Conversations, Model, Compact,
+    Memories, Remembered approvals, Usage and More. More lists Schedules and
+    Tasks when those plugins provide their commands.
+  - Conversation, model, memory, approval, schedule and task lists have Previous
+    and Next buttons, eight entries per page. They read full service data rather
+    than the command completer's twenty suggestions. The current conversation
+    and effective model are marked ✓; models also offer following the default.
+  - Memory and approval entries show their scope. Deleting a memory, cancelling
+    a schedule, or clearing a whole list requires a confirmation tap. Completed
+    mutations offer Back to list. Typed commands keep their existing behavior.
+  - Task buttons open the task's conversation. Notices also offer Open
+    conversation and, when available, Schedules, alongside approval buttons.
+  - A tap on a list's choice removes the old choice buttons. Long callback
+    commands still use expiring tokens; paging and confirmations do not send
+    prompts to the model.
 - The bot's `/` menu comes from the [command registry](commands.md).
 
 ## WeChat iLink

@@ -32,13 +32,13 @@ test('replies run registry commands', async () => {
 	await reply('/remember 喝茶');
 	expect(await reply('/approve always')).toContain('approved remember and it ran');
 	expect(await reply('/remember 喝咖啡')).not.toContain('Approval needed');
-	expect(await reply('/grants')).toContain('| remember | every call | every conversation |');
+	expect(await reply('/grants')).toContain('remember: every call — every conversation');
 	expect(await reply('/revoke all')).toContain('Forgot 1');
 });
 
 test('buttons, taps and menus', () => {
 	const a = newID();
-	expect(buttons([{ id: a, tool: 'remember', input: {} }])).toEqual([[{ text: 'Approve', callback_data: '/approve ' + a }, { text: 'Always allow', callback_data: `/approve ${a} always` }, { text: 'Deny', callback_data: '/deny ' + a }]]);
+	expect(buttons([{ id: a, tool: 'remember', input: {} }])).toEqual([[{ text: 'Approve', callback_data: '/approve ' + a }, { text: 'Deny', callback_data: '/deny ' + a }], [{ text: 'Allow in conversation', callback_data: `/approve ${a} conversation` }, { text: 'Always allow', callback_data: `/approve ${a} always` }]]);
 	const bot = new Bot(config);
 	const tap = (from: number, data: string) => bot.tapped({ update_id: 9, callback_query: { id: 'q', data, from: { id: from } } } as Update);
 	expect(tap(8, '/new')[1]).toBeUndefined();
@@ -95,4 +95,54 @@ test('the loop answers the owner once and keeps the offset', async () => {
 	expect(texts.some(t => t.includes('stranger'))).toBe(false);
 	expect(s.store.setting<number>('telegram-offset:1')).toBe(8);
 	expect(s.store.delivery('tg:1:5')?.state).toBe('sent');
+});
+
+test('management buttons page beyond completion limits and confirm deletions', async () => {
+	const s = service();
+	const c = s.store.create();
+	for (let i = 0; i < 25; i++) s.store.saveFact(newID(), c.id, `Fact ${i}`, true);
+	const seen: string[] = [];
+	let sent = '/memories';
+	for (;;) {
+		const [reply, rows] = await s.present(config, 'bot', sent, { text: '' });
+		expect(reply.text).toContain('of 25');
+		const flat = rows.flat();
+		seen.push(...flat.filter(b => b.callback_data.startsWith('/_confirm /forget ') && !b.callback_data.endsWith(' all')).map(b => b.callback_data));
+		const next = flat.find(b => b.text === 'Next');
+		if (!next) break;
+		sent = s.command(next.callback_data);
+	}
+	expect(new Set(seen).size).toBe(25);
+	const [confirmation, rows] = await s.present(config, 'bot', seen[0]!, { text: '' });
+	expect(confirmation.text).toContain('Fact 0');
+	expect(s.store.facts()).toHaveLength(25);
+	expect(rows[0]![0]!.callback_data).toBe(seen[0]!.replace('/_confirm ', ''));
+	await s.reply(config, 'bot', newID(), rows[0]![0]!.callback_data, signal());
+	expect(s.store.facts()).toHaveLength(24);
+	const [, refreshed] = await s.present(config, 'bot', '/forget x', { text: 'Gone' });
+	expect(refreshed.flat().some(b => b.callback_data === '/memories')).toBe(true);
+});
+
+test('conversation picker reaches conversations after the first twenty', async () => {
+	const s = service();
+	for (let i = 0; i < 25; i++) { const c = s.store.create(); s.store.command(c.id, newID(), 'hello', 'world'); s.store.rename(c.id, `Conversation ${i}`); }
+	const [, rows] = await s.present(config, 'bot', '/_page list 24', { text: '' });
+	expect(rows.flat().filter(b => b.callback_data.startsWith('/open '))).toHaveLength(1);
+	expect(rows.flat().some(b => b.text === 'Previous')).toBe(true);
+	expect(rows.flat().some(b => b.text === 'Next')).toBe(false);
+});
+
+test('paging and confirmation callbacks do not start model turns', async () => {
+	const s = service();
+	const sent: { text: string; reply_markup?: { inline_keyboard: { text: string; callback_data: string }[][] } }[] = [];
+	const bot = new Bot(config, (async (_url, init) => {
+		sent.push(JSON.parse(String(init?.body)));
+		return Response.json({ ok: true, result: true });
+	}) as typeof fetch);
+	for (const [i, text] of ['/_page memories 0', '/_confirm /forget all', '/_more'].entries()) {
+		await s.handle(bot, '1', { update_id: i + 100, message: { text, tap: true, from: { id: 7 }, chat: { id: 7, type: 'private' } } }, signal());
+	}
+	expect(s.store.list(true)).toEqual([]);
+	expect(sent.some(m => m.text?.includes('Saved memories'))).toBe(true);
+	expect(sent.some(m => m.reply_markup?.inline_keyboard.flat().some(b => b.callback_data === '/forget all'))).toBe(true);
 });
