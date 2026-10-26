@@ -20,7 +20,7 @@ before it has an effect, and the owner can decide from any client or channel.
   installs a remote server from the catalog.
 - While any [skill](skills.md) is installed, the `skill` tool loads one; it
   reads without approval.
-- An `OwnerOnly` tool is offered only to the owner's turns, and only the owner
+- An `ownerOnly` tool is offered only to the owner's turns, and only the owner
   can approve its calls: another allowed WeChat user cannot read or send the
   owner's mail. Plugin and MCP tools are owner-only.
 - Mail text and Cloudflare results sent to the model are bounded, and the model
@@ -42,13 +42,13 @@ before it has an effect, and the owner can decide from any client or channel.
 ## Exposure and tool_search
 
 Registering a tool and declaring it to the model are separate, so many tools
-cost the prompt nothing until a task needs them. `Tool.Exposure` is one of:
+cost the prompt nothing until a task needs them. `Tool.exposure` is one of:
 
-- `Direct`, the default: declared to every turn that may use the tool.
+- `direct`, the default: declared to every turn that may use the tool.
   Built-in and plugin tools are direct.
-- `Deferred`: declared once `tool_search` loads it. [MCP](mcp.md) tools are
+- `deferred`: declared once `tool_search` loads it. [MCP](mcp.md) tools are
   deferred unless their server's configuration says otherwise.
-- `Hidden`: never declared and never found.
+- `hidden`: never declared and never found.
 
 While a turn has deferred tools to load, or entries such as skills to find, it
 offers `tool_search`, and the system prompt names how many wait in each
@@ -64,7 +64,7 @@ A conversation keeps the tools it loaded, and those it called before, declared
 in its later turns: they are read back from its history, so nothing else is
 stored. Loading changes no approval: a loaded MCP tool asks as it always does.
 
-`ToolRegistry.RegisterEntries` adds things `tool_search` finds that are not
+`ToolRegistry.registerEntries` adds things `tool_search` finds that are not
 tools to load, each with a kind, a description and how to use it, such as a
 skill and the tool that loads it. Owner-only entries are found only in the
 owner's turns.
@@ -84,8 +84,11 @@ owner's turns.
 
 ## Deciding
 
+Approval decisions require a boolean `approved` value. Malformed decisions are
+rejected before changing the pending approval or running its tool.
+
 - An approval request carries the tool name and the input to approve.
-  `chat.DescribeApproval` renders it as plain text for channels. The AI SDK
+  `describeApproval` renders it as plain text for channels. The AI SDK
   `tool-approval-request` chunk carries only the approval and call IDs.
 - Before an approval decision, the web UI shows the full tool input above the
   approval buttons, including all parameters and long command or content text.
@@ -93,7 +96,7 @@ owner's turns.
   `/deny` work in every client. Telegram shows Approve, Always allow and Deny
   buttons; WeChat iLink accepts 批准 and 拒绝, or a bare reply when one request is
   pending. `/approve` and `/deny` without an ID decide the only pending request.
-- A denial may carry a reason (`chat.Answer.Reason`). It is written into the
+- A denial may carry a reason (`Answer.reason`). It is written into the
   denial note, and the model answers in a new turn. A denial without a reason
   ends quietly.
 - An approval left undecided past its hour is marked expired and its call
@@ -107,9 +110,9 @@ owner's turns.
 
 ## Exactly once
 
-- `Store.Decide` records the decision once and marks an approved call
-  `approval-responded`. The service then runs the tool's `Approved` and
-  `Store.Complete` records its result. A retried approval is refused as stale,
+- `Store.decide` records the decision once and marks an approved call
+  `approval-responded`. The service then runs the tool's `approved` and
+  `Store.complete` records its result. A retried approval is refused as stale,
   so the effect happens at most once. After a crash between those steps, startup
   marks the call failed with an unknown outcome. Check the external result before asking again; Mob never
   repeats the approved call automatically. Completed and undecided calls keep
@@ -131,17 +134,17 @@ remain visible in the conversation or agent card.
 ## Remembered approvals
 
 - The owner may remember an approval for the conversation or always
-  (`chat.Answer.Remember`). A grant covers the tool's calls whose `Tool.Scope`
+  (`Answer.remember`). A grant covers the tool's calls whose `Tool.scope`
   matches the approved input's: the recipients and sender for `email_send`, the
   operation and target for `cloudflare`, the server configuration for MCP tools,
-  any call for a tool without `Scope`.
-- Covered calls in the owner's turns run `Approved` at once with a fresh
+  any call for a tool without `scope`.
+- Covered calls in the owner's turns run `approved` at once with a fresh
   approval ID; other callers' turns always ask.
 - Grants live in the `grants` table. `/grants` lists them and `/revoke ID|all`
   forgets them. A grant outlives configuration changes only as far as its scope
   does: a new SMTP account or D1 database gives a new scope, which asks again.
-  Remembering is coarse for tools without `Scope`, so a tool whose inputs differ
+  Remembering is coarse for tools without `scope`, so a tool whose inputs differ
   in risk should define one.
 
-Writing a tool, including `RequestApproval`, `Approved` and `Scope`, is covered
+Writing a tool, including `requestApproval`, `approved` and `scope`, is covered
 in [Extensions](extensions.md).

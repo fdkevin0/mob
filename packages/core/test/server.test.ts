@@ -176,3 +176,29 @@ test('a chat request can say an earlier message again', async () => {
 	expect((await call('POST', '/api/chat', { id, text: 'again', requestId: 'r3', replace: 'r1' })).status).toBe(404);
 	expect((await call('POST', '/api/chat', { id, text: 'again', requestId: 'r4', replace: 7 })).status).toBe(400);
 });
+
+
+test('approval endpoints reject malformed decisions without consuming the approval', async () => {
+	const store = new Store(openBun(':memory:')).open();
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token: 'test', version: 'test' });
+	const c = store.create();
+	const call = (path: string, body: unknown) => server.fetch(new Request('http://127.0.0.1' + path, {
+		method: 'POST', headers: { Authorization: 'Bearer test', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+	}));
+	await (await call('/api/chat', { id: c.id, text: '/remember tea', requestId: 'remember' })).text();
+	const approval = server.pending(c.id)[0];
+	for (const path of ['/api/chat', `/api/conversations/${c.id}/decide`]) {
+		for (const fields of [{ approved: 'false' }, { approved: 1 }, { approved: null }, {}, { approved: false, reason: 1 }, { approved: true, remember: 0 }]) {
+			const answer = { id: approval.id, ...fields };
+			const response = await call(path, path === '/api/chat' ? { id: c.id, approval: answer } : answer);
+			expect(response.status).toBe(400);
+			expect(server.pending(c.id)).toEqual([approval]);
+			expect(store.memories(c.id, true)).toEqual([]);
+		}
+	}
+	expect((await call(`/api/conversations/${c.id}/decide`, { id: approval.id, approved: false })).status).toBe(202);
+	expect(server.pending(c.id)).toEqual([]);
+	expect(store.memories(c.id, true)).toEqual([]);
+	await server.close();
+	store.close();
+});

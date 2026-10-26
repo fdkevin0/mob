@@ -105,13 +105,7 @@ export class ConversationService {
 	 * thrown instead.
 	 */
 	async start(input: ChatRequest, stop?: AbortSignal): Promise<Running> {
-		const [running, proceed] = this.admit(input, () => {}, {
-			admitted: r => {
-				// Authority already withdrawn stops the turn before it does anything.
-				if (stop?.aborted) r.stop();
-				else stop?.addEventListener('abort', () => r.stop(), { once: true });
-			},
-		});
+		const [running, proceed] = this.admit(input, () => {}, { signal: stop });
 		proceed.catch(() => {});
 		if (!(await running.begun())) await proceed;
 		return running;
@@ -126,7 +120,9 @@ export class ConversationService {
 		const a = input.approval;
 		if (input.id?.length !== 32 || (!a && (!input.text || !input.requestId || input.requestId.length > 100)) ||
 			(input.replace !== undefined && (a || typeof input.replace !== 'string' || !input.replace || input.replace.length > 100)) ||
-			(a && (input.text !== '' || a.id?.length !== 32 || (a.reason ?? '').length > 2000 || (a.approved && !!a.reason) || !rememberable(a)))) {
+			(a && (input.text !== '' || typeof a.id !== 'string' || a.id.length !== 32 || typeof a.approved !== 'boolean' ||
+				(a.reason !== undefined && (typeof a.reason !== 'string' || a.reason.length > 2000)) ||
+				(a.remember !== undefined && typeof a.remember !== 'string') || (a.approved && !!a.reason) || !rememberable(a)))) {
 			throw new CommandError(400, 'invalid conversation, text, request ID, or approval');
 		}
 		if (a?.remember && !input.owner) throw new CommandError(403, 'only the owner of this Mob can remember approvals');
@@ -158,8 +154,9 @@ export class ConversationService {
 		// each model call and tool bounds its own wait.
 		const running = new Running();
 		this.active.set(input.id, running);
-		if (options.signal?.aborted) running.stop();
-		else options.signal?.addEventListener('abort', () => running.stop(), { once: true });
+		const stop = () => running.stop();
+		if (options.signal?.aborted) stop();
+		else options.signal?.addEventListener('abort', stop, { once: true });
 		// Whether a turn runs is part of what clients show, in the conversation and the list.
 		this.store.changes.conversation(input.id, true);
 		const signal = running.signal;
@@ -177,6 +174,7 @@ export class ConversationService {
 			} catch (e) {
 				err = e instanceof Error ? e : new Error(String(e));
 			}
+			options.signal?.removeEventListener('abort', stop);
 			running.finish(err);
 			this.active.delete(input.id);
 			this.store.changes.conversation(input.id, true);
