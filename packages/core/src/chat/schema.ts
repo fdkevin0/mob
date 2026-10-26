@@ -2,7 +2,7 @@
 // the release that last opened the database. Version 12 is the schema the Go
 // service left, so its databases open as they are; upgrades lists how each
 // older schema becomes the next.
-export const schemaVersion = 13;
+export const schemaVersion = 14;
 
 /** upgrades are the statements that bring schema N-1 to N, by N. */
 export const upgrades: Record<number, string> = {
@@ -12,6 +12,8 @@ export const upgrades: Record<number, string> = {
 	12: "ALTER TABLE tasks ADD COLUMN outcome TEXT NOT NULL DEFAULT ''; ALTER TABLE tasks ADD COLUMN result TEXT NOT NULL DEFAULT '';",
 	// How long a reply took, and how soon each model request's first words came.
 	13: "ALTER TABLE messages ADD COLUMN stats TEXT NOT NULL DEFAULT ''; ALTER TABLE usage ADD COLUMN first_token_ms INTEGER NOT NULL DEFAULT 0;",
+	// Where a task is in its blueprint.
+	14: "ALTER TABLE tasks ADD COLUMN flow TEXT NOT NULL DEFAULT '';",
 };
 
 export const schema = `CREATE TABLE IF NOT EXISTS deliveries(id TEXT PRIMARY KEY, state TEXT NOT NULL, reply TEXT NOT NULL DEFAULT '',
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, conversation_id TEXT NOT 
 CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, conversation_id TEXT UNIQUE NOT NULL REFERENCES conversations(id),
  project TEXT NOT NULL, agent TEXT NOT NULL, title TEXT NOT NULL, worktree TEXT NOT NULL, branch TEXT NOT NULL,
  session TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
- parent_id TEXT NOT NULL DEFAULT '', read_only INTEGER NOT NULL DEFAULT 0, outcome TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '');
+ parent_id TEXT NOT NULL DEFAULT '', read_only INTEGER NOT NULL DEFAULT 0, outcome TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '',
+ flow TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS usage(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, message_id TEXT NOT NULL,
  model TEXT NOT NULL, input INTEGER NOT NULL, output INTEGER NOT NULL, reasoning INTEGER NOT NULL, cache_read INTEGER NOT NULL,
  cache_write INTEGER NOT NULL, cost REAL NOT NULL, duration_ms INTEGER NOT NULL, created_at INTEGER NOT NULL,

@@ -176,6 +176,14 @@ function Instruct({ send, busy, done }: { send: (text: string) => Promise<boolea
 	);
 }
 
+// Where a done task is in its blueprint, for the stages Mob runs after the agent's work.
+const stages: Record<string, { label: string; icon?: ReactNode }> = {
+	verify: { label: 'Checking', icon: <SpinnerIcon /> },
+	review: { label: 'In review', icon: <SpinnerIcon /> },
+	ready: { label: 'Ready', icon: <CheckIcon /> },
+	stuck: { label: 'Needs you', icon: <HandIcon /> },
+};
+
 // How an agent said its work ended.
 const outcomes: Record<string, string> = { passed: 'Passed', rework: 'Needs rework', blocked: 'Blocked' };
 
@@ -216,7 +224,9 @@ function Card({
 	const message = run(act.message);
 	const actions: Act = { decide: run(act.decide), stop: run(act.stop), message };
 	const { node, children } = branch;
-	const status = statuses[node.status] ?? { label: node.status };
+	const flow = node.task?.flow;
+	const stage = node.status === 'review' && flow ? stages[flow.stage] : undefined;
+	const status = stage ?? statuses[node.status] ?? { label: node.status };
 	const plan = node.task?.plan ?? [];
 	const done = plan.filter((p) => p.status === 'completed').length;
 	const shown = node.tools.filter((t) => tools[t]).slice(0, 4);
@@ -244,7 +254,7 @@ function Card({
 						{node.model || (node.agent === 'mob' ? 'Project manager' : 'Model not reported')}
 					</small>
 				</div>
-				<span className="agent-status" data-status={node.status}>
+				<span className="agent-status" data-status={node.status} data-stage={stage && flow?.stage}>
 					{status.icon}
 					{status.label}
 					{node.approvals.length > 1 && ` · ${node.approvals.length}`}
@@ -270,6 +280,20 @@ function Card({
 				<p className="agent-outcome" data-outcome={node.task.outcome} title={node.task.result}>
 					<strong>{outcomes[node.task.outcome] ?? node.task.outcome}</strong>
 					{node.task.result && <span>{node.task.result.split('\n')[0]}</span>}
+				</p>
+			)}
+			{flow && (
+				<p className="agent-stage" data-stage={flow.stage} title={flow.note || flow.review}>
+					<strong>{flow.blueprint}</strong>
+					<span>
+						{[
+							flow.round > 1 && `Round ${flow.round}`,
+							flow.checks?.length && flow.checks.map((c) => `${c.passed ? '✓' : '✗'} ${c.command}`).join(' · '),
+							flow.note || flow.review,
+						]
+							.filter(Boolean)
+							.join(' · ')}
+					</span>
 				</p>
 			)}
 			{plan.length > 0 && (

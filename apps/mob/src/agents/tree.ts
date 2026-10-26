@@ -94,8 +94,14 @@ export const statusLabels: Record<string, string> = {
 /** outcomeLabels are how reports name outcomes. */
 export const outcomeLabels: Record<string, string> = { [outcomePassed]: 'passed', [outcomeRework]: 'needs rework', [outcomeBlocked]: 'blocked' };
 
+/** stageLabels are how reports name where a done task is in its blueprint. */
+export const stageLabels: Record<string, string> = { verify: 'Checking', review: 'In review', ready: 'Ready', stuck: 'Needs you' };
+
+/** status is how a report names what task t is doing: for a done task, where it is in its blueprint. */
+const status = (t: Task) => (t.status === taskReview && t.flow && stageLabels[t.flow.stage]) || statusLabels[t.status]!;
+
 /** label is how a report names what task t is doing and, once it said, how its work ended. */
-export const label = (t: Task) => t.outcome ? statusLabels[t.status] + ', ' + outcomeLabels[t.outcome] : statusLabels[t.status]!;
+export const label = (t: Task) => t.outcome ? status(t) + ', ' + outcomeLabels[t.outcome] : status(t);
 
 /** outline writes nodes as a Markdown list nested by who started whom. */
 export function outline(nodes: AgentNode[]) {

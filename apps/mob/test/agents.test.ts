@@ -16,7 +16,8 @@ import { check, diff, Limited, reviewLimit, snapshot } from '../src/agents/revie
 import { inside } from '../src/agents/session';
 import { Service } from '../src/agents/service';
 import { subtaskActive } from '../src/agents/subtasks';
-import { overview, tools } from '../src/agents/tools';
+import { blueprints, problems, recover } from '../src/agents/blueprints';
+import { commands, overview, tools } from '../src/agents/tools';
 import { mob, idle, outline, type AgentNode } from '../src/agents/tree';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -470,7 +471,7 @@ test('what agents use is recorded', async () => {
 test('the tree shows who started whom', async () => {
 	const h = harness();
 	const root = h.store.create();
-	const task = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Greet', 'hello'));
+	const task = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Greet', 'hello', 'manual'));
 	const alone = await h.start('hello');
 	const nodes = h.svc.tree('');
 	expect(nodes).toHaveLength(3);
@@ -561,7 +562,7 @@ test('Mob reviews a finished task', async () => {
 	const notices: { conversationId: string; text: string }[] = [];
 	closers.push(h.conv.notices(n => notices.push(n)));
 	const origin = h.store.create();
-	const out = await h.tool('task_start').approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify({ project: h.repo, agent: 'codex', title: 'Say hello', prompt: 'hello' }), store: h.store, owner: true }) as { task: string };
+	const out = await h.tool('task_start').approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify({ project: h.repo, agent: 'codex', title: 'Say hello', prompt: 'hello', blueprint: 'manual' }), store: h.store, owner: true }) as { task: string };
 	const task = await h.wait(h.store.task(out.task)!);
 	expect([task.parent, task.status]).toEqual([origin.id, 'review']);
 	await h.until('no review notice', () => notices.length > 0 && !h.conv.isActive(origin.id));
@@ -642,7 +643,7 @@ test('a message stops with the signal that sent it', async () => {
 test('an agent starts sub-tasks', async () => {
 	const h = harness();
 	const root = h.store.create();
-	let lead = await h.svc.startTask(root.id, h.repo, '', 'Lead', 'sub Child');
+	let lead = await h.svc.startTask(root.id, h.repo, '', 'Lead', 'sub Child', 'manual');
 	// The owner is asked first, in the lead task's conversation.
 	lead = await h.wait(lead);
 	expect(lead.status).toBe('waiting');
@@ -712,7 +713,7 @@ test("a squad waits for its reviewers' turns to end", async () => {
 test('ended tasks are summarized', async () => {
 	const h = harness();
 	const root = h.store.create();
-	const tasks = [await h.svc.startTask(root.id, h.repo, '', 'One', 'hello'), await h.svc.startTask(root.id, h.repo, '', 'Two', 'hello')];
+	const tasks = [await h.svc.startTask(root.id, h.repo, '', 'One', 'hello', 'manual'), await h.svc.startTask(root.id, h.repo, '', 'Two', 'hello', 'manual')];
 	for (const t of tasks) await h.wait(t);
 	const notes = () => h.store.history(root.id).filter(m => m.command).map(textOf);
 	await h.until('no summary', () => notes().length > 0);
@@ -754,7 +755,7 @@ test('forgotten tokens reach nothing', async () => {
 test('readers share a worktree without changing it', async () => {
 	const h = harness();
 	const root = h.store.create();
-	const lead = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Lead', 'subread Review'));
+	const lead = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Lead', 'subread Review', 'manual'));
 	expect(lead.status).toBe('waiting');
 	const pending = JSON.stringify(h.conv.pending(lead.conversationId));
 	expect([pending.includes('Start a read-only sub-task: Review'), pending.includes('read-only in ' + lead.worktree)]).toEqual([true, true]);
@@ -774,7 +775,7 @@ test('tasks report how they ended', async () => {
 	const h = harness();
 	const root = h.store.create();
 	const tasks: Task[] = [];
-	for (const prompt of ['result passed', 'result rework', 'result maybe']) tasks.push(await h.svc.startTask(root.id, h.repo, '', prompt, prompt));
+	for (const prompt of ['result passed', 'result rework', 'result maybe']) tasks.push(await h.svc.startTask(root.id, h.repo, '', prompt, prompt, 'manual'));
 	for (const [i, t] of tasks.entries()) tasks[i] = await h.wait(t);
 	expect([tasks[0]!.outcome, tasks[0]!.result, tasks[1]!.outcome]).toEqual(['passed', 'found passed', 'rework']);
 	// An outcome Mob does not know is refused, and the agent is told why.
@@ -804,6 +805,7 @@ test('a review squad', async () => {
 	const h = harness({ default: () => 'test/validator', resolve: () => validator, setDefault: () => validator.ref, list: async () => [] });
 	const origin = h.store.create();
 	await h.svc.addProject(h.repo, 'mob');
+	h.svc.setProject('mob', { blueprint: 'manual' });
 	const work = await h.wait(await h.svc.startTask(origin.id, 'mob', '', 'Work', 'hello'));
 	// Mob's own review of the finished work ends first.
 	await h.until('the review did not end', () => seen.length > 0 && !h.conv.isActive(origin.id));
@@ -854,4 +856,166 @@ test('a review squad', async () => {
 	await h.decide(helper, { approved: true });
 	const summary = await h.until('the worker was not told its sub-task ended', told);
 	expect([summary.includes('Helper'), summary.includes('Review correctness')]).toEqual([true, false]);
+});
+
+/** concluding is a model for Mob that answers every turn with text. */
+function concluding(text: string, seen: string[] = []): Models {
+	const m: llm.Model = {
+		ref: { provider: 'test', model: 'mob' } as llm.Ref,
+		info: { id: 'mob', name: 'mob', tools: true, known: false } as llm.Info,
+		async stream(req, emit) {
+			seen.push(req.messages[req.messages.length - 1]!.text);
+			await emit('text', text);
+			return { text, reasoning: '', signature: '', calls: [] };
+		},
+	};
+	return { default: () => 'test/mob', resolve: () => m, setDefault: () => m.ref, list: async () => [] };
+}
+
+const command = (h: ReturnType<typeof harness>, line: string) => {
+	const [name, ...fields] = line.split(/\s+/);
+	const rest = line.slice(name!.length).trim();
+	return commands(h.svc).find(c => c.name === name)!.run!({ client: 'web', conversationId: '', rest, fields, owner: true }) as Promise<{ markdown: string }>;
+};
+
+test('the built-in blueprints hold together', () => {
+	for (const b of blueprints) expect([b.name, problems(b)]).toEqual([b.name, []]);
+	expect(problems({ name: 'Loop', title: '', stages: [{ type: 'review', aspects: ['style'], rounds: 9 }, { type: 'verify', retries: -1 }, { type: 'verify', retries: 1 }] })).toEqual([
+		'the name is up to 32 lower-case letters, digits and dashes', 'review rounds are 1 to 3', 'no aspect "style"', 'verify retries are 0 to 3', 'verify comes twice', 'verify comes before review',
+	]);
+});
+
+test('a blueprint runs the checks and says the work is ready', async () => {
+	const h = harness();
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	await h.svc.addProject(h.repo, 'mob');
+	expect((await command(h, 'projects check mob test -e .git')).markdown).toContain('`test -e .git`');
+	await command(h, 'projects blueprint mob quick');
+	expect((await command(h, 'projects')).markdown).toContain('| mob | `' + h.repo + '` | quick | `test -e .git` |');
+	const origin = h.store.create();
+	const task = await h.wait(await h.svc.startTask(origin.id, 'mob', 'codex', 'Work', 'hello'));
+	expect(task.flow).toMatchObject({ blueprint: 'quick' });
+	await h.until('no ready notice', () => notices.length > 0);
+	expect(notices).toHaveLength(1);
+	expect(notices[0]!.conversationId).toBe(origin.id);
+	expect(notices[0]!.text).toStartWith('**Ready to review:** codex · Work\nBranch `' + task.branch + '`');
+	expect(notices[0]!.text).toContain('Checks: ✓ `test -e .git`');
+	expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'ready', round: 1, checks: [{ command: 'test -e .git', passed: true, exitCode: 0 }] });
+	expect(outline(h.svc.tree(''))).toContain('**Ready** · Codex · Work');
+	// The note stays in the conversation that started the task.
+	expect(textOf(h.store.history(origin.id).at(-1)!)).toStartWith('**Ready to review:**');
+	// More work from the owner is a new round.
+	await h.say(task, 'again');
+	await h.until('no second ready notice', () => notices.length > 1);
+	expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'ready', round: 2 });
+});
+
+test('a failing check goes back to the agent until it is stuck', async () => {
+	const h = harness();
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	await h.svc.addProject(h.repo, 'mob');
+	await command(h, 'projects check mob echo broken && exit 3');
+	expect((await command(h, 'projects checks mob')).markdown).toContain('- `echo broken && exit 3`');
+	const origin = h.store.create();
+	const task = await h.svc.startTask(origin.id, 'mob', 'codex', 'Work', 'hello', 'quick');
+	await h.until('no stuck notice', () => notices.length > 0);
+	const sent = h.fakes.agents.flatMap(f => f.prompts).filter(p => p.startsWith('Automatic update from Mob'));
+	expect(sent).toHaveLength(2);
+	expect(sent[0]).toContain('`echo broken && exit 3` failed');
+	expect(sent[0]).toContain('broken');
+	expect(sent[1]).toContain('retry 2 of 2');
+	expect(notices).toHaveLength(1);
+	expect(notices[0]!.text).toStartWith('**Task needs you:** codex · Work');
+	expect(notices[0]!.text).toContain('still fails after 2 retries');
+	expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'stuck', tries: 2, checks: [{ passed: false, exitCode: 3 }] });
+	expect((await command(h, 'projects checks mob clear')).markdown).toContain('has no checks');
+});
+
+test('a blueprint has another agent review the work', async () => {
+	const seen: string[] = [];
+	const h = harness(concluding('Only a P3 nit remains; ready to merge.', seen));
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	await h.svc.addProject(h.repo, 'mob');
+	await command(h, 'projects check mob true');
+	const origin = h.store.create();
+	const task = await h.svc.startTask(origin.id, 'mob', 'claude', 'Work', 'hello');
+	expect(task.flow).toMatchObject({ blueprint: 'standard' });
+	await h.until('no ready notice', () => notices.length > 0 && !h.conv.isActive(origin.id));
+	// The reviewers were another agent's, and Mob's model checked their findings.
+	const reviewers = h.store.tasks().filter(t => t.readOnly);
+	expect(reviewers.map(r => [r.title, r.agent !== 'claude', r.outcome]).sort()).toEqual([['Review correctness: Work', true, 'rework'], ['Review tests: Work', true, 'rework']]);
+	expect(seen).toHaveLength(1);
+	expect(seen[0]).toContain('review round 1 of 2 of its blueprint');
+	expect(notices).toHaveLength(1);
+	expect(notices[0]!.text).toStartWith('**Ready to review:** claude · Work');
+	expect(notices[0]!.text).toContain('Checks: ✓ `true`');
+	expect(notices[0]!.text).toContain('checked by Mob: Only a P3 nit remains');
+	expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'ready' });
+	expect(h.svc.squads.size).toBe(0);
+});
+
+test('a blueprint stage Mob was running when it stopped needs the owner', async () => {
+	const h = harness();
+	const origin = h.store.create();
+	const task = await h.wait(await h.svc.startTask(origin.id, h.repo, 'codex', 'Work', 'hello', 'manual'));
+	h.store.setTaskFlow(task.id, { blueprint: 'standard', stage: 'review', round: 1, tries: 0 });
+	recover(h.svc);
+	expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'stuck' });
+	expect((await command(h, 'blueprints')).markdown).toContain('**Standard** (`standard`, the default)');
+});
+
+test('a project with no checks still moves on', async () => {
+	for (const [name, review] of [['quick', false], ['standard', true]] as const) {
+		const h = harness(concluding('Nothing blocks; ready to merge.'));
+		const notices: { conversationId: string; text: string }[] = [];
+		closers.push(h.conv.notices(n => notices.push(n)));
+		const origin = h.store.create();
+		const task = await h.svc.startTask(origin.id, h.repo, 'claude', 'Work', 'hello', name);
+		await h.until(`no ready notice for ${name}`, () => notices.length > 0 && !h.conv.isActive(origin.id));
+		expect(notices[0]!.text).toStartWith('**Ready to review:** claude · Work');
+		expect(notices[0]!.text).toContain('Checks: none are set for');
+		expect([name, notices[0]!.text.includes('checked by Mob')]).toEqual([name, review]);
+		expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'ready' });
+	}
+});
+
+test('stopping a task under review drops its review', async () => {
+	const h = harness(concluding('Ready to merge.'));
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	const origin = h.store.create();
+	let work: Task | undefined;
+	h.svc.launched = async r => { if (r.readOnly && work?.status !== 'stopped') { h.svc.stopTask(work!.id); work = h.store.task(work!.id); } };
+	work = await h.svc.startTask(origin.id, h.repo, 'claude', 'Work', 'hello');
+	await h.until('the review did not start', () => h.store.tasks().some(t => t.readOnly));
+	await h.until('the reviewers did not end', () => h.store.tasks().filter(t => t.readOnly).every(r => r.status !== 'running' && r.status !== 'waiting' && !h.conv.isActive(r.conversationId)));
+	expect(h.svc.squads.size).toBe(0);
+	// No reviewer starts once the review is dropped, though the squad was still starting the rest.
+	expect(h.store.tasks().filter(t => t.readOnly)).toHaveLength(1);
+	expect(h.store.task(work.id)!.status).toBe('stopped');
+	expect(notices.filter(n => n.text.startsWith('**Ready to review'))).toEqual([]);
+});
+
+test('more work while reviewers read starts a new round', async () => {
+	const seen: string[] = [];
+	const h = harness(concluding('Ready to merge.', seen));
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	const origin = h.store.create();
+	let work: Task | undefined, sent = false;
+	h.svc.launched = async r => {
+		if (!r.readOnly || sent) return;
+		sent = true;
+		await h.svc.message(work!.id, 'again');
+	};
+	work = await h.svc.startTask(origin.id, h.repo, 'claude', 'Work', 'hello');
+	await h.until('no ready notice', () => notices.length > 0 && !h.conv.isActive(origin.id));
+	// Round 1's reports were about older work, so only round 2's reached Mob and the owner.
+	expect(seen).toHaveLength(1);
+	expect(seen[0]).toContain('review round 2 of 2');
+	expect(notices).toHaveLength(1);
+	expect(h.store.task(work.id)!.flow).toMatchObject({ stage: 'ready', round: 2 });
 });

@@ -41,7 +41,8 @@ it. Its login methods are interactive, so without a login (or
 
 - A project is a git repository on that computer, saved in the `projects`
   setting. `/projects add PATH [NAME]` saves one (named after its directory by
-  default), `/projects remove NAME` forgets it, and `/projects` lists them.
+  default), `/projects remove NAME` forgets it, and `/projects` lists them
+  with their blueprint and checks (see Blueprints below).
   `task_start` also accepts the absolute path of a repository and saves it.
 - A task is one piece of work for one agent. It gets its own branch,
   `mob/<title>-<id>`, checked out from the project's `HEAD` in a new worktree
@@ -62,10 +63,10 @@ it. Its login methods are interactive, so without a login (or
 
 Owner-only tools:
 
-- `task_start` (project, prompt, optional title and agent) asks the owner to
-  approve, then creates the worktree and task and hands the prompt to the
-  agent in a turn that runs on its own. Always allow covers the same project
-  and agent. Its prompt tells the model to hand coding work to agents rather
+- `task_start` (project, prompt, optional title, agent and blueprint) asks
+  the owner to approve, showing the blueprint and what it does, then creates
+  the worktree and task and hands the prompt to the agent in a turn that runs
+  on its own. Always allow covers the same project, agent and blueprint. Its prompt tells the model to hand coding work to agents rather
   than do it itself. With `share` (a task's ID) the agent instead works
   read-only in that task's worktree and branch (see Readers below); Always
   allow then covers only that task.
@@ -150,11 +151,66 @@ seven days, each with its status, title, ID, agent, project and branch.
 Stopped tasks and other callers' turns get none. The snapshot changes when a
 task does, which misses the prompt cache once.
 
+## Blueprints
+
+A blueprint is how a task Mob's model started goes from the agent's finished
+work to ready to review. Mob runs it itself, step by step, so the checks, the
+review and the rounds of rework do not depend on a model remembering them.
+Sub-tasks and readers have none: their parent task's agent checks them.
+
+| Blueprint | After the agent's work |
+| --- | --- |
+| `standard` (the default) | the project's checks, then a review of correctness and tests by another agent |
+| `quick` | the project's checks |
+| `manual` | Mob's model checks the work as it sees fit (see Reviewing finished work below) |
+
+`/blueprints` lists them. `/projects blueprint NAME BLUEPRINT` sets a
+project's; `task_start` may pick another for one task.
+
+**Checks** are the project's commands, such as its tests or build:
+`/projects check NAME COMMAND` adds one, `/projects checks NAME` lists them
+and `/projects checks NAME clear` removes them all. Mob runs them in order in
+the task's worktree, as `task_check` does, without asking: the owner typed
+them. No tool sets them, so a model reading untrusted text cannot plant a
+command that runs on its own later. When one fails, the end of its output
+goes back to the same agent as an automatic update, and its next finished
+turn runs the checks again; after `retries` failures (2 in the built-ins) the
+task is stuck. A project with no checks passes this step, and the ready
+notice says how to add one.
+
+**Review** starts a review squad (see Review squads below) of another agent
+than the one that did the work, where one can work read-only, one reviewer
+per aspect. When they all pass, the work is ready. Otherwise Mob's model
+checks their findings in the conversation that started the task, and either
+sends those that hold back to the agent with `task_message`, whose next
+finished turn is the next round (the checks and review run again), or
+concludes; on the last round (2 in `standard`) it only concludes. A squad
+that cannot start is noted and skipped.
+
+The owner hears once, at the end: **Ready to review** with the branch, git's
+count of the change, each check's result, the review's conclusion and what
+the task used, or **Task needs you** with why and the end of the failing
+output. The notice is also saved as a note in the conversation. Writing to the
+task afterwards starts a new round. Stopping a task, or giving it more work
+while it is checked or reviewed, drops what was under way, its reviewers
+included: their reports would be about work that changed.
+
+Where a task is in its blueprint is saved in `tasks.flow`: the blueprint,
+the stage (`build`, `verify`, `review`, `ready` or `stuck`), the round, the
+retries used, the last checks and the review's conclusion. `tasks`, `/tasks`,
+the agent tree and the model's view of the tasks show it. A task that was
+being checked or reviewed when Mob stopped is stuck when it starts again.
+
+A blueprint's loops are bounded: at most 3 retries and 3 review rounds, each
+stage once, verify before review. The built-ins are the only blueprints for
+now.
+
 ## Reviewing finished work
 
-A task remembers the conversation that started it (`tasks.parent_id`, also
-used for the agent tree). When a task Mob's model started ends its turn in
-review with something written, the model reviews the work in that
+This is the `manual` blueprint, and what a task started before blueprints
+gets. A task remembers the conversation that started it (`tasks.parent_id`,
+also used for the agent tree). When a task Mob's model started ends its turn
+in review with something written, the model reviews the work in that
 conversation before
 the owner hears about it: a turn starts there with a note, saved as the
 turn's message, saying it is an automatic update and asking the model to

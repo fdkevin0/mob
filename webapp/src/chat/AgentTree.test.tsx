@@ -230,6 +230,20 @@ it('shows how an agent said its work ended', async () => {
 	expect(outcome.getAttribute('title')).toContain('and more');
 });
 
+it('shows where a done task is in its blueprint', async () => {
+	const ready = node({
+		...task('ready', 'review', 1000, 2000, 'm1'),
+		flow: { blueprint: 'standard', stage: 'ready', round: 2, tries: 0, checks: [{ command: 'bun test', passed: true, seconds: 3 }], review: 'nothing to change' },
+	});
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([...nodes, ready])));
+	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={() => {}} />);
+	const stage = (await screen.findByText('standard')).closest('p') as HTMLElement;
+	expect(stage.dataset.stage).toBe('ready');
+	expect(stage.textContent).toContain('Round 2 · ✓ bun test · nothing to change');
+	const card = stage.closest('article')!;
+	expect(within(card as HTMLElement).getByText('Ready')).toBeTruthy();
+});
+
 it.each(['conversation', 'always'] as const)('keeps child agents expanded when granting %s permission', async scope => {
 	const calls: unknown[] = [];
 	const withChild = [...nodes, node(task('nested', 'idle', 1000, 2000, 'c-copy'))];

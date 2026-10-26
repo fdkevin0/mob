@@ -225,8 +225,24 @@ export type Task = {
   outcome?: string;
   result?: string;
   plan?: PlanEntry[];
+  flow?: Flow;
   createdAt: number;
   updatedAt: number;
+};
+export type FlowCheck = {
+  command: string;
+  passed: boolean;
+  exitCode?: number;
+  seconds: number;
+};
+export type Flow = {
+  blueprint: string;
+  stage: string;
+  round: number;
+  tries: number;
+  checks?: FlowCheck[];
+  review?: string;
+  note?: string;
 };
 export type AgentApproval = {
   id: string;
