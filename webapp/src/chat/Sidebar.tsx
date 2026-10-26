@@ -191,7 +191,7 @@ export function Sidebar({
 							: `History stays ${connection.runner ? 'on your runner' : 'on this computer'}`}
 					</DropdownMenuLabel>
 					{/* A provider is added here as well as with `mob provider add`, which the browser runner does not have. */}
-					{provider && <Item icon={<KeyIcon />} label="Model provider" onSelect={provider} />}
+					{provider && <Item icon={<KeyIcon />} label="Model providers" onSelect={provider} />}
 					{/* Channels and cloud services run in the background, which a browser tab cannot. */}
 					{!connection.browser && <Item icon={<PlugIcon />} label="Plugins & cloud services" onSelect={() => show('plugins')} />}
 					{move && <Item icon={<MoveIcon />} label="Move conversations" onSelect={move} />}

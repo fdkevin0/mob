@@ -298,13 +298,13 @@ The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go
 straight from the browser to the provider, so they work only with providers
 that allow cross-origin requests; OpenCode Zen does not, so the browser
-runner starts on the offline demo model. **Model provider** in the runner menu
+runner starts on the offline demo model. **Model providers** in the runner menu
 saves one provider: a preset (OpenAI, Anthropic, OpenRouter and other vendors
 that take a key) or a custom OpenAI Chat Completions or Anthropic Messages
 base URL, with its API key and optionally a model. Saving lists the
 provider's models and makes the named model, or the first listed, the
 default (`POST /api/plugins/browser/provider`). An Anthropic-only provider is
-sent `anthropic-dangerous-direct-browser-access`. With OpenRouter selected,
+sent `anthropic-dangerous-direct-browser-access`. With OpenRouter chosen,
 **Sign in with OpenRouter** gets a key without copying one: OpenRouter's PKCE
 flow returns to `/app?code=…`, and the worker trades the code, with the
 verifier kept in the tab's session storage, for a key of the user's account

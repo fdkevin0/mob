@@ -2132,20 +2132,7 @@ button.reply-meta:hover,
 	margin: 16px 0;
 	font-size: 13px;
 }
-.provider-form {
-	border: 0;
-	padding: 0;
-	margin: 0;
-}
-.provider-form select {
-	width: 100%;
-	margin: 8px 0 20px;
-}
-.provider-form .provider-signin {
-	width: 100%;
-}
-.plugin-field select,
-.provider-form select {
+.plugin-field select {
 	border: 1px solid var(--input);
 	border-radius: var(--radius);
 	background: var(--bg);
@@ -3340,4 +3327,275 @@ button.reply-meta:hover,
 .conversation-content [data-streamdown='table-wrapper'] > div:last-child {
 	border-color: var(--line-strong);
 	border-radius: 12px;
+}
+
+/* Model providers: a list of tiles, connected ones first, then one provider's sign-in or key. */
+.provider-dialog {
+	width: min(600px, calc(100% - 32px));
+}
+.provider-dialog .dialog-description {
+	margin-bottom: 8px;
+}
+.provider-section h3 {
+	margin: 20px 0 8px;
+	color: var(--muted-foreground);
+	font-size: 12px;
+	font-weight: 500;
+}
+.provider-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+.provider-tile,
+.provider-connected button,
+.provider-fixed {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-width: 0;
+	padding: 10px 12px;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--radius-card);
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color 120ms,
+		background 120ms;
+}
+.provider-tile:hover,
+.provider-connected button:hover {
+	border-color: var(--line-hover);
+	background: var(--surface-raised);
+}
+.provider-tile:focus-visible,
+.provider-connected button:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 1px;
+}
+.provider-connected {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.provider-fixed {
+	cursor: default;
+}
+.provider-connected button > svg {
+	flex-shrink: 0;
+	color: var(--muted-foreground);
+}
+.provider-logo {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--bg);
+	color: var(--text);
+}
+.provider-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.provider-name {
+	font-size: 14px;
+	font-weight: 500;
+}
+.provider-sub {
+	overflow: hidden;
+	color: var(--muted-foreground);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.provider-badge {
+	flex-shrink: 0;
+	padding: 2px 8px;
+	border-radius: var(--radius-pill);
+	background: color-mix(in srgb, var(--brand) 16%, transparent);
+	color: var(--text);
+	font-size: 12px;
+}
+.provider-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: -6px 30px 12px -10px;
+}
+.provider-head .dialog-title {
+	margin: 0;
+}
+.provider-back {
+	width: 32px;
+	min-height: 32px;
+	padding: 0;
+}
+.provider-back svg {
+	transform: rotate(180deg);
+}
+.provider-form {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.provider-dialog .provider-form .ui-input {
+	margin: 0;
+}
+.provider-form > .ui-segmented {
+	align-self: flex-start;
+	max-width: 100%;
+}
+.provider-label,
+.provider-label-row {
+	margin-top: 8px;
+	font-size: 14px;
+	font-weight: 500;
+}
+.provider-label-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+.provider-label-row a {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--muted-foreground);
+	font-size: 13px;
+	font-weight: 400;
+	text-decoration: none;
+}
+.provider-label-row a:hover {
+	color: var(--text);
+}
+.provider-hint {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--muted-foreground);
+	font-size: 12px;
+	line-height: 1.5;
+}
+.provider-hint svg {
+	flex-shrink: 0;
+	width: 12px;
+	height: 12px;
+}
+.provider-signin {
+	width: 100%;
+	min-height: 40px;
+}
+.provider-or {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 8px 0 0;
+	color: var(--muted-foreground);
+	font-size: 12px;
+}
+.provider-or::before,
+.provider-or::after {
+	flex: 1;
+	height: 1px;
+	background: var(--line-strong);
+	content: '';
+}
+.provider-advanced {
+	margin-top: 8px;
+	border-top: 1px solid var(--line);
+	padding-top: 12px;
+}
+.provider-advanced summary {
+	color: var(--muted-foreground);
+	font-size: 13px;
+	cursor: pointer;
+}
+.provider-advanced[open] summary {
+	margin-bottom: 8px;
+}
+.provider-advanced .ui-label {
+	display: block;
+	margin-bottom: 8px;
+}
+.provider-facts {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 12px 14px 12px 30px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+	background: var(--surface);
+	color: var(--text-soft);
+	font-size: 13px;
+	line-height: 1.5;
+}
+.provider-dialog .provider-error {
+	margin: 4px 0 0;
+}
+.provider-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}
+.provider-done {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	padding: 16px;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--radius-card);
+	background: var(--surface);
+}
+.provider-done .provider-actions {
+	align-self: stretch;
+}
+.provider-dialog .provider-done p {
+	margin: 4px 0 0;
+	color: var(--text-soft);
+}
+.provider-done strong {
+	font-weight: 500;
+	color: var(--text);
+}
+.provider-done-mark {
+	display: grid;
+	width: 28px;
+	height: 28px;
+	place-items: center;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--ok) 18%, transparent);
+	color: var(--ok);
+}
+@media (max-width: 520px) {
+	.provider-grid {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+	.provider-tile,
+	.provider-connected button,
+	.provider-fixed {
+		padding: 8px 10px;
+	}
+}
+.provider-error {
+	color: var(--destructive);
+	font-size: 13px;
+	overflow-wrap: anywhere;
 }
