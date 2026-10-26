@@ -993,6 +993,8 @@ test('stopping a task under review drops its review', async () => {
 	await h.until('the review did not start', () => h.store.tasks().some(t => t.readOnly));
 	await h.until('the reviewers did not end', () => h.store.tasks().filter(t => t.readOnly).every(r => r.status !== 'running' && r.status !== 'waiting' && !h.conv.isActive(r.conversationId)));
 	expect(h.svc.squads.size).toBe(0);
+	// No reviewer starts once the review is dropped, though the squad was still starting the rest.
+	expect(h.store.tasks().filter(t => t.readOnly)).toHaveLength(1);
 	expect(h.store.task(work.id)!.status).toBe('stopped');
 	expect(notices.filter(n => n.text.startsWith('**Ready to review'))).toEqual([]);
 });

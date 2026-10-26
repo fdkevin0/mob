@@ -103,6 +103,8 @@ export async function startSquad(svc: Service, conversation: string, input: Requ
 	const started: { aspect: string; task: string }[] = [];
 	const failures: string[] = [];
 	for (const name of input.aspects) {
+		// The owner stopped the task or gave it more work meanwhile, and its blueprint dropped the squad: no more reviewers start.
+		if (svc.squads.get(t.id) !== sq) break;
 		if (!Object.hasOwn(aspects, name)) continue;
 		const focus = aspects[name]!;
 		let joined = '';
@@ -124,6 +126,7 @@ export async function startSquad(svc: Service, conversation: string, input: Requ
 		}
 	}
 	sq.starting = false;
+	if (svc.squads.get(t.id) !== sq) return { reviewers: started, status: 'dropped: the task was stopped or given more work' };
 	const last = sq.reviewers[sq.reviewers.length - 1];
 	if (!last) {
 		svc.squads.delete(t.id);
