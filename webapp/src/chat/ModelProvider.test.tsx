@@ -47,6 +47,27 @@ it('lists connected providers first, marking the default, and opens one to repla
 	expect(screen.getByLabelText('API key').getAttribute('placeholder')).toContain('sk-…c3d4');
 });
 
+it('replaces the key of a connected custom API at its own endpoint', async () => {
+	const posts: unknown[] = [];
+	vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+		if (init?.method === 'POST') {
+			posts.push(JSON.parse(String(init.body)));
+			return Response.json({ default: 'custom/m1', models: 1 });
+		}
+		return Response.json({ default: 'custom/m1', providers: [{ id: 'custom', name: 'Custom', key: 'sk-…9z', anthropic: 'https://llm.example.com' }] });
+	}));
+	render(<ModelProvider connection={{ url: 'http://localhost', token: 't' }} open onOpenChange={() => {}} />);
+	const connected = await screen.findByRole('region', { name: 'Connected' });
+	fireEvent.click(within(connected).getByRole('button'));
+	expect((screen.getByLabelText('API base URL') as HTMLInputElement).value).toBe('https://llm.example.com');
+	expect(screen.getByRole('button', { name: 'Anthropic Messages' }).getAttribute('aria-pressed')).toBe('true');
+	expect(screen.getByLabelText('API key').getAttribute('placeholder')).toContain('sk-…9z');
+	fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-new' } });
+	fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+	await screen.findByRole('status');
+	expect(posts).toEqual([{ preset: '', url: 'https://llm.example.com', protocol: 'anthropic', key: 'sk-new', model: '' }]);
+});
+
 it('signs in with OpenRouter in the browser, or takes a pasted key', () => {
 	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: '', providers: [] })));
 	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);

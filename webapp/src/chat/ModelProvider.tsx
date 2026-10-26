@@ -59,7 +59,8 @@ const runnerGroups = (where: string): Group[] => [
 	},
 ];
 
-type Saved = { default: string; providers: { id: string; name?: string; key?: string; chat?: string; anthropic?: string }[] };
+type SavedProvider = { id: string; name?: string; key?: string; chat?: string; anthropic?: string };
+type Saved = { default: string; providers: SavedProvider[] };
 
 function Logo({ service, size = 20 }: { service?: Service; size?: number }) {
 	return (
@@ -76,6 +77,8 @@ function Logo({ service, size = 20 }: { service?: Service; size?: number }) {
  */
 export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn }: { connection: Connection; open: boolean; onOpenChange: (open: boolean) => void; onSaved?: (model: string) => void; signIn?: OpenRouterSignIn }) {
 	const [chosen, setChosen] = useState<Service>();
+	// editing is the connected provider whose page is open, whose key the page replaces.
+	const [editing, setEditing] = useState<SavedProvider>();
 	const [form, setForm] = useState<ProviderForm>({ preset: 'openrouter', url: '', protocol: 'chat', key: '', model: '' });
 	const [saved, setSaved] = useState<Saved>();
 	const [busy, setBusy] = useState(false);
@@ -100,11 +103,15 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		choose(services.find((s) => s.id === 'openrouter')!);
 		void submit('/plugins/browser/openrouter', signIn);
 	}, [open, signIn]);
-	function choose(service: Service | undefined) {
+	function choose(service: Service | undefined, row?: SavedProvider) {
 		setChosen(service);
+		setEditing(row);
 		setError('');
 		setDone(undefined);
-		if (service) setForm({ preset: service.id, url: '', protocol: 'chat', key: '', model: '' });
+		// A custom provider is saved again with its own endpoint, so only its key changes.
+		const url = service?.id === '' ? (row?.chat ?? row?.anthropic ?? '') : '';
+		const protocol = service?.id === '' && row?.anthropic && !row.chat ? 'anthropic' : 'chat';
+		if (service) setForm({ preset: service.id, url, protocol, key: '', model: '' });
 	}
 	const cloudflare = browser && chosen?.id === 'cloudflare';
 	const chrome = browser && chosen?.id === 'chrome';
@@ -146,7 +153,11 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	}
 	const connected = saved?.providers ?? [];
 	const defaultProvider = saved?.default.slice(0, saved.default.indexOf('/'));
-	const serviceOf = (id: string, name?: string): Service => services.find((s) => s.id === id) ?? { id, name: name || id, tagline: '' };
+	// A connected provider opens as its tile, as its preset, or else as a custom API with its endpoint.
+	const serviceOf = (p: SavedProvider): Service => {
+		const preset = findPreset(p.id);
+		return services.find((s) => s.id === p.id) ?? (preset ? { id: p.id, name: p.name || preset.name, tagline: '', noKey: preset.noKey } : { ...custom, name: p.name || custom.name });
+	};
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="provider-dialog">
@@ -161,11 +172,11 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 								<h3 id="providers-connected">Connected</h3>
 								<ul className="provider-connected">
 									{connected.map((p) => {
-										const service = serviceOf(p.id, p.name);
+										const service = serviceOf(p);
 										const isDefault = p.id === defaultProvider;
 										return (
 											<li key={p.id}>
-												<button type="button" onClick={() => choose(service)}>
+												<button type="button" onClick={() => choose(service, p)}>
 													<Logo service={service} />
 													<span className="provider-text">
 														<span className="provider-name">{p.name || service.name}</span>
@@ -185,7 +196,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 								<h3>{group.title}</h3>
 								<div className="provider-grid">
 									{group.services.map((service) => (
-										<button key={service.id || 'custom'} type="button" className="provider-tile" onClick={() => choose(service)}>
+										<button key={service.id || 'custom'} type="button" className="provider-tile" onClick={() => choose(service, service.id ? connected.find((p) => p.id === service.id) : undefined)}>
 											<Logo service={service} />
 											<span className="provider-text">
 												<span className="provider-name">{service.name}</span>
@@ -228,7 +239,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 						) : (
 							<form onSubmit={save}>
 								<fieldset disabled={busy} className="provider-form">
-									<ProviderFields browser={browser} chosen={chosen} form={form} setForm={setForm} setError={setError} connectedKey={connected.find((p) => p.id === chosen.id)?.key} />
+									<ProviderFields browser={browser} chosen={chosen} form={form} setForm={setForm} setError={setError} connectedKey={editing?.key} />
 									{error && (
 										<p className="provider-error" role="alert">
 											{error}
