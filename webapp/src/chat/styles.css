@@ -1333,6 +1333,161 @@ button.reply-meta:hover,
 .tool-call.waiting .tool-status {
 	color: var(--wait);
 }
+.plan-card {
+	width: 100%;
+	max-width: 100%;
+	padding: 12px 16px 14px;
+	border: 1px solid var(--line-strong);
+	border-radius: 12px;
+	background: var(--surface);
+	font-size: 13px;
+}
+.plan-card.waiting {
+	background: color-mix(in srgb, var(--wait) 4%, var(--surface));
+	border-color: color-mix(in srgb, var(--wait) 35%, transparent);
+	box-shadow: inset 3px 0 0 var(--wait);
+}
+.plan-card > header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--text);
+}
+.plan-card > header strong {
+	font-weight: 560;
+}
+.plan-card.done .tool-status {
+	color: var(--ok);
+}
+.plan-card.failed .tool-status {
+	color: var(--destructive);
+}
+.plan-card.waiting .tool-status {
+	color: var(--wait);
+}
+.plan-summary {
+	margin: 8px 0 0;
+	color: var(--text-soft);
+}
+.plan-tasks {
+	display: grid;
+	gap: 8px;
+	margin: 12px 0 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: plan;
+}
+.plan-tasks > li {
+	counter-increment: plan;
+	position: relative;
+	padding: 8px 10px 8px 34px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface-raised);
+}
+.plan-tasks > li::before {
+	content: counter(plan);
+	position: absolute;
+	top: 9px;
+	left: 10px;
+	width: 16px;
+	font-family: var(--mono);
+	font-size: 12px;
+	color: var(--muted-foreground);
+	text-align: right;
+}
+.plan-task-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.plan-task-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text);
+	font-weight: 500;
+}
+.plan-task-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	margin-left: auto;
+	padding: 2px 8px;
+	border: 0;
+	border-radius: 8px;
+	font: inherit;
+	font-size: 12px;
+	color: var(--muted-foreground);
+	background: var(--accent);
+	cursor: pointer;
+}
+.plan-task-status .spinner {
+	width: 10px;
+	height: 10px;
+}
+.plan-tasks > li[data-status='running'] .plan-task-status,
+.plan-tasks > li[data-stage='verify'] .plan-task-status,
+.plan-tasks > li[data-stage='review'] .plan-task-status {
+	color: var(--run);
+	background: color-mix(in srgb, var(--run) 8%, transparent);
+}
+.plan-tasks > li[data-status='waiting'] .plan-task-status,
+.plan-tasks > li[data-stage='stuck'] .plan-task-status {
+	color: var(--wait);
+	background: color-mix(in srgb, var(--wait) 10%, transparent);
+}
+.plan-tasks > li[data-stage='ready'] .plan-task-status {
+	color: var(--ok);
+	background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+.plan-tasks > li[data-status='failed'] .plan-task-status {
+	color: var(--destructive);
+	background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+.plan-task-meta {
+	margin: 2px 0 0;
+	font-size: 12px;
+	color: var(--muted-foreground);
+	overflow-wrap: anywhere;
+}
+.plan-task-prompt summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	list-style: none;
+}
+.plan-task-prompt summary::-webkit-details-marker {
+	display: none;
+}
+.plan-task-prompt[open] summary svg {
+	transform: rotate(90deg);
+}
+.plan-task-prompt p {
+	margin: 6px 0 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	color: var(--text-soft);
+}
+.plan-blueprints {
+	margin: 10px 0 0;
+	padding: 0 0 0 16px;
+	font-size: 12px;
+	color: var(--muted-foreground);
+}
+.plan-failed {
+	margin: 8px 0 0;
+	color: var(--destructive);
+}
+.plan-card .approval-prompt {
+	margin-top: 12px;
+}
 .tool-body {
 	margin: 6px 0 4px 30px;
 	padding: 4px 0 4px 14px;

@@ -70,6 +70,17 @@ Owner-only tools:
   than do it itself. With `share` (a task's ID) the agent instead works
   read-only in that task's worktree and branch (see Readers below); Always
   allow then covers only that task.
+- `task_plan` (project, an optional summary, and up to six tasks, each with a
+  title, prompt, and optional agent and blueprint) asks the owner to approve
+  them all at once, then starts each as `task_start` would, in order, from the
+  conversation that asked. The approval shows each task's agent and
+  blueprint (the project's by default) and what each blueprint does; the web
+  shows it as a plan card whose tasks, once started, show where they are
+  (Running, Checking, In review, Ready, Needs you) and open their
+  conversations. A task that fails to start is reported and the others go
+  on. Always allow covers plans in the same project with the same agents and
+  blueprints. Its prompt has the model propose work that splits into parts
+  that can go on at once as one plan.
 - `tasks` lists the projects and tasks with status, branch, plan, the end of
   each task's latest reply, the outcome and result its agent reported (see
   Results below) and what its agent used (see Usage below).

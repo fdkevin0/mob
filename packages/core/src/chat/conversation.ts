@@ -366,10 +366,21 @@ export function describeApproval(tool: string, input: unknown): [string, boolean
 	let b = tool;
 	if (input === undefined || input === null) return [b, whole];
 	if (typeof input !== 'object' || Array.isArray(input)) return [b + '\n' + clip(JSON.stringify(input)), whole];
-	for (const [key, value] of Object.entries(input)) {
+	const line = (key: string, value: unknown, indent: string) => {
 		const text = typeof value === 'string' ? value : JSON.stringify(value);
-		if (!text?.trim()) continue;
-		b += `\n${key}: ${clip(text)}`;
+		if (text?.trim()) b += `\n${indent}${key}: ${clip(text)}`;
+	};
+	for (const [key, value] of Object.entries(input)) {
+		// A list of items, such as a plan's tasks, shows one numbered item at a time, each field clipped on its own.
+		if (Array.isArray(value) && value.length && value.every(v => v && typeof v === 'object' && !Array.isArray(v))) {
+			b += `\n${key}:`;
+			value.forEach((item, i) => {
+				b += `\n${i + 1}.`;
+				for (const [k, v] of Object.entries(item as object)) line(k, v, '   ');
+			});
+			continue;
+		}
+		line(key, value, '');
 	}
 	return [b, whole];
 }

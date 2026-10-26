@@ -184,6 +184,14 @@ const stages: Record<string, { label: string; icon?: ReactNode }> = {
 	stuck: { label: 'Needs you', icon: <HandIcon /> },
 };
 
+// nodeStatus is what an agent is doing, as its card and a plan's task show it: for a done task, where it is in its blueprint.
+export function nodeStatus(node: AgentNode): { label: string; icon?: ReactNode; stage?: string } {
+	const flow = node.task?.flow;
+	const stage = node.status === 'review' && flow ? stages[flow.stage] : undefined;
+	if (stage) return { ...stage, stage: flow!.stage };
+	return statuses[node.status] ?? { label: node.status };
+}
+
 // How an agent said its work ended.
 const outcomes: Record<string, string> = { passed: 'Passed', rework: 'Needs rework', blocked: 'Blocked' };
 
@@ -225,8 +233,7 @@ function Card({
 	const actions: Act = { decide: run(act.decide), stop: run(act.stop), message };
 	const { node, children } = branch;
 	const flow = node.task?.flow;
-	const stage = node.status === 'review' && flow ? stages[flow.stage] : undefined;
-	const status = stage ?? statuses[node.status] ?? { label: node.status };
+	const status = nodeStatus(node);
 	const plan = node.task?.plan ?? [];
 	const done = plan.filter((p) => p.status === 'completed').length;
 	const shown = node.tools.filter((t) => tools[t]).slice(0, 4);
@@ -254,7 +261,7 @@ function Card({
 						{node.model || (node.agent === 'mob' ? 'Project manager' : 'Model not reported')}
 					</small>
 				</div>
-				<span className="agent-status" data-status={node.status} data-stage={stage && flow?.stage}>
+				<span className="agent-status" data-status={node.status} data-stage={status.stage}>
 					{status.icon}
 					{status.label}
 					{node.approvals.length > 1 && ` · ${node.approvals.length}`}

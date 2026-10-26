@@ -3,7 +3,7 @@ import {
 	AgentSideConnection, PROTOCOL_VERSION, RequestError, ndJsonStream,
 	type Agent, type McpServer, type PromptRequest, type PromptResponse, type SessionUpdate, type ToolCallLocation, type ToolKind,
 } from '@agentclientprotocol/sdk';
-import { ConversationService, newID, rememberAlways, Store, type Answer, type llm, type Message, type Models, type Task, type Tool, type Turn } from '@mob/core';
+import { ConversationService, describeApproval, newID, rememberAlways, Store, type Answer, type llm, type Message, type Models, type Task, type Tool, type Turn } from '@mob/core';
 import { openBun } from '@mob/core/sqlite/bun';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -1018,4 +1018,31 @@ test('more work while reviewers read starts a new round', async () => {
 	expect(seen[0]).toContain('review round 2 of 2');
 	expect(notices).toHaveLength(1);
 	expect(h.store.task(work.id)!.flow).toMatchObject({ stage: 'ready', round: 2 });
+});
+
+test('task_plan asks once, then starts every task', async () => {
+	const h = harness();
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	await h.svc.addProject(h.repo, 'mob');
+	h.svc.setProject('mob', { blueprint: 'quick' });
+	const plan = h.tool('task_plan');
+	expect(plan.run(toolCall({ project: 'mob', tasks: [] }))).rejects.toThrow('one task or more');
+	expect(plan.run(toolCall({ project: 'mob', tasks: Array.from({ length: 7 }, () => ({ title: 'x', prompt: 'x' })) }))).rejects.toThrow('at most 6');
+	expect(plan.run(toolCall({ project: 'mob', tasks: [{ title: 'x', prompt: ' ' }] }))).rejects.toThrow("task 1's prompt is empty");
+	expect(plan.run(toolCall({ project: 'other', tasks: [{ title: 'x', prompt: 'x' }] }))).rejects.toThrow('saved projects: mob');
+	// Each task gets its agent and blueprint, the project's by default, and the owner sees what each blueprint does.
+	const asked = await plan.run(toolCall({ project: 'mob', summary: 'Greet twice', tasks: [{ title: 'One', prompt: 'hello', agent: 'claude' }, { prompt: 'hello', blueprint: 'standard' }] })).catch(e => e.asked) as { tasks: Record<string, string>[]; blueprints: Record<string, string> };
+	expect(asked).toMatchObject({ project: h.repo, summary: 'Greet twice', tasks: [{ title: 'One', agent: 'claude', blueprint: 'quick' }, { title: 'hello', agent: 'codex', blueprint: 'standard' }] });
+	expect(Object.keys(asked.blueprints).sort()).toEqual(['quick', 'standard']);
+	expect(plan.scope!(JSON.stringify(asked))).toBe(`${h.repo} plan claude/quick codex/standard`);
+	const [text] = describeApproval('task_plan', asked);
+	expect(text).toContain('tasks:\n1.\n   title: One\n   agent: claude');
+	// Approving it starts both, from the conversation that asked.
+	const origin = h.store.create();
+	const out = await plan.approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify({ ...asked, tasks: [asked.tasks[0], { ...asked.tasks[1], blueprint: 'quick' }] }), store: h.store, owner: true }) as { tasks: { task: string; title: string }[] };
+	expect(out.tasks.map(t => t.title)).toEqual(['One', 'hello']);
+	const started = out.tasks.map(t => h.store.task(t.task)!);
+	expect(started.map(t => [t.parent, t.agent, t.flow?.blueprint])).toEqual([[origin.id, 'claude', 'quick'], [origin.id, 'codex', 'quick']]);
+	await h.until('not both ready', () => notices.filter(n => n.text.startsWith('**Ready to review')).length === 2);
 });

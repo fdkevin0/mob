@@ -15,7 +15,8 @@ export function ApprovalPrompt({
 	decide,
 }: {
 	question: string;
-	request: string;
+	/** request is the request's details; unset when the card shows them itself. */
+	request?: string;
 	whole?: boolean;
 	busy: boolean;
 	decide: (approved: boolean, reason?: string, remember?: 'conversation' | 'always') => void;
@@ -25,10 +26,12 @@ export function ApprovalPrompt({
 	return (
 		<div className="approval-prompt" aria-busy={busy}>
 			<p className="approval-question">{question}</p>
-			<details className="approval-request" open>
-				<summary>{whole ? 'Request details' : 'Partial request'}</summary>
-				<pre tabIndex={0}>{request || 'No input parameters.'}</pre>
-			</details>
+			{request !== undefined && (
+				<details className="approval-request" open>
+					<summary>{whole ? 'Request details' : 'Partial request'}</summary>
+					<pre tabIndex={0}>{request || 'No input parameters.'}</pre>
+				</details>
+			)}
 			{!whole && <p className="approval-note">Too long to show here; open its conversation to approve it.</p>}
 			{denying ? (
 				<form
