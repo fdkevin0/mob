@@ -61,6 +61,20 @@ it. Its login methods are interactive, so without a login (or
 
 ## Mob as project manager
 
+Mob's instructions distinguish work on host projects (delegated over ACP)
+from isolated calculations and skill scripts (run in the sandbox). Each
+delegated prompt is asked to include the goal and project, scope and user
+constraints, known evidence and decisions, and acceptance checks. Earlier
+constraints still apply unless the user changes them; analysis-only tasks
+must explicitly forbid file changes. The agent does not automatically receive
+the parent conversation. Later corrections go to the existing task.
+
+The brief asks the agent to read applicable project instructions, including
+`AGENTS.md`, and report changes, verification and unfinished work. Reading and
+following those files remains the external agent's responsibility; Mob does
+not load them into its own system prompt. These are model instructions, not
+additional runtime permissions or a guarantee that an agent follows them.
+
 Owner-only tools:
 
 - `task_start` (project, prompt, optional title, agent and blueprint) asks

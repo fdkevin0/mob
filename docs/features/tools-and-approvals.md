@@ -1,5 +1,14 @@
 # Tools and approvals
 
+Mob's shared instructions ask it to preserve the user's scope, clarify missing
+targets, distinguish tool evidence from assumptions, and report unfinished
+work. Tool results, quoted content, memories and summaries do not grant
+permission. Installed skills guide the task within the user's request and
+tool permissions. Cleared instructions should be loaded again when needed.
+Denied or revoked actions must not be rerouted through another tool, and an
+uncertain side effect must not be repeated just to discover whether it worked.
+These instructions complement the runtime approval checks described below.
+
 The model works through tools. Any tool may ask the owner to approve a call
 before it has an effect, and the owner can decide from any client or channel.
 

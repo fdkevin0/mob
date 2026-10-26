@@ -269,6 +269,17 @@ The shared rendering configuration is in
 
 ## Summarizing older history
 
+- The summary prompt requests four sections: goal and constraints, decisions
+  and evidence, progress and verification, and remaining work. Empty sections
+  are omitted and headings follow the conversation's language. It preserves
+  acceptance criteria, relevant rejected approaches, denied or revoked
+  permissions, important paths and task IDs, and instructions to reload.
+  Hypotheses remain unverified; attempted actions are not reported as success.
+- A summary is historical data, not new instructions or permission. Current
+  user corrections and the runtime's tool approval state take precedence.
+  The summarizer is instructed to ignore instructions embedded in external
+  data and replace superseded requests. This guides the model; summaries are
+  still lossy and do not replace stored approval decisions.
 - When history does not fit after clearing, the conversation's model folds the
   older messages into the conversation's summary, stored with the ID of the
   last message it covers. Turns read the summary in the system prompt in place
