@@ -7,9 +7,9 @@ browser UI, the terminal UI and messaging channels are its clients. How each
 feature behaves is in [features/](features/README.md).
 
 The browser UI and the terminal UI share `@mob/client`. The core
-(`packages/core`) uses no Bun or Node APIs of its own: SQLite and the host
-reach it through small interfaces, so the same code can later run in a browser
-worker or a Cloudflare Durable Object. `apps/mob` is the Bun host that gives it
+(`packages/core`) keeps Bun and Node APIs out of its service logic: SQLite and
+the host reach it through small interfaces. Its SQLite adapters use `bun:sqlite`
+on the host and SQLite WASM in the browser. `apps/mob` is the Bun host that gives it
 a database, files, processes and the command line.
 
 ## Where code lives
@@ -38,7 +38,9 @@ a database, files, processes and the command line.
 - Every client and channel goes through `ConversationService`; Telegram, WeChat
   iLink and email call it in-process, other clients over HTTP. Nothing else opens
   the database.
-- `@mob/client` has no browser or terminal APIs. It uses the AI SDK's headless
+- `@mob/client` shares conversation state across browser and terminal clients.
+  In a browser, it uses document visibility events to pause polling while hidden
+  and reload when shown. It uses the AI SDK's headless
   `Chat` state container (exported by `@ai-sdk/react`), `DefaultChatTransport` and
   `readUIMessageStream`, not a new message protocol. UIs subscribe to its stable
   snapshot and translate their own input events. Commands still run in the service;
