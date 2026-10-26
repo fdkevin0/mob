@@ -1,0 +1,90 @@
+/* Notice: one look for every failure, warning, note and success on every page. */
+.notice {
+	--notice: var(--muted-foreground);
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid color-mix(in srgb, var(--notice) 26%, transparent);
+	border-radius: var(--radius-card);
+	background: color-mix(in srgb, var(--notice) 7%, var(--surface));
+	color: var(--text-soft);
+	font-family: var(--sans);
+	font-size: 13px;
+	line-height: 1.5;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+/* A notice with actions centres its line on them. */
+.notice:has(.notice-actions) {
+	align-items: center;
+}
+.notice:has(.notice-actions) .notice-icon {
+	margin-top: 0;
+}
+.notice[data-tone='error'] {
+	--notice: var(--destructive);
+}
+.notice[data-tone='warning'] {
+	--notice: var(--wait);
+}
+.notice[data-tone='success'] {
+	--notice: var(--ok);
+}
+.notice-icon {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+	color: var(--notice);
+}
+.notice-body {
+	flex: 1;
+	min-width: 0;
+}
+.notice-title {
+	display: block;
+	color: var(--text);
+	font-weight: 500;
+}
+.notice-text {
+	user-select: text;
+}
+.notice-text > :first-child {
+	margin-top: 0;
+}
+.notice-text > :last-child {
+	margin-bottom: 0;
+}
+.notice-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-self: center;
+	gap: 6px;
+	flex-shrink: 0;
+}
+.notice-actions .btn {
+	min-height: 30px;
+	padding: 0 12px;
+	font-size: 12.5px;
+}
+.notice[data-size='sm'] {
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: var(--radius);
+	font-size: 12px;
+}
+.notice[data-size='sm'] .notice-icon {
+	width: 14px;
+	height: 14px;
+	margin-top: 1px;
+}
+@media (max-width: 520px) {
+	.notice {
+		flex-wrap: wrap;
+	}
+	.notice-actions {
+		flex-basis: 100%;
+		justify-content: flex-end;
+	}
+}

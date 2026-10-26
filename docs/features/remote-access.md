@@ -290,9 +290,19 @@ runners; the API, the chat stream and the change feed are unchanged. The
 database is the usual SQLite schema on sqlite-wasm, stored in the origin
 private file system (OPFS) with the `opfs-sahpool` VFS, and `providers.json`
 is a setting in that database. Where OPFS is unavailable, such as in some
-private windows, conversations last until the tab closes. One tab at a time
-owns the database; another tab says so until it is reloaded after the first
-one closes.
+private windows, conversations last until the last Mob tab closes.
+
+Every Mob tab in the browser shares one runner. The pool's file handles are
+exclusive, so the worker of one tab leads: it holds the `mob-browser-runner`
+Web Lock, owns the database and serves the other tabs over a
+`BroadcastChannel`. A follower's worker passes its page's requests to the
+leader and streams the answers back, so every tab sees the same conversations
+and the change feed reaches them all. Followers queue for the lock; when the
+leader's tab closes, one of them opens the database and leads, and requests
+that were in flight fail once, which the client retries (the change stream
+reconnects by itself). Each worker also holds a lock named after its tab, so
+the leader ends a closed follower's streams. A turn the leader was running
+stops with its tab.
 
 The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go

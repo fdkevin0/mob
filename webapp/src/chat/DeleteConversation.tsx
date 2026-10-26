@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Connection, Conversation } from './api';
 import { Button } from '../components/ui/button';
 import { DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
+import { Notice } from '../components/ui/notice';
 
 /** DeleteConversation asks before a conversation and what was said in it are deleted, since that cannot be undone. */
 export function DeleteConversation({
@@ -24,7 +25,7 @@ export function DeleteConversation({
 			<DialogDescription className="dialog-description">
 				“{conversation.title}” and its messages are deleted from {where}, and cannot be brought back. Memories you approved in it stay.
 			</DialogDescription>
-			{failure && <p role="alert">{failure}</p>}
+			{failure && <Notice tone="error">{failure}</Notice>}
 			<div className="browser-limits-actions">
 				<Button
 					className="danger"

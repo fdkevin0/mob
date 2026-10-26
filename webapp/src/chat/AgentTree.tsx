@@ -26,6 +26,7 @@ import {
 	StopIcon,
 	TerminalIcon,
 } from './icons';
+import { Notice } from '../components/ui/notice';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -309,9 +310,9 @@ function Card({
 			)}
 			{instructing && node.task && <Instruct send={(text) => message(node.task!.id, text)} busy={busy} done={() => setInstructing(false)} />}
 			{failure && (
-				<p className="agent-failure" role="alert">
+				<Notice tone="error" size="sm" className="agent-failure">
 					{failure}
-				</p>
+				</Notice>
 			)}
 			<footer>
 				<span className="agent-spent" title={node.usage ? usageTitle(node.usage) : undefined}>
@@ -714,9 +715,9 @@ export function AgentTree({
 			</header>
 			<div className="agents">
 			{error && (
-				<div className="error" role="alert">
+				<Notice tone="error" className="agents-notice">
 					{error}
-				</div>
+				</Notice>
 			)}
 			{!nodes && !error && (
 				<Loading label="Loading agents…" />

@@ -1,4 +1,5 @@
-// The page side of the browser runner: one worker per tab, reached as a fetch.
+// The page side of the browser runner: one worker per tab, reached as a fetch;
+// the workers of all tabs share one database (see runner.worker.ts).
 // The client sees an ordinary Mob service at browserURL.
 import type { Connection } from '../api';
 import { promptChrome } from './chrome';
@@ -51,9 +52,16 @@ function start(token: string) {
 	return { worker, ready, pending };
 }
 
-/** startBrowser starts this tab's runner, once, and resolves when it serves. */
+/** startBrowser starts this tab's runner, once, and resolves when it serves; after a failure, the next call tries again. */
 export function startBrowser(connection: Connection) {
-	started ??= start(connection.token);
+	if (!started) {
+		const run = start(connection.token);
+		started = run;
+		run.ready.catch(() => {
+			run.worker.terminate();
+			if (started === run) started = undefined;
+		});
+	}
 	return started.ready;
 }
 

@@ -12,6 +12,7 @@ import { Sidebar, type View } from './Sidebar';
 import { ComposeIcon, MenuIcon } from './icons';
 import { pendingOpenRouterSignIn } from './browser/openrouter';
 import { cacheScope, forgetSnapshot, keepsMessages, readList, readSnapshot, resume, setKeepsMessages, writeList, writeSnapshot } from './localCache';
+import { Notice } from '../components/ui/notice';
 
 const errorText = (error: unknown) =>
 	error instanceof TypeError
@@ -393,12 +394,17 @@ export function Workspace({
 					</Suspense>
 				)}
 				{error && (
-					<div className="error" role="alert">
+					<Notice
+						tone="error"
+						className="workspace-notice"
+						actions={
+							<Button variant="outline" disabled={dispatching || switching} onClick={() => setRetry((value) => value + 1)}>
+								Try again
+							</Button>
+						}
+					>
 						{error}
-						<Button variant="ghost" disabled={dispatching || switching} onClick={() => setRetry((value) => value + 1)}>
-							Refresh
-						</Button>
-					</div>
+					</Notice>
 				)}
 				{view === 'agents' && (
 					<Suspense fallback={panel}>
@@ -458,7 +464,8 @@ export function Workspace({
 						/>
 					</div>
 				) : (
-					view === 'chat' && (
+					view === 'chat' &&
+					!error && (
 						<Loading label="Opening workspace…" />
 					)
 				)}

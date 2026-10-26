@@ -22,6 +22,7 @@ import { ReplyMeta, modelName } from './ReplyMeta';
 import { BrandIcon, modelBrand } from './brandIcons';
 import { ContextMeter, useContextUsage } from './ContextMeter';
 import { ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronIcon, CopyIcon, CrossIcon, HandIcon, RaisedHandIcon, RenameIcon, RetryIcon, SpinnerIcon, StopIcon } from './icons';
+import { Notice } from '../components/ui/notice';
 
 // What a new conversation offers to start with; a choice fills the message box, and nothing is sent until the owner sends it.
 const starters = [
@@ -203,9 +204,9 @@ export function Thread({
 					</button>
 				)}
 				{(failure || error) && (
-					<p className="error" role="alert">
+					<Notice tone="error" className="composer-notice">
 						{failure || error?.message}
-					</p>
+					</Notice>
 				)}
 				{commandResult && (
 					<section className="command-result" aria-label="Command result">
@@ -481,7 +482,7 @@ const MessageView = memo(function MessageView({
 								{part.state !== 'approval-requested' && <div className="tool-body">
 									<JsonResponse value={part.input} />
 									{part.state === 'output-available' && <JsonResponse value={part.output} />}
-									{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
+									{part.state === 'output-error' && <Notice tone="error" size="sm">{part.errorText}</Notice>}
 								</div>}
 								{part.state === 'approval-requested' && (
 									<ApprovalPrompt
@@ -511,9 +512,9 @@ const MessageView = memo(function MessageView({
 					</div>
 				) : (
 					message.metadata?.error && (
-						<p className="error" role="status">
+						<Notice tone="error" size="sm" role="status" className="reply-notice">
 							{message.metadata.status}: {message.metadata.error}
-						</p>
+						</Notice>
 					)
 				)}
 			</MessageContent>
