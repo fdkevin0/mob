@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { getEventListeners } from 'node:events';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -321,5 +322,27 @@ test('a message said again replaces it and everything after it', async () => {
 	stop.abort();
 	await expect(service.start({ id: c.id, text: 'stopped', requestId: 'r10', replace: 'r7' }, stop.signal)).rejects.toThrow();
 	expect(s.history(c.id).map(m => m.id)).toEqual(kept);
+	s.close();
+});
+
+
+test('turns release shared cancellation listeners after completion and failure', async () => {
+	const s = open();
+	const service = new ConversationService(s, demoModels);
+	const c = s.create();
+	const stop = new AbortController();
+	for (let i = 0; i < 3; i++) {
+		const running = await service.start({ id: c.id, text: '/compact', requestId: newID(), owner: true }, stop.signal);
+		await running.whenDone();
+		expect(getEventListeners(stop.signal, 'abort')).toHaveLength(0);
+	}
+	await expect(service.execute({ id: c.id, text: 'hello', requestId: newID() }, () => { throw new Error('reader failed'); }, { signal: stop.signal })).rejects.toThrow('reader failed');
+	expect(getEventListeners(stop.signal, 'abort')).toHaveLength(0);
+	const running = await service.start({ id: c.id, text: 'hello', requestId: newID() }, stop.signal);
+	stop.abort();
+	await running.whenDone();
+	expect(running.signal.aborted).toBe(true);
+	expect(getEventListeners(stop.signal, 'abort')).toHaveLength(0);
+	await service.close();
 	s.close();
 });
