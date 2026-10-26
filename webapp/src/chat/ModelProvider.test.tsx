@@ -2,9 +2,13 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelProvider } from './ModelProvider';
 
+// The browser runner answers as the stubbed fetch does, in tests that run as the public web.
+vi.mock('./browser/browser', () => ({ startBrowser: async () => {}, browserFetch: (input: RequestInfo, init?: RequestInit) => fetch(input, init) }));
+
 afterEach(() => {
 	cleanup();
 	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
 });
 
 it('saves a provider on a runner, where a model server on that machine needs no key', async () => {
@@ -81,6 +85,16 @@ it('leaves a provider named on the command line to the command line, so saving n
 	expect(within(connected).getByText(/sk-…w1 · m1 · change it with mob provider add/)).toBeDefined();
 	fireEvent.click(screen.getByRole('button', { name: /^OpenAI/ }));
 	expect(screen.getByLabelText('API key').getAttribute('placeholder')).toBe('Paste your key');
+});
+
+it('opens Workers AI connected in the browser from its row', async () => {
+	vi.stubEnv('MODE', 'public');
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json({ default: 'cloudflare/llama', providers: [{ id: 'cloudflare', name: 'Cloudflare Workers AI', chat: 'https://usemob.app/api/ai/cloudflare/v1' }] })));
+	render(<ModelProvider connection={{ url: '', token: '', browser: true } as never} open onOpenChange={() => {}} />);
+	const connected = await screen.findByRole('region', { name: 'Connected' });
+	expect(within(connected).queryByText(/mob provider add/)).toBeNull();
+	fireEvent.click(within(connected).getByRole('button'));
+	expect(screen.getByRole('button', { name: 'Use my Cloudflare account' })).toBeDefined();
 });
 
 it('signs in with OpenRouter in the browser, or takes a pasted key', () => {

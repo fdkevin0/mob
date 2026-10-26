@@ -158,6 +158,8 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	// line, are changed there, since saving them here would replace a different provider.
 	const editable = (p: SavedProvider): Service | undefined => {
 		if (p.id === 'custom' && !p.preset) return { ...custom, name: p.name || custom.name };
+		// Workers AI and Chrome's model have the browser's own routes, which save them under their IDs.
+		if (browser && (p.id === 'cloudflare' || p.id === 'chrome')) return services.find((s) => s.id === p.id);
 		const preset = findPreset(p.id);
 		if (!preset || p.preset !== p.id || p.chat || p.anthropic) return undefined;
 		return services.find((s) => s.id === p.id) ?? { id: p.id, name: p.name || preset.name, tagline: '', noKey: preset.noKey };
@@ -184,7 +186,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 												<Logo service={look} />
 												<span className="provider-text">
 													<span className="provider-name">{p.name || look?.name || p.id}</span>
-													<span className="provider-sub">{[p.key, isDefault && saved?.default.slice(p.id.length + 1), !service && 'change it with mob provider add'].filter(Boolean).join(' · ') || 'No key'}</span>
+													<span className="provider-sub">{[p.key, isDefault && saved?.default.slice(p.id.length + 1), !service && (browser ? 'not available in this browser' : 'change it with mob provider add')].filter(Boolean).join(' · ') || look?.tagline || 'No key'}</span>
 												</span>
 												{isDefault && <span className="provider-badge">Default</span>}
 											</>
