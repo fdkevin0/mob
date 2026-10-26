@@ -582,6 +582,7 @@ function Empty({ browser, start, connect }: { browser?: boolean; start?: (text: 
 }
 
 export function AgentTree({
+	manage,
 	connection,
 	changes,
 	open,
@@ -591,6 +592,7 @@ export function AgentTree({
 	connect,
 }: {
 	connection: Connection;
+	manage?: () => void;
 	/** browser is set in the browser runner, which has no coding agents. */
 	browser?: boolean;
 	/** changes, while live, replaces refreshing on a timer: the tree reloads when something changed. */
@@ -698,6 +700,7 @@ export function AgentTree({
 			<header className="view-header">
 				<div className="view-header-inner wide agents-header">
 				<h1>Agents</h1>
+				{manage && !browser && <Button variant="outline" onClick={manage}>Manage projects</Button>}
 				{all.length > 0 && <div className="agents-summary">
 					<span>
 						{all.length} {all.length === 1 ? 'agent' : 'agents'}

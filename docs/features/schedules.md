@@ -21,7 +21,7 @@ tasks, a reminder, a check on something that is still running. The code is in
   bytes.
 - `schedules` lists them (ID, prompt, next run, repeat) and `schedule_cancel`
   cancels one; both are offered once something is scheduled. `/schedules`
-  and `/unschedule ID|all` do the same in the web UI and TUI. All are
+  and `/unschedule ID|all` do the same in Web, TUI and Telegram. All are
   owner-only.
 
 ## Running
@@ -41,3 +41,12 @@ tasks, a reminder, a check on something that is still running. The code is in
   any approval it waits for; [Telegram](channels.md) sends it with approval
   buttons. A turn that cannot start, such as with no model configured, raises
   a notice with the error instead.
+
+## Managing schedules
+
+Web's **Manage Mob → Schedules** shows each prompt, next run (in the browser's
+local time), repeat rule and configured time zone, with a link to its conversation.
+Cancelling one or all schedules requires confirmation. Creation still goes
+through a conversation and approval. Telegram's **More → Schedules** offers a
+paged list and cancellation confirmations; dates there are shown in UTC, with
+the configured repeat time zone beside them.

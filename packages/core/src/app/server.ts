@@ -242,6 +242,10 @@ export class Server extends ConversationService {
 			queueMicrotask(() => s.options.shutdown!());
 			return json(202, { stopping: true });
 		});
+		r.handle('GET /api/memories', () => json(200, s.store.facts()));
+		r.handle('POST /api/memories/{id}/delete', (_, p) => json(200, { removed: s.store.forget(p.id) }));
+		r.handle('GET /api/grants', () => json(200, s.store.grants()));
+		r.handle('POST /api/grants/{id}/delete', (_, p) => json(200, { removed: s.store.revoke(p.id) }));
 		r.handle('GET /api/deliveries', () => json(200, s.store.deliveries()));
 		r.handle('GET /api/plugins', () => json(200, {
 			config: s.settings.publicConfig(), sections: s.settings.sections.map(({ name, title, fields, secrets }) => ({ name, title, fields, secrets: secrets.map(x => x.name) })),

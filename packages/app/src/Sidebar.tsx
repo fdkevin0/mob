@@ -34,7 +34,7 @@ import {
 } from './icons';
 
 /** View is what the workspace's main area shows: the open conversation, or one of the workspace's pages. */
-export type View = 'chat' | 'agents' | 'usage' | 'plugins';
+export type View = 'chat' | 'agents' | 'usage' | 'plugins' | 'manage';
 
 const day = 24 * 60 * 60 * 1000;
 /**
@@ -171,6 +171,7 @@ export function Sidebar({
 			<div className="sidebar-pages">
 				{page('agents', 'Agents', <AgentsIcon />)}
 				{page('usage', 'Token usage', <ChartIcon />)}
+				{page('manage', 'Manage Mob', <RaisedHandIcon />)}
 			</div>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>

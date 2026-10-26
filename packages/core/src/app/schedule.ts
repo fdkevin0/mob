@@ -3,7 +3,7 @@
 // task. A scheduled prompt runs as a turn of the owner's in the conversation
 // that scheduled it, and the owner hears its conclusion in the messaging apps
 // they use.
-import { cell, interactive, type Command } from '../chat/commands';
+import { cell, interactive, clientTelegram, type Command } from '../chat/commands';
 import { CommandError, type ConversationService } from '../chat/conversation';
 import type { Running } from '../chat/running';
 import { newID } from '../chat/sql';
@@ -239,7 +239,7 @@ export class Schedules {
 	/** commands list and cancel schedules. */
 	commands(): Command[] {
 		return [{
-			name: 'schedules', usage: '/schedules', summary: 'List scheduled prompts', clients: interactive, ownerOnly: true,
+			name: 'schedules', usage: '/schedules', summary: 'List scheduled prompts', clients: [...interactive, clientTelegram], ownerOnly: true,
 			run: async () => {
 				const all = this.store.schedules(0);
 				if (!all.length) return { markdown: 'Nothing is scheduled. Ask Mob to do something later, such as "every weekday at 9 summarize my coding tasks".' };
@@ -248,7 +248,7 @@ export class Schedules {
 				return { markdown: b + '\n`/unschedule all` cancels every one.' };
 			},
 		}, {
-			name: 'unschedule', usage: '/unschedule ID|all', summary: 'Cancel a scheduled prompt', clients: interactive, ownerOnly: true,
+			name: 'unschedule', usage: '/unschedule ID|all', summary: 'Cancel a scheduled prompt', clients: [...interactive, clientTelegram], ownerOnly: true,
 			run: async call => {
 				if (call.fields.length !== 1) return { markdown: 'Use `/unschedule ID` or `/unschedule all`; `/schedules` lists them.' };
 				const n = this.store.unschedule(call.fields[0]!);
@@ -260,5 +260,5 @@ export class Schedules {
 
 /** schedulePlugin adds schedules to a service. */
 export function schedulePlugin(s: Schedules): Plugin {
-	return { name: 'schedules', commands: s.commands(), tools: s.tools(), background: s.extension() };
+	return { name: 'schedules', routes: [{ method: 'GET', path: 'list', handle: async () => s.store.schedules(0) }], commands: s.commands(), tools: s.tools(), background: s.extension() };
 }

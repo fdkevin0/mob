@@ -430,6 +430,15 @@ export class Hub {
 	/** finishSignIn completes a sign-in pasted from another device. */
 	finishSignIn(address: string) { return finishSignIn(this.waits, address); }
 
+	/** list exposes status and tool names without server credentials. */
+	list() {
+		return names(this.servers).map(name => {
+			const state = this.states?.get(name);
+			const status = state?.status ?? 'not running';
+			return { name, status, tools: state?.tools.map(t => toolName(name, t.name)) ?? [], removable: !!this.installs()[name], ...(status.startsWith(signInPrefix) ? { signIn: status.slice(signInPrefix.length) } : {}) };
+		});
+	}
+
 	/** describe is a table of the servers and the tools they offer. */
 	describe() {
 		const shadowed = this.shadowedInstalls();

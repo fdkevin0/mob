@@ -148,3 +148,12 @@ remain visible in the conversation or agent card.
 
 Writing a tool, including `requestApproval`, `approved` and `scope`, is covered
 in [Extensions](extensions.md).
+
+## Managing saved state
+
+Web's **Manage Mob → Memories** lists saved facts and their scope, links to
+source conversations, and confirms individual or bulk deletion. **Remembered
+approvals** shows the tool, matching scope and whether an approval applies to
+one conversation or all of them. Revoking an approval makes future matching
+calls ask again; revoking all approvals requires confirmation. The corresponding
+`/memories`, `/forget`, `/grants` and `/revoke` commands remain available.

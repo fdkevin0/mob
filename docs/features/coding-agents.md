@@ -445,3 +445,17 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
 - Delegated conversations reuse `ConversationService`: `SetDelegate` hands the
   turns of the conversations a `chat.Delegate` owns to it instead of the model
   loop, and `chat.DelegateTurn` writes and saves the reply as the engine does.
+
+## Project forms
+
+**Agents → Manage projects** opens Web's **Manage Mob → Projects**. Add a
+repository using its absolute path on the connected Mob (spaces are supported),
+choose a blueprint, and edit checks as an ordered list of commands. Each check
+may contain multiple lines. Saving checks authorizes their automatic execution
+in finished tasks' worktrees; the form explains this before saving. Removing a
+project requires confirmation and keeps its tasks, branches and worktrees.
+The form and `/projects` use the same project service and blueprint validation.
+
+Telegram's `/tasks [PROJECT]` and **More → Tasks** show paged task summaries.
+Selecting a task switches to its conversation; the list does not execute task
+configuration changes.
