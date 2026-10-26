@@ -471,7 +471,7 @@ test('what agents use is recorded', async () => {
 test('the tree shows who started whom', async () => {
 	const h = harness();
 	const root = h.store.create();
-	const task = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Greet', 'hello'));
+	const task = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Greet', 'hello', 'manual'));
 	const alone = await h.start('hello');
 	const nodes = h.svc.tree('');
 	expect(nodes).toHaveLength(3);
@@ -775,7 +775,7 @@ test('tasks report how they ended', async () => {
 	const h = harness();
 	const root = h.store.create();
 	const tasks: Task[] = [];
-	for (const prompt of ['result passed', 'result rework', 'result maybe']) tasks.push(await h.svc.startTask(root.id, h.repo, '', prompt, prompt));
+	for (const prompt of ['result passed', 'result rework', 'result maybe']) tasks.push(await h.svc.startTask(root.id, h.repo, '', prompt, prompt, 'manual'));
 	for (const [i, t] of tasks.entries()) tasks[i] = await h.wait(t);
 	expect([tasks[0]!.outcome, tasks[0]!.result, tasks[1]!.outcome]).toEqual(['passed', 'found passed', 'rework']);
 	// An outcome Mob does not know is refused, and the agent is told why.
@@ -902,6 +902,7 @@ test('a blueprint runs the checks and says the work is ready', async () => {
 	expect(notices[0]!.text).toStartWith('**Ready to review:** codex · Work\nBranch `' + task.branch + '`');
 	expect(notices[0]!.text).toContain('Checks: ✓ `test -e .git`');
 	expect(h.store.task(task.id)!.flow).toMatchObject({ stage: 'ready', round: 1, checks: [{ command: 'test -e .git', passed: true, exitCode: 0 }] });
+	expect(outline(h.svc.tree(''))).toContain('**Ready** · Codex · Work');
 	// The note stays in the conversation that started the task.
 	expect(textOf(h.store.history(origin.id).at(-1)!)).toStartWith('**Ready to review:**');
 	// More work from the owner is a new round.
