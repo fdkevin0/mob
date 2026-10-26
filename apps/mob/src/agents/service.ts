@@ -6,7 +6,7 @@ import {
 } from '@mob/core';
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import { advance, begin, blueprint, recover } from './blueprints';
+import { advance, begin, blueprint, drop, recover } from './blueprints';
 import { firstLine, git, slug, start, type Conn } from './process';
 import { preset, presets, readers, type Preset } from './presets';
 import { Session } from './session';
@@ -330,6 +330,7 @@ export class Service implements Delegate, Tasks {
 		const s = this.running(t.id);
 		if (s) this.drop(t.id, s);
 		this.store.setTaskStatus(t.id, taskStopped);
+		drop(this, t.id);
 		settle(this, t.id);
 		this.ended(t.id);
 	}

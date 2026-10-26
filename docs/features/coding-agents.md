@@ -191,7 +191,9 @@ The owner hears once, at the end: **Ready to review** with the branch, git's
 count of the change, each check's result, the review's conclusion and what
 the task used, or **Task needs you** with why and the end of the failing
 output. The notice is also saved as a note in the conversation. Writing to the
-task afterwards starts a new round.
+task afterwards starts a new round. Stopping a task, or giving it more work
+while it is checked or reviewed, drops what was under way, its reviewers
+included: their reports would be about work that changed.
 
 Where a task is in its blueprint is saved in `tasks.flow`: the blueprint,
 the stage (`build`, `verify`, `review`, `ready` or `stuck`), the round, the
