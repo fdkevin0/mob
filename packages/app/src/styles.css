@@ -2119,6 +2119,13 @@ button.reply-meta:hover,
 	grid-template-columns: 1fr 1fr;
 	gap: 28px;
 }
+.extension-tabs { flex-wrap: wrap; height: auto; }
+.extension-row { padding: 20px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.extension-row h3 { margin-top: 0; }
+.extension-row details { margin: 12px 0; }
+.extension-detail { max-height: 85dvh; overflow: auto; overflow-wrap: anywhere; }
+.extension-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.extension-market [data-update="available"] { color: var(--foreground); font-weight: 550; }
 .plugin-field {
 	display: flex;
 	flex-direction: column;

@@ -11,6 +11,18 @@ const initial = (): Configs => ({
   wechat_ilink: { enabled: false, baseUrl: '', allowedUsers: [] },
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+it('opens MCP and Skills management through the existing plugin navigation', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.endsWith('/plugins/mcp/overview')) return Response.json({ servers: [], catalog: [] });
+    if (url.endsWith('/plugins/skills/installed')) return Response.json({ skills: [], warnings: [] });
+    return Response.json({ config: initial(), telegramStatus: 'Disabled' });
+  }));
+  render(<Plugins connection={connection} />);
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'MCP' }), { button: 0, ctrlKey: false });
+  expect(await screen.findByText('No servers installed. Open Discover to connect one.')).toBeTruthy();
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Skills' }), { button: 0, ctrlKey: false });
+  expect(await screen.findByText('No skills installed. Open Discover to preview and install one.')).toBeTruthy();
+});
 it('keeps saved passwords hidden, saves configuration and requires review before sending', async () => {
   let config = initial();
   const send = vi.fn();

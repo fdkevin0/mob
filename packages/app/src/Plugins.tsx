@@ -7,15 +7,17 @@ import { CloudflarePlugin } from './plugins/CloudflarePlugin';
 import { WeChatILinkPlugin } from './plugins/WeChatILinkPlugin';
 import { errorText } from './plugins/shared';
 import { Deliveries } from './plugins/Deliveries';
+import { MCPPlugin } from './plugins/MCPPlugin';
+import { SkillsPlugin } from './plugins/SkillsPlugin';
 import { Button } from '@mob/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@mob/ui/tabs';
 import { Notice } from '@mob/ui/notice';
 
-const tabs = ['email', 'telegram', 'wechat_ilink', 'cloudflare', 'deliveries'] as const;
+const tabs = ['mcp', 'skills', 'email', 'telegram', 'wechat_ilink', 'cloudflare', 'deliveries'] as const;
 
 export function Plugins({ connection }: { connection: Connection }) {
   const [config, setConfig] = useState<Configs>();
-  const [tab, setTab] = useState<keyof Configs | 'deliveries'>('email');
+  const [tab, setTab] = useState<typeof tabs[number]>('email');
   const [status, setStatus] = useState('');
   const [mailStatus, setMailStatus] = useState('');
   const [error, setError] = useState('');
@@ -57,10 +59,10 @@ export function Plugins({ connection }: { connection: Connection }) {
       </header>
       <div className="plugins">
       <Tabs value={tab} onValueChange={value => setTab(value as typeof tab)}>
-        <TabsList aria-label="Connections">
+        <TabsList aria-label="Connections" className="extension-tabs">
           {tabs.map(name => (
             <TabsTrigger key={name} value={name}>
-              {name === 'email'
+              {name === 'mcp' ? 'MCP' : name === 'skills' ? 'Skills' : name === 'email'
                 ? 'Email plugin'
                 : name === 'telegram'
                 ? 'Telegram'
@@ -72,6 +74,8 @@ export function Plugins({ connection }: { connection: Connection }) {
             </TabsTrigger>
           ))}
         </TabsList>
+        <TabsContent value="mcp">{connection.browser ? <p>Connect to a Mob service to manage MCP servers.</p> : <MCPPlugin key={connection.url + (connection.runner?.id ?? '')} connection={connection} />}</TabsContent>
+        <TabsContent value="skills">{connection.browser ? <p>Connect to a Mob service to install skills.</p> : <SkillsPlugin key={connection.url + (connection.runner?.id ?? '')} connection={connection} />}</TabsContent>
         {error && <Notice tone="error">{error}</Notice>}
         {!config ? (
           <Button onClick={() => void load()}>Retry</Button>
