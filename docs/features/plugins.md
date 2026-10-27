@@ -3,7 +3,8 @@
 Plugins are optional connections configured in **Plugins & cloud services** in
 the GUI (also available before model setup), or with **Ctrl+P** / `/plugins` in
 the TUI. Telegram, WeChat iLink and answering mail are covered in
-[Messaging channels](channels.md); MCP servers in [MCP servers](mcp.md). How a
+[Messaging channels](channels.md); the MCP and Skills market tabs in
+[MCP servers](mcp.md#web-management) and [Skills](skills.md#web-management-and-installation). How a
 plugin is built is in [Extensions](extensions.md).
 
 ## Settings and secrets

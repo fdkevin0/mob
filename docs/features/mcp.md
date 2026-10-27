@@ -131,6 +131,30 @@ this machine.
   `/mcp remove NAME` forgets an installed server and its sign-in; a shadowed
   install's name keeps the configured server's sign-in.
 
+## Web management
+
+**Plugins & cloud services → MCP** has **Installed** and **Discover** views.
+Installed servers show their connection status, tool descriptions and exposure,
+and whether they are managed by `config.yaml` or were installed from the catalog.
+Configuration credentials are not returned in the overview.
+
+Discover uses the same catalog and namespace restrictions as `tool_install`.
+Reviewing and confirming a server installs it directly as the owner's action;
+it does not need a model turn or grant permission to call its tools. Both Web
+and model installs validate catalog membership and name conflicts at installation
+time. Servers requiring headers still need configuration in `config.yaml`.
+
+Installation and connection are separate: a saved server can still be connecting,
+need sign-in, or fail to connect. The page refreshes its status while visible.
+For OAuth, open **Sign in to connect**; on another device, paste the final
+loopback address into **Finish sign-in from another device** if it cannot open.
+Removing an installation uses the same behavior as `/mcp remove`; a configured
+server that shadows it remains configured. Configured servers cannot be deleted
+from this page.
+
+Operations run on the connected Mob service, not necessarily on the browser's
+computer. The browser-only runner does not offer this management interface.
+
 ## Trust
 
 - Every MCP call asks for [approval](tools-and-approvals.md). The approval shows
@@ -152,13 +176,3 @@ this machine.
 ## Not supported
 
 Resources, prompts and sampling.
-
-## Web management
-
-**Manage Mob → MCP servers** shows connection status and tool names without
-returning server connection credentials. Installed servers can be removed after
-confirmation; servers configured in `config.yaml` stay managed there, including
-those that override an earlier install. A pending
-sign-in offers its browser link. When signing in from another device, paste the
-callback address into **Sign-in callback address** to finish the existing
-`/signin` flow. Refresh checks the latest connection status.

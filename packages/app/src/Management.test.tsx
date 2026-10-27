@@ -61,7 +61,7 @@ it('saves project checks as separate strings, preserving multiline commands and 
 it('does not fetch a plugin missing on this Mob', async () => {
 	const fetch = vi.fn(async () => Response.json([]));
 	vi.stubGlobal('fetch', fetch);
-	render(<Management connection={connection} tab="mcp" select={() => {}} open={() => {}} held={() => false} />);
+	render(<Management connection={connection} tab="projects" select={() => {}} open={() => {}} held={() => false} />);
 	await screen.findByText(/This feature is not available/);
 	expect(fetch).toHaveBeenCalledTimes(1);
 });

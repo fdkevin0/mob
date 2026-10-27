@@ -282,5 +282,14 @@ export type RememberedApproval = { id: string; conversationId: string; tool: str
 export type ScheduledPrompt = { id: string; conversationId: string; prompt: string; next: number; repeat?: string; zone?: string };
 export type ProjectConfig = { name: string; path: string; blueprint?: string; checks?: string[] };
 export type Projects = { projects: ProjectConfig[]; blueprints: { name: string; title: string; description: string }[] };
-export type MCPServer = { name: string; status: string; tools: string[]; removable: boolean; signIn?: string };
-export type SkillCatalog = { skills: { name: string; description: string; compatibility?: string; dir: string }[]; problems: { dir: string; message: string }[] };
+
+/** Web extension management; paths and credentials remain service-owned. */
+export type SkillSource = { source: string; ref?: string; skillPath: string };
+export type SkillPreview = SkillSource & { commit: string; name: string; description: string; content: string; files: string[]; executableFiles: string[]; folderHash: string };
+export type SkillUpdate = { status: 'current' | 'available' | 'unknown' | 'error'; message: string };
+export type InstalledSkill = { name: string; description: string; compatibility?: string; managed: boolean; source?: string; ref?: string; update?: SkillUpdate };
+export type SkillsOverview = { skills: InstalledSkill[]; warnings: string[] };
+export type MCPOverview = {
+  servers: { name: string; managed: boolean; shadowed: boolean; connected: boolean; status: string; signInUrl?: string; tools: { name: string; description?: string; exposure: string }[] }[];
+  catalog: { name: string; title?: string; description: string; url: string; source: string; repository?: string; version?: string; requiredHeader?: string }[];
+};
