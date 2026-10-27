@@ -5,7 +5,7 @@ import path from 'node:path';
 import { preloadFonts, renderBlocking } from '@mob/ui/vite';
 import { workspaceBuild } from '@mob/app/vite';
 
-// The site deployed to Cloudflare Workers (wrangler.jsonc): the landing page,
+// The site deployed to Cloudflare Workers (the root wrangler.jsonc): the landing page,
 // the demo page, the account page and the workspace at /app (from @mob/app, in
 // public mode, which adds Mob in the browser). The Worker in worker/ serves
 // them and sets their content security policies; scripts/build.ts adds the

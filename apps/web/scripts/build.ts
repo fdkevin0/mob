@@ -1,4 +1,4 @@
-// Builds the site Workers Builds deploys (wrangler.jsonc): this package's
+// Builds the site Workers Builds deploys (the root wrangler.jsonc): this package's
 // pages with /app from @mob/app, then the documentation (@mob/docs) under /docs.
 import { $ } from 'bun';
 import { cp } from 'node:fs/promises';

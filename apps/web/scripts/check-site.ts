@@ -2,12 +2,15 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFile, readdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
 const { Miniflare, convertV4MiniflareOptions } = wranglerRequire('miniflare');
-const config = Bun.JSONC.parse(await readFile('wrangler.jsonc', 'utf8'));
-const built = await Bun.build({ entrypoints: [config.main], target: 'browser', external: ['cloudflare:workers', 'node:*'] });
+// The Worker's config sits at the repository root, where Workers Builds deploys it.
+const repo = resolve(import.meta.dir, '../../..');
+const config = Bun.JSONC.parse(await readFile(resolve(repo, 'wrangler.jsonc'), 'utf8'));
+const built = await Bun.build({ entrypoints: [resolve(repo, config.main)], target: 'browser', external: ['cloudflare:workers', 'node:*'] });
 assert(built.success, String(built.logs));
 const mf = new Miniflare(convertV4MiniflareOptions({ workers: [{
 	name: config.name,
@@ -15,7 +18,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({ workers: [{
 	script: await built.outputs[0].text(),
 	compatibilityDate: config.compatibility_date,
 	compatibilityFlags: config.compatibility_flags,
-	assets: { ...config.assets, routerConfig: { has_user_worker: true } },
+	assets: { ...config.assets, directory: resolve(repo, config.assets.directory), routerConfig: { has_user_worker: true } },
 	d1Databases: { DB: 'site-test' },
 	durableObjects: { RUNNERS: { className: 'RunnerRelay', useSQLite: true } },
 	bindings: {
