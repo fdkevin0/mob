@@ -8,8 +8,8 @@ Take them the same way each time, so a before and an after compare directly.
 Start the app, then capture it:
 
 ```sh
-bun run dev -- --mode public           # the public web, running Mob in the browser
-bun scripts/screenshot.ts http://127.0.0.1:5173/ --name workspace --wait textarea
+bun run dev:web                        # the public web (apps/web), running Mob in the browser
+bun scripts/screenshot.ts http://127.0.0.1:5174/app.html --name workspace --wait textarea
 ```
 
 `scripts/screenshot.ts` writes `<name>-<size>-<theme>.png` for every size in
@@ -31,9 +31,9 @@ cloud sessions have both installed; elsewhere run `bun add -g playwright` and
 
 ## Which app to capture
 
-- **The public web** (`bun run dev -- --mode public`) runs Mob in the browser
-  on the demo model, with no service to start. Use it for `/app`, the landing
-  page (`/landing.html`), `/demo.html` and `/account.html`.
+- **The public web** (`bun run dev:web`, port 5174) runs Mob in the browser
+  on the demo model, with no service to start. Use it for `/app.html`, the
+  landing page (`/landing.html`), `/demo.html` and `/account.html`.
 - **A local Mob** shows what needs a runner (agents, plugins, the sandbox):
   run `./build/mob serve --demo` and `bun run dev`, and sign in with the token
   it prints. Seed rich conversations with `POST /api/conversations/import`

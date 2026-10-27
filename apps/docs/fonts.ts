@@ -1,6 +1,6 @@
 // Each documentation page asks for its Latin Geist face in <head>, so it
 // arrives with the stylesheet instead of after it and the first paint already
-// uses it (the web app's pages do the same in webapp/vite.config.ts). Astro
+// uses it (the web app's pages do the same in packages/ui/vite.ts). Astro
 // names the file with a hash, so this runs after the build.
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

@@ -1,7 +1,7 @@
 // @ts-check
-// The documentation site at https://usemob.app/docs. It builds into the
-// public web build (webapp/dist-public/docs), and the Worker in worker/ serves
-// it beside the landing page and /app. Pages come from the repository's
+// The documentation site at https://usemob.app/docs. The site's build
+// (apps/web/scripts/build.ts) copies dist/ to /docs, and its Worker serves it
+// beside the landing page and /app. Pages come from the repository's
 // Markdown through scripts/sync.ts; pages.ts lists them in sidebar order.
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
@@ -16,12 +16,11 @@ export default defineConfig({
 	site: 'https://usemob.app',
 	base: '/docs',
 	trailingSlash: 'always',
-	outDir: '../../webapp/dist-public/docs',
 	// Pages share an origin with /app, so they run only scripts this build
 	// emits: Astro hashes its scripts and styles into a policy <meta> on each
 	// page, and csp.ts adds Starlight's inline scripts. Pagefind search
 	// compiles WebAssembly, and code blocks use inline style attributes.
-	// worker/index.ts adds the other directives.
+	// apps/web/worker/index.ts adds the other directives.
 	security: {
 		csp: {
 			scriptDirective: { resources: ["'self'", "'wasm-unsafe-eval'"] },
@@ -46,7 +45,7 @@ export default defineConfig({
 			},
 			expressiveCode: { styleOverrides: { borderRadius: '12px' } },
 			// Starlight sets the other Open Graph and Twitter tags; links to the
-			// docs preview with the landing page's image (webapp/public/og.png).
+			// docs preview with the landing page's image (apps/web/public/og.png).
 			head: [
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://usemob.app/og.png' } },
 				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },

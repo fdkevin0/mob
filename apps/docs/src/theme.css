@@ -1,12 +1,12 @@
-/* The site's palette (webapp/src/styles/theme.css), Geist fonts and lime
+/* The site's palette (packages/ui/src/styles/theme.css), Geist fonts and lime
  * accent. Starlight's theme menu stores its choice under the key the app,
  * account, landing and demo pages read, so one choice holds everywhere. */
 @import '@fontsource-variable/geist';
 @import '@fontsource/geist-mono';
 /* The app's tokens, for the shared header, account menu and theme picker. */
-@import '../../../webapp/src/styles/tokens.css';
+@import '@mob/ui/tokens.css';
 
-/* Cross-fade to and from the site's other pages (webapp/src/styles/base.css). */
+/* Cross-fade to and from the site's other pages (packages/ui/src/styles/base.css). */
 @media (prefers-reduced-motion: no-preference) {
 	@view-transition { navigation: auto; }
 }
@@ -48,7 +48,7 @@
 /* The site's component style: a quiet tint and
  * a lime bar for the current page instead of a solid lime fill, links with a
  * soft underline that turns lime on hover, and the shared radius scale
- * (webapp/src/styles/theme.css). */
+ * (packages/ui/src/styles/theme.css). */
 .sidebar-content a {
 	border-radius: 8px;
 }

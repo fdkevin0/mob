@@ -1,0 +1,93 @@
+// The public site at https://usemob.app: the landing page, GitHub sign-in
+// (Better Auth with Turnstile, accounts in D1), the web UI behind it, which
+// connects to loopback Mob or an end-to-end encrypted runner relay, and the
+// documentation at /docs (apps/docs). Cloudflare Workers
+// Builds deploys it from this repository with root directory apps/web, build
+// command `bun install --frozen-lockfile && bun run build` and deploy command
+// `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
+// Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, GITHUB_CLIENT_SECRET and
+// CLOUDFLARE_CLIENT_SECRET (Cloudflare sign-in stays off without it).
+// The Turnstile site key and the OAuth client IDs are public, so they are vars.
+// CLOUDFLARE_SCOPES (space-separated) adds scopes to Cloudflare's
+// user-details.read: account read, Workers AI and offline_access let Mob in
+// the browser run Workers AI on the visitor's account. Each ID must be one the
+// OAuth client offers, or Cloudflare refuses the whole sign-in.
+// PR builds apply migrations with wrangler.preview-migrations.jsonc before
+// running `npx wrangler preview`; their auth data uses a separate D1.
+{
+	"$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+	"name": "mob",
+	"account_id": "98010e731e09a77b673ba51074dfbe1c",
+	"main": "worker/index.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"run_worker_first": ["/*", "!/assets/*", "!/og.png", "!/logo.png", "!/logo.svg", "!/docs/_astro/*", "!/docs/pagefind/*"]
+	},
+	"durable_objects": { "bindings": [{ "name": "RUNNERS", "class_name": "RunnerRelay" }] },
+	"migrations": [{ "tag": "runner-v1", "new_sqlite_classes": ["RunnerRelay"] }],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "mob-auth",
+			"database_id": "4de3925b-83b6-4df5-87df-d0e2d764226d",
+			"migrations_dir": "worker/migrations"
+		}
+	],
+	"vars": {
+		"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
+		"CLOUDFLARE_SCOPES": "account-settings.read ai.read ai.write offline_access",
+		"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
+		"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
+	},
+	"previews": {
+		"vars": {
+			"CLOUDFLARE_CLIENT_ID": "859294fc8bdaddc51370de0725deedf1",
+			"CLOUDFLARE_SCOPES": "account-settings.read ai.read ai.write offline_access",
+			"GITHUB_CLIENT_ID": "Ov23liO90RZ7gTbMmoOJ",
+			"TURNSTILE_SITE_KEY": "0x4AAAAAAFb9fVa1goMgd_NC"
+		},
+		"d1_databases": [
+			{
+				"binding": "DB",
+				"database_name": "mob-auth-preview",
+				"database_id": "9ecd0ba5-6341-421c-88ce-16ff15b9047b"
+			}
+		],
+		"observability": {
+			"logs": {
+				"enabled": true,
+				"head_sampling_rate": 1,
+				"invocation_logs": true,
+				"persist": true
+			},
+			"traces": {
+				"enabled": true,
+				"head_sampling_rate": 1,
+				"persist": true
+			},
+			"issues": {
+				"enabled": true
+			}
+		}
+	},
+	"routes": [{ "pattern": "usemob.app", "custom_domain": true, "previews_enabled": true }],
+	"observability": {
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true,
+			"persist": true
+		},
+		"traces": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true
+		},
+		"issues": {
+			"enabled": true
+		}
+	}
+}

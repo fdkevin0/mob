@@ -1,6 +1,6 @@
-// The web UI's files: embedded in a compiled mob, else read from webapp/dist.
+// The web UI's files: embedded in a compiled mob, else read from @mob/app's dist.
 import { existsSync, statSync } from 'node:fs';
-import { dirname, join, normalize, resolve } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import { files } from './web';
 
 const types: Record<string, string> = {
@@ -9,9 +9,9 @@ const types: Record<string, string> = {
 };
 const typeOf = (path: string) => types[path.slice(path.lastIndexOf('.'))] ?? 'application/octet-stream';
 
-/** directory finds webapp/dist: MOB_ASSETS, beside the executable, or in the repository. */
+/** directory finds the built web UI: MOB_ASSETS, beside the executable, or @mob/app's dist in the repository. */
 function directory(): string | undefined {
-	const candidates = [process.env.MOB_ASSETS, join(dirname(process.execPath), 'web'), resolve(import.meta.dir, '../../../webapp/dist')];
+	const candidates = [process.env.MOB_ASSETS, join(dirname(process.execPath), 'web'), join(dirname(Bun.resolveSync('@mob/app/package.json', import.meta.dir)), 'dist')];
 	return candidates.find(d => d && existsSync(join(d, 'index.html')));
 }
 

@@ -1,0 +1,29 @@
+{
+	"compilerOptions": {
+		"target": "es2023",
+		"lib": [
+			"es2023",
+			"dom",
+			"dom.iterable"
+		],
+		"jsx": "react-jsx",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"useDefineForClassFields": true,
+		"types": [
+			"node"
+		]
+	},
+	"include": [
+		"src",
+		"vite.ts"
+	]
+}

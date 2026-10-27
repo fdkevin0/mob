@@ -7,7 +7,6 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 *.test
-webapp/dist-public/
 
 # Local Worker secrets and state
 .dev.vars
