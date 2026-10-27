@@ -28,7 +28,7 @@ a database, files, processes and the command line.
 | `packages/client` | the wire contract (`contracts.ts`), authenticated HTTP, AI SDK message state, commands, approvals, polling and stream recovery, shared by Web and the terminal |
 | `packages/ui` (`@mob/ui`) | the design system: tokens and theme, the calf brand, source-owned shadcn/Radix controls and the header markup the site and docs share; no authentication or conversation state |
 | `packages/app` (`@mob/app`) | the React workspace (`/app`), with adapted AI Elements; browser authentication/storage, DOM input/completion and presentation adapt the shared client. `mob` embeds its build, the desktop app loads it and the site deploys it |
-| `apps/web` (`@mob/web`) | https://usemob.app: the landing page with GitHub sign-in and voxel scenes, the demo and account pages, the Cloudflare Worker (`worker/`, deployed by the root `wrangler.jsonc`) and the build that adds `/app` and `/docs` |
+| `apps/web` (`@mob/web`) | https://usemob.app: the landing page with GitHub sign-in and voxel scenes, the demo and account pages, the Cloudflare Worker (`worker/`) and the build that adds `/app` and `/docs` |
 | `apps/docs` | the Starlight documentation built from this repository's Markdown |
 | `apps/tui` | the OpenTUI React terminal UI; terminal input, focus, layout and scrolling adapt the shared client |
 | `apps/desktop` | the Electron app around the `mob` executable |

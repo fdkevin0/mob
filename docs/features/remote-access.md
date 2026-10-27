@@ -171,9 +171,8 @@ Deployment:
   `@mob/app`), then the documentation (`apps/docs`) into `apps/web/dist/docs`.
   Hashed documentation assets (`/docs/_astro/`, `/docs/pagefind/`) are served
   without running the Worker. Cloudflare Workers Builds deploys
-  `wrangler.jsonc` (at the repository root, pointing into `apps/web`) with
-  build command `bun install --frozen-lockfile && bun run build:web` and
-  deploy command
+  `apps/web/wrangler.jsonc` with root directory `apps/web`, build command
+  `bun install --frozen-lockfile && bun run build` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
   The custom domain route serves production at `usemob.app` and, with
   `previews_enabled: true`, previews at `<preview-name>.usemob.app`.
@@ -183,7 +182,7 @@ Deployment:
   This automatically applies pending preview database migrations before deployment;
   a migration failure stops deployment, and applied migrations are skipped.
   Wrangler requires the explicit
-  `previews` block in `wrangler.jsonc`: public variables and the `DB` binding
+  `previews` block in `apps/web/wrangler.jsonc`: public variables and the `DB` binding
   do not inherit their production values. Previews share the separate
   `mob-auth-preview` database.
   Keep that file's database ID aligned with `previews.d1_databases`.
@@ -195,15 +194,15 @@ Deployment:
 - Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY`,
   `GITHUB_CLIENT_SECRET` and `CLOUDFLARE_CLIENT_SECRET`. The public
   `TURNSTILE_SITE_KEY`, `GITHUB_CLIENT_ID` and `CLOUDFLARE_CLIENT_ID` are
-  vars in `wrangler.jsonc`. The OAuth callback URLs are
+  vars in `apps/web/wrangler.jsonc`. The OAuth callback URLs are
   `https://usemob.app/api/auth/callback/github` and
   `https://usemob.app/api/auth/callback/cloudflare`. Cloudflare always asks
   for `user-details.read`; the `CLOUDFLARE_SCOPES` var (space-separated scope
   IDs as the Cloudflare OAuth client lists them) adds account read, Workers
   AI and `offline_access`, which Workers AI in the browser needs.
-- Locally, put the secrets in `.dev.vars`, which overrides the vars too
-  (Turnstile's test keys work), run
-  `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
+- Locally, put the secrets in `apps/web/.dev.vars`, which overrides the vars too
+  (Turnstile's test keys work), and in `apps/web` run
+  `npx wrangler d1 migrations apply DB --local`, `bun run build` and
   `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799` (the flag
   keeps the request host local instead of the production domain; port 8787 is
   Mob's own). The GitHub OAuth app then needs the local callback URL.
