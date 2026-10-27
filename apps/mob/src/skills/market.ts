@@ -71,6 +71,20 @@ export class SkillMarket {
     const locks = [this.lockFile, this.sharedLock].map(file => {
       try { return readLock(file); } catch (e) { warnings.push((e as Error).message); return { version: 3, skills: {} } as Lock; }
     });
+    // Installation identity survives edits to SKILL.md, including invalid frontmatter.
+    for (const name of Object.keys(locks[0]!.skills)) {
+      if (!nameInput.safeParse({ name }).success) continue;
+      const dir = join(this.library.roots[0]!, name);
+      if (!lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) continue;
+      const skill = skills.find(s => s.dir === dir);
+      if (skill?.name === name) continue;
+      if (skill) skill.name = name;
+      else {
+        const shadowed = skills.findIndex(s => s.name === name);
+        if (shadowed !== -1) skills.splice(shadowed, 1);
+        skills.push({ name, dir, description: 'Installed instructions are unavailable. Repair or remove this skill.' });
+      }
+    }
     const trees = new Map<string, Promise<Tree>>();
     const result: SkillsOverview = { skills: [], warnings };
     for (const skill of skills) {
@@ -160,14 +174,15 @@ export class SkillMarket {
 
   remove(name: string) {
     if (this.busy) throw new Error('Another skill operation is running; retry when it finishes');
+    name = nameInput.parse({ name }).name;
     const lock = readLock(this.lockFile);
-    const skill = this.library.find(name);
-    if (!Object.hasOwn(lock.skills, name) || !skill || dirname(skill.dir) !== this.library.roots[0] || lstatSync(skill.dir).isSymbolicLink()) throw new Error('Only skills installed by Mob can be removed here');
-    const staged = join(dirname(skill.dir), `.remove-${crypto.randomUUID()}`);
-    renameSync(skill.dir, staged);
+    const dir = join(this.library.roots[0]!, name);
+    if (!Object.hasOwn(lock.skills, name) || !lstatSync(dir, { throwIfNoEntry: false })?.isDirectory()) throw new Error('Only skills installed by Mob can be removed here');
+    const staged = join(dirname(dir), `.remove-${crypto.randomUUID()}`);
+    renameSync(dir, staged);
     delete lock.skills[name];
     try { writeAtomic(this.lockFile, JSON.stringify(lock, null, 2) + '\n'); }
-    catch (e) { renameSync(staged, skill.dir); throw e; }
+    catch (e) { renameSync(staged, dir); throw e; }
     rmSync(staged, { recursive: true, force: true });
     return { removed: name };
   }

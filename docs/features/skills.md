@@ -69,7 +69,9 @@ trees, more than 512 files or more than 16 MiB. Files are staged before becoming
 visible; cancelled or failed downloads are discarded. Remote operations have
 a 45-second overall deadline. An existing skill, including one in the shared directory, is never
 overwritten. Removal is available only for skills Mob installed in its own
-directory; it deletes those files, including local edits. Shared or symlinked
+directory; it deletes those files, including local edits. Mob-installed skills
+remain listed and removable under their installation name even if their
+`SKILL.md` is missing, invalid, or renamed in frontmatter. Shared or symlinked
 skills remain managed by their original installer.
 
 These operations run on the connected Mob service, including when the browser

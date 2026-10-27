@@ -124,6 +124,33 @@ test('refuses to shadow a shared skill or remove a linked skill', async () => {
   expect(existsSync(join(f.shared, 'example', 'SKILL.md'))).toBe(true);
 });
 
+test('edited or missing instructions keep managed installations visible and removable', async () => {
+  for (const edited of ['---\nname: example\n---\nNo description', content.replace('name: example', 'name: renamed'), undefined]) {
+    const f = fixture();
+    await f.market.install({ ...source, commit });
+    const file = join(f.own, 'example', 'SKILL.md');
+    if (edited === undefined) rmSync(file);
+    else write(file, edited);
+    expect((await f.market.overview()).skills).toMatchObject([{ name: 'example', managed: true }]);
+    expect(f.market.remove('example')).toEqual({ removed: 'example' });
+    expect(existsSync(join(f.own, 'example'))).toBe(false);
+    expect(readLock(f.market.lockFile).skills).toEqual({});
+    await f.market.install({ ...source, commit });
+    expect(f.market.library.find('example')).toBeDefined();
+  }
+});
+
+test('broken managed instructions do not hide removal behind a shared skill of the same name', async () => {
+  const f = fixture();
+  await f.market.install({ ...source, commit });
+  write(join(f.own, 'example', 'SKILL.md'), 'broken');
+  write(join(f.shared, 'example', 'SKILL.md'), content);
+  expect((await f.market.overview()).skills).toMatchObject([{ name: 'example', managed: true }]);
+  f.market.remove('example');
+  expect(readFileSync(join(f.shared, 'example', 'SKILL.md'), 'utf8')).toBe(content);
+  expect((await f.market.overview()).skills).toMatchObject([{ name: 'example', managed: false }]);
+});
+
 test('prototype property names do not turn untracked skills into managed installations', async () => {
   const f = fixture();
   write(join(f.own, 'constructor', 'SKILL.md'), content.replace('name: example', 'name: constructor'));
