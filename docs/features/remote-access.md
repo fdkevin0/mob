@@ -303,9 +303,11 @@ and the change feed reaches them all.
 
 Followers queue for the lock. When the leader's tab closes, one of them opens
 the database and leads, retrying while the closed tab's file handles are
-released. If it still cannot open a saved database, it gives up rather than
-serve an empty one: its page fails what it asked and starts a new runner on
-the next request, and the next follower in line tries. Requests in flight at a
+released. Once the browser has saved conversations (the pool's files exist in
+OPFS), no runner, whether taking over or started anew after a failure, serves
+an empty in-memory database in their place: if it still cannot open the saved
+one, it fails, its page reports it and starts a new runner on the next
+request, and the next follower in line tries. Requests in flight at a
 handover fail once, which the client retries (the change stream reconnects by
 itself). Each worker also holds a lock named after its tab, so the leader ends
 a closed follower's streams. A turn the leader was running stops with its tab,
