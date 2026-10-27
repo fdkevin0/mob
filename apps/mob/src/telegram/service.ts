@@ -298,14 +298,14 @@ export class Service {
 	private async answer(c: Config, botId: string, m: ChannelMessage, signal: AbortSignal): Promise<[Reply, Button[][]]> {
 		const text = m.text.trim();
 		const name = text.split(/\s+/, 1)[0]!.slice(1);
-		if (/^\/_(page |confirm |more$)/.test(text) ||
+		if (m.text.startsWith('/') && !/[\r\n]/.test(m.text) && (/^\/_(page |confirm |more$)/.test(text) ||
 			(/^\/(list|models|memories|grants|tasks)( |$)/.test(text) || /^\/(model|open|forget|revoke|schedules)$/.test(text)) &&
-			this.conversation.commands.specs(clientTelegram).some(c => c.name === name)) {
+			this.conversation.commands.specs(clientTelegram).some(c => c.name === name))) {
 			m.started?.();
 			return this.present(c, botId, text, { text: '' });
 		}
 		this.bindApproval(m);
-		return this.present(c, botId, text, await this.bridge.answer(m, signal));
+		return this.present(c, botId, m.text, await this.bridge.answer(m, signal));
 	}
 
 	/** announce sends the owner notice n, with buttons for the approvals it says wait. */
@@ -318,6 +318,7 @@ export class Service {
 	/** present is the reply to sent as the bot shows it, with the buttons that go under it. */
 	async present(c: Config, botId: string, sent: string, r: Reply): Promise<[Reply, Button[][]]> {
 		if (r.text === texts.busy) return [r, stopButton];
+		if (!sent.startsWith('/') || /[\r\n]/.test(sent)) return [r, []];
 		const paged = /^\/_page (list|models|memories|grants|schedules|tasks) (\d+) ?(.*)$/.exec(sent);
 		const offset = paged ? Number(paged[2]) : 0;
 		const trimmed = paged ? '/' + paged[1] + (paged[3] ? ' ' + paged[3] : '') : sent.trim();
@@ -338,16 +339,19 @@ export class Service {
 		if (name === '/open' && rest && !r.text) return [{ ...r, text: `Switched to ${this.title(rest)}.` }, []];
 		const current = this.store.setting<string>(conversationKey(botId, c)) ?? '';
 		let entries: { label: string; command: string; detail?: string }[] = [];
-		let heading = '', pageName = name.slice(1);
+		let heading = '', warnings = '', pageName = name.slice(1);
 		if (name === '/list' || (name === '/open' && !rest)) {
 			heading = pickConversation; pageName = 'list';
 			entries = this.store.list().map(c => ({ label: (c.id === current ? '✓ ' : '') + (c.title || 'Untitled'), command: '/open ' + c.id }));
 		} else if ((name === '/model' && !rest) || name === '/models') {
 			heading = 'Choose a model for this conversation.'; pageName = 'models';
 			entries = [{ label: 'Follow the default model', command: '/model default' }];
-			for (const group of await this.conversation.models?.list(rest, AbortSignal.timeout(10_000)) ?? []) for (const model of group.models) {
-				const ref = group.provider + '/' + model.id;
-				entries.push({ label: (current && this.conversation.model(current) === ref ? '✓ ' : '') + ref, command: '/model ' + ref });
+			for (const group of await this.conversation.models?.list(rest, AbortSignal.timeout(10_000)) ?? []) {
+				if (group.error) warnings += '\n\nWarning:\n' + fence(group.provider + ': ' + group.error);
+				for (const model of group.models) {
+					const ref = group.provider + '/' + model.id;
+					entries.push({ label: (current && this.conversation.model(current) === ref ? '✓ ' : '') + ref, command: '/model ' + ref });
+				}
 			}
 		} else if (name === '/memories' || (name === '/forget' && !rest)) {
 			heading = 'Saved memories'; pageName = 'memories';
@@ -374,7 +378,7 @@ export class Service {
 		if (navigation.length) rows.push(navigation);
 		if (entries.length && ['memories', 'grants', 'schedules'].includes(pageName)) rows.push([{ text: pageName === 'memories' ? 'Delete all memories…' : pageName === 'grants' ? 'Revoke all approvals…' : 'Cancel all schedules…', callback_data: '/_confirm /' + ({ memories: 'forget', grants: 'revoke', schedules: 'unschedule' } as Record<string, string>)[pageName] + ' all' }]);
 		rows.push([{ text: 'Refresh', callback_data: this.callback(`/_page ${pageName} ${start} ${rest}`.trim()) }, { text: 'Menu', callback_data: '/help' }]);
-		return [{ ...r, text: heading + (entries.length ? ` (${start + 1}–${start + shown.length} of ${entries.length})` : ': none.') + shown.map((entry, i) => entry.detail ? `\n\n${start + i + 1}. ${fence(entry.detail)}` : '').join('') }, rows];
+		return [{ ...r, text: heading + (entries.length ? ` (${start + 1}–${start + shown.length} of ${entries.length})` : ': none.') + warnings + shown.map((entry, i) => entry.detail ? `\n\n${start + i + 1}. ${fence(entry.detail)}` : '').join('') }, rows];
 	}
 
 	/** title is how the conversation with id is named on a button. */

@@ -101,7 +101,8 @@ commands, approvals, delivery records and replies behave the same everywhere.
   - Conversation, model, memory, approval, schedule and task lists have Previous
     and Next buttons, eight entries per page. They read full service data rather
     than the command completer's twenty suggestions. The current conversation
-    and effective model are marked ✓; models also offer following the default.
+    and effective model are marked ✓; models also offer following the default
+    and show provider errors alongside the choices.
   - Memory and approval entries show their scope. Deleting a memory, cancelling
     a schedule, or clearing a whole list requires a confirmation tap. Completed
     mutations offer Back to list. Typed commands keep their existing behavior.
@@ -110,7 +111,8 @@ commands, approvals, delivery records and replies behave the same everywhere.
   - A tap on a list's choice removes the old choice buttons. Long callback
     commands still use expiring tokens. List menus query their data once; paging,
     confirmations and More stay local even when their internal commands are
-    typed instead of tapped. They do not send prompts to the model.
+    typed instead of tapped. They do not send prompts to the model. Multiline
+    messages remain chat prompts even when they begin with a menu command.
 - The bot's `/` menu comes from the [command registry](commands.md).
 
 ## WeChat iLink

@@ -197,3 +197,30 @@ test('local menu replies release the next update before the previous send finish
 	}
 	expect(beforeRelease).toBe(2);
 });
+
+test('multiline menu-like messages remain chat prompts and keep the model reply', async () => {
+	const s = service();
+	for (const text of ['/memories \nPlease explain what you remember', '/models \r\nExplain this command', ' /memories']) {
+		const reply = await s.reply(config, 'bot', newID(), text, signal());
+		expect(reply).toContain('Received:');
+		expect(reply).toContain(text.trim());
+	}
+	expect(s.store.list(true)).toHaveLength(1);
+});
+
+test('model menus retain provider warnings without querying twice', async () => {
+	let calls = 0;
+	const store = new Store(openBun(':memory:')).open();
+	const s = new Service(store, new ConversationService(store, { ...models, list: async () => {
+		calls++;
+		return [{ provider: 'offline', name: 'Offline provider', models: [], error: '401 invalid API key' }];
+	} }));
+	for (const text of ['/models', '/model', '/_page models 0']) {
+		calls = 0;
+		const reply = await s.reply(config, 'bot', newID(), text, signal());
+		expect(reply).toContain('Choose a model');
+		expect(reply).toContain('offline: 401 invalid API key');
+		expect(calls).toBe(1);
+	}
+	store.close();
+});

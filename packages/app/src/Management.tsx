@@ -11,10 +11,10 @@ import type {
 	MCPServer,
 	SkillCatalog,
 } from './contracts';
-import { Button } from '../components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { Button } from '@mob/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@mob/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@mob/ui/dropdown-menu';
 import { MoreIcon } from './icons';
 import './management.css';
 
