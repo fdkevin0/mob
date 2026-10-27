@@ -58,4 +58,4 @@ sources.
 ## License
 
 [MIT](LICENSE). AI Elements sources keep
-[their Apache-2.0 license](webapp/src/components/ai-elements/SOURCE.md).
+[their Apache-2.0 license](packages/app/src/ai-elements/SOURCE.md).

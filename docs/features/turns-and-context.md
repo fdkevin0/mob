@@ -134,8 +134,8 @@ controls.
 ![Highlighted message code, reasoning and tool JSON in the conversation view](../images/chat-syntax-highlighting.png)
 
 The shared rendering configuration is in
-`webapp/src/components/ai-elements/message.tsx`; the conversation uses it in
-`webapp/src/chat/Thread.tsx`.
+`packages/app/src/ai-elements/message.tsx`; the conversation uses it in
+`packages/app/src/Thread.tsx`.
 
 ## Limits follow the model
 

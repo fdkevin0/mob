@@ -2,7 +2,8 @@
 node_modules
 **/node_modules
 build/*
-webapp/dist-public
+apps/web/dist
+apps/docs/dist
 .wrangler
 .dev.vars
 *.sqlite*

@@ -1,9 +1,9 @@
 ---
 import Search from '@astrojs/starlight/components/Search.astro';
 import ThemeSelect from './ThemeSelect.astro';
-import { siteLinks } from '../../../../webapp/src/components/site/navigation';
-import { calfHeadSVG } from '../../../../webapp/src/components/brand/calfHead';
-import '../../../../webapp/src/components/site/header.css';
+import { siteLinks } from '@mob/ui/navigation';
+import { calfHeadSVG } from '@mob/ui/brand/calfHead';
+import '@mob/ui/header.css';
 ---
 
 <div class="site-header docs-header">
@@ -22,7 +22,7 @@ import '../../../../webapp/src/components/site/header.css';
 			<script is:inline>
 				// The docs load no framework. Inline, so it runs before the header
 				// paints: the last signed-in visitor (the key in
-				// webapp/src/components/site/accountHint.ts) shows at once, then the
+				// apps/web/src/site/accountHint.ts) shows at once, then the
 				// session answer replaces it. A signed-in avatar links to the account
 				// page, which has Sign out; everyone else keeps the Log in link.
 				(() => {

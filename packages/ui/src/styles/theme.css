@@ -1,0 +1,35 @@
+/* Tailwind scans only what each entry names: this package's components here,
+ * and the app's and site's own files in their entries (packages/app/src/app.css,
+ * apps/web/src/tailwind.css). */
+@import 'tailwindcss' source(none);
+@import '@fontsource-variable/geist';
+@import '@fontsource/geist-mono/400.css';
+@import './tokens.css';
+@source '..';
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--font-sans: var(--sans);
+	--font-mono: var(--mono);
+	--radius-sm: var(--radius);
+	--radius-md: var(--radius);
+	--radius-lg: var(--radius);
+}

@@ -9,5 +9,9 @@
 	"dependencies": {
 		"@ai-sdk/react": "4.0.146",
 		"ai": "7.0.142"
+	},
+	"devDependencies": {
+		"@types/node": "^26.5.1",
+		"vitest": "^5.0.0"
 	}
 }

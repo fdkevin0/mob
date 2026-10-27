@@ -6,7 +6,7 @@ Mob runs on the user's machine and serves its clients over loopback.
 
 The site at https://usemob.app is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has five parts,
-served by the Worker in `worker/`:
+served by the Worker in `apps/web/worker/`:
 
 - `/` is the landing page, scrolled through in pages over one pinned isometric
   voxel office. Each load lays out a new square open-plan floor of shared
@@ -26,7 +26,7 @@ served by the Worker in `worker/`:
   are idealised, not a picture of what Mob does today.
 - Links to the site show a preview card in Telegram, Slack, X and other apps:
   the landing page and every docs page carry Open Graph and Twitter card tags
-  with the 1200×630 image `webapp/public/og.png` (served at `/og.png`, straight
+  with the 1200×630 image `apps/web/public/og.png` (served at `/og.png`, straight
   from static assets). `/app` and `/account` send visitors without a session,
   crawlers included, to the landing page, so their links preview the same.
   Telegram caches a preview per URL; after changing the image or tags, send
@@ -96,7 +96,7 @@ served by the Worker in `worker/`:
   It needs no sign-in and has local search.
 
 The landing, demo, documentation and account pages share one header
-(`webapp/src/components/site/`): Home, Demo, Docs and GitHub, a theme picker,
+(`apps/web/src/site/`): Home, Demo, Docs and GitHub, a theme picker,
 Open Mob, and a Log in button or the visitor's avatar. On the React pages the
 avatar opens a menu with Account and Sign out; the documentation loads no
 framework, so there it links to the account page, which has Sign out too. On
@@ -112,7 +112,7 @@ the page at once. The pages also opt into cross-document view transitions: the
 header stays in place while the content cross-fades, unless the visitor asks
 for reduced motion. Every page preloads its Latin Geist face, and hashed build
 files (`/assets/*`, `/docs/_astro/*`) are cached as immutable
-(`webapp/public/_headers`), so later pages paint in Geist straight away instead
+(`apps/web/public/_headers`), so later pages paint in Geist straight away instead
 of swapping from a fallback font.
 
 The landing page and workspace share the dark theme, Geist fonts and pixel
@@ -166,12 +166,13 @@ Pairing with Mob on your computer works as before:
 
 Deployment:
 
-- `bun run build:web` builds `webapp/dist-public` (Vite `--mode public`):
-  `landing.html` and the web UI's `index.html`, then the documentation into
-  `webapp/dist-public/docs`. Hashed documentation assets (`/docs/_astro/`,
-  `/docs/pagefind/`) are served without running the Worker. Cloudflare Workers Builds
-  deploys `wrangler.jsonc` with build command
-  `bun install --frozen-lockfile && bun run build:web` and deploy command
+- `bun run build:web` builds `apps/web/dist` (Vite `--mode public`): the
+  landing, demo and account pages and the web UI's `app.html` (from
+  `@mob/app`), then the documentation (`apps/docs`) into `apps/web/dist/docs`.
+  Hashed documentation assets (`/docs/_astro/`, `/docs/pagefind/`) are served
+  without running the Worker. Cloudflare Workers Builds deploys
+  `apps/web/wrangler.jsonc` with root directory `apps/web`, build command
+  `bun install --frozen-lockfile && bun run build` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
   The custom domain route serves production at `usemob.app` and, with
   `previews_enabled: true`, previews at `<preview-name>.usemob.app`.
@@ -181,7 +182,7 @@ Deployment:
   This automatically applies pending preview database migrations before deployment;
   a migration failure stops deployment, and applied migrations are skipped.
   Wrangler requires the explicit
-  `previews` block in `wrangler.jsonc`: public variables and the `DB` binding
+  `previews` block in `apps/web/wrangler.jsonc`: public variables and the `DB` binding
   do not inherit their production values. Previews share the separate
   `mob-auth-preview` database.
   Keep that file's database ID aligned with `previews.d1_databases`.
@@ -193,15 +194,15 @@ Deployment:
 - Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY`,
   `GITHUB_CLIENT_SECRET` and `CLOUDFLARE_CLIENT_SECRET`. The public
   `TURNSTILE_SITE_KEY`, `GITHUB_CLIENT_ID` and `CLOUDFLARE_CLIENT_ID` are
-  vars in `wrangler.jsonc`. The OAuth callback URLs are
+  vars in `apps/web/wrangler.jsonc`. The OAuth callback URLs are
   `https://usemob.app/api/auth/callback/github` and
   `https://usemob.app/api/auth/callback/cloudflare`. Cloudflare always asks
   for `user-details.read`; the `CLOUDFLARE_SCOPES` var (space-separated scope
   IDs as the Cloudflare OAuth client lists them) adds account read, Workers
   AI and `offline_access`, which Workers AI in the browser needs.
-- Locally, put the secrets in `.dev.vars`, which overrides the vars too
-  (Turnstile's test keys work), run
-  `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
+- Locally, put the secrets in `apps/web/.dev.vars`, which overrides the vars too
+  (Turnstile's test keys work), and in `apps/web` run
+  `npx wrangler d1 migrations apply DB --local`, `bun run build` and
   `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799` (the flag
   keeps the request host local instead of the production domain; port 8787 is
   Mob's own). The GitHub OAuth app then needs the local callback URL.
@@ -283,7 +284,7 @@ locally with fake account sessions and an offline demo model.
 ## Mob in the browser
 
 The public web can run Mob's core service, `@mob/core`, in a dedicated Web
-Worker in the tab (`webapp/src/chat/browser/`), so no runner is needed. The
+Worker in the tab (`packages/app/src/browser/`), so no runner is needed. The
 page reaches it through a `fetch` that posts each request to the worker and
 streams the response back, the same way the relay is a `fetch` for paired
 runners; the API, the chat stream and the change feed are unchanged. The
@@ -402,7 +403,7 @@ Spaces (Docker Spaces on free hardware need PRO since July 2026), ClawCloud
 Run (shutting down), Google Cloud Run (scales to zero and needs billing, so
 an always-on runner costs money). Railway and Northflank are candidates
 (see [Candidate hosts](#candidate-hosts)). The dialog lists the hosts in
-`webapp/src/chat/hosts.ts`; it shows a host picker once there is more than
+`packages/app/src/hosts.ts`; it shows a host picker once there is more than
 one.
 
 ### Render

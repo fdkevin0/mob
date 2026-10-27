@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="dark" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Watch Mob hand a goal to a team of coding agents, ask before anything risky, and report back on the web or in your chat app." />
+    <meta name="theme-color" content="#0c0d0f" />
+    <!-- Applies the saved or system colour scheme before the first paint; see packages/ui/src/theme/theme.ts. Its hash is in apps/web/worker/index.ts. -->
+    <script>(function(){var t;try{t=localStorage.getItem('starlight-theme')}catch(e){}var l=t==='light'||t!=='dark'&&matchMedia('(prefers-color-scheme: light)').matches,r=document.documentElement;r.dataset.theme=l?'light':'dark';r.classList.toggle('dark',!l);if(l)document.querySelector('meta[name="theme-color"]').setAttribute('content','#f4f3ee')})()</script>
+    <!-- Link previews in Telegram, Slack, X and other apps. /app and /account
+         send visitors without a session here, so their links preview the same. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Mob" />
+    <meta property="og:title" content="Mob · Demo" />
+    <meta property="og:description" content="Watch Mob hand a goal to a team of coding agents, ask before anything risky, and report back on the web or in your chat app." />
+    <meta property="og:url" content="https://usemob.app/demo" />
+    <meta property="og:image" content="https://usemob.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Agents for you: calves at work in Mob's voxel office" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://usemob.app/og.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/node_modules/@mob/ui/src/brand/favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" href="/node_modules/@mob/ui/src/brand/favicon.svg" />
+    <link rel="apple-touch-icon" href="/node_modules/@mob/ui/src/brand/apple-touch-icon.png" />
+    <title>Mob · Demo</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" blocking="render" src="/src/landing/demo/main.tsx"></script>
+  </body>
+</html>

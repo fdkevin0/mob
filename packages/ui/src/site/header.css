@@ -1,0 +1,64 @@
+/* One public header for the React pages and the docs, on the shared tokens
+ * (packages/ui/src/styles/tokens.css) rather than either page's own styles. */
+.site-header, .site-user-menu, .site-drawer {
+	font-family: var(--sans);
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--text);
+}
+.site-header { position: sticky; top: 0; z-index: 10; background: linear-gradient(var(--bg) 55%, transparent); }
+/* The header is the same on every public page, so a page change keeps it in
+ * place while the content below cross-fades. */
+.site-header { view-transition-name: site-header; }
+.site-header-floating { position: fixed; inset: 0 0 auto; }
+.site-header-inner {
+	box-sizing: border-box;
+	max-width: 1240px;
+	height: 72px;
+	margin: 0 auto;
+	padding: 18px 28px;
+	display: grid;
+	grid-template-columns: auto 1fr auto auto;
+	align-items: center;
+	gap: 28px;
+}
+.site-header :is(.site-brand, .site-links a, .site-account a) { color: inherit; text-decoration: none; white-space: nowrap; }
+.site-header :is(.site-brand, .site-links a, .site-account a):focus-visible { outline: 2px solid var(--lime); outline-offset: 4px; border-radius: 4px; }
+.site-brand, .site-brand .logo { display: inline-flex; align-items: center; gap: 10px; }
+.site-brand .logo-word { font-size: 22px; font-weight: 650; letter-spacing: -0.04em; line-height: 1; color: inherit; }
+.site-links { display: flex; align-items: center; gap: 24px; color: var(--muted-foreground); }
+.site-links a { padding: 4px 0; }
+.site-links a:hover, .site-links a[aria-current='page'] { color: var(--text); }
+.site-theme { display: flex; }
+.site-account { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+.site-account a { box-sizing: border-box; display: inline-flex; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 8px; }
+.site-account a:hover, .site-account a[aria-current='page'] { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.site-account a.site-open { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.site-account a.site-open:hover { background: color-mix(in srgb, var(--primary) 85%, var(--text)); }
+.site-menu-button { display: none; }
+.site-drawer.dialog-panel {
+	inset: 0 auto 0 0; transform: none; width: min(320px, 85vw); max-width: none;
+	height: 100dvh; max-height: none; border-radius: 0; padding: 24px;
+	display: flex; flex-direction: column; gap: 24px; background: var(--bg);
+}
+.site-drawer h2 { margin: 0; font-size: 16px; }
+.site-drawer-links { display: flex; flex-direction: column; gap: 4px; }
+.site-drawer-links a, .site-drawer-search { color: inherit; text-decoration: none; padding: 10px 12px; border-radius: 8px; }
+.site-drawer-links a:hover, .site-drawer-links a[aria-current='page'] { background: color-mix(in srgb, currentColor 8%, transparent); }
+.site-drawer-search { border: 1px solid var(--line-strong); color: var(--muted-foreground); }
+.site-drawer-theme { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line-strong); }
+@media (width < 50rem) {
+	.site-header-inner { height: 64px; padding: 12px; gap: 8px; grid-template-columns: 36px 1fr auto; }
+	.site-menu-button { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--line-strong); border-radius: 8px; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+	.site-header .site-links, .site-header .site-theme { display: none; }
+	.site-account { justify-content: flex-end; }
+	.site-account a { padding: 6px 10px; }
+}
+
+.site-account .site-user { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 50%; background: transparent; color: inherit; font: inherit; cursor: pointer; overflow: hidden; }
+.site-account .site-login { width: auto; padding: 6px 12px; border-radius: 8px; white-space: nowrap; }
+.site-user img { width: 100%; height: 100%; object-fit: cover; }
+.site-user:disabled { opacity: 0.5; cursor: wait; }
+.site-user:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+#site-user { display: flex; }
+.site-user-menu a { color: inherit; text-decoration: none; }

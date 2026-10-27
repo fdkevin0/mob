@@ -1,0 +1,50 @@
+{
+	"name": "@mob/app",
+	"private": true,
+	"type": "module",
+	"description": "The Mob workspace UI (/app): served by mob, loaded by the desktop app and deployed at usemob.app/app",
+	"exports": {
+		"./app.css": "./src/app.css",
+		"./styles.css": "./src/styles.css",
+		"./remote": "./src/remote.ts",
+		"./vite": "./vite.ts",
+		"./package.json": "./package.json",
+		"./ai-elements/*": "./src/ai-elements/*.tsx",
+		"./*": "./src/*.tsx"
+	},
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@lobehub/icons-static-svg": "1.95.1",
+		"@mob/client": "workspace:*",
+		"@mob/core": "workspace:*",
+		"@mob/ui": "workspace:*",
+		"@radix-ui/react-dialog": "1.3.1",
+		"@radix-ui/react-dropdown-menu": "2.2.1",
+		"@sqlite.org/sqlite-wasm": "3.53.4-build2",
+		"@streamdown/code": "2.0.0",
+		"ai": "7.0.142",
+		"qrcode.react": "4.2.0",
+		"react": "^19.3.0",
+		"react-dom": "^19.3.0",
+		"streamdown": "2.7.0",
+		"use-stick-to-bottom": "1.1.6"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "^4.3.3",
+		"@testing-library/react": "^16.3.3",
+		"@types/node": "^26.5.1",
+		"@types/react": "^19.3.0",
+		"@types/react-dom": "^19.3.0",
+		"@vitejs/plugin-react": "^6.1.1",
+		"fake-indexeddb": "^6.2.5",
+		"happy-dom": "^20.14.5",
+		"tailwindcss": "^4.3.3",
+		"vite": "^8.3.0",
+		"vitest": "^5.0.0"
+	}
+}

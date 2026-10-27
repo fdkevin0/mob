@@ -43,7 +43,7 @@ help, completion and execution from the same definition.
   the suggestion changes a partly typed token, so a complete command still
   sends. Stale answers are dropped.
 - The contract types live in `packages/client/src/contracts.ts`, which the
-  service and every client import. `webapp/src/chat/contracts.ts` re-exports
+  service and every client import. `packages/app/src/contracts.ts` re-exports
   them for existing Web imports.
 
 ## Terminal

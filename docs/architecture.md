@@ -23,12 +23,13 @@ a database, files, processes and the command line.
 | `packages/core/src/sqlite` | the SQLite adapter for Bun |
 | `apps/mob/src/main.ts`, `config.ts`, `local.ts` | the CLI (commander), option definitions with their generated reference, XDG loading and live reload, process ownership, the database lock and the background lifecycle |
 | `apps/mob/src/plugins.ts` | the host's plugins, each in its own directory: `agents` (coding agents over ACP), `email`, `telegram`, `cloudflare`, `wechat`, `mcp`, `skills`, `sandbox` (container runtimes and the model's `sandbox` tool) and `runner` |
-| `apps/mob/src/runner`, `worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `worker/runners.ts` |
+| `apps/mob/src/runner`, `apps/web/worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `apps/web/worker/runners.ts` |
 | `apps/mob/scripts/build.ts`, `scripts/release.ts` | the single-executable build and the release archives |
 | `packages/client` | the wire contract (`contracts.ts`), authenticated HTTP, AI SDK message state, commands, approvals, polling and stream recovery, shared by Web and the terminal |
-| `webapp/src/chat` | the React UI; browser authentication/storage, DOM input/completion and presentation adapt the shared client |
-| `webapp/src/styles`, `webapp/src/components` | shared site theme, brand assets, source-owned shadcn/Radix controls and adapted AI Elements; no authentication or conversation state |
-| `webapp/src/landing` | the public landing page, GitHub sign-in and voxel scenes; a separate entry from the workspace |
+| `packages/ui` (`@mob/ui`) | the design system: tokens and theme, the calf brand, source-owned shadcn/Radix controls and the header markup the site and docs share; no authentication or conversation state |
+| `packages/app` (`@mob/app`) | the React workspace (`/app`), with adapted AI Elements; browser authentication/storage, DOM input/completion and presentation adapt the shared client. `mob` embeds its build, the desktop app loads it and the site deploys it |
+| `apps/web` (`@mob/web`) | https://usemob.app: the landing page with GitHub sign-in and voxel scenes, the demo and account pages, the Cloudflare Worker (`worker/`) and the build that adds `/app` and `/docs` |
+| `apps/docs` | the Starlight documentation built from this repository's Markdown |
 | `apps/tui` | the OpenTUI React terminal UI; terminal input, focus, layout and scrolling adapt the shared client |
 | `apps/desktop` | the Electron app around the `mob` executable |
 | `apps/dsh` | optional Bun process loading official DSH/Cordis tool plugins and exposing them to Mob over MCP |
