@@ -7,6 +7,7 @@ import { summarize } from '@mob/core/chat/compact';
 import { openBun } from '@mob/core/sqlite/bun';
 import { Service } from '../src/agents/service';
 import { tools } from '../src/agents/tools';
+import { tools as emailTools } from '../src/email';
 import { cases, type Case } from './prompts/cases';
 
 const requestSchema = z.object({
@@ -49,6 +50,7 @@ export async function capture(c: Case): Promise<llm.Request> {
 			if (error) throw error;
 		} else {
 			const offered = [...defaultTools(), sandboxTool({ exec: async () => { throw new Error('evaluation must never run a command'); } })];
+			if (c.tool?.name.startsWith('email_')) offered.push(...emailTools(() => { throw new Error('evaluation must never access email configuration'); }, store));
 			if (c.kind === 'manager') offered.push(...tools(new Service(store, new ConversationService(store), '/unused-evaluation-workspace')));
 			const message: Message = store.begin(conversation.id, newID(), c.text, 'eval/capture');
 			await run(new AbortController().signal, store, model, {

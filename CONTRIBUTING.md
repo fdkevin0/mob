@@ -79,7 +79,9 @@ bun apps/mob/scripts/prompt-eval.ts > /tmp/mob-prompts-after.json
 Capture uses the real engine, summary builder and tool definitions with an
 in-memory store and a fake model. It calls no external service or tool. The
 fixture environment offers sandbox and tool search; manager cases also offer
-coding-agent tools. This is a controlled fixture, not a user's live setup.
+coding-agent tools. Email turn cases offer the production email tools and
+their prompt guidance, but cannot access email configuration or execute sends.
+This is a controlled fixture, not a user's live setup.
 The host tests check deterministic capture and that replay never runs tools.
 
 Replay is opt-in and uses an OpenAI-compatible Chat Completions endpoint:
