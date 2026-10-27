@@ -14,6 +14,23 @@ const memory = (): Settings & { values: Map<string, string> } => {
 	return { values, setting: <T>(k: string) => values.has(k) ? JSON.parse(values.get(k)!) as T : undefined, saveSetting: (k, v) => { values.set(k, JSON.stringify(v)); } };
 };
 
+test('Web installs use catalog validation, record user intent, and expose no configuration secrets', async () => {
+	const settings = memory(), hub = new Hub(settings);
+	hub.configure({ private: { url: 'https://example.com/mcp?key=secret', headers: { Authorization: 'Bearer secret' } } });
+	await expect(hub.installFromWeb('https://unlisted.example.com/mcp')).rejects.toThrow('unavailable');
+	const result = await hub.installFromWeb('https://docs.mcp.cloudflare.com/mcp');
+	expect(result.error).toBe('');
+	expect(JSON.parse(settings.values.get('mcp_installed')!)[result.name]).toMatchObject({ installedBy: 'user' });
+	expect(JSON.parse(settings.values.get('mcp_installed')!)[result.name].approvalId).toBeUndefined();
+	expect(hub.overview().servers.find(s => s.name === result.name)).toMatchObject({ managed: true, connected: false });
+	expect(JSON.stringify(hub.overview())).not.toContain('secret');
+	await expect(hub.installFromWeb('https://docs.mcp.cloudflare.com/mcp')).rejects.toThrow('unavailable');
+	hub.configure({ configured: { url: 'https://docs.mcp.cloudflare.com/mcp' } });
+	expect(hub.overview().servers.find(s => s.name === result.name)?.shadowed).toBe(true);
+	await hub.remove(result.name);
+	expect(hub.configured().configured).toBeDefined();
+});
+
 const until = async (what: () => boolean, label: () => string) => {
 	for (const deadline = Date.now() + 20_000; Date.now() < deadline; await Bun.sleep(20)) if (what()) return;
 	throw new Error('timed out: ' + label());
