@@ -16,6 +16,9 @@ and messaging channels.
   clients share; change both sides in the same pull request.
 - Tests fail when `docs/environment-variables.md` is stale; regenerate it with
   `bun run generate:configdocs`.
+- Show a UI change with screenshots taken by `bun scripts/screenshot.ts <url>`
+  (desktop and mobile, light and dark, 2x). `docs/screenshots.md` has the
+  settings, which app to capture and how to reach dialogs or several tabs.
 
 ## Rules tooling does not catch
 
@@ -47,3 +50,4 @@ Reduce total variable count by inlining when a value is only used once.
 - `docs/architecture.md` when a change crosses packages.
 - `docs/features/` for how the feature you are changing behaves.
 - `CONTRIBUTING.md` before opening a pull request.
+- `docs/screenshots.md` before capturing a state the script cannot reach.
