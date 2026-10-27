@@ -14,6 +14,8 @@ import type {
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { MoreIcon } from './icons';
 import './management.css';
 
 const titles = {
@@ -63,15 +65,28 @@ export function Management({
 				</div>
 			</header>
 			<div className="management">
-				<Tabs value={tab} onValueChange={(value) => select(value as ManagementTab)}>
-					<TabsList aria-label="Management sections">
-						{Object.entries(titles).map(([key, title]) => (
-							<TabsTrigger key={key} value={key}>
-								{title}
-							</TabsTrigger>
-						))}
-					</TabsList>
-					<TabsContent value={tab}>
+				<Tabs className="management-layout" orientation="vertical" value={tab} onValueChange={(value) => select(value as ManagementTab)}>
+					<div className="management-nav">
+						<p className="management-nav-label">Workspace</p>
+						<TabsList aria-label="Management sections">
+							{Object.entries(titles).map(([key, title]) => (
+								<TabsTrigger key={key} value={key}>
+									{title}
+								</TabsTrigger>
+							))}
+						</TabsList>
+					</div>
+					<label className="management-mobile-nav">
+						Section
+						<select className="ui-input" aria-label="Manage Mob" value={tab} onChange={(e) => select(e.target.value as ManagementTab)}>
+							{Object.entries(titles).map(([key, title]) => (
+								<option key={key} value={key}>
+									{title}
+								</option>
+							))}
+						</select>
+					</label>
+					<TabsContent className="management-content" value={tab}>
 						<Contents key={tab} connection={connection} tab={tab} open={open} held={held} />
 					</TabsContent>
 				</Tabs>
@@ -155,14 +170,66 @@ function Contents({
 		<>
 			<div className="management-heading">
 				<h2>{titles[tab]}</h2>
-				<Button variant="outline" disabled={busy} onClick={() => setRevision((n) => n + 1)}>
-					Refresh
-				</Button>
+				<div className="management-toolbar">
+					<Button variant="ghost" disabled={busy} onClick={() => setRevision((n) => n + 1)}>
+						Refresh
+					</Button>
+					{(!!data?.memories?.length || !!data?.grants?.length || !!data?.schedules?.length) && (
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button variant="outline" aria-label="More actions" disabled={busy}>
+									<MoreIcon />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent>
+								{!!data?.memories?.length && (
+									<DropdownMenuItem
+										disabled={busy}
+										onSelect={() =>
+											setConfirmation({
+												text: 'Delete every saved memory across all conversations? This cannot be undone.',
+												run: () => remove('/memories/all/delete'),
+											})
+										}
+									>
+										Delete all memories
+									</DropdownMenuItem>
+								)}
+								{!!data?.grants?.length && (
+									<DropdownMenuItem
+										disabled={busy}
+										onSelect={() =>
+											setConfirmation({
+												text: 'Revoke all remembered approvals? Matching tools will ask again.',
+												run: () => remove('/grants/all/delete'),
+											})
+										}
+									>
+										Revoke all approvals
+									</DropdownMenuItem>
+								)}
+								{!!data?.schedules?.length && (
+									<DropdownMenuItem
+										disabled={busy}
+										onSelect={() =>
+											setConfirmation({ text: 'Cancel every schedule across all conversations?', run: () => command('/unschedule all') })
+										}
+									>
+										Cancel all schedules
+									</DropdownMenuItem>
+								)}
+							</DropdownMenuContent>
+						</DropdownMenu>
+					)}
+				</div>
 			</div>
 			{error && <p role="alert">{error}</p>}
 			{notice && <p role="status">{notice}</p>}
 			{!available ? (
-				<p>This feature is not available on this Mob. Connect a runner that provides it.</p>
+				<div className="management-empty">
+					<h3>Connect a runner</h3>
+					<p>This feature is not available on this Mob. Connect a runner that provides it.</p>
+				</div>
 			) : busy && !data ? (
 				<p role="status">Loading…</p>
 			) : null}
@@ -191,20 +258,6 @@ function Contents({
 							</div>
 						</article>
 					))}
-					{!!data.memories.length && (
-						<Button
-							variant="outline"
-							disabled={busy}
-							onClick={() =>
-								setConfirmation({
-									text: 'Delete every saved memory across all conversations? This cannot be undone.',
-									run: () => remove('/memories/all/delete'),
-								})
-							}
-						>
-							Delete all memories
-						</Button>
-					)}
 				</>
 			)}
 			{data?.grants && (
@@ -224,20 +277,6 @@ function Contents({
 							</div>
 						</article>
 					))}
-					{!!data.grants.length && (
-						<Button
-							variant="outline"
-							disabled={busy}
-							onClick={() =>
-								setConfirmation({
-									text: 'Revoke all remembered approvals? Matching tools will ask again.',
-									run: () => remove('/grants/all/delete'),
-								})
-							}
-						>
-							Revoke all approvals
-						</Button>
-					)}
 				</>
 			)}
 			{data?.schedules && (
@@ -265,17 +304,6 @@ function Contents({
 							</div>
 						</article>
 					))}
-					{!!data.schedules.length && (
-						<Button
-							variant="outline"
-							disabled={busy}
-							onClick={() =>
-								setConfirmation({ text: 'Cancel every schedule across all conversations?', run: () => command('/unschedule all') })
-							}
-						>
-							Cancel all schedules
-						</Button>
-					)}
 				</>
 			)}
 			{data?.projects && (

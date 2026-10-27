@@ -82,7 +82,10 @@ first to keep it running after exit.
   servers and skills. Each section reads structured API data, not command
   Markdown. Sections unavailable on the connected Mob explain that a runner is
   needed. Refresh reloads the current section; section URLs survive reload and
-  browser back/forward. Commands remain available to existing clients.
+  browser back/forward. Desktop uses section navigation beside the content; mobile
+  uses a section picker. Bulk memory deletion, approval revocation and schedule
+  cancellation live in **More actions** and require confirmation. Commands remain
+  available to existing clients.
 - Clients own their forms (plugin settings, mail compose); an action opens them.
 - Messaging channels run commands through the registry too; see
   [Channels](channels.md). After each connection the Telegram bot calls

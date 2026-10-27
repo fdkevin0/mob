@@ -65,3 +65,42 @@ it('does not fetch a plugin missing on this Mob', async () => {
 	await screen.findByText(/This feature is not available/);
 	expect(fetch).toHaveBeenCalledTimes(1);
 });
+it('selects a section from the mobile picker', async () => {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json([])),
+	);
+	const select = vi.fn();
+	render(<Management connection={connection} tab="memories" select={select} open={() => {}} held={() => false} />);
+	fireEvent.change(screen.getByRole('combobox', { name: 'Manage Mob' }), { target: { value: 'grants' } });
+	expect(select).toHaveBeenCalledWith('grants');
+	await screen.findByText(/This feature is not available/);
+});
+it('keeps bulk deletion behind the actions menu and confirmation', async () => {
+	const deleted: string[] = [];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url: string) => {
+			const path = new URL(url).pathname;
+			if (path === '/api/commands') return Response.json([{ name: 'memories' }]);
+			if (path.endsWith('/delete')) {
+				deleted.push(path);
+				return Response.json({ removed: 1 });
+			}
+			return Response.json(deleted.length ? [] : [{ id: 'one', text: 'A saved fact', owner: true, conversationId: '' }]);
+		}),
+	);
+	render(<Management connection={connection} tab="memories" select={() => {}} open={() => {}} held={() => false} />);
+	await screen.findByText('A saved fact');
+	expect(screen.queryByText('Delete all memories')).toBeNull();
+	fireEvent.keyDown(screen.getByRole('button', { name: 'More actions' }), { key: 'ArrowDown' });
+	fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete all memories' }));
+	expect(deleted).toEqual([]);
+	fireEvent.click(screen.getByRole('button', { name: 'Keep unchanged' }));
+	expect(deleted).toEqual([]);
+	fireEvent.keyDown(screen.getByRole('button', { name: 'More actions' }), { key: 'ArrowDown' });
+	fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete all memories' }));
+	fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+	await screen.findByText('No saved memories.');
+	expect(deleted).toEqual(['/api/memories/all/delete']);
+});
