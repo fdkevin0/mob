@@ -43,7 +43,7 @@ function routedID() {
 const routedView = (): View => window.location.hash.startsWith('#/manage/') ? 'manage' : pages[window.location.hash] ?? 'chat';
 const routedManagement = (): ManagementTab => {
 	const tab = window.location.hash.slice('#/manage/'.length);
-	return ['memories', 'grants', 'schedules', 'projects', 'mcp', 'skills'].includes(tab) ? tab as ManagementTab : 'memories';
+	return ['memories', 'grants', 'schedules', 'projects'].includes(tab) ? tab as ManagementTab : 'memories';
 };
 function route(hash: string, replace: boolean) {
 	if (window.location.hash === hash) return;

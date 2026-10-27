@@ -282,8 +282,6 @@ export type RememberedApproval = { id: string; conversationId: string; tool: str
 export type ScheduledPrompt = { id: string; conversationId: string; prompt: string; next: number; repeat?: string; zone?: string };
 export type ProjectConfig = { name: string; path: string; blueprint?: string; checks?: string[] };
 export type Projects = { projects: ProjectConfig[]; blueprints: { name: string; title: string; description: string }[] };
-export type MCPServer = { name: string; status: string; tools: string[]; removable: boolean; signIn?: string };
-export type SkillCatalog = { skills: { name: string; description: string; compatibility?: string; dir: string }[]; problems: { dir: string; message: string }[] };
 
 /** Web extension management; paths and credentials remain service-owned. */
 export type SkillSource = { source: string; ref?: string; skillPath: string };

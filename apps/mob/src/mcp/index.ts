@@ -21,7 +21,6 @@ function plugin(hub: Hub): Plugin {
 	return {
 		name: 'mcp',
 		routes: [
-			{ method: 'GET', path: 'list', handle: async () => hub.list() },
 			{ method: 'GET', path: 'overview', handle: async () => hub.overview() },
 			{ method: 'POST', path: 'install', handle: async req => hub.installFromWeb(z.object({ url: z.string().url() }).parse(await body(req)).url) },
 			{ method: 'POST', path: 'remove', handle: async req => {

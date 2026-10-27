@@ -25,8 +25,9 @@ test('Web installs use catalog validation, record user intent, and expose no con
 	expect(hub.overview().servers.find(s => s.name === result.name)).toMatchObject({ managed: true, connected: false });
 	expect(JSON.stringify(hub.overview())).not.toContain('secret');
 	await expect(hub.installFromWeb('https://docs.mcp.cloudflare.com/mcp')).rejects.toThrow('unavailable');
+	(hub as any).states = new Map([[result.name, { server: { url: 'https://docs.mcp.cloudflare.com/mcp' }, tools: [{ name: 'search', inputSchema: { type: 'object' } }], status: '1 tools' }]]);
 	hub.configure({ configured: { url: 'https://docs.mcp.cloudflare.com/mcp' } });
-	expect(hub.overview().servers.find(s => s.name === result.name)?.shadowed).toBe(true);
+	expect(hub.overview().servers.find(s => s.name === result.name)).toMatchObject({ shadowed: true, tools: [{ name: 'search', exposure: 'deferred' }] });
 	await hub.remove(result.name);
 	expect(hub.configured().configured).toBeDefined();
 });

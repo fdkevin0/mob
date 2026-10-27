@@ -3,6 +3,7 @@ import { api, type Connection } from '../api';
 import type { SkillPreview, SkillsOverview } from '../contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
+import { Notice } from '@mob/ui/notice';
 import { Field, Feedback, errorText } from './shared';
 
 const curated = [
@@ -43,12 +44,12 @@ export function SkillsPlugin({ connection }: { connection: Connection }) {
       <Button variant="outline" disabled={busy} onClick={() => void perform(async () => { setData(await api<SkillsOverview>(connection, '/plugins/skills/check', {})); setNotice('Update check finished. Installed files are unchanged.'); })}>Check for updates</Button>
       <Button variant="ghost" disabled={busy} onClick={() => void perform(load)}>Refresh</Button>
     </div>
-    <Feedback error={error} notice={notice} />
+    <Feedback error={preview || reading || removing ? '' : error} notice={notice} />
     {busy && <p role="status">Working…</p>}
     <Field label="Search skills" value={query} onChange={setQuery} />
     {view === 'installed' ? <>
       {!data && !error && <p role="status">Loading skills…</p>}
-      {data?.warnings.map(w => <p className="error" key={w}>{w}</p>)}
+      {data?.warnings.map(w => <Notice tone="warning" key={w}>{w}</Notice>)}
       {data?.skills.length === 0 && <p>No skills installed. Open Discover to preview and install one.</p>}
       {data?.skills.filter(s => `${s.name} ${s.description} ${s.source ?? ''}`.toLowerCase().includes(query.toLowerCase())).map(s => <article className="extension-row" key={s.name}>
         <h3>{s.name}</h3><p>{s.description}</p>
@@ -71,14 +72,14 @@ export function SkillsPlugin({ connection }: { connection: Connection }) {
           <Field label="Path to SKILL.md" value={skillPath} onChange={setPath} /><Button disabled={!source}>Preview skill</Button></fieldset>
       </form>
     </>}
-    <Dialog open={!!preview || !!reading} onOpenChange={open => { if (!open && !busy) { setPreview(undefined); setReading(undefined); } }}>
+    <Dialog open={!!preview || !!reading} onOpenChange={open => { if (!open && !busy) { setPreview(undefined); setReading(undefined); setError(''); } }}>
       <DialogContent className="extension-detail"><DialogTitle>{preview?.name ?? reading?.name}</DialogTitle><DialogDescription>{preview ? `Review before installing from ${preview.source} on the connected Mob service.` : 'Installed skill instructions.'}</DialogDescription>
         {preview && <><p>Revision: {preview.commit.slice(0, 12)}</p><p>{preview.files.length} files. Scripts run only through Mob’s sandbox; other agent-specific tools may not be available.</p><details><summary>Files</summary><pre>{preview.files.join('\n')}</pre></details></>}
         <pre className="plugin-result">{preview?.content ?? reading?.content}</pre>
-        {error && <p role="alert">{error}</p>}
+        {error && <Notice tone="error">{error}</Notice>}
         {preview && <Button disabled={busy} onClick={() => void perform(async () => { await api(connection, '/plugins/skills/install', { source: preview.source, ref: preview.ref, skillPath: preview.skillPath, commit: preview.commit }); setPreview(undefined); setView('installed'); await load(); setNotice('Skill installed. Available from the next turn.'); })}>{busy ? 'Installing…' : 'Install skill'}</Button>}
       </DialogContent>
     </Dialog>
-    <Dialog open={!!removing} onOpenChange={open => { if (!open && !busy) setRemoving(''); }}><DialogContent><DialogTitle>Remove {removing}?</DialogTitle><DialogDescription>This deletes the skill installed by Mob, including any edits to its files.</DialogDescription>{error && <p role="alert">{error}</p>}<Button disabled={busy} onClick={() => void perform(async () => { await api(connection, '/plugins/skills/remove', { name: removing }); setRemoving(''); await load(); })}>Remove skill</Button></DialogContent></Dialog>
+    <Dialog open={!!removing} onOpenChange={open => { if (!open && !busy) { setRemoving(''); setError(''); } }}><DialogContent><DialogTitle>Remove {removing}?</DialogTitle><DialogDescription>This deletes the skill installed by Mob, including any edits to its files.</DialogDescription>{error && <Notice tone="error">{error}</Notice>}<Button disabled={busy} onClick={() => void perform(async () => { await api(connection, '/plugins/skills/remove', { name: removing }); setRemoving(''); await load(); })}>Remove skill</Button></DialogContent></Dialog>
   </section>;
 }

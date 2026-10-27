@@ -80,7 +80,7 @@ export class SkillMarket {
       let update: SkillUpdate | undefined;
       if (check) {
         const skillPath = entry?.skillPath?.replaceAll('\\', '/').replace(/\/$/, '');
-        const input = sourceInput.safeParse({ source: entry?.source, ref: entry?.ref, skillPath: skillPath === '' ? 'SKILL.md' : skillPath && (/SKILL\.md$/i.test(skillPath) ? skillPath.replace(/SKILL\.md$/i, 'SKILL.md') : skillPath + '/SKILL.md') });
+        const input = sourceInput.safeParse({ source: entry?.source, ref: entry?.ref, skillPath: skillPath === '' ? 'SKILL.md' : skillPath && (/SKILL\.md$/i.test(skillPath) ? skillPath.replace(/SKILL\.md$/i, 'SKILL.md') : skillPath.endsWith('.md') ? skillPath : skillPath + '/SKILL.md') });
         if (!entry || entry.sourceType !== 'github' || !entry.skillFolderHash || !input.success) {
           update = { status: 'unknown', message: 'No supported GitHub v3 lock entry; install with a tracked source to check updates.' };
         } else {
@@ -94,7 +94,9 @@ export class SkillMarket {
           } catch (e) { update = { status: 'error', message: (e as Error).message }; }
         }
       }
-      result.skills.push({ name: skill.name, description: skill.description, compatibility: skill.compatibility, managed: own && !!entry && !lstatSync(skill.dir).isSymbolicLink(), source: entry?.source, ref: entry?.ref, update });
+      let link = true;
+      try { link = lstatSync(skill.dir).isSymbolicLink(); } catch { /* removed concurrently */ }
+      result.skills.push({ name: skill.name, description: skill.description, compatibility: skill.compatibility, managed: own && !!entry && !link, source: entry?.source, ref: entry?.ref, update });
     }
     return result;
   }
@@ -137,8 +139,10 @@ export class SkillMarket {
       const prefix = input.skillPath === 'SKILL.md' ? '' : input.skillPath.slice(0, -8);
       let bytes = 0;
       for (const file of preview.files) {
-        const data = await this.bytes(`https://raw.githubusercontent.com/${input.source}/${input.commit}/${(prefix + file).split('/').map(encodeURIComponent).join('/')}`, (16 << 20) - bytes, signal);
+        const data = file === 'SKILL.md' ? new TextEncoder().encode(preview.content)
+          : await this.bytes(`https://raw.githubusercontent.com/${input.source}/${input.commit}/${(prefix + file).split('/').map(encodeURIComponent).join('/')}`, (16 << 20) - bytes, signal);
         bytes += data.length;
+        if (bytes > 16 << 20) throw new Error('GitHub response exceeds the size limit');
         mkdirSync(dirname(join(temp, file)), { recursive: true, mode: 0o700 });
         await Bun.write(join(temp, file), data);
         chmodSync(join(temp, file), preview.executableFiles.includes(file) ? 0o700 : 0o600);

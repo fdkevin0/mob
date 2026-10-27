@@ -75,6 +75,10 @@ test('reports API failures and missing folders separately from current', async (
   const missing = fixture(); write(join(missing.shared, 'example', 'SKILL.md'), content);
   write(missing.market.sharedLock, JSON.stringify({ version: 3, skills: { example: { ...entry, skillPath: 'deleted/SKILL.md' } } }));
   expect((await missing.market.overview(true)).skills[0]?.update?.status).toBe('unknown');
+  write(missing.market.sharedLock, JSON.stringify({ version: 3, skills: { example: { ...entry, skillPath: 'docs/README.md' } } }));
+  missing.requests.length = 0;
+  expect((await missing.market.overview(true)).skills[0]?.update).toMatchObject({ status: 'unknown', message: expect.stringContaining('No supported GitHub v3 lock entry') });
+  expect(missing.requests).toHaveLength(0);
 });
 
 test('root skills compare the root tree hash, not a commit hash', async () => {
@@ -97,8 +101,10 @@ test('previews, installs a pinned commit, writes a compatible lock and removes o
   expect(preview).toMatchObject({ name: 'example', commit, folderHash: hash, executableFiles: ['scripts/run.sh'] });
   expect(existsSync(f.own)).toBe(false);
   write(f.market.lockFile, JSON.stringify({ version: 3, skills: {}, dismissed: { findSkillsPrompt: true } }));
+  f.requests.length = 0;
   await f.market.install({ ...source, commit: preview.commit });
   expect(f.requests.filter(u => u.startsWith('https://raw.')).every(u => u.includes('/' + commit + '/'))).toBe(true);
+  expect(f.requests.filter(u => u.endsWith('SKILL.md'))).toHaveLength(1);
   expect(readFileSync(join(f.own, 'example', 'references/guide.md'), 'utf8')).toBe('hello');
   if (process.platform !== 'win32') expect(statSync(join(f.own, 'example', 'scripts/run.sh')).mode & 0o100).toBe(0o100);
   expect(readLock(f.market.lockFile)).toMatchObject({ version: 3, skills: { example: { ...entry, installedAt: expect.any(String), updatedAt: expect.any(String) } }, dismissed: { findSkillsPrompt: true } });
@@ -162,4 +168,12 @@ test('an invalid existing lock prevents installation without overwriting it', as
   await expect(f.market.install({ ...source, commit })).rejects.toThrow();
   expect(existsSync(join(f.own, 'example'))).toBe(false);
   expect(readFileSync(f.market.lockFile, 'utf8')).toBe('{ invalid');
+});
+
+test('overview tolerates a skill removed while an update check is in flight', async () => {
+  let installed = false;
+  const f = fixture(() => { if (installed) f.market.remove('example'); return undefined; });
+  await f.market.install({ ...source, commit });
+  installed = true;
+  expect((await f.market.overview(true)).skills[0]?.managed).toBe(false);
 });

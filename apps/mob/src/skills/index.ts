@@ -51,7 +51,6 @@ function plugin(l: Library, market: SkillMarket): Plugin {
 	return {
 		name: 'skills',
 		routes: [
-			{ method: 'GET', path: 'list', handle: async () => { const [skills, problems] = l.scan(); return { skills, problems }; } },
 			{ method: 'GET', path: 'installed', handle: async () => market.overview() },
 			{ method: 'POST', path: 'check', handle: async req => market.overview(true, signal(req)) },
 			{ method: 'POST', path: 'discover', handle: async req => market.discover(repositoryInput.parse(await body(req)), signal(req)) },

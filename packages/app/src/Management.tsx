@@ -8,8 +8,6 @@ import type {
 	ScheduledPrompt,
 	Projects,
 	ProjectConfig,
-	MCPServer,
-	SkillCatalog,
 } from './contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
@@ -23,8 +21,6 @@ const titles = {
 	grants: 'Remembered approvals',
 	schedules: 'Schedules',
 	projects: 'Projects',
-	mcp: 'MCP servers',
-	skills: 'Skills',
 };
 export type ManagementTab = keyof typeof titles;
 const paths = {
@@ -32,16 +28,12 @@ const paths = {
 	grants: '/grants',
 	schedules: '/plugins/schedules/list',
 	projects: '/plugins/agents/projects',
-	mcp: '/plugins/mcp/list',
-	skills: '/plugins/skills/list',
 };
 type Data = {
 	memories?: Memory[];
 	grants?: RememberedApproval[];
 	schedules?: ScheduledPrompt[];
 	projects?: Projects;
-	mcp?: MCPServer[];
-	skills?: SkillCatalog;
 };
 
 export function Management({
@@ -113,7 +105,6 @@ function Contents({
 	const [notice, setNotice] = useState('');
 	const [revision, setRevision] = useState(0);
 	const [confirmation, setConfirmation] = useState<{ text: string; run: () => Promise<unknown> }>();
-	const [address, setAddress] = useState('');
 	useEffect(() => {
 		let live = true;
 		setBusy(true);
@@ -186,8 +177,6 @@ function Contents({
 			run: () => command('/unschedule all'),
 		},
 		projects: undefined,
-		mcp: undefined,
-		skills: undefined,
 	}[tab];
 	return (
 		<>
@@ -318,79 +307,6 @@ function Contents({
 								})
 							}
 						/>
-					))}
-				</>
-			)}
-			{data?.mcp && (
-				<>
-					<p>Configured servers are managed in config.yaml. Ask Mob to install a server from its catalog.</p>
-					{!data.mcp.length && <p>No MCP servers.</p>}
-					{data.mcp.map((s) => (
-						<article className="management-card" key={s.name}>
-							<h3>{s.name}</h3>
-							<p>{s.status}</p>
-							{s.signIn && /^https?:\/\//.test(s.signIn) && (
-								<a href={s.signIn} target="_blank" rel="noreferrer">
-									Sign in to {s.name}
-								</a>
-							)}
-							<details>
-								<summary>{s.tools.length} tools</summary>
-								<ul>
-									{s.tools.map((t) => (
-										<li key={t}>{t}</li>
-									))}
-								</ul>
-							</details>
-							{s.removable && (
-								<Button
-									variant="outline"
-									disabled={busy}
-									onClick={() =>
-										setConfirmation({ text: `Remove ${s.name} and its saved sign-in?`, run: () => command(`/mcp remove ${s.name}`) })
-									}
-								>
-									Remove server
-								</Button>
-							)}
-						</article>
-					))}
-					<form
-						onSubmit={(e) => {
-							e.preventDefault();
-							void perform(async () => {
-								await command(`/signin ${address.trim()}`);
-								setAddress('');
-							});
-						}}
-					>
-						<label>
-							Sign-in callback address
-							<input className="ui-input" type="url" required value={address} onChange={(e) => setAddress(e.target.value)} />
-						</label>
-						<p>After signing in on another device, paste the address the browser was sent to.</p>
-						<Button disabled={busy || !address.trim()}>Finish sign-in</Button>
-					</form>
-				</>
-			)}
-			{data?.skills && (
-				<>
-					{!data.skills.skills.length && <p>No skills installed.</p>}
-					{data.skills.skills.map((s) => (
-						<article className="management-card" key={s.name}>
-							<h3>{s.name}</h3>
-							<p>{s.description}</p>
-							<details>
-								<summary>Details</summary>
-								<p>{s.compatibility}</p>
-								<code>{s.dir}</code>
-							</details>
-						</article>
-					))}
-					{data.skills.problems.map((p, i) => (
-						<p key={i} role="status">
-							{p.dir}: {p.message}
-						</p>
 					))}
 				</>
 			)}

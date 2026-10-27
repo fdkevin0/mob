@@ -337,7 +337,7 @@ export class Hub {
 				return { name, managed, shadowed: managed && this.shadowed(name, installs[name]!), connected: !!state?.client,
 					status: status.startsWith(signInPrefix) ? 'Sign in to connect' : status,
 					signInUrl: status.startsWith(signInPrefix) ? status.slice(signInPrefix.length) : undefined,
-					tools: (state?.tools ?? []).map(t => ({ name: t.name, description: t.description, exposure: exposure(this.servers[name]!, t.name) })),
+					tools: (state?.tools ?? []).map(t => ({ name: t.name, description: t.description, exposure: exposure(this.servers[name] ?? {}, t.name) })),
 				};
 			}),
 		};

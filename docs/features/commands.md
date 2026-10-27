@@ -78,13 +78,14 @@ first to keep it running after exit.
 - In Web, a bare `/` lists only commands without a button of their own:
   conversation, model, approval, context, usage, plugin and management commands
   are left out of that list but still complete once their name is typed.
-- **Manage Mob** opens memories, remembered approvals, schedules, projects, MCP
-  servers and skills. Each section reads structured API data, not command
+- **Manage Mob** opens memories, remembered approvals, schedules and projects.
+  Each section reads structured API data, not command
   Markdown. Sections unavailable on the connected Mob explain that a runner is
   needed. Refresh reloads the current section; section URLs survive reload and
   browser back/forward. Desktop uses section navigation beside the content; mobile
   uses a section picker. Bulk memory deletion, approval revocation and schedule
-  cancellation live in **More actions** and require confirmation. Commands remain
+  cancellation live in **More actions** and require confirmation. MCP servers
+  and skills are managed in **Plugins & cloud services**. Commands remain
   available to existing clients.
 - Clients own their forms (plugin settings, mail compose); an action opens them.
 - Messaging channels run commands through the registry too; see
