@@ -57,7 +57,7 @@ export function groups(list: Conversation[], now = Date.now()): { label: string;
 
 /** where says which Mob this is and where its history lives, as the runner menu shows it. */
 function where(connection: Connection, background: boolean) {
-	if (connection.browser) return { name: 'This browser', detail: 'Stops with this tab', icon: <BrowserIcon /> };
+	if (connection.browser) return { name: 'This browser', detail: 'Shared by every tab', icon: <BrowserIcon /> };
 	if (connection.runner) return { name: 'Remote runner', detail: 'History stays on your runner', icon: <RunnerIcon /> };
 	return { name: 'This computer', detail: background ? 'Keeps running in the background' : 'Stops with its process', icon: <RunnerIcon /> };
 }
@@ -187,7 +187,7 @@ export function Sidebar({
 					<DropdownMenuLabel className="ui-menu-label">
 						<strong>{here.name}</strong>
 						{connection.browser
-							? 'Mob runs in this tab, one tab at a time'
+							? 'Mob runs in this browser, shared by its tabs'
 							: `History stays ${connection.runner ? 'on your runner' : 'on this computer'}`}
 					</DropdownMenuLabel>
 					{/* A provider is added here as well as with `mob provider add`, which the browser runner does not have. */}

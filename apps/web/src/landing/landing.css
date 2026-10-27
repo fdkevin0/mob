@@ -136,7 +136,6 @@ code { font-family: var(--mono); font-size: .92em; }
 .sign-in-dialog { width: min(420px, calc(100% - 32px)); padding: 34px 30px 30px; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
 .turnstile { min-height: 65px; }
-.form-error { margin: 0; padding: 10px 12px; border-left: 2px solid var(--amber); background: color-mix(in srgb, var(--amber) 5%, transparent); color: color-mix(in srgb, var(--amber) 55%, var(--text)); font-size: 13px; line-height: 1.45; }
 .auth-form .btn-primary:disabled { opacity: 1; background: transparent; color: var(--muted-foreground); border-color: var(--line-strong); box-shadow: none; }
 .fine-print { margin: 0; text-align: center; font-size: 12px; color: var(--faint); }
 

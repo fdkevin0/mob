@@ -4,6 +4,7 @@ import { Icon } from '@mob/ui/brand/Icon';
 import { Button } from '@mob/ui/button';
 import { Input } from '@mob/ui/input';
 import { SiteHeader } from '../site/Site';
+import { Notice } from '@mob/ui/notice';
 
 type Passkey = { id: string; name?: string | null; createdAt?: Date | string | null; backedUp: boolean; deviceType: string };
 type Linked = { id: string; providerId: string; createdAt: Date | string };
@@ -29,7 +30,7 @@ export function Account() {
 
 	if (session.isPending || !user) return (
 		<div className="account-page"><SiteHeader current="/account" /><main className="account-main">
-			{session.error ? <p className="form-error" role="alert">Could not load your account. Check your connection and reload the page.</p> : <p className="account-muted">Loading…</p>}
+			{session.error ? <Notice tone="error" title="Could not load your account.">Check your connection and reload the page.</Notice> : <p className="account-muted">Loading…</p>}
 		</main></div>
 	);
 	return (
@@ -111,7 +112,7 @@ function SignInMethods() {
 	return (
 		<section className="account-card" aria-labelledby="methods-title">
 			<h2 id="methods-title">Sign-in methods</h2>
-			{error ? <p className="form-error" role="alert">{error}</p> : null}
+			{error ? <Notice tone="error">{error}</Notice> : null}
 			<ul className="account-list">
 				{rows.map(provider => {
 					const account = find(provider);
@@ -179,7 +180,7 @@ function Passkeys() {
 		<section className="account-card" aria-labelledby="passkeys-title">
 			<h2 id="passkeys-title">Passkeys</h2>
 			<p className="account-muted">Sign in with your fingerprint, face or device PIN instead of going through GitHub. Each passkey belongs to this account only.</p>
-			{list.error ? <p className="form-error" role="alert">{list.error.message || 'Could not load passkeys.'}</p> : null}
+			{list.error ? <Notice tone="error">{list.error.message || 'Could not load passkeys.'}</Notice> : null}
 			{list.isPending ? <p className="account-muted">Loading…</p> : passkeys.length === 0 ? <p className="account-empty">No passkeys yet.</p> : (
 				<ul className="account-list">
 					{passkeys.map(passkey => <PasskeyRow key={passkey.id} passkey={passkey} onError={setError} />)}
@@ -189,15 +190,14 @@ function Passkeys() {
 				<div className="account-add">
 					<Button type="button" onClick={() => void add()} disabled={busy}><Icon name="key" size={14} />{busy ? 'Waiting for your device…' : 'Add a passkey'}</Button>
 				</div>
-			) : <p className="form-error">This browser does not support passkeys.</p>}
+			) : <Notice tone="warning" role="note">This browser does not support passkeys.</Notice>}
 			{stale ? (
-				<div className="form-error" role="alert">
-					For your safety, sign in with GitHub again before adding a passkey.{' '}
-					<Button variant="outline" className="small" onClick={signInAgain}>Sign in again</Button>
-				</div>
+				<Notice tone="warning" actions={<Button variant="outline" onClick={signInAgain}>Sign in again</Button>}>
+					For your safety, sign in with GitHub again before adding a passkey.
+				</Notice>
 			) : null}
-			{error ? <p className="form-error" role="alert">{error}</p> : null}
-			{notice ? <p className="account-notice" role="status">{notice}</p> : null}
+			{error ? <Notice tone="error">{error}</Notice> : null}
+			{notice ? <Notice tone="success">{notice}</Notice> : null}
 		</section>
 	);
 }

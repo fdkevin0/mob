@@ -15,6 +15,7 @@ import { CheckIcon, ChevronIcon, KeyIcon, OpenIcon, PlugIcon } from './icons';
 import type { OpenRouterSignIn, ProviderForm } from './browser/providers';
 import { finishOpenRouterSignIn, pendingOpenRouterSignIn, startOpenRouter } from './browser/openrouter';
 import { chromeModelSupported, prepareChromeModel } from './browser/chrome';
+import { Notice } from '@mob/ui/notice';
 
 const { openai, anthropic, deepseek, gemini, kimi, zhipu } = vendorLogos;
 
@@ -257,9 +258,9 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 								<fieldset disabled={busy} className="provider-form">
 									<ProviderFields browser={browser} chosen={chosen} form={form} setForm={setForm} setError={setError} connectedKey={editing?.key} />
 									{error && (
-										<p className="provider-error" role="alert">
+										<Notice tone="error" size="sm" className="provider-error">
 											{error}
-										</p>
+										</Notice>
 									)}
 									<div className="provider-actions">
 										<Button type="button" variant="ghost" onClick={() => choose(undefined)}>

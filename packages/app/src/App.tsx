@@ -10,6 +10,7 @@ import { Splash } from './Splash';
 import { hosts } from './hosts';
 import { browserConnection, browserLast, chooseBrowser } from './browser/connection';
 import { cacheScope, forget, readList } from './localCache';
+import { Notice } from '@mob/ui/notice';
 
 // The workspace and its chat renderer load in parallel with signing in, so the loading screen and connect form
 // paint without waiting for them.
@@ -119,7 +120,7 @@ export function App() {
     {isPublicWeb() && <Runners connect={open} />}
     <form onSubmit={connect}>{isPublicWeb() && <><Label htmlFor="address">Mob address</Label><Input id="address" type="url" value={address} onChange={e => setAddress(e.target.value)} required /></>}<Label htmlFor="token">Local access token</Label><Input id="token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} required />
       <p className="muted">Run <code>{openCommand()}</code> to sign in with a one-time link, or paste the token file shown by <code>mob serve</code>. The desktop app connects automatically.</p><Button disabled={loading}>{loading ? 'Connecting…' : 'Open workspace'}</Button></form>
-    {error && <p role="alert">{error}</p>}</>;
+    {error && <Notice tone="error">{error}</Notice>}</>;
   if (isPublicWeb()) return <>
     {workspaceView || <Splash label="Connecting to Mob…">{starting ? undefined : <Button onClick={() => { setChoice(error ? 'own' : undefined); setPrompting(true); }}>Connect a runner</Button>}</Splash>}
     <Dialog open={prompting} onOpenChange={show => { if (show) setPrompting(true); else closeConnection(); }}><DialogContent className="connect-dialog">

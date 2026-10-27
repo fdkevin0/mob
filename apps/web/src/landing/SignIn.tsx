@@ -6,6 +6,7 @@ import { DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Button } from '@mob/ui/button';
 import cloudflareIcon from '@lobehub/icons-static-svg/icons/cloudflare-color.svg?raw';
 import githubIcon from '@lobehub/icons-static-svg/icons/github.svg?raw';
+import { Notice } from '@mob/ui/notice';
 
 const passkeys = () => typeof window !== 'undefined' && 'PublicKeyCredential' in window;
 
@@ -72,12 +73,12 @@ export function SignIn({ site, siteError, reason, returnFocus }: {
 			<Icon name="lock" size={28} className="dialog-icon" />
 			<DialogTitle className="dialog-title">Sign in to Mob</DialogTitle>
 			<DialogDescription className="dialog-description">{reason ?? `Use your GitHub${site?.cloudflare ? ' or Cloudflare' : ''} account to open Mob on the web. Your conversations stay on your computer.`}</DialogDescription>
-			{siteError ? <p className="form-error" role="alert">{siteError}</p> : null}
-			{site && !ready ? <p className="form-error" role="alert">Sign-in is not set up on this site yet.</p> : null}
+			{siteError ? <Notice tone="error">{siteError}</Notice> : null}
+			{site && !ready ? <Notice tone="warning">Sign-in is not set up on this site yet.</Notice> : null}
 			{ready ? (
 				<div className="auth-form">
 					<Turnstile ref={turnstile} siteKey={site.turnstileSiteKey} action="github" onToken={onToken} onError={onError} />
-					{error ? <p className="form-error" role="alert">{error}</p> : null}
+					{error ? <Notice tone="error">{error}</Notice> : null}
 					<Button type="button" className="wide" onClick={() => void social('github')} disabled={!!busy || !token}>
 						<span className="sign-in-provider-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: githubIcon }} />{busy === 'github' ? 'Opening GitHub…' : 'Continue with GitHub'}
 					</Button>

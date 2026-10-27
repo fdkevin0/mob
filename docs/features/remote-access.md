@@ -291,9 +291,29 @@ runners; the API, the chat stream and the change feed are unchanged. The
 database is the usual SQLite schema on sqlite-wasm, stored in the origin
 private file system (OPFS) with the `opfs-sahpool` VFS, and `providers.json`
 is a setting in that database. Where OPFS is unavailable, such as in some
-private windows, conversations last until the tab closes. One tab at a time
-owns the database; another tab says so until it is reloaded after the first
-one closes.
+private windows, conversations live in the memory of the leading tab's worker
+(below): closing or reloading that tab loses them, even while other Mob tabs
+stay open, since a follower that takes over starts an empty database.
+
+Every Mob tab in the browser shares one runner. The pool's file handles are
+exclusive, so the worker of one tab leads: it holds the `mob-browser-runner`
+Web Lock, owns the database and serves the other tabs over a
+`BroadcastChannel`. A follower's worker passes its page's requests to the
+leader and streams the answers back, so every tab sees the same conversations
+and the change feed reaches them all.
+
+Followers queue for the lock. When the leader's tab closes, one of them opens
+the database and leads, retrying while the closed tab's file handles are
+released. Once the browser has saved conversations (the pool's files exist in
+OPFS), no runner, whether taking over or started anew after a failure, serves
+an empty in-memory database in their place: if it still cannot open the saved
+one, it fails, its page reports it and starts a new runner on the next
+request, and the next follower in line tries. Requests in flight at a
+handover fail once, which the client retries (the change stream reconnects by
+itself). Each worker also holds a lock named after its tab, so the leader ends
+a closed follower's streams. A turn the leader was running stops with its tab,
+so while one runs, closing or reloading the leader's tab asks first (the
+browser's own leave-page prompt).
 
 The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go

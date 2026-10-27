@@ -36,6 +36,11 @@ desktop:
 mob *args:
     ./build/mob "$@"
 
+# Capture a page in each size and theme, e.g. just screenshot http://127.0.0.1:5174/app.html --name workspace.
+[positional-arguments]
+screenshot *args:
+    bun scripts/screenshot.ts "$@"
+
 test: test-core test-web test-integration test-dsh
 
 test-core:

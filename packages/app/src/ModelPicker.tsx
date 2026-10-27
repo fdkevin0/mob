@@ -4,7 +4,8 @@ import { Content as DialogContent } from '@radix-ui/react-dialog';
 import { DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Button } from '@mob/ui/button';
 import { BrandIcon, modelBrand } from './brandIcons';
-import { AlertIcon, BrainIcon, CheckIcon, EyeIcon, PlusIcon, SearchIcon, WrenchIcon } from './icons';
+import { BrainIcon, CheckIcon, EyeIcon, PlusIcon, SearchIcon, WrenchIcon } from './icons';
+import { Notice } from '@mob/ui/notice';
 
 export type ModelInfo = {
 	id: string;
@@ -247,7 +248,7 @@ export function ModelPicker({
 				</div>
 			</div>
 			<div className="model-results" onMouseLeave={() => setActive(undefined)}>
-				{error && <p role="alert">{error}</p>}
+				{error && <Notice tone="error" size="sm" className="model-error">{error}</Notice>}
 				{!groups && !error && (
 					<p className="muted model-note" role="status">
 						Loading models…
@@ -286,10 +287,9 @@ export function ModelPicker({
 								{group.models.length > 0 && <span className="model-count">{group.models.length}</span>}
 							</h3>
 							{group.error && (
-								<p className="model-error" role="alert" title={group.error}>
-									<AlertIcon />
-									<span>{group.error}</span>
-								</p>
+								<Notice tone="error" size="sm" className="model-error">
+									<span title={group.error}>{group.error}</span>
+								</Notice>
 							)}
 							{families(group.provider, group.models).map((family) => {
 								const list = <ul>{family.models.map((model) => row({ group, model, ref: refOf(group.provider, model) }))}</ul>;

@@ -226,13 +226,17 @@ it('keeps the browser workspace when choosing the current runner or a connection
     render(<App />);
     await screen.findByRole('button', { name: 'This browser: settings and runner' });
     expect(screen.queryByRole('button', { name: 'Plugins & cloud services' })).toBeNull();
-    const limits = await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
+    // On first use the notice is one line; the list waits behind its toggle.
+    const limits = await screen.findByRole('region', { name: 'Mob in this browser' });
+    expect(limits.querySelector('details')?.open).toBe(false);
     expect(limits.textContent).toContain('Coding agents');
-    fireEvent.click(within(limits).getByRole('button', { name: 'Got it' }));
-    expect(screen.queryByRole('region', { name: 'What Mob in this browser cannot do' })).toBeNull();
+    fireEvent.click(within(limits).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('region', { name: 'Mob in this browser' })).toBeNull();
     expect(localStorage.getItem('mob-browser-limits-seen')).toBe('1');
+    // Asked for, it opens with the list showing.
     await chooseFromRunnerMenu('What needs a runner');
-    await screen.findByRole('region', { name: 'What Mob in this browser cannot do' });
+    const asked = await screen.findByRole('region', { name: 'Mob in this browser' });
+    expect(asked.querySelector('details')?.open).toBe(true);
     const token = localStorage.getItem('mob-browser-token');
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     fireEvent.click(screen.getAllByRole('button', { name: 'New conversation' })[0]);

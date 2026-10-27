@@ -5,6 +5,7 @@ import { tokens } from './format';
 export { tokens } from './format';
 import type { DayUsage, UsageReport } from './contracts';
 import { Tabs, TabsList, TabsTrigger } from '@mob/ui/tabs';
+import { Notice } from '@mob/ui/notice';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -90,7 +91,7 @@ export function Usage({
 					))}
 				</TabsList>
 			</Tabs>
-			{error && <p role="alert">{error}</p>}
+			{error && <Notice tone="error">{error}</Notice>}
 			{!report ? (
 				!error && <Loading label="Counting tokens…" />
 			) : report.totalTokens === 0 ? (
