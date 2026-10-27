@@ -18,6 +18,8 @@ export type FromWorker =
 	| { type: 'failed'; error: string }
 	// Whether the runner of this tab, as the leader, is running a turn, which closing the tab would stop.
 	| { type: 'busy'; busy: boolean }
+	// The runner served, then could not take over from a closed tab: the page starts a new one.
+	| { type: 'lost'; error: string }
 	| { type: 'head'; id: number; status: number; headers: [string, string][] }
 	| { type: 'chunk'; id: number; chunk: Uint8Array }
 	| { type: 'end'; id: number }

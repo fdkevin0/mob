@@ -24,6 +24,15 @@ function start(token: string) {
 			if (m.type === 'ready') { resolve({ persistent: m.persistent }); return; }
 			if (m.type === 'failed') { reject(new Error(m.error)); return; }
 			if (m.type === 'busy') { busy = m.busy; return; }
+			if (m.type === 'lost') {
+				// Requests fail with the reason, and the next one starts a new runner, which leads or follows.
+				const error = new Error(m.error);
+				for (const p of pending.values()) { p.fail(error); try { p.stream?.error(error); } catch { /* already closed */ } }
+				pending.clear();
+				worker.terminate();
+				if (started?.worker === worker) started = undefined;
+				return;
+			}
 			if (m.type === 'chrome') {
 				const abort = new AbortController();
 				prompts.set(m.id, abort);

@@ -35,8 +35,8 @@ export function BrowserLimits({ connection, open, setOpen, connect }: { connecti
 	return (
 		<section className="browser-limits" aria-label="Mob in this browser">
 			{!persistent && (
-				<Notice tone="warning" title="Conversations are not saved in this browser." details="This browser does not let Mob keep files, as in some private windows, so conversations are lost when the last Mob tab closes. Connect a runner to keep them.">
-					They last until the last Mob tab closes.
+				<Notice tone="warning" title="Conversations are not saved in this browser." details="This browser does not let Mob keep files, as in some private windows, so conversations live in the memory of the first Mob tab you opened. Closing or reloading that tab loses them, even while other Mob tabs stay open. Connect a runner to keep them.">
+					They are lost when the first Mob tab you opened closes or reloads.
 				</Notice>
 			)}
 			{open && (
