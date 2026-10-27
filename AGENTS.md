@@ -1,5 +1,8 @@
 # AGENTS.md
 
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
+- When a repository's documentation and its existing code disagree, follow the conventions used in the existing code, and in your final reply point out each inconsistency you found between the documentation and the code.
+
 Mob is a local TypeScript assistant: one Bun service with SQLite, used from a
 React UI (browser and Electron desktop), an OpenTUI terminal UI, the `mob` CLI
 and messaging channels.
