@@ -4,6 +4,6 @@ node_modules
 build/*
 apps/web/dist
 apps/docs/dist
-.wrangler
-.dev.vars
-*.sqlite*
+**/.wrangler
+**/.dev.vars
+**/*.sqlite*
