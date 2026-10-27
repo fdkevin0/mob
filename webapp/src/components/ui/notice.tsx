@@ -35,7 +35,9 @@ export type NoticeTone = keyof typeof icons;
 /**
  * Notice is every message Mob puts in a page about what happened: a failure, a
  * warning, a note or a success. It is a tinted card with a line icon, an
- * optional title and the actions that resolve it, in either theme. Errors are
+ * optional title and the actions that resolve it, in either theme. It shows
+ * the gist first: what explains it further waits behind a "details" toggle
+ * (progressive disclosure), and a notice that can go has a close button. Errors are
  * announced at once (role alert); the other tones politely (role status),
  * without the actions' labels.
  */
@@ -44,6 +46,10 @@ export function Notice({
 	title,
 	children,
 	actions,
+	details,
+	detailsLabel = 'Details',
+	detailsOpen,
+	onDismiss,
 	size,
 	className,
 	role,
@@ -53,6 +59,11 @@ export function Notice({
 	title?: ReactNode;
 	children?: ReactNode;
 	actions?: ReactNode;
+	/** details is shown only on request, under detailsLabel; detailsOpen opens it at first. */
+	details?: ReactNode;
+	detailsLabel?: string;
+	detailsOpen?: boolean;
+	onDismiss?: () => void;
 	/** sm fits a notice inside a list, a card or a menu. */
 	size?: 'sm';
 	className?: string;
@@ -65,8 +76,26 @@ export function Notice({
 			<div className="notice-body" role={role ?? (tone === 'error' ? 'alert' : 'status')}>
 				{title && <strong className="notice-title">{title}</strong>}
 				{children && <div className="notice-text">{children}</div>}
+				{details && (
+					<details className="notice-details" open={detailsOpen}>
+						<summary>
+							{detailsLabel}
+							<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+								<path d="m6 9 6 6 6-6" />
+							</svg>
+						</summary>
+						<div className="notice-text">{details}</div>
+					</details>
+				)}
 			</div>
 			{actions && <div className="notice-actions">{actions}</div>}
+			{onDismiss && (
+				<button type="button" className="notice-dismiss" aria-label="Dismiss" onClick={onDismiss}>
+					<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+						<path d="M18 6 6 18M6 6l12 12" />
+					</svg>
+				</button>
+			)}
 		</div>
 	);
 }

@@ -302,7 +302,8 @@ leader's tab closes, one of them opens the database and leads, and requests
 that were in flight fail once, which the client retries (the change stream
 reconnects by itself). Each worker also holds a lock named after its tab, so
 the leader ends a closed follower's streams. A turn the leader was running
-stops with its tab.
+stops with its tab, so while one runs, closing or reloading the leader's tab
+asks first (the browser's own leave-page prompt).
 
 The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go

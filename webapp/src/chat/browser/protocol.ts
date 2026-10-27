@@ -16,6 +16,8 @@ export type ChromeMessage = { role: 'system' | 'user' | 'assistant'; content: st
 export type FromWorker =
 	| { type: 'ready'; persistent: boolean }
 	| { type: 'failed'; error: string }
+	// Whether the runner of this tab, as the leader, is running a turn, which closing the tab would stop.
+	| { type: 'busy'; busy: boolean }
 	| { type: 'head'; id: number; status: number; headers: [string, string][] }
 	| { type: 'chunk'; id: number; chunk: Uint8Array }
 	| { type: 'end'; id: number }

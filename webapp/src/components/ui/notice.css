@@ -79,6 +79,61 @@
 	height: 14px;
 	margin-top: 1px;
 }
+.notice-details summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 2px;
+	color: var(--muted-foreground);
+	font-weight: 500;
+	list-style: none;
+	cursor: pointer;
+	user-select: none;
+}
+.notice-details summary::-webkit-details-marker {
+	display: none;
+}
+.notice-details summary:hover {
+	color: var(--text);
+}
+.notice-details summary svg {
+	width: 14px;
+	height: 14px;
+	transition: transform 0.15s;
+}
+.notice-details[open] summary svg {
+	transform: rotate(180deg);
+}
+.notice-details > .notice-text {
+	margin-top: 6px;
+}
+.notice-dismiss {
+	display: grid;
+	flex-shrink: 0;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	margin: -2px -4px 0 0;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--muted-foreground);
+	cursor: pointer;
+}
+.notice-dismiss:hover {
+	background: var(--accent);
+	color: var(--text);
+}
+.notice-dismiss svg {
+	width: 14px;
+	height: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.notice-details summary svg {
+		transition: none;
+	}
+}
 @media (max-width: 520px) {
 	.notice {
 		flex-wrap: wrap;

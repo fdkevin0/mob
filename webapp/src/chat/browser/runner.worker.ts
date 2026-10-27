@@ -103,6 +103,7 @@ function lead(takeover: boolean): Promise<unknown> {
 	failForwarded();
 	return started.then(s => {
 		persistent = s.persistent;
+		reportBusy(s.server);
 		announce(s.persistent);
 		share({ type: 'leader', tab, persistent: s.persistent });
 		return held();
@@ -110,6 +111,17 @@ function lead(takeover: boolean): Promise<unknown> {
 		if (announced) console.error('Mob could not take over in this tab: ' + errorText(e));
 		else { announced = true; post({ type: 'failed', error: errorText(e) }); }
 	});
+}
+
+// The page asks before its tab closes while a turn runs here: other tabs would
+// take over the database, but not the turn. Checked each second; a turn lasts longer.
+function reportBusy(server: Server) {
+	let busy = false;
+	setInterval(() => {
+		if (server.busy === busy) return;
+		busy = server.busy;
+		post({ type: 'busy', busy });
+	}, 1000);
 }
 
 async function begin() {

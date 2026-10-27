@@ -9,6 +9,9 @@ type Pending = { head: (r: Response) => void; fail: (e: Error) => void; stream?:
 
 let started: { worker: Worker; ready: Promise<{ persistent: boolean }>; pending: Map<number, Pending> } | undefined;
 let next = 0;
+// busy is set while this tab's runner leads and runs a turn: closing or reloading the tab asks first.
+let busy = false;
+if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => { if (busy) { event.preventDefault(); event.returnValue = ''; } });
 
 function start(token: string) {
 	const worker = new Worker(new URL('./runner.worker.ts', import.meta.url), { type: 'module', name: 'mob-runner' });
@@ -20,6 +23,7 @@ function start(token: string) {
 			const m = event.data;
 			if (m.type === 'ready') { resolve({ persistent: m.persistent }); return; }
 			if (m.type === 'failed') { reject(new Error(m.error)); return; }
+			if (m.type === 'busy') { busy = m.busy; return; }
 			if (m.type === 'chrome') {
 				const abort = new AbortController();
 				prompts.set(m.id, abort);

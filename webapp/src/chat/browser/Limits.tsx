@@ -16,28 +16,46 @@ const missing = [
 const seenKey = 'mob-browser-limits-seen';
 const seen = () => { try { return localStorage.getItem(seenKey) === '1'; } catch { return false; } };
 
-/** BrowserLimits says what the browser runner cannot do; it shows on first use and whenever asked. */
+/**
+ * BrowserLimits says what the browser runner cannot do. On first use it says
+ * so in a line, with the list behind "What needs a runner"; asked from the
+ * sidebar, it opens with the list showing.
+ */
 export function BrowserLimits({ connection, open, setOpen, connect }: { connection: Connection; open: boolean; setOpen: (open: boolean) => void; connect: () => void }) {
 	const [persistent, setPersistent] = useState(true);
-	useEffect(() => { if (!seen()) setOpen(true); }, []);
+	const [first, setFirst] = useState(false);
+	useEffect(() => { if (!seen()) { setFirst(true); setOpen(true); } }, []);
 	useEffect(() => {
 		let live = true;
-		browserState(connection).then(s => { if (live) { setPersistent(s.persistent); if (!s.persistent) setOpen(true); } }).catch(() => { /* the workspace reports a runner that did not start */ });
+		browserState(connection).then(s => { if (live) setPersistent(s.persistent); }).catch(() => { /* the workspace reports a runner that did not start */ });
 		return () => { live = false; };
 	}, [connection]);
-	if (!open) return null;
-	const hide = () => { try { localStorage.setItem(seenKey, '1'); } catch { /* shown again next time */ } setOpen(false); };
+	const hide = () => { try { localStorage.setItem(seenKey, '1'); } catch { /* shown again next time */ } setFirst(false); setOpen(false); };
+	if (!open && persistent) return null;
 	return (
-		<section className="browser-limits" aria-label="What Mob in this browser cannot do">
-			{!persistent && <Notice tone="warning" title="Conversations are not saved in this browser.">It does not let Mob keep files, as in some private windows, so they are lost when the last Mob tab closes.</Notice>}
-			<Notice tone="info" title="Mob is running in this browser.">
-				<p>Conversations, approvals, memory, commands and token usage work, with models from providers that accept browsers. Every Mob tab in this browser shares it, and it stops when the last one closes. These need a runner:</p>
-				<ul>{missing.map(m => <li key={m}>{m}</li>)}</ul>
-				<div className="browser-limits-actions">
-					<Button variant="outline" onClick={connect}>Connect a runner</Button>
-					<Button variant="ghost" onClick={hide}>Got it</Button>
-				</div>
-			</Notice>
+		<section className="browser-limits" aria-label="Mob in this browser">
+			{!persistent && (
+				<Notice tone="warning" title="Conversations are not saved in this browser." details="This browser does not let Mob keep files, as in some private windows, so conversations are lost when the last Mob tab closes. Connect a runner to keep them.">
+					They last until the last Mob tab closes.
+				</Notice>
+			)}
+			{open && (
+				<Notice
+					tone="info"
+					title="Mob is running in this browser."
+					onDismiss={hide}
+					detailsLabel="What needs a runner"
+					detailsOpen={!first}
+					details={
+						<>
+							<ul>{missing.map(m => <li key={m}>{m}</li>)}</ul>
+							<Button variant="outline" className="small" onClick={connect}>Connect a runner</Button>
+						</>
+					}
+				>
+					Chat, approvals and memory work here, shared by every tab in this browser.
+				</Notice>
+			)}
 		</section>
 	);
 }
