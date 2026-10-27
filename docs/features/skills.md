@@ -26,7 +26,9 @@ from each directory.
   colon is read anyway. A name that differs from its directory is a warning.
 - A skill without a description or a valid name is skipped. A name already
   found in an earlier directory is skipped too, so Mob's own skills win.
-- `/skills` lists the skills found and every warning.
+- `/skills` lists the skills found and every warning. Web's **Manage Mob → Skills**
+  shows the same catalog as read-only cards, with descriptions, compatibility,
+  source directories and scan warnings. Refresh rescans the installed skills.
 
 ## How the model uses them
 

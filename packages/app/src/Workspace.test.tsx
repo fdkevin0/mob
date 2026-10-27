@@ -146,3 +146,26 @@ it('shows the default the service kept when making a model the default fails', a
 	expect(screen.getByRole('button', { name: 'Make o3 high the default' })).toBeDefined();
 	expect(screen.queryByText(/^Default:/)).toBeNull();
 });
+
+it('refreshes conversations before opening a memory from a newly created task', async () => {
+	window.history.replaceState(null, '', '/#/manage/memories');
+	let requests = 0, added = false;
+	vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+		const path = new URL(url).pathname;
+		if (path === '/api/events') return new Response(null, { status: 404 });
+		if (path === '/api/conversations') { requests++; return Response.json(added ? [...list, { id: 'task', title: 'New coding task' }] : list); }
+		if (path === '/api/commands') return Response.json([{ name: 'memories' }]);
+		if (path === '/api/memories') return Response.json([{ id: 'fact', text: 'Task memory', conversationId: 'task', owner: false }]);
+		if (path === '/api/runtime') return Response.json({ background: false });
+		if (path === '/api/config') return Response.json({});
+		return Response.json(snapshot);
+	}));
+	render(<Workspace connection={connection} disconnect={() => {}} />);
+	const open = await screen.findByRole('button', { name: 'Open conversation' });
+	const before = requests;
+	added = true;
+	fireEvent.click(open);
+	await waitFor(() => expect(window.location.hash).toBe('#/c/task'));
+	expect(screen.getByRole('button', { name: 'New coding task' })).toBeTruthy();
+	expect(requests).toBeGreaterThan(before);
+});

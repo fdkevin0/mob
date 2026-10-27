@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { Changes } from '@mob/client';
 import { api, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
+import type { ManagementTab } from './Management';
 import type { Action } from './contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog } from '@mob/ui/dialog';
@@ -28,17 +29,22 @@ const Usage = lazy(() => import('./Usage').then((m) => ({ default: m.Usage })));
 const BrowserLimits = lazy(() => import('./browser/Limits').then((m) => ({ default: m.BrowserLimits })));
 const Move = lazy(() => import('./Move').then((m) => ({ default: m.Move })));
 const ModelProvider = lazy(() => import('./ModelProvider').then((m) => ({ default: m.ModelProvider })));
+const Management = lazy(() => import('./Management').then(m => ({ default: m.Management })));
 const panel = <Loading />;
 
 // The address names what the workspace shows: a conversation as #/c/<id>, or a page such as #/usage,
 // so reloading or going back returns to it.
 const routePrefix = '#/c/';
-const pages: Record<string, Exclude<View, 'chat'>> = { '#/agents': 'agents', '#/usage': 'usage', '#/plugins': 'plugins' };
-const pageTitles: Record<View, string> = { chat: '', agents: 'Agents', usage: 'Token usage', plugins: 'Plugins & cloud services' };
+const pages: Record<string, Exclude<View, 'chat'>> = { '#/agents': 'agents', '#/usage': 'usage', '#/plugins': 'plugins', '#/manage': 'manage' };
+const pageTitles: Record<View, string> = { chat: '', manage: 'Manage Mob', agents: 'Agents', usage: 'Token usage', plugins: 'Plugins & cloud services' };
 function routedID() {
 	return window.location.hash.startsWith(routePrefix) ? decodeURIComponent(window.location.hash.slice(routePrefix.length)) : undefined;
 }
-const routedView = (): View => pages[window.location.hash] ?? 'chat';
+const routedView = (): View => window.location.hash.startsWith('#/manage/') ? 'manage' : pages[window.location.hash] ?? 'chat';
+const routedManagement = (): ManagementTab => {
+	const tab = window.location.hash.slice('#/manage/'.length);
+	return ['memories', 'grants', 'schedules', 'projects', 'mcp', 'skills'].includes(tab) ? tab as ManagementTab : 'memories';
+};
 function route(hash: string, replace: boolean) {
 	if (window.location.hash === hash) return;
 	if (replace) window.history.replaceState(window.history.state, '', hash);
@@ -61,6 +67,7 @@ export function Workspace({
 	/** switchTo opens another Mob, such as the one conversations were just moved to. */
 	switchTo?: (connection: Connection) => void;
 }) {
+	const [managementTab, setManagementTab] = useState<ManagementTab>(routedManagement);
 	const [view, setView] = useState<View>(routedView);
 	// OpenRouter's sign-in returns to the page with a code, which the provider dialog finishes.
 	const [signIn] = useState(() => (connection.browser ? pendingOpenRouterSignIn() : undefined));
@@ -143,8 +150,13 @@ export function Workspace({
 	function page(next: View, replace = false) {
 		if (next === 'chat') {
 			if (selected) route(routePrefix + encodeURIComponent(selected.id), replace);
-		} else route(Object.keys(pages).find((hash) => pages[hash] === next)!, replace);
+		} else route(next === 'manage' ? '#/manage/' + managementTab : Object.keys(pages).find((hash) => pages[hash] === next)!, replace);
 		paged(next);
+	}
+	function manage(tab: ManagementTab) {
+		setManagementTab(tab);
+		route('#/manage/' + tab, false);
+		paged('manage');
 	}
 	// choice counts the conversations asked for, so a slow response for an earlier one is dropped.
 	const choice = useRef(0);
@@ -289,7 +301,7 @@ export function Workspace({
 	useEffect(() => {
 		const follow = () => {
 			const id = routedID();
-			if (routedView() !== 'chat') pager.current(routedView());
+			if (routedView() !== 'chat') { setManagementTab(routedManagement()); pager.current(routedView()); }
 			else if (id && held(id)) route(routePrefix + encodeURIComponent(current.current!), true);
 			else if (id && id !== current.current) void opener.current(id, true);
 			else pager.current('chat');
@@ -410,6 +422,7 @@ export function Workspace({
 					<Suspense fallback={panel}>
 						<AgentTree
 							connection={connection}
+							manage={() => manage('projects')}
 							browser={connection.browser}
 							changes={changes}
 							open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))}
@@ -422,6 +435,7 @@ export function Workspace({
 						/>
 					</Suspense>
 				)}
+				{view === 'manage' && <Suspense fallback={panel}><Management connection={connection} tab={managementTab} select={manage} open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))} held={held} /></Suspense>}
 				{view === 'usage' && (
 					<Suspense fallback={panel}>
 						<Usage

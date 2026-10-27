@@ -46,6 +46,7 @@ function tools(l: Library): Tool[] {
 function plugin(l: Library): Plugin {
 	return {
 		name: 'skills',
+		routes: [{ method: 'GET', path: 'list', handle: async () => { const [skills, problems] = l.scan(); return { skills, problems }; } }],
 		commands: [{ name: 'skills', usage: '/skills', summary: 'Show the skills the model can load', clients: interactive, ownerOnly: true, run: async () => ({ markdown: l.describe() }) }],
 		source: () => tools(l),
 		entries: () => entries(l),

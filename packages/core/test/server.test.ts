@@ -202,3 +202,23 @@ test('approval endpoints reject malformed decisions without consuming the approv
 	await server.close();
 	store.close();
 });
+
+test('management data and deletion require authentication and preserve other entries', async () => {
+	const store = new Store(openBun(':memory:')).open();
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token: 't'.repeat(64), version: 'test' });
+	const c = store.create();
+	store.saveFact('one', c.id, 'Private fact', true);
+	store.saveFact('two', c.id, 'Keep this', false);
+	store.addGrant(c.id, 'execute', 'npm test');
+	const call = (path: string, method = 'GET', token = 't'.repeat(64)) => server.fetch(new Request('http://localhost/api/' + path, { method, headers: { Authorization: 'Bearer ' + token } }));
+	expect((await call('memories', 'GET', 'wrong')).status).toBe(401);
+	expect((await call('memories/all/delete', 'POST', 'wrong')).status).toBe(401);
+	expect(await (await call('memories')).json()).toEqual(store.facts());
+	expect(await (await call('grants')).json()).toEqual(store.grants());
+	expect(await (await call('memories/one/delete', 'POST')).json()).toEqual({ removed: 1 });
+	expect(store.facts().map(f => f.text)).toEqual(['Keep this']);
+	expect(await (await call('memories/one/delete', 'POST')).json()).toEqual({ removed: 0 });
+	await call('grants/all/delete', 'POST');
+	expect(store.grants()).toEqual([]);
+	store.close();
+});

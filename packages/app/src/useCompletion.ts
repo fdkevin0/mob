@@ -6,7 +6,7 @@ import type { Suggestion } from './contracts';
 export { lastToken };
 
 // Commands the workspace already offers as buttons stay out of the list a bare / shows; typing their names still completes them.
-const buttons = new Set(['/new', '/list', '/open', '/model', '/models', '/approve', '/deny']);
+const buttons = new Set(['/new', '/list', '/open', '/model', '/models', '/approve', '/deny', '/compact', '/usage', '/tasks', '/plugins', '/test', '/clear-secret', '/deliveries', '/mail', '/email', '/cloud', '/memories', '/forget', '/grants', '/revoke', '/schedules', '/unschedule', '/projects', '/blueprints', '/mcp', '/signin', '/skills']);
 
 // useCompletion suggests slash commands and their arguments from the service.
 export function useCompletion({

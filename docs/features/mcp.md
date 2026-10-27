@@ -152,3 +152,13 @@ this machine.
 ## Not supported
 
 Resources, prompts and sampling.
+
+## Web management
+
+**Manage Mob → MCP servers** shows connection status and tool names without
+returning server connection credentials. Installed servers can be removed after
+confirmation; servers configured in `config.yaml` stay managed there, including
+those that override an earlier install. A pending
+sign-in offers its browser link. When signing in from another device, paste the
+callback address into **Sign-in callback address** to finish the existing
+`/signin` flow. Refresh checks the latest connection status.

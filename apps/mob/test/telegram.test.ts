@@ -32,13 +32,13 @@ test('replies run registry commands', async () => {
 	await reply('/remember 喝茶');
 	expect(await reply('/approve always')).toContain('approved remember and it ran');
 	expect(await reply('/remember 喝咖啡')).not.toContain('Approval needed');
-	expect(await reply('/grants')).toContain('| remember | every call | every conversation |');
+	expect(await reply('/grants')).toContain('remember: every call — every conversation');
 	expect(await reply('/revoke all')).toContain('Forgot 1');
 });
 
 test('buttons, taps and menus', () => {
 	const a = newID();
-	expect(buttons([{ id: a, tool: 'remember', input: {} }])).toEqual([[{ text: 'Approve', callback_data: '/approve ' + a }, { text: 'Always allow', callback_data: `/approve ${a} always` }, { text: 'Deny', callback_data: '/deny ' + a }]]);
+	expect(buttons([{ id: a, tool: 'remember', input: {} }])).toEqual([[{ text: 'Approve', callback_data: '/approve ' + a }, { text: 'Deny', callback_data: '/deny ' + a }], [{ text: 'Allow in conversation', callback_data: `/approve ${a} conversation` }, { text: 'Always allow', callback_data: `/approve ${a} always` }]]);
 	const bot = new Bot(config);
 	const tap = (from: number, data: string) => bot.tapped({ update_id: 9, callback_query: { id: 'q', data, from: { id: from } } } as Update);
 	expect(tap(8, '/new')[1]).toBeUndefined();
@@ -47,6 +47,7 @@ test('buttons, taps and menus', () => {
 	expect(u.message).toMatchObject({ text: '/new', tap: true, chat: { id: 7, type: 'private' } });
 	expect(menu([{ name: 'ok', usage: '/ok', summary: 'Fine', clients: [] }, { name: 'Bad-Name', usage: '', summary: 'x', clients: [] }])).toEqual([{ command: 'ok', description: 'Fine' }]);
 	expect(picked('/open abc', { inline_keyboard: [] })).toBe(true);
+	expect(picked('/_confirm /forget all', { inline_keyboard: [] })).toBe(true);
 	expect(picked('/new', { inline_keyboard: [[{ text: '', callback_data: '/open x' }]] })).toBe(true);
 	expect(picked('/new', { inline_keyboard: [[{ text: '', callback_data: '/list' }]] })).toBe(false);
 	const s = service();
@@ -95,4 +96,131 @@ test('the loop answers the owner once and keeps the offset', async () => {
 	expect(texts.some(t => t.includes('stranger'))).toBe(false);
 	expect(s.store.setting<number>('telegram-offset:1')).toBe(8);
 	expect(s.store.delivery('tg:1:5')?.state).toBe('sent');
+});
+
+test('management buttons page beyond completion limits and confirm deletions', async () => {
+	const s = service();
+	const c = s.store.create();
+	for (let i = 0; i < 25; i++) s.store.saveFact(newID(), c.id, `Fact ${i}`, true);
+	const seen: string[] = [];
+	let sent = '/memories';
+	for (;;) {
+		const [reply, rows] = await s.present(config, 'bot', sent, { text: '' });
+		expect(reply.text).toContain('of 25');
+		const flat = rows.flat();
+		seen.push(...flat.filter(b => b.callback_data.startsWith('/_confirm /forget ') && !b.callback_data.endsWith(' all')).map(b => b.callback_data));
+		const next = flat.find(b => b.text === 'Next');
+		if (!next) break;
+		sent = s.command(next.callback_data);
+	}
+	expect(new Set(seen).size).toBe(25);
+	const [confirmation, rows] = await s.present(config, 'bot', seen[0]!, { text: '' });
+	expect(confirmation.text).toContain('Fact 0');
+	expect(s.store.facts()).toHaveLength(25);
+	expect(rows[0]![0]!.callback_data).toBe(seen[0]!.replace('/_confirm ', ''));
+	await s.reply(config, 'bot', newID(), rows[0]![0]!.callback_data, signal());
+	expect(s.store.facts()).toHaveLength(24);
+	const [, refreshed] = await s.present(config, 'bot', '/forget x', { text: 'Gone' });
+	expect(refreshed.flat().some(b => b.callback_data === '/memories')).toBe(true);
+});
+
+test('conversation picker reaches conversations after the first twenty', async () => {
+	const s = service();
+	for (let i = 0; i < 25; i++) { const c = s.store.create(); s.store.command(c.id, newID(), 'hello', 'world'); s.store.rename(c.id, `Conversation ${i}`); }
+	const [, rows] = await s.present(config, 'bot', '/_page list 24', { text: '' });
+	expect(rows.flat().filter(b => b.callback_data.startsWith('/open '))).toHaveLength(1);
+	expect(rows.flat().some(b => b.text === 'Previous')).toBe(true);
+	expect(rows.flat().some(b => b.text === 'Next')).toBe(false);
+});
+
+test('typed and tapped management menus do not start model turns', async () => {
+	const s = service();
+	const sent: { text: string; reply_markup?: { inline_keyboard: { text: string; callback_data: string }[][] } }[] = [];
+	const bot = new Bot(config, (async (_url, init) => {
+		sent.push(JSON.parse(String(init?.body)));
+		return Response.json({ ok: true, result: true });
+	}) as typeof fetch);
+	for (const [i, text] of ['/_page memories 0', '/_confirm /forget all', '/_more'].entries()) {
+		await s.handle(bot, '1', { update_id: i + 100, message: { text, tap: true, from: { id: 7 }, chat: { id: 7, type: 'private' } } }, signal());
+		expect(await s.reply(config, '1', newID(), text, signal())).not.toContain('Received:');
+		await s.handle(bot, '1', { update_id: i + 200, message: { text, from: { id: 7 }, chat: { id: 7, type: 'private' } } }, signal());
+	}
+	expect(s.store.list(true)).toEqual([]);
+	expect(sent.some(m => m.text?.includes('Saved memories'))).toBe(true);
+	expect(sent.some(m => m.reply_markup?.inline_keyboard.flat().some(b => b.callback_data === '/forget all'))).toBe(true);
+});
+
+
+test('model menus query the provider once per request', async () => {
+	let calls = 0;
+	const store = new Store(openBun(':memory:')).open();
+	const s = new Service(store, new ConversationService(store, { ...models, list: async () => { calls++; return []; } }));
+	for (const text of ['/models', '/model', '/_page models 0']) {
+		calls = 0;
+		expect(await s.reply(config, 'bot', newID(), text, signal())).toContain('Choose a model');
+		expect(calls).toBe(1);
+	}
+	expect(store.list(true)).toEqual([]);
+	store.close();
+});
+
+test('local menu replies release the next update before the previous send finishes', async () => {
+	const s = service();
+	const stop = new AbortController();
+	let release!: () => void;
+	const sending = new Promise<void>(resolve => { release = resolve; });
+	let polls = 0, sent = 0;
+	const bot = new Bot(config, (async (url, init) => {
+		const method = String(url).split('/').at(-1);
+		const ok = (result: unknown) => Response.json({ ok: true, result });
+		if (method === 'getMe') return ok({ id: 1 });
+		if (method === 'getWebhookInfo') return ok({ url: '' });
+		if (method === 'getUpdates') {
+			if (!polls++) return ok([1, 2].map(update_id => ({ update_id, message: {
+				text: '/_more', tap: true, from: { id: 7 }, chat: { id: 7, type: 'private' },
+			} })));
+			if (!init?.signal?.aborted) await new Promise(resolve => init?.signal?.addEventListener('abort', resolve, { once: true }));
+			throw stop.signal.reason;
+		}
+		if (method === 'sendMessage' && ++sent === 1) await sending;
+		return ok(true);
+	}) as typeof fetch);
+	const loop = s.loop(bot, stop.signal, () => {});
+	let beforeRelease = 0;
+	try {
+		for (const deadline = Date.now() + 2000; sent < 2 && Date.now() < deadline;) await Bun.sleep(10);
+		beforeRelease = sent;
+	} finally {
+		release();
+		stop.abort();
+		await loop;
+	}
+	expect(beforeRelease).toBe(2);
+});
+
+test('multiline menu-like messages remain chat prompts and keep the model reply', async () => {
+	const s = service();
+	for (const text of ['/memories \nPlease explain what you remember', '/models \r\nExplain this command', ' /memories']) {
+		const reply = await s.reply(config, 'bot', newID(), text, signal());
+		expect(reply).toContain('Received:');
+		expect(reply).toContain(text.trim());
+	}
+	expect(s.store.list(true)).toHaveLength(1);
+});
+
+test('model menus retain provider warnings without querying twice', async () => {
+	let calls = 0;
+	const store = new Store(openBun(':memory:')).open();
+	const s = new Service(store, new ConversationService(store, { ...models, list: async () => {
+		calls++;
+		return [{ provider: 'offline', name: 'Offline provider', models: [], error: '401 invalid API key' }];
+	} }));
+	for (const text of ['/models', '/model', '/_page models 0']) {
+		calls = 0;
+		const reply = await s.reply(config, 'bot', newID(), text, signal());
+		expect(reply).toContain('Choose a model');
+		expect(reply).toContain('offline: 401 invalid API key');
+		expect(calls).toBe(1);
+	}
+	store.close();
 });

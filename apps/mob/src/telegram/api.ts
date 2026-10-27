@@ -139,14 +139,13 @@ export function decided(k: Keyboard, ids: Set<string>): Keyboard {
 	return { inline_keyboard: k.inline_keyboard.filter(row => { const f = row[0]?.callback_data.split(/\s+/).filter(Boolean) ?? []; return f.length < 2 || !ids.has(f[1]!); }) };
 }
 
-/** buttons is one Approve/Always allow/Deny row per approval; a tap arrives as a callback query whose data is the matching command. */
+/** buttons keeps one-time decisions separate from remembered approval scopes. */
 export function buttons(approvals: PendingApproval[]): Button[][] {
-	return approvals.map(a => {
+	return approvals.flatMap(a => {
 		const label = approvals.length > 1 ? ' ' + a.tool : '';
 		return [
-			{ text: 'Approve' + label, callback_data: '/approve ' + a.id },
-			{ text: 'Always allow' + label, callback_data: `/approve ${a.id} ${rememberAlways}` },
-			{ text: 'Deny' + label, callback_data: '/deny ' + a.id },
+			[{ text: 'Approve' + label, callback_data: '/approve ' + a.id }, { text: 'Deny' + label, callback_data: '/deny ' + a.id }],
+			[{ text: 'Allow in conversation' + label, callback_data: `/approve ${a.id} conversation` }, { text: 'Always allow' + label, callback_data: `/approve ${a.id} ${rememberAlways}` }],
 		];
 	});
 }

@@ -176,7 +176,7 @@ export function commands(svc: Service): Command[] {
 		name: 'blueprints', usage: '/blueprints', summary: "Show the blueprints tasks follow from done to ready to review", clients: interactive, ownerOnly: true,
 		run: async () => ({ markdown: blueprints.map(b => `- **${b.title}** (\`${b.name}\`${b.name === defaultBlueprint ? ', the default' : ''}): ${steps(b)}.`).join('\n') + '\n\nSet a project\'s with `/projects blueprint NAME BLUEPRINT`.' }),
 	}, {
-		name: 'tasks', usage: '/tasks [PROJECT]', summary: 'Show coding agent tasks and what they are doing', clients: interactive, ownerOnly: true,
+		name: 'tasks', usage: '/tasks [PROJECT]', summary: 'Show coding agent tasks and what they are doing', clients: [...interactive, 'telegram'], ownerOnly: true,
 		run: async ({ fields }) => {
 			const nodes = svc.tree(fields[0] ?? '');
 			return { markdown: nodes.length ? outline(nodes) : 'No tasks yet. Ask Mob to hand coding work in a project to a coding agent.' };

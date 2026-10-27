@@ -19,6 +19,7 @@ function configure(hub: Hub, e: Environment) {
 function plugin(hub: Hub): Plugin {
 	return {
 		name: 'mcp',
+		routes: [{ method: 'GET', path: 'list', handle: async () => hub.list() }],
 		commands: [{
 			name: 'mcp', usage: '/mcp [remove NAME]', summary: 'Show MCP servers and their tools, or remove an installed one', clients: interactive, ownerOnly: true,
 			run: async call => {
