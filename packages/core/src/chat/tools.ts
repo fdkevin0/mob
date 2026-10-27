@@ -181,7 +181,7 @@ export function sandboxTool(box: Sandbox): Tool {
 				timeout: { type: 'integer', minimum: 1, maximum: sandboxMaxTimeout / 1000, description: 'Seconds; default ' + sandboxDefaultTimeout / 1000 },
 			}, required: ['command'], additionalProperties: false,
 		},
-		prompt: 'Use the sandbox tool for any command, code or file work; it is isolated, so it needs no permission.',
+		prompt: "Use the sandbox for isolated calculations, experiments and installed skill scripts; it needs no permission inside its container. It cannot access the user's host projects. When coding-agent tools are available, hand work on those projects to a coding agent.",
 		run: call => box.exec(call.conversationId, String(call.input.command ?? ''), typeof call.input.timeout === 'number' ? Math.trunc(call.input.timeout) * 1000 : 0, call.signal),
 	};
 }
