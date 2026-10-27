@@ -20,7 +20,7 @@ export const menuButtons: Button[][] = [
 const stopButton: Button[][] = [[{ text: 'Stop', callback_data: '/stop' }]];
 
 /** picks names, for a command whose reply offers things to pick from, the command a button for each of them sends. */
-const picks: Record<string, string> = { '/list': '/open', '/open': '/open', '/model': '/model', '/models': '/model', '/grants': '/revoke', '/revoke': '/revoke', '/memories': '/forget', '/forget': '/forget', '/schedules': '/unschedule', '/unschedule': '/unschedule' };
+const picks: Record<string, string> = { '/list': '/open', '/open': '/open', '/model': '/model', '/models': '/model', '/grants': '/revoke', '/revoke': '/revoke', '/forget': '/forget', '/unschedule': '/unschedule', '/_confirm': '/_confirm' };
 
 const pickConversation = 'Conversations, most recent first. Tap one to continue it here; ✓ marks the current one.';
 export const expired = 'That button has expired. Here is the menu again.';
@@ -221,16 +221,12 @@ export class Service {
 			const placeholding = new AbortController();
 			const shown = this.placeholder(bot, u.message!.chat.id, draft, AbortSignal.any([signal, placeholding.signal]));
 			try {
-				let r: Reply;
-				try {
-					this.bindApproval(m);
-					r = u.message!.tap && /^\/_((page|confirm) |more$)/.test(m.text) ? { text: '' } : await this.bridge.answer(m, signal);
-				} catch (err) {
-					if (err instanceof ReplyError) { let p; [p, rows] = await this.present(bot.config, botId, m.text, err.reply); Object.assign(err.reply, p); }
-					throw err;
-				}
-				[r, rows] = await this.present(bot.config, botId, m.text, r);
+				const [r, buttons] = await this.answer(bot.config, botId, m, signal);
+				rows = buttons;
 				return r;
+			} catch (err) {
+				if (err instanceof ReplyError) { let p; [p, rows] = await this.present(bot.config, botId, m.text, err.reply); Object.assign(err.reply, p); }
+				throw err;
 			} finally {
 				this.stops.delete(draft);
 				placeholding.abort();
@@ -295,7 +291,21 @@ export class Service {
 	async reply(c: Config, botId: string, requestId: string, text: string, signal: AbortSignal) {
 		const m = this.message(c, botId, { update_id: 0, message: { text, from: { id: c.userId }, chat: { id: c.userId, type: 'private' } } });
 		m.id = requestId;
-		return (await this.present(c, botId, m.text, await this.bridge.answer(m, signal)))[0].text;
+		return (await this.answer(c, botId, m, signal))[0].text;
+	}
+
+	/** answer renders read-only menus directly; state-changing commands still run through the bridge. */
+	private async answer(c: Config, botId: string, m: ChannelMessage, signal: AbortSignal): Promise<[Reply, Button[][]]> {
+		const text = m.text.trim();
+		const name = text.split(/\s+/, 1)[0]!.slice(1);
+		if (/^\/_(page |confirm |more$)/.test(text) ||
+			(/^\/(list|models|memories|grants|tasks)( |$)/.test(text) || /^\/(model|open|forget|revoke|schedules)$/.test(text)) &&
+			this.conversation.commands.specs(clientTelegram).some(c => c.name === name)) {
+			m.started?.();
+			return this.present(c, botId, text, { text: '' });
+		}
+		this.bindApproval(m);
+		return this.present(c, botId, text, await this.bridge.answer(m, signal));
 	}
 
 	/** announce sends the owner notice n, with buttons for the approvals it says wait. */

@@ -435,7 +435,7 @@ export function Workspace({
 						/>
 					</Suspense>
 				)}
-				{view === 'manage' && <Suspense fallback={panel}><Management connection={connection} tab={managementTab} select={manage} open={id => void open(id)} held={held} /></Suspense>}
+				{view === 'manage' && <Suspense fallback={panel}><Management connection={connection} tab={managementTab} select={manage} open={(id) => void refreshList().then(() => open(id)).catch((e) => setError(errorText(e)))} held={held} /></Suspense>}
 				{view === 'usage' && (
 					<Suspense fallback={panel}>
 						<Usage

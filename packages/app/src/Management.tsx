@@ -144,8 +144,8 @@ function Contents({
 		setError('');
 		setNotice('');
 		try {
-			const result = await run();
-			setNotice(typeof result === 'string' ? result : 'Saved.');
+			await run();
+			setNotice('Done.');
 			setConfirmation(undefined);
 			setRevision((n) => n + 1);
 		} catch (e) {
@@ -166,6 +166,29 @@ function Contents({
 			</Button>
 		);
 	const remove = (path: string) => api(connection, path, {});
+	const bulk = {
+		memories: {
+			count: data?.memories?.length,
+			label: 'Delete all memories',
+			text: 'Delete every saved memory across all conversations? This cannot be undone.',
+			run: () => remove('/memories/all/delete'),
+		},
+		grants: {
+			count: data?.grants?.length,
+			label: 'Revoke all approvals',
+			text: 'Revoke all remembered approvals? Matching tools will ask again.',
+			run: () => remove('/grants/all/delete'),
+		},
+		schedules: {
+			count: data?.schedules?.length,
+			label: 'Cancel all schedules',
+			text: 'Cancel every schedule across all conversations?',
+			run: () => command('/unschedule all'),
+		},
+		projects: undefined,
+		mcp: undefined,
+		skills: undefined,
+	}[tab];
 	return (
 		<>
 			<div className="management-heading">
@@ -174,7 +197,7 @@ function Contents({
 					<Button variant="ghost" disabled={busy} onClick={() => setRevision((n) => n + 1)}>
 						Refresh
 					</Button>
-					{(!!data?.memories?.length || !!data?.grants?.length || !!data?.schedules?.length) && (
+					{!!bulk?.count && (
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button variant="outline" aria-label="More actions" disabled={busy}>
@@ -182,42 +205,9 @@ function Contents({
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent>
-								{!!data?.memories?.length && (
-									<DropdownMenuItem
-										disabled={busy}
-										onSelect={() =>
-											setConfirmation({
-												text: 'Delete every saved memory across all conversations? This cannot be undone.',
-												run: () => remove('/memories/all/delete'),
-											})
-										}
-									>
-										Delete all memories
-									</DropdownMenuItem>
-								)}
-								{!!data?.grants?.length && (
-									<DropdownMenuItem
-										disabled={busy}
-										onSelect={() =>
-											setConfirmation({
-												text: 'Revoke all remembered approvals? Matching tools will ask again.',
-												run: () => remove('/grants/all/delete'),
-											})
-										}
-									>
-										Revoke all approvals
-									</DropdownMenuItem>
-								)}
-								{!!data?.schedules?.length && (
-									<DropdownMenuItem
-										disabled={busy}
-										onSelect={() =>
-											setConfirmation({ text: 'Cancel every schedule across all conversations?', run: () => command('/unschedule all') })
-										}
-									>
-										Cancel all schedules
-									</DropdownMenuItem>
-								)}
+								<DropdownMenuItem disabled={busy} onSelect={() => setConfirmation(bulk)}>
+									{bulk.label}
+								</DropdownMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenu>
 					)}

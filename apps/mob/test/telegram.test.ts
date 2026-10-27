@@ -47,6 +47,7 @@ test('buttons, taps and menus', () => {
 	expect(u.message).toMatchObject({ text: '/new', tap: true, chat: { id: 7, type: 'private' } });
 	expect(menu([{ name: 'ok', usage: '/ok', summary: 'Fine', clients: [] }, { name: 'Bad-Name', usage: '', summary: 'x', clients: [] }])).toEqual([{ command: 'ok', description: 'Fine' }]);
 	expect(picked('/open abc', { inline_keyboard: [] })).toBe(true);
+	expect(picked('/_confirm /forget all', { inline_keyboard: [] })).toBe(true);
 	expect(picked('/new', { inline_keyboard: [[{ text: '', callback_data: '/open x' }]] })).toBe(true);
 	expect(picked('/new', { inline_keyboard: [[{ text: '', callback_data: '/list' }]] })).toBe(false);
 	const s = service();
@@ -132,7 +133,7 @@ test('conversation picker reaches conversations after the first twenty', async (
 	expect(rows.flat().some(b => b.text === 'Next')).toBe(false);
 });
 
-test('paging and confirmation callbacks do not start model turns', async () => {
+test('typed and tapped management menus do not start model turns', async () => {
 	const s = service();
 	const sent: { text: string; reply_markup?: { inline_keyboard: { text: string; callback_data: string }[][] } }[] = [];
 	const bot = new Bot(config, (async (_url, init) => {
@@ -141,8 +142,58 @@ test('paging and confirmation callbacks do not start model turns', async () => {
 	}) as typeof fetch);
 	for (const [i, text] of ['/_page memories 0', '/_confirm /forget all', '/_more'].entries()) {
 		await s.handle(bot, '1', { update_id: i + 100, message: { text, tap: true, from: { id: 7 }, chat: { id: 7, type: 'private' } } }, signal());
+		expect(await s.reply(config, '1', newID(), text, signal())).not.toContain('Received:');
+		await s.handle(bot, '1', { update_id: i + 200, message: { text, from: { id: 7 }, chat: { id: 7, type: 'private' } } }, signal());
 	}
 	expect(s.store.list(true)).toEqual([]);
 	expect(sent.some(m => m.text?.includes('Saved memories'))).toBe(true);
 	expect(sent.some(m => m.reply_markup?.inline_keyboard.flat().some(b => b.callback_data === '/forget all'))).toBe(true);
+});
+
+
+test('model menus query the provider once per request', async () => {
+	let calls = 0;
+	const store = new Store(openBun(':memory:')).open();
+	const s = new Service(store, new ConversationService(store, { ...models, list: async () => { calls++; return []; } }));
+	for (const text of ['/models', '/model', '/_page models 0']) {
+		calls = 0;
+		expect(await s.reply(config, 'bot', newID(), text, signal())).toContain('Choose a model');
+		expect(calls).toBe(1);
+	}
+	expect(store.list(true)).toEqual([]);
+	store.close();
+});
+
+test('local menu replies release the next update before the previous send finishes', async () => {
+	const s = service();
+	const stop = new AbortController();
+	let release!: () => void;
+	const sending = new Promise<void>(resolve => { release = resolve; });
+	let polls = 0, sent = 0;
+	const bot = new Bot(config, (async (url, init) => {
+		const method = String(url).split('/').at(-1);
+		const ok = (result: unknown) => Response.json({ ok: true, result });
+		if (method === 'getMe') return ok({ id: 1 });
+		if (method === 'getWebhookInfo') return ok({ url: '' });
+		if (method === 'getUpdates') {
+			if (!polls++) return ok([1, 2].map(update_id => ({ update_id, message: {
+				text: '/_more', tap: true, from: { id: 7 }, chat: { id: 7, type: 'private' },
+			} })));
+			if (!init?.signal?.aborted) await new Promise(resolve => init?.signal?.addEventListener('abort', resolve, { once: true }));
+			throw stop.signal.reason;
+		}
+		if (method === 'sendMessage' && ++sent === 1) await sending;
+		return ok(true);
+	}) as typeof fetch);
+	const loop = s.loop(bot, stop.signal, () => {});
+	let beforeRelease = 0;
+	try {
+		for (const deadline = Date.now() + 2000; sent < 2 && Date.now() < deadline;) await Bun.sleep(10);
+		beforeRelease = sent;
+	} finally {
+		release();
+		stop.abort();
+		await loop;
+	}
+	expect(beforeRelease).toBe(2);
 });

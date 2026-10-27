@@ -455,6 +455,8 @@ may contain multiple lines. Saving checks authorizes their automatic execution
 in finished tasks' worktrees; the form explains this before saving. Removing a
 project requires confirmation and keeps its tasks, branches and worktrees.
 The form and `/projects` use the same project service and blueprint validation.
+Adding an already-saved name or repository path in the form reports an error;
+it does not rename or replace the existing project.
 
 Telegram's `/tasks [PROJECT]` and **More → Tasks** show paged task summaries.
 Selecting a task switches to its conversation; the list does not execute task

@@ -108,8 +108,9 @@ commands, approvals, delivery records and replies behave the same everywhere.
   - Task buttons open the task's conversation. Notices also offer Open
     conversation and, when available, Schedules, alongside approval buttons.
   - A tap on a list's choice removes the old choice buttons. Long callback
-    commands still use expiring tokens; paging and confirmations do not send
-    prompts to the model.
+    commands still use expiring tokens. List menus query their data once; paging,
+    confirmations and More stay local even when their internal commands are
+    typed instead of tapped. They do not send prompts to the model.
 - The bot's `/` menu comes from the [command registry](commands.md).
 
 ## WeChat iLink

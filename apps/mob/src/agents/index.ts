@@ -24,7 +24,12 @@ export function agentPlugin(svc: Service): Plugin {
 				const input = await body<{ action?: unknown; name?: unknown; path?: unknown; blueprint?: unknown; checks?: unknown }>(req, 64 << 10, ['action', 'name', 'path', 'blueprint', 'checks']);
 				if (typeof input.name !== 'string') throw new CommandError(400, 'name must be text');
 				try {
-					if (input.action === 'add' && typeof input.path === 'string') return await svc.addProject(input.path, input.name);
+					if (input.action === 'add' && typeof input.path === 'string') {
+						const existing = svc.projects();
+						const project = await svc.addProject(input.path, input.name);
+						if (existing.some(p => p.name === project.name)) throw new Error(`Project ${project.name} already exists at ${project.path}.`);
+						return project;
+					}
 					if (input.action === 'remove') { svc.removeProject(input.name); return { removed: true }; }
 					if (input.action === 'save' && typeof input.blueprint === 'string' && Array.isArray(input.checks) && input.checks.every(c => typeof c === 'string' && c.trim())) return svc.setProject(input.name, { blueprint: input.blueprint, checks: input.checks });
 				} catch (e) { throw new CommandError(400, (e as Error).message); }

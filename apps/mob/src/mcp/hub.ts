@@ -435,7 +435,7 @@ export class Hub {
 		return names(this.servers).map(name => {
 			const state = this.states?.get(name);
 			const status = state?.status ?? 'not running';
-			return { name, status, tools: state?.tools.map(t => toolName(name, t.name)) ?? [], removable: !!this.installs()[name], ...(status.startsWith(signInPrefix) ? { signIn: status.slice(signInPrefix.length) } : {}) };
+			return { name, status, tools: state?.tools.map(t => toolName(name, t.name)) ?? [], removable: this.installed(name), ...(status.startsWith(signInPrefix) ? { signIn: status.slice(signInPrefix.length) } : {}) };
 		});
 	}
 

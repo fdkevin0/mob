@@ -256,9 +256,13 @@ test('the catalog lists, installs and removes remote servers', async () => {
 	expect(hub.configured()['example-docs']).toEqual({ url: 'https://docs.example.com/mcp', oauth: true });
 	expect(hub.listings().map(l => l.url)).not.toContain('https://docs.example.com/mcp');
 	expect(hub.describe()).toContain('example-docs (installed)');
+	expect(hub.list().find(s => s.name === 'example-docs')?.removable).toBe(true);
+	hub.configure({ 'example-docs': { url: 'https://configured.example.com/mcp' } });
+	expect(hub.list().find(s => s.name === 'example-docs')?.removable).toBe(false);
 	// config.yaml taking its URL shadows the install.
 	hub.configure({ mine: { url: 'https://docs.example.com/mcp' } });
 	expect(hub.shadowedInstalls()).toEqual(['example-docs']);
+	expect(hub.list().some(s => s.name === 'example-docs')).toBe(false);
 	expect(hub.installed('example-docs')).toBe(false);
 	hub.configure({});
 	await hub.remove('example-docs');

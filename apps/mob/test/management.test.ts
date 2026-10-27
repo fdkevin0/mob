@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Server, Store, ProviderRegistry } from '@mob/core';
@@ -21,6 +21,13 @@ test('project forms share service validation and keep multiline checks intact', 
 		expect((await request({ action: 'add', name: 'demo', path: 'relative' })).status).toBe(400);
 		expect(Bun.spawnSync(['git', 'init', dir]).exitCode).toBe(0);
 		expect((await request({ action: 'add', name: 'demo', path: dir })).status).toBe(200);
+		for (const name of ['demo', 'renamed', '']) expect((await request({ action: 'add', name, path: dir })).status).toBe(400);
+		const other = join(dir, 'other');
+		mkdirSync(other);
+		expect(Bun.spawnSync(['git', 'init', other]).exitCode).toBe(0);
+		expect((await request({ action: 'add', name: 'demo', path: other })).status).toBe(400);
+		expect(svc.projects()).toEqual([{ name: 'demo', path: dir }]);
+		expect(await svc.addProject(dir, 'demo')).toEqual({ name: 'demo', path: dir });
 		const checks = ['echo first\necho second', 'bun test'];
 		expect((await request({ action: 'save', name: 'demo', blueprint: 'quick', checks })).status).toBe(200);
 		expect(svc.project('demo')).toMatchObject({ path: dir, blueprint: 'quick', checks });
