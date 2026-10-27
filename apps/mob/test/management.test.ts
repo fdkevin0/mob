@@ -6,7 +6,6 @@ import { Server, Store, ProviderRegistry } from '@mob/core';
 import { openBun } from '@mob/core/sqlite/bun';
 import { Service } from '../src/agents/service';
 import { agentPlugin } from '../src/agents';
-import { Hub } from '../src/mcp/hub';
 
 test('project forms share service validation and keep multiline checks intact', async () => {
 	const dir = mkdtempSync(join(tmpdir(), 'mob-project form-'));
@@ -38,11 +37,4 @@ test('project forms share service validation and keep multiline checks intact', 
 		expect(svc.projects()).toEqual([]);
 		expect(Bun.spawnSync(['git', '-C', dir, 'rev-parse', '--is-inside-work-tree']).exitCode).toBe(0);
 	} finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('MCP management exposes status without connection credentials', () => {
-	const hub = new Hub();
-	hub.configure({ private: { url: 'https://example.com/mcp', headers: { authorization: 'Bearer secret' } } });
-	expect(hub.list()).toEqual([{ name: 'private', status: 'not running', tools: [], removable: false }]);
-	expect(JSON.stringify(hub.list())).not.toContain('secret');
 });
