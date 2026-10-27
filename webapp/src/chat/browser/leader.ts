@@ -33,6 +33,27 @@ export async function retryOpen<T>(open: (again: boolean) => Promise<T>, attempt
 	}
 }
 
+/**
+ * openSaved opens the database pool, or resolves undefined where Mob may keep
+ * conversations in memory instead. That is only where this browser never
+ * saved any: once it has (saved finds the pool's files), or when taking over
+ * from a leader that kept them, every runner, a new one after a failure
+ * included, keeps trying and then fails rather than serve an empty database
+ * in their place.
+ */
+export async function openSaved<T>(open: (again: boolean) => Promise<T>, saved: () => Promise<boolean>, takeover?: Takeover): Promise<T | undefined> {
+	const keep = takeover?.persistent || await saved();
+	try {
+		// A runner taking over from a closed tab may find the files still held for a moment while that tab's worker goes away.
+		return await retryOpen(open, keep ? 10 : 1);
+	} catch (e) {
+		if (keep) throw new Error(`Mob could not open the conversations saved in this browser (${errorText(e)}). Close other Mob tabs, then try again.`);
+		// Without OPFS, such as in some private windows, conversations last as long as the tab whose runner leads.
+		console.warn('Mob keeps this browser’s conversations in memory: ' + errorText(e));
+		return undefined;
+	}
+}
+
 /** sharedRunner runs one tab's side of the shared runner and returns what handles its page's messages. */
 export function sharedRunner({ tab, post, channel, locks, start, leaderWait = 15_000 }: {
 	tab: string;

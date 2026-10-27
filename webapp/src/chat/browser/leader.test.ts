@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { retryOpen, sharedRunner, type Serving, type Takeover } from './leader';
+import { openSaved, retryOpen, sharedRunner, type Serving, type Takeover } from './leader';
 import type { FromWorker, Shared, ToWorker } from './protocol';
 
 // A browser's Web Locks and BroadcastChannel, shared by fake tabs in one test.
@@ -116,3 +116,31 @@ it('gives up a failed takeover: it stops answering, tells its page, and the next
 	failing.receive(request(2));
 	await vi.waitFor(() => expect(failing.posted.some((m) => m.type === 'end' && m.id === 2)).toBe(true));
 });
+
+it('keeps conversations in memory only where this browser never saved any', async () => {
+	const failing = vi.fn(async (_again: boolean): Promise<string> => { throw new Error('no file system'); });
+	await expect(openSaved(failing, async () => false)).resolves.toBeUndefined();
+	expect(failing).toHaveBeenCalledTimes(1);
+	// Saved files, or a leader that kept them, mean an empty database would hide them.
+	await expect(openSaved(failing, async () => false, { persistent: true })).rejects.toThrow('could not open the conversations saved');
+	await expect(openSaved(async () => 'pool', async () => true)).resolves.toBe('pool');
+}, 10_000);
+
+it('fails, rather than serve an empty database, when the page replaces a runner that lost its takeover', async () => {
+	const b = browser();
+	const held = vi.fn(async (_again: boolean): Promise<Serving> => { throw new Error('the database is still held'); });
+	const start = async (_token: string, takeover?: Takeover) => {
+		const pool = await openSaved(held, async () => true, takeover);
+		return { server: pool ?? server('memory'), persistent: !!pool };
+	};
+	const a = b.tab('a', async () => ({ server: server('from a'), persistent: true }));
+	const first = b.tab('b', start);
+	await vi.waitFor(() => expect(first.posted).toContainEqual({ type: 'ready', persistent: true }));
+	a.close();
+	await vi.waitFor(() => expect(first.posted.some((m) => m.type === 'lost')).toBe(true), { timeout: 5000 });
+	// The page ends that worker and starts another, which finds the lock free and starts without a takeover.
+	first.close();
+	const replacement = b.tab('b2', start);
+	await vi.waitFor(() => expect(replacement.posted.some((m) => m.type === 'failed')).toBe(true), { timeout: 5000 });
+	expect(replacement.posted.some((m) => m.type === 'ready')).toBe(false);
+}, 15_000);

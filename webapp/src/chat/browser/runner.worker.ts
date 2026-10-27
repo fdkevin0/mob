@@ -5,7 +5,7 @@ import init from '@sqlite.org/sqlite-wasm';
 import { ProviderRegistry, Server, Store, type ProvidersFile, type ProvidersStorage } from '@mob/core';
 import { openWasm } from '@mob/core/sqlite/wasm';
 import { chromeBridge } from './chrome';
-import { lockName, retryOpen, sharedRunner, type Takeover } from './leader';
+import { lockName, openSaved, sharedRunner, type Takeover } from './leader';
 import type { FromWorker, Shared, ToWorker } from './protocol';
 import { browserProviders, providerPlugin } from './providers';
 
@@ -25,23 +25,21 @@ function storedProviders(store: Store): ProvidersStorage {
 	};
 }
 
+// saved says whether the pool's files exist, so this browser has kept conversations before.
+async function saved() {
+	try {
+		const files = (await (await navigator.storage.getDirectory()).getDirectoryHandle('mob')) as FileSystemDirectoryHandle & { keys(): AsyncIterable<string> };
+		for await (const _ of files.keys()) return true;
+	} catch { /* no files, or no file system at all */ }
+	return false;
+}
+
 async function start(token: string, takeover?: Takeover) {
 	const sqlite3 = await init();
-	let db, persistent = true;
 	// The pool caches a failed install, so a retry asks it to start over (an option its types leave out).
-	const open = (again: boolean) => sqlite3.installOpfsSAHPoolVfs({ name: 'mob', directory: '/mob', ...{ forceReinitIfPreviouslyFailed: again } });
-	try {
-		// A runner taking over from a closed tab may find the files still held for a moment while that tab's worker goes away.
-		const pool = await retryOpen(open, takeover?.persistent ? 10 : 1);
-		db = new pool.OpfsSAHPoolDb('/mob.sqlite');
-	} catch (e) {
-		// Taking over saved conversations, an empty database in memory would hide them: this tab gives up instead.
-		if (takeover?.persistent) throw e;
-		// Without OPFS, such as in some private windows, conversations last as long as the tab whose runner leads.
-		console.warn('Mob keeps this browser’s conversations in memory: ' + String(e));
-		db = new sqlite3.oo1.DB(':memory:');
-		persistent = false;
-	}
+	const pool = await openSaved(again => sqlite3.installOpfsSAHPoolVfs({ name: 'mob', directory: '/mob', ...{ forceReinitIfPreviouslyFailed: again } }), saved, takeover);
+	const db = pool ? new pool.OpfsSAHPoolDb('/mob.sqlite') : new sqlite3.oo1.DB(':memory:');
+	const persistent = !!pool;
 	const store = new Store(openWasm(db), 'web').open();
 	// Chrome's built-in model answers through the page; every other provider is fetched as usual.
 	const providers = new ProviderRegistry(storedProviders(store), undefined, false, chrome.fetcher((input, init) => fetch(input, init)));
