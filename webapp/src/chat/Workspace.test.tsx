@@ -68,7 +68,7 @@ it.each(['/api/conversations', '/api/runtime', '/api/conversations/one'])('retri
 	render(<Workspace connection={connection} disconnect={() => {}} />);
 	await screen.findByRole('alert');
 	failing = false;
-	fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+	fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 	await screen.findByLabelText('Message');
 	expect(screen.queryByRole('alert')).toBeNull();
 	expect(screen.queryByText('Opening workspace…')).toBeNull();
@@ -82,7 +82,7 @@ it('retries opening the requested conversation while preserving the previous dra
 	fireEvent.click(screen.getByRole('button', { name: 'Second conversation' }));
 	await screen.findByRole('alert');
 	failing = false;
-	fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+	fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 	await waitFor(() => expect(window.location.hash).toBe('#/c/two'));
 	expect(screen.queryByRole('alert')).toBeNull();
 	fireEvent.click(screen.getByRole('button', { name: 'First conversation' }));

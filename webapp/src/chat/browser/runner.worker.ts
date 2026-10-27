@@ -5,7 +5,8 @@ import init from '@sqlite.org/sqlite-wasm';
 import { ProviderRegistry, Server, Store, type ProvidersFile, type ProvidersStorage } from '@mob/core';
 import { openWasm } from '@mob/core/sqlite/wasm';
 import { chromeBridge } from './chrome';
-import type { FromWorker, ToWorker } from './protocol';
+import { hasSaved, lockName, openSaved, sharedRunner, type Takeover } from './leader';
+import type { FromWorker, Shared, ToWorker } from './protocol';
 import { browserProviders, providerPlugin } from './providers';
 
 // The page's DOM types describe a worker's self closely enough for these two.
@@ -24,32 +25,12 @@ function storedProviders(store: Store): ProvidersStorage {
 	};
 }
 
-// One tab at a time owns the database: the pool's file handles are exclusive.
-async function ownDatabase() {
-	if (!navigator.locks) return;
-	await new Promise<void>((resolve, reject) => {
-		void navigator.locks.request('mob-browser-runner', { ifAvailable: true }, lock => {
-			if (!lock) { reject(new Error('Mob is already open in this browser in another tab. Close that tab, then reload this one.')); return undefined; }
-			resolve();
-			// The lock is held for as long as this worker lives.
-			return new Promise(() => {});
-		});
-	});
-}
-
-async function start(token: string) {
-	await ownDatabase();
+async function start(token: string, takeover?: Takeover) {
 	const sqlite3 = await init();
-	let db, persistent = true;
-	try {
-		const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'mob', directory: '/mob' });
-		db = new pool.OpfsSAHPoolDb('/mob.sqlite');
-	} catch (e) {
-		// Without OPFS, such as in some private windows, conversations last until the tab closes.
-		console.warn('Mob keeps this tab’s conversations in memory: ' + String(e));
-		db = new sqlite3.oo1.DB(':memory:');
-		persistent = false;
-	}
+	// The pool caches a failed install, so a retry asks it to start over (an option its types leave out).
+	const pool = await openSaved(again => sqlite3.installOpfsSAHPoolVfs({ name: 'mob', directory: '/mob', ...{ forceReinitIfPreviouslyFailed: again } }), () => hasSaved(navigator.storage?.getDirectory && (() => navigator.storage.getDirectory())), takeover);
+	const db = pool ? new pool.OpfsSAHPoolDb('/mob.sqlite') : new sqlite3.oo1.DB(':memory:');
+	const persistent = !!pool;
 	const store = new Store(openWasm(db), 'web').open();
 	// Chrome's built-in model answers through the page; every other provider is fetched as usual.
 	const providers = new ProviderRegistry(storedProviders(store), undefined, false, chrome.fetcher((input, init) => fetch(input, init)));
@@ -57,50 +38,18 @@ async function start(token: string) {
 	return { server, persistent };
 }
 
-let ready: Promise<Server> | undefined;
-const running = new Map<number, AbortController>();
-
-async function serve(server: Server, m: Extract<ToWorker, { type: 'request' }>) {
-	const abort = new AbortController();
-	running.set(m.id, abort);
-	try {
-		const response = await server.fetch(new Request(m.url, { method: m.method, headers: m.headers, body: m.body, signal: abort.signal }));
-		post({ type: 'head', id: m.id, status: response.status, headers: [...response.headers] });
-		if (response.body) {
-			const reader = response.body.getReader();
-			abort.signal.addEventListener('abort', () => void reader.cancel().catch(() => {}), { once: true });
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				const chunk = value.slice();
-				post({ type: 'chunk', id: m.id, chunk }, [chunk.buffer]);
-			}
-		}
-		post({ type: 'end', id: m.id });
-	} catch (e) {
-		post({ type: 'error', id: m.id, error: e instanceof Error ? e.message : String(e) });
-	} finally {
-		running.delete(m.id);
-	}
-}
+const receive = sharedRunner({
+	tab: crypto.randomUUID(),
+	post,
+	channel: typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel(lockName) as BroadcastChannel & { postMessage(m: Shared): void },
+	locks: navigator.locks,
+	start,
+});
 
 self.onmessage = (event: MessageEvent<ToWorker>) => {
 	const m = event.data;
+	if (receive(m)) return;
 	switch (m.type) {
-		case 'init': {
-			if (ready) return;
-			const started = start(m.token);
-			ready = started.then(s => s.server);
-			started.then(s => post({ type: 'ready', persistent: s.persistent }), e => post({ type: 'failed', error: e instanceof Error ? e.message : String(e) }));
-			return;
-		}
-		case 'request':
-			if (!ready) { post({ type: 'error', id: m.id, error: 'The browser runner has not started.' }); return; }
-			ready.then(server => serve(server, m), e => post({ type: 'error', id: m.id, error: e instanceof Error ? e.message : String(e) }));
-			return;
-		case 'abort':
-			running.get(m.id)?.abort();
-			return;
 		case 'chrome-text':
 		case 'chrome-end':
 		case 'chrome-error':

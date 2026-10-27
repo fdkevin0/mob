@@ -1,4 +1,5 @@
-// The page side of the browser runner: one worker per tab, reached as a fetch.
+// The page side of the browser runner: one worker per tab, reached as a fetch;
+// the workers of all tabs share one database (see runner.worker.ts).
 // The client sees an ordinary Mob service at browserURL.
 import type { Connection } from '../api';
 import { promptChrome } from './chrome';
@@ -8,6 +9,9 @@ type Pending = { head: (r: Response) => void; fail: (e: Error) => void; stream?:
 
 let started: { worker: Worker; ready: Promise<{ persistent: boolean }>; pending: Map<number, Pending> } | undefined;
 let next = 0;
+// busy is set while this tab's runner leads and runs a turn: closing or reloading the tab asks first.
+let busy = false;
+if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => { if (busy) { event.preventDefault(); event.returnValue = ''; } });
 
 function start(token: string) {
 	const worker = new Worker(new URL('./runner.worker.ts', import.meta.url), { type: 'module', name: 'mob-runner' });
@@ -19,6 +23,16 @@ function start(token: string) {
 			const m = event.data;
 			if (m.type === 'ready') { resolve({ persistent: m.persistent }); return; }
 			if (m.type === 'failed') { reject(new Error(m.error)); return; }
+			if (m.type === 'busy') { busy = m.busy; return; }
+			if (m.type === 'lost') {
+				// Requests fail with the reason, and the next one starts a new runner, which leads or follows.
+				const error = new Error(m.error);
+				for (const p of pending.values()) { p.fail(error); try { p.stream?.error(error); } catch { /* already closed */ } }
+				pending.clear();
+				worker.terminate();
+				if (started?.worker === worker) started = undefined;
+				return;
+			}
 			if (m.type === 'chrome') {
 				const abort = new AbortController();
 				prompts.set(m.id, abort);
@@ -51,9 +65,16 @@ function start(token: string) {
 	return { worker, ready, pending };
 }
 
-/** startBrowser starts this tab's runner, once, and resolves when it serves. */
+/** startBrowser starts this tab's runner, once, and resolves when it serves; after a failure, the next call tries again. */
 export function startBrowser(connection: Connection) {
-	started ??= start(connection.token);
+	if (!started) {
+		const run = start(connection.token);
+		started = run;
+		run.ready.catch(() => {
+			run.worker.terminate();
+			if (started === run) started = undefined;
+		});
+	}
 	return started.ready;
 }
 

@@ -19,9 +19,6 @@
 .account-add { display: flex; }
 .account-add-row { display: flex; gap: 8px; align-items: center; }
 .account-add-row .ui-input { flex: 1; }
-.form-error { margin: 0; padding: 10px 12px; border-left: 2px solid var(--wait); background: color-mix(in srgb, var(--wait) 5%, transparent); color: color-mix(in srgb, var(--wait) 55%, var(--text)); font-size: 13px; line-height: 1.45; }
-.form-error .btn { margin-left: 8px; }
-.account-notice { margin: 0; padding: 10px 12px; border-left: 2px solid var(--ok); background: color-mix(in srgb, var(--ok) 5%, transparent); color: var(--ok); font-size: 13px; }
 
 @media (max-width: 640px) {
 	.account-main { padding-left: 16px; padding-right: 16px; }

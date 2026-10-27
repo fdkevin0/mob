@@ -300,6 +300,8 @@ export class ConversationService {
 	}
 
 	isActive(id: string) { return this.active.has(id); }
+	/** busy says whether a turn is running in any conversation. */
+	get busy() { return this.active.size > 0; }
 
 	stop(id: string) {
 		const running = this.active.get(id);

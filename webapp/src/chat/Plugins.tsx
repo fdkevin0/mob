@@ -9,6 +9,7 @@ import { errorText } from './plugins/shared';
 import { Deliveries } from './plugins/Deliveries';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Notice } from '../components/ui/notice';
 
 const tabs = ['email', 'telegram', 'wechat_ilink', 'cloudflare', 'deliveries'] as const;
 
@@ -71,7 +72,7 @@ export function Plugins({ connection }: { connection: Connection }) {
             </TabsTrigger>
           ))}
         </TabsList>
-        {error && <p role="alert">{error}</p>}
+        {error && <Notice tone="error">{error}</Notice>}
         {!config ? (
           <Button onClick={() => void load()}>Retry</Button>
         ) : (

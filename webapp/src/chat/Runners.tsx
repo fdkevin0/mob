@@ -5,6 +5,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { cloud, newKey } from './remote';
 import { hostGuideURL, hosts } from './hosts';
+import { Notice } from '../components/ui/notice';
 
 type Runner = { id: string; session: string | null };
 const storageKey = (id: string) => `mob-runner-key:${id}`;
@@ -181,7 +182,7 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 					</div>
 				</div>
 			)}
-			{error && <p role="alert">{error}</p>}
+			{error && <Notice tone="error">{error}</Notice>}
 		</section>
 	);
 }
