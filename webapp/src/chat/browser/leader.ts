@@ -33,6 +33,26 @@ export async function retryOpen<T>(open: (again: boolean) => Promise<T>, attempt
 	}
 }
 
+type Directory = { getDirectoryHandle(name: string): Promise<{ keys(): AsyncIterable<string> }> };
+/**
+ * hasSaved says whether the pool's files exist, so this browser kept conversations before.
+ * Only a confirmed absence says no: no file system (none at all, or refused, as
+ * in some private windows), no pool directory, or an empty one. Any other
+ * failure to read it is thrown, since it cannot rule saved conversations out.
+ */
+export async function hasSaved(root: (() => Promise<Directory>) | undefined): Promise<boolean> {
+	if (!root) return false;
+	let files;
+	try {
+		files = await (await root()).getDirectoryHandle('mob');
+	} catch (e) {
+		if (e instanceof DOMException && (e.name === 'NotFoundError' || e.name === 'SecurityError')) return false;
+		throw new Error(`Mob could not check this browser for saved conversations (${errorText(e)}). Try again.`);
+	}
+	for await (const _ of files.keys()) return true;
+	return false;
+}
+
 /**
  * openSaved opens the database pool, or resolves undefined where Mob may keep
  * conversations in memory instead. That is only where this browser never

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { openSaved, retryOpen, sharedRunner, type Serving, type Takeover } from './leader';
+import { hasSaved, openSaved, retryOpen, sharedRunner, type Serving, type Takeover } from './leader';
 import type { FromWorker, Shared, ToWorker } from './protocol';
 
 // A browser's Web Locks and BroadcastChannel, shared by fake tabs in one test.
@@ -144,3 +144,23 @@ it('fails, rather than serve an empty database, when the page replaces a runner 
 	await vi.waitFor(() => expect(replacement.posted.some((m) => m.type === 'failed')).toBe(true), { timeout: 5000 });
 	expect(replacement.posted.some((m) => m.type === 'ready')).toBe(false);
 }, 15_000);
+
+it('treats only a confirmed absence as no saved conversations', async () => {
+	const dir = (...names: string[]) => async () => ({
+		getDirectoryHandle: async (name: string) => {
+			if (!names.length) throw new DOMException('missing', 'NotFoundError');
+			return { async *keys() { yield* names; } };
+		},
+	});
+	await expect(hasSaved(undefined)).resolves.toBe(false);
+	await expect(hasSaved(dir())).resolves.toBe(false);
+	await expect(hasSaved(dir('.opaque'))).resolves.toBe(true);
+	await expect(hasSaved(async () => { throw new DOMException('private window', 'SecurityError'); })).resolves.toBe(false);
+	// A file system that fails to answer may hold saved conversations, so startup fails rather than start empty.
+	await expect(hasSaved(async () => { throw new DOMException('backend failed', 'UnknownError'); })).rejects.toThrow('could not check');
+	const broken = { getDirectoryHandle: async () => ({ keys: () => ({ [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(new DOMException('read failed', 'NotReadableError')) }) }) }) };
+	await expect(hasSaved(async () => broken)).rejects.toThrow('read failed');
+	const empty = vi.fn(async (_again: boolean): Promise<string> => { throw new Error('no file system'); });
+	await expect(openSaved(empty, () => hasSaved(async () => { throw new DOMException('backend failed', 'UnknownError'); }))).rejects.toThrow('could not check');
+	expect(empty).not.toHaveBeenCalled();
+});

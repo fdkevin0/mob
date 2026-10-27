@@ -5,7 +5,7 @@ import init from '@sqlite.org/sqlite-wasm';
 import { ProviderRegistry, Server, Store, type ProvidersFile, type ProvidersStorage } from '@mob/core';
 import { openWasm } from '@mob/core/sqlite/wasm';
 import { chromeBridge } from './chrome';
-import { lockName, openSaved, sharedRunner, type Takeover } from './leader';
+import { hasSaved, lockName, openSaved, sharedRunner, type Takeover } from './leader';
 import type { FromWorker, Shared, ToWorker } from './protocol';
 import { browserProviders, providerPlugin } from './providers';
 
@@ -25,19 +25,10 @@ function storedProviders(store: Store): ProvidersStorage {
 	};
 }
 
-// saved says whether the pool's files exist, so this browser has kept conversations before.
-async function saved() {
-	try {
-		const files = (await (await navigator.storage.getDirectory()).getDirectoryHandle('mob')) as FileSystemDirectoryHandle & { keys(): AsyncIterable<string> };
-		for await (const _ of files.keys()) return true;
-	} catch { /* no files, or no file system at all */ }
-	return false;
-}
-
 async function start(token: string, takeover?: Takeover) {
 	const sqlite3 = await init();
 	// The pool caches a failed install, so a retry asks it to start over (an option its types leave out).
-	const pool = await openSaved(again => sqlite3.installOpfsSAHPoolVfs({ name: 'mob', directory: '/mob', ...{ forceReinitIfPreviouslyFailed: again } }), saved, takeover);
+	const pool = await openSaved(again => sqlite3.installOpfsSAHPoolVfs({ name: 'mob', directory: '/mob', ...{ forceReinitIfPreviouslyFailed: again } }), () => hasSaved(navigator.storage?.getDirectory && (() => navigator.storage.getDirectory())), takeover);
 	const db = pool ? new pool.OpfsSAHPoolDb('/mob.sqlite') : new sqlite3.oo1.DB(':memory:');
 	const persistent = !!pool;
 	const store = new Store(openWasm(db), 'web').open();
