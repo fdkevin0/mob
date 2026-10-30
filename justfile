@@ -45,6 +45,7 @@ test: test-core test-web test-integration test-dsh
 
 test-core:
     bun run test:core
+    bun run test:release
 
 test-web:
     bun run test:web

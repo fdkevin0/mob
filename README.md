@@ -8,13 +8,12 @@ anything with an effect waits for your approval.
 
 ## Install
 
-Download an archive for Linux, macOS or Windows from the
-[releases page](https://github.com/fdkevin0/mob/releases). Every change to `main`
-is published there as a nightly prerelease named `{date}.{sha}`. To build from
-source, see [CONTRIBUTING.md](CONTRIBUTING.md).
+```bash
+npm install -g usemob      # or: bun add -g --trust usemob
+```
 
-Stable `vX.Y.Z` releases and `brew install fdkevin0/tap/mob` start with the first
-stable release; none is published yet.
+Nightly builds, archives, upgrading and building from source are in
+[Install](docs/install.md).
 
 ## Use
 

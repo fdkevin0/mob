@@ -25,6 +25,7 @@
     "build:desktop": "bun run --cwd apps/desktop package",
     "test:desktop": "bun run --cwd apps/desktop typecheck && bun run --cwd apps/desktop test",
     "test:core": "bun run --cwd packages/core typecheck && bun run --cwd packages/core test && bun run --cwd apps/mob typecheck && bun run --cwd apps/mob test",
+    "test:release": "bun test scripts/npm",
     "test:integration": "bun apps/mob/scripts/check-chat.ts",
     "test:runner": "bun run --cwd apps/web check:runner",
     "test:site": "bun run --cwd apps/web check:site",

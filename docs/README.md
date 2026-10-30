@@ -3,6 +3,7 @@
 These pages, with the repository's README and CONTRIBUTING, are published at
 https://usemob.app/docs.
 
+- [Install](install.md): npm, Bun, nightly builds and archives.
 - [Features](features/README.md): how each part of Mob behaves today. Start here
   to use or change a feature.
 - [Architecture](architecture.md): where code lives and the boundaries between

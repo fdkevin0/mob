@@ -44,6 +44,7 @@ export const pages: Page[] = [
 		title: 'Mob',
 		description: 'A personal AI assistant that runs on your own machine.',
 	},
+	{ source: 'docs/install.md', slug: 'install', group: 'Start', description: 'Install Mob with npm or Bun.' },
 	{ source: 'docs/features/README.md', slug: 'features', group: 'Features', title: 'Overview' },
 	...features.map((name): Page => ({ source: `docs/features/${name}.md`, slug: `features/${name}`, group: 'Features' })),
 	{
