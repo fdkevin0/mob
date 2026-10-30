@@ -1,10 +1,14 @@
 // Publishes the npm packages that `bun scripts/release.ts --npm` wrote to
 // dist/npm (docs/features/releases.md). Without NPM_TOKEN it only lists them.
+//
+//   bun scripts/npm/publish.ts [--dir dist/npm]
 import { $ } from 'bun';
 import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 
-const out = resolve(import.meta.dir, '../../dist/npm');
+const { values } = parseArgs({ options: { dir: { type: 'string' } } });
+const out = resolve(values.dir ?? resolve(import.meta.dir, '../../dist/npm'));
 const { version, tag, packages } = await Bun.file(join(out, 'publish.json')).json() as { version: string; tag: string; packages: string[] };
 const token = process.env.NPM_TOKEN;
 if (!token) {

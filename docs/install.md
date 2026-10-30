@@ -30,14 +30,15 @@ where they are.
 ## Platforms
 
 Mob is published for Linux and macOS (x64 and arm64) and Windows (x64). The
-package installs one compiled binary for your machine, and Mob needs neither
-Node.js nor Bun to run.
+package installs one compiled binary for your machine.
 
-On Linux and macOS the package's install script puts that binary in place of
-the `mob` command. Bun runs install scripts only for packages you trust, which
-is what `--trust` does. Without it, or with `--ignore-scripts`, `mob` is a small
-launcher that needs Node.js on your `PATH`. On Windows `mob` is always that
-launcher.
+- **Linux and macOS**: the package's install script puts that binary in place
+  of the `mob` command, so Mob runs without Node.js or Bun. Bun runs install
+  scripts only for packages you trust, which is what `--trust` does. Without
+  it, or with `--ignore-scripts`, the install prints a warning and `mob` is a
+  small launcher that needs Node.js on your `PATH`.
+- **Windows**: `mob` is always that launcher, so it needs Node.js on your
+  `PATH`. Use an archive below to run Mob without it.
 
 ## Without npm
 
