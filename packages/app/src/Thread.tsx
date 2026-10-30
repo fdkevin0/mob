@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { isToolUIPart } from 'ai';
 import type { Changes } from '@mob/client';
 import { useConversation } from './useConversation';
@@ -12,6 +12,7 @@ import {
 import { JsonResponse, Message, MessageContent, MessageResponse } from './ai-elements/message';
 import { Button } from '@mob/ui/button';
 import { ApprovalPrompt } from './ApprovalPrompt';
+import { PlanCard, planInput } from './PlanCard';
 import { Label } from '@mob/ui/label';
 import { Textarea } from '@mob/ui/textarea';
 import { Dialog, DialogTrigger } from '@mob/ui/dialog';
@@ -107,6 +108,13 @@ export function Thread({
 		setInput(draft);
 		clearDraft?.();
 	}, []);
+	// Plans show their tasks live, and open a task's conversation; one value for every message keeps them memoized.
+	const action = useRef(onAction);
+	action.current = onAction;
+	const plans = useMemo<Plans>(
+		() => ({ connection, changes, open: (conversationId) => action.current({ kind: 'open-conversation', conversationId }) }),
+		[connection, changes],
+	);
 	const completion = useCompletion({ connection, id, input, setInput });
 	const context = useContextUsage(connection, id, messages, model, busy);
 	const [choosing, setChoosing] = useState(false);
@@ -179,6 +187,7 @@ export function Thread({
 							decide={decide}
 							proceed={proceed}
 							resend={resend}
+							plans={plans}
 							asked={index === messages.length - 1 ? askedBy(messages) : undefined}
 						/>
 					))}
@@ -413,6 +422,7 @@ const MessageView = memo(function MessageView({
 	decide,
 	proceed,
 	resend,
+	plans,
 	asked,
 }: {
 	message: ChatMessage;
@@ -422,6 +432,7 @@ const MessageView = memo(function MessageView({
 	decide: Decide;
 	proceed: () => void;
 	resend: Resend;
+	plans: Plans;
 	/** asked is the owner's message this reply answers, when it is the last reply and can be asked for again. */
 	asked?: ChatMessage;
 }) {
@@ -464,6 +475,26 @@ const MessageView = memo(function MessageView({
 					if (isToolUIPart(part)) {
 						const name = part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5);
 						const state = toolState(part.state);
+						const plan = name === 'task_plan' ? planInput(part.input) : undefined;
+						if (plan)
+							return (
+								<PlanCard
+									key={part.toolCallId}
+									{...plans}
+									input={plan}
+									output={part.state === 'output-available' ? part.output : undefined}
+									state={state}
+								>
+									{part.state === 'approval-requested' && (
+										<ApprovalPrompt
+											question={`Mob wants to start ${(plan.tasks ?? []).length === 1 ? 'this task' : 'these tasks'} at once.`}
+											busy={busy}
+											decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
+										/>
+									)}
+									{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
+								</PlanCard>
+							);
 						return (
 							<details
 								className={`tool-call ${state.kind}`}
@@ -600,6 +631,9 @@ function MessageEditor({ text, cancel, send }: { text: string; cancel: () => voi
 		</form>
 	);
 }
+
+/** Plans is what a plan card needs from its conversation. */
+type Plans = { connection: Connection; changes?: Changes; open: (conversationId: string) => void };
 
 // toolState turns an AI SDK tool state into what the row shows: running, waiting for approval, done or failed.
 function toolState(state: string): { kind: string; label: string; icon: ReactNode } {
