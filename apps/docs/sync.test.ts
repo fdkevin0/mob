@@ -52,6 +52,14 @@ describe('convert', () => {
 		);
 	});
 
+	test('frames a prototype where the page shows its screenshot', () => {
+		const out = convert('# Plans\n\n<!-- prototype: /prototype/plan/?flow=0.build -->\n![The plan as a flow](../images/plan-flow.png)\n', page);
+		expect(out).toContain('\n\n<iframe class="prototype" src="/prototype/plan/?flow=0.build" title="The plan as a flow" loading="lazy"></iframe>\n');
+		expect(out).not.toContain('plan-flow.png');
+		expect(() => convert('# Plans\n\n<!-- prototype: /prototype/plan/ -->\nText\n', page)).toThrow('goes on the line before an image');
+		expect(() => convert('# Plans\n\n<!-- prototype: https://example.com/ -->\n![x](../images/plan-flow.png)\n', page)).toThrow('not a prototype');
+	});
+
 	test('edits a generated page at its source', () => {
 		const reference = pages.find((entry) => entry.source === 'docs/environment-variables.md')!;
 		expect(convert('# Keys\n', reference)).toContain(`editUrl: "${github}/edit/main/apps/mob/src/config.ts"`);

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" class="dark" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A working prototype of a Mob plan, with sample data, for the documentation." />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0c0d0f" />
+    <!-- Applies the saved or system colour scheme before the first paint; see packages/ui/src/theme/theme.ts. Its hash is in apps/web/worker/index.ts. -->
+    <script>(function(){var t;try{t=localStorage.getItem('starlight-theme')}catch(e){}var l=t==='light'||t!=='dark'&&matchMedia('(prefers-color-scheme: light)').matches,r=document.documentElement;r.dataset.theme=l?'light':'dark';r.classList.toggle('dark',!l);if(l)document.querySelector('meta[name="theme-color"]').setAttribute('content','#f4f3ee')})()</script>
+    <link rel="icon" type="image/png" sizes="32x32" href="/node_modules/@mob/ui/src/brand/favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" href="/node_modules/@mob/ui/src/brand/favicon.svg" />
+    <link rel="apple-touch-icon" href="/node_modules/@mob/ui/src/brand/apple-touch-icon.png" />
+    <title>Mob · Plan prototype</title>
+  </head>
+  <body class="prototype-page">
+    <div id="root"></div>
+    <script type="module" blocking="render" src="/src/prototype/main.tsx"></script>
+  </body>
+</html>

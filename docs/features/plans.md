@@ -5,6 +5,7 @@ them as one **plan**: up to six coding tasks in one project, each for its own
 agent in its own worktree and branch. You approve the plan once, and every
 task starts.
 
+<!-- prototype: /prototype/plan/ -->
 ![A plan card in the conversation: three tasks, each with the steps its blueprint runs](../images/plan-card.png)
 
 Each row is one task: its title, its agent, what its
@@ -21,13 +22,12 @@ back to the agent, and how often: a failing check up to its retries, a
 review's findings up to its rounds. Every lane ends with you, and shipping is
 always yours: Mob does not push or merge.
 
+<!-- prototype: /prototype/plan/?flow=0.verify -->
 ![The plan as a flow: one lane per task, with the loops back to the agent](../images/plan-flow.png)
 
 Click a step to see what it does. Details stay a click further: a task's
 instructions sit under **Instructions**, and a started task's last checks and
 the review's conclusion under their own headings.
-
-![The step inspector for a task's checks](../images/plan-step.png)
 
 ## Change a plan before you approve it
 
@@ -44,9 +44,8 @@ A changed step gets a dot, and the decision reads **Approve with N changes**;
 **Undo changes** puts the plan back as Mob asked. Mob checks your changes as
 it checks a blueprint before it starts anything.
 
+<!-- prototype: /prototype/plan/?flow=2.ready -->
 ![Changing a review: security added, one round at most](../images/plan-edit.png)
-
-![The decision with two changes, and Undo changes](../images/plan-approve-changes.png)
 
 A task of the `manual` blueprint leaves checking to Mob's model, so it has
 no stages to change. Which agent works on a task cannot be changed here yet.
@@ -57,13 +56,12 @@ Once approved, each row shows where its task is, and its status opens the
 task's conversation. The pills light up as the task moves: done in green,
 working in blue, waiting for you in amber.
 
+<!-- prototype: /prototype/plan/?started=6 -->
 ![A started plan: one task in review, one reworking after a failed check, one ready](../images/plan-card-running.png)
 
 In the flow, the step a task is on says what is happening, such as
 "Round 1" in review or "Fixing what the checks found", and the inspector
 opens its conversation.
-
-![A started plan as a flow, with the review step of the first task selected](../images/plan-flow-running.png)
 
 You hear once per task, when it is **Ready to review** or **needs you** (see
 [Blueprints](coding-agents.md#blueprints)).

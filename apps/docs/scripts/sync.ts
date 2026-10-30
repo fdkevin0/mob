@@ -39,18 +39,42 @@ export function convert(markdown: string, page: Page): string {
 	const title = page.title ?? lines[heading].slice(2).trim();
 	lines.splice(heading, 1);
 	let fence = '';
+	let prototype = '';
 	const body = lines.map((line) => {
 		const marker = line.match(/^\s*(```+|~~~+)/)?.[1];
 		if (marker && (!fence || marker.startsWith(fence))) {
 			fence = fence ? '' : marker;
 			return line;
 		}
-		return fence ? line : rewriteLinks(line, page);
+		if (fence) return line;
+		const embed = line.match(/^<!-- prototype: (\S+) -->$/)?.[1];
+		if (embed) {
+			if (!embed.startsWith('/prototype/')) throw new Error(`${page.source} embeds ${embed}, which is not a prototype`);
+			prototype = embed;
+			return '';
+		}
+		if (prototype) {
+			const src = prototype;
+			prototype = '';
+			return framed(line, page, src);
+		}
+		return rewriteLinks(line, page);
 	});
 	const frontmatter = ['---', `title: ${JSON.stringify(title)}`];
 	if (page.description) frontmatter.push(`description: ${JSON.stringify(page.description)}`);
 	frontmatter.push(`editUrl: ${JSON.stringify(`${repositoryUrl}/edit/main/${page.editSource ?? page.source}`)}`, '---');
 	return `${frontmatter.join('\n')}\n${body.join('\n').replace(/^\n+/, '\n')}`;
+}
+
+// A page shows a working prototype on the site where it shows a screenshot on
+// GitHub: `<!-- prototype: /prototype/plan/?flow=0.build -->` on the line
+// before an image frames that page in its place, titled with the image's text.
+function framed(line: string, page: Page, src: string): string {
+	const image = line.match(/^!\[([^\]]+)\]\([^)]+\)$/);
+	if (!image) throw new Error(`${page.source}: a prototype comment goes on the line before an image`);
+	// The screenshot must still exist, for GitHub.
+	rewriteLinks(line, page);
+	return `<iframe class="prototype" src="${src}" title="${image[1].replace(/"/g, '&quot;')}" loading="lazy"></iframe>`;
 }
 
 // Rewrites inline links and images (with or without a title), reference

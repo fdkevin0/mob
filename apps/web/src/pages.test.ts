@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 // their head: one inline theme script and the calf icons.
 const root = path.resolve(__dirname, '..');
 const app = path.join(root, 'node_modules/@mob/app');
-const pages = [path.join(app, 'index.html'), ...['app.html', 'landing.html', 'account.html', 'demo.html'].map((page) => path.join(root, page))];
+const pages = [path.join(app, 'index.html'), ...['app.html', 'landing.html', 'account.html', 'demo.html', 'prototype.html'].map((page) => path.join(root, page))];
 const inline = (file: string) => {
 	const scripts = [...readFileSync(file, 'utf8').matchAll(/<script>([^<]*)<\/script>/g)].map((m) => m[1]);
 	expect(scripts, file).toHaveLength(1);

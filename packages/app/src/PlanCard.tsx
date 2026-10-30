@@ -63,6 +63,7 @@ export function PlanCard({
 	state,
 	open,
 	approval,
+	defaultFlow,
 	children,
 }: {
 	connection: Connection;
@@ -74,6 +75,8 @@ export function PlanCard({
 	open: (conversationId: string) => void;
 	/** approval decides the plan while it waits for the owner, with what they changed in it as input. */
 	approval?: { busy: boolean; decide: (approved: boolean, reason?: string, remember?: string, input?: unknown) => void };
+	/** defaultFlow opens the flow on this step at first, such as "0.build" (the docs' prototypes do). */
+	defaultFlow?: string;
 	children?: ReactNode;
 }) {
 	const done = planOutput(output);
@@ -83,7 +86,9 @@ export function PlanCard({
 		changes,
 		started.map((t) => t.conversation),
 	);
-	const [flow, setFlow] = useState<string | undefined>();
+	const [flow, setFlow] = useState<string | undefined>(defaultFlow);
+	// A flow open from the start leaves focus where it is, so the page around it does not scroll to it.
+	const quiet = useRef(defaultFlow !== undefined);
 	const [changed, setChanged] = useState<Change[]>([]);
 	const tasks = input.tasks ?? [];
 	const editable = !!approval;
@@ -205,7 +210,14 @@ export function PlanCard({
 			{decide}
 			{children}
 			<Dialog open={flow !== undefined} onOpenChange={(show) => !show && setFlow(undefined)}>
-				<DialogContent className="plan-flow-dialog" aria-describedby={undefined}>
+				<DialogContent
+					className="plan-flow-dialog"
+					aria-describedby={undefined}
+					onOpenAutoFocus={(e) => {
+						if (quiet.current) e.preventDefault();
+						quiet.current = false;
+					}}
+				>
 					<header className="plan-flow-head">
 						<DialogTitle>{title}</DialogTitle>
 						{input.summary && <DialogDescription>{input.summary}</DialogDescription>}
