@@ -1,4 +1,4 @@
-import { calfColors, calfHead } from '../../../webapp/src/components/brand/calfHead';
+import { calfColors, calfHead } from '@mob/ui/brand/calfHead';
 
 // calfBitmap draws the logo at scale pixels per cell as BGRA, the layout
 // Electron's nativeImage.createFromBitmap takes.

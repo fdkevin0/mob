@@ -9,7 +9,8 @@ You need Bun (version in `package.json`). The desktop app is Electron in
 bun install --frozen-lockfile
 bun run build:cli                 # web UI + build/mob
 ./build/mob serve --demo          # offline model, no keys needed
-bun run dev                       # Vite, alongside a running service
+bun run dev                       # the web UI (@mob/app) in Vite, alongside a running service
+bun run dev:web                   # the public site (apps/web): landing, demo, account and /app
 bun run desktop                   # Electron window around the running service
 ```
 
@@ -44,8 +45,8 @@ amp orb service start mob --command './build/mob serve --demo' --port 8787 --por
 ## Tests
 
 `just test` runs the core and host typecheck and tests (`bun run test:core`),
-the UI typecheck and Vitest suite (`bun run test:webapp`), and
-`scripts/check-chat.ts`, which builds the binary, starts a temporary service and
+the UI typecheck and Vitest suite (`bun run test:web`), and
+`apps/mob/scripts/check-chat.ts`, which builds the binary, starts a temporary service and
 reads its stream with the real AI SDK UI parser and shared client. It also runs
 `bun run test:dsh`, the optional DSH bridge's typecheck and runtime tests; the
 host's MCP tests run the bridge when its dependencies are installed. See
@@ -62,6 +63,52 @@ after host changes reach `main`, weekly and by hand, never on pull requests.
 Tests use temporary data directories, local fixtures and fake providers, so
 they need no keys and send nothing to real models, mailboxes or chats.
 
+### Prompt evaluations
+
+`apps/mob/scripts/prompts/cases.ts` holds 20 synthetic scenarios with behavior
+rubrics: language, missing context, tool failures, uncertain side effects,
+external instructions, denial, tool discovery, delegation and summarization.
+Capture the baseline **before** changing prompts, then capture the candidate:
+
+```bash
+bun apps/mob/scripts/prompt-eval.ts > /tmp/mob-prompts-before.json
+# Edit prompts, then:
+bun apps/mob/scripts/prompt-eval.ts > /tmp/mob-prompts-after.json
+```
+
+Capture uses the real engine, summary builder and tool definitions with an
+in-memory store and a fake model. It calls no external service or tool. The
+fixture environment offers sandbox and tool search; manager cases also offer
+coding-agent tools. Email turn cases offer the production email tools and
+their prompt guidance, but cannot access email configuration or execute sends.
+This is a controlled fixture, not a user's live setup.
+The host tests check deterministic capture and that replay never runs tools.
+
+Replay is opt-in and uses an OpenAI-compatible Chat Completions endpoint:
+
+```bash
+bun apps/mob/scripts/prompt-eval.ts --input /tmp/mob-prompts-before.json --url http://localhost:1234/v1 --model MODEL > /tmp/mob-results-before.json
+bun apps/mob/scripts/prompt-eval.ts --input /tmp/mob-prompts-after.json --url http://localhost:1234/v1 --model MODEL > /tmp/mob-results-after.json
+```
+
+For an authenticated endpoint, add `--key-file /path/to/key`; keys are not
+included in reports. Replay sends fixture requests to the named endpoint and
+may incur model charges. Each case makes one model decision or one summary;
+proposed tool calls are recorded, never executed. It does not test ACP agents,
+multi-step task completion or resumption after a generated summary.
+
+Grade each rubric item as pass/fail with a short evidence note; do not infer a
+pass from a tool's name alone or exact response wording. Compare paired cases
+with the same model and settings and repeat runs to expose variability.
+Reports record the source revision, a hash of each exact request, responses,
+tool arguments, latency and provider-reported usage. Request hashes distinguish
+uncommitted prompt changes too. Failed requests are recorded alongside the
+other cases and make the command exit unsuccessfully; they are not behavior
+scores, and their usage may be incomplete. Compare tokens and latency alongside rubric
+results; calculate money only with the endpoint's applicable prices. Keep
+reports outside the repository. Add a regression scenario when a real failure
+reveals a missing constraint, using synthetic data rather than user transcripts.
+
 ## Generated references
 
 Edit the source and regenerate the affected artifact. Tests reject stale output.
@@ -69,7 +116,7 @@ Edit the source and regenerate the affected artifact. Tests reject stale output.
 | Artifact | Source | Regenerate from the repository root |
 | --- | --- | --- |
 | `docs/environment-variables.md` | `apps/mob/src/config.ts` | `bun run generate:configdocs` |
-| `webapp/public/logo.png` | `webapp/public/logo.svg` | `rsvg-convert -o webapp/public/logo.png webapp/public/logo.svg` (librsvg) |
+| `apps/web/public/logo.png` | `apps/web/public/logo.svg` | `rsvg-convert -o apps/web/public/logo.png apps/web/public/logo.svg` (librsvg) |
 
 ### Documentation site
 
@@ -94,7 +141,7 @@ For documentation writing or organization, the repository skill
 The app, landing page, demo, account page and documentation share one look: a
 quiet rounded workspace, with pixel art kept for the calves.
 
-- Colours, radii and fonts are tokens in `webapp/src/styles/theme.css` (the
+- Colours, radii and fonts are tokens in `packages/ui/src/styles/theme.css` (the
   docs palette is in `apps/docs/src/theme.css`). Other stylesheets use the
   tokens; a new colour becomes a token or a named custom property first.
 - Radii come from one scale: `--radius-code` (4px) for code and keys,
@@ -107,13 +154,14 @@ quiet rounded workspace, with pixel art kept for the calves.
   machine values, not for labels, kickers or buttons.
 - Lime marks a signal (the primary action, the current item, success), not
   decoration. Only the calves are pixel art; other icons are line icons
-  (`webapp/src/components/brand/Icon.tsx`).
-- Reuse the shared pieces: `SiteHeader`/`SiteFooter` and `Segmented` in
-  `webapp/src/components`, `ThemePicker` in `webapp/src/theme`, and the `.btn`,
+  (`packages/ui/src/brand/Icon.tsx`).
+- Reuse the shared pieces: `Segmented` and the other controls in `@mob/ui`
+  (`packages/ui/src/ui`), `SiteHeader`/`SiteFooter` in `apps/web/src/site`,
+  `ThemePicker` in `packages/ui/src/theme`, and the `.btn`,
   `.ui-input`, `.ui-menu` and `.dialog-panel` classes in
-  `webapp/src/styles/base.css`. Every page supports System, Light and Dark.
+  `packages/ui/src/styles/base.css`. Every page supports System, Light and Dark.
 
-`webapp/src/theme/style-rules.test.ts` (part of `bun run test:webapp`) checks
+`packages/ui/src/theme/style-rules.test.ts` (part of `bun run test:web`) checks
 the colour, radius and shadow rules over every stylesheet. The chat styles and
 the demo's copy of them still carry older radii, counted in that test; lower
 the count when you move one onto the scale.
@@ -144,5 +192,5 @@ the count when you move one onto the scale.
 - Formatting: `.editorconfig` and `.prettierrc`.
 - Never commit provider keys, tokens or databases.
 
-AI Elements sources in `webapp/src/components/ai-elements/` keep
-[their Apache-2.0 license and provenance](webapp/src/components/ai-elements/SOURCE.md).
+AI Elements sources in `packages/app/src/ai-elements/` keep
+[their Apache-2.0 license and provenance](packages/app/src/ai-elements/SOURCE.md).

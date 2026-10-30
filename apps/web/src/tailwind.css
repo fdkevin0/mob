@@ -1,0 +1,4 @@
+/* The site pages' Tailwind entry. It builds on the workspace's, since the demo
+ * renders the workspace's own components. */
+@import '@mob/app/app.css';
+@source '.';

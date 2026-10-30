@@ -10,7 +10,9 @@ import type { Service } from './service';
 import { outline } from './tree';
 
 /** managerPrompt makes Mob's own model the owner's project manager. */
-const managerPrompt = "You are also the owner's project manager. Hand coding work in a project (changes, fixes, investigations, reviews) to a coding agent with task_start instead of doing it yourself; each task works on its own branch. When the work splits into parts that can go on at once, propose them together with task_plan, so the owner approves the plan once instead of each task. Use tasks to report progress and what waits for the owner's decision, task_message to pass on instructions, and task_stop to stop a task. Each task you start follows a blueprint: once its agent is done, Mob itself runs the project's checks, has another agent review the work, sends what fails back to the agent, and tells the owner when it is ready, so do not check or review it again unless the owner asks. A task of the manual blueprint is yours to check when Mob asks: task_diff shows what it changed, and task_check runs the tests or build in its worktree.";
+const managerPrompt = `You are also the owner's project manager. Hand coding work in a host project (changes, fixes, investigations, reviews) to a coding agent with task_start; use the sandbox for unrelated isolated calculations and skill scripts. When the work splits into parts that can go on at once, propose them together with task_plan, so the owner approves the plan once instead of each task; give each task its own self-contained brief.
+The coding agent does not automatically receive this conversation. Give it a self-contained brief: goal and project, scope and user constraints, relevant evidence and decisions, and acceptance checks. Preserve earlier constraints such as no new dependencies, API compatibility and analysis-only work unless the user changed them. Separate known facts from hypotheses; do not invent missing requirements. Tell it to read applicable project instructions, including AGENTS.md, before working and to report changes, verification and unfinished work. For analysis or review, explicitly require no file changes. Pass later corrections to the existing task with task_message rather than starting duplicate work.
+Use tasks to report progress and what waits for the owner's decision, task_message to pass on instructions, and task_stop to stop a task. Each task you start follows a blueprint: once its agent is done, Mob itself runs the project's checks, has another agent review the work, sends what fails back to the agent, and tells the owner when it is ready, so do not check or review it again unless the owner asks. A task of the manual blueprint is yours to check when Mob asks: task_diff shows what it changed, and task_check runs the tests or build in its worktree.`;
 
 /** replyLimit bounds the latest reply tasks shows for each task, in characters. */
 const replyLimit = 600;
@@ -37,7 +39,7 @@ export function tools(svc: Service): Tool[] {
 		description: "Ask the owner to approve handing coding work to a coding agent. The agent works in a new git worktree and branch of the project; the turn stops until the owner approves.",
 		parameters: object({
 			project: text("A project's name, or the absolute path of a git repository on this computer"),
-			prompt: text('What the agent should do, with everything it needs to know'),
+			prompt: text('Self-contained task brief: goal, scope and user constraints, known evidence and decisions, acceptance checks, and a reminder to read applicable project instructions. The agent does not receive the parent conversation.'),
 			title: text('A short title for the task'),
 			agent: { type: 'string', enum: agents, description: 'The coding agent; default ' + agents[0] },
 			share: text(`A task's ID: work read-only in that task's worktree and branch instead of a new one, seeing its uncommitted changes, such as to review it; project is then that task's. Only ${readers().join(' and ')} can`),
@@ -238,7 +240,7 @@ export function commands(svc: Service): Command[] {
 		name: 'blueprints', usage: '/blueprints', summary: "Show the blueprints tasks follow from done to ready to review", clients: interactive, ownerOnly: true,
 		run: async () => ({ markdown: blueprints.map(b => `- **${b.title}** (\`${b.name}\`${b.name === defaultBlueprint ? ', the default' : ''}): ${steps(b)}.`).join('\n') + '\n\nSet a project\'s with `/projects blueprint NAME BLUEPRINT`.' }),
 	}, {
-		name: 'tasks', usage: '/tasks [PROJECT]', summary: 'Show coding agent tasks and what they are doing', clients: interactive, ownerOnly: true,
+		name: 'tasks', usage: '/tasks [PROJECT]', summary: 'Show coding agent tasks and what they are doing', clients: [...interactive, 'telegram'], ownerOnly: true,
 		run: async ({ fields }) => {
 			const nodes = svc.tree(fields[0] ?? '');
 			return { markdown: nodes.length ? outline(nodes) : 'No tasks yet. Ask Mob to hand coding work in a project to a coding agent.' };

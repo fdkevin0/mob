@@ -27,7 +27,7 @@ jobs:
       - name: Typecheck and test
         run: |
           bun run test:client
-          bun run test:webapp
+          bun run test:web
           bun run test:tui
           bun run test:docs
           bun run test:desktop

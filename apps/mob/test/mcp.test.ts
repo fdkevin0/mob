@@ -14,6 +14,24 @@ const memory = (): Settings & { values: Map<string, string> } => {
 	return { values, setting: <T>(k: string) => values.has(k) ? JSON.parse(values.get(k)!) as T : undefined, saveSetting: (k, v) => { values.set(k, JSON.stringify(v)); } };
 };
 
+test('Web installs use catalog validation, record user intent, and expose no configuration secrets', async () => {
+	const settings = memory(), hub = new Hub(settings);
+	hub.configure({ private: { url: 'https://example.com/mcp?key=secret', headers: { Authorization: 'Bearer secret' } } });
+	await expect(hub.installFromWeb('https://unlisted.example.com/mcp')).rejects.toThrow('unavailable');
+	const result = await hub.installFromWeb('https://docs.mcp.cloudflare.com/mcp');
+	expect(result.error).toBe('');
+	expect(JSON.parse(settings.values.get('mcp_installed')!)[result.name]).toMatchObject({ installedBy: 'user' });
+	expect(JSON.parse(settings.values.get('mcp_installed')!)[result.name].approvalId).toBeUndefined();
+	expect(hub.overview().servers.find(s => s.name === result.name)).toMatchObject({ managed: true, connected: false });
+	expect(JSON.stringify(hub.overview())).not.toContain('secret');
+	await expect(hub.installFromWeb('https://docs.mcp.cloudflare.com/mcp')).rejects.toThrow('unavailable');
+	(hub as any).states = new Map([[result.name, { server: { url: 'https://docs.mcp.cloudflare.com/mcp' }, tools: [{ name: 'search', inputSchema: { type: 'object' } }], status: '1 tools' }]]);
+	hub.configure({ configured: { url: 'https://docs.mcp.cloudflare.com/mcp' } });
+	expect(hub.overview().servers.find(s => s.name === result.name)).toMatchObject({ shadowed: true, tools: [{ name: 'search', exposure: 'deferred' }] });
+	await hub.remove(result.name);
+	expect(hub.configured().configured).toBeDefined();
+});
+
 const until = async (what: () => boolean, label: () => string) => {
 	for (const deadline = Date.now() + 20_000; Date.now() < deadline; await Bun.sleep(20)) if (what()) return;
 	throw new Error('timed out: ' + label());
@@ -256,6 +274,9 @@ test('the catalog lists, installs and removes remote servers', async () => {
 	expect(hub.configured()['example-docs']).toEqual({ url: 'https://docs.example.com/mcp', oauth: true });
 	expect(hub.listings().map(l => l.url)).not.toContain('https://docs.example.com/mcp');
 	expect(hub.describe()).toContain('example-docs (installed)');
+	expect(hub.overview().servers.find(s => s.name === 'example-docs')?.shadowed).toBe(false);
+	hub.configure({ 'example-docs': { url: 'https://configured.example.com/mcp' } });
+	expect(hub.overview().servers.find(s => s.name === 'example-docs')?.shadowed).toBe(true);
 	// config.yaml taking its URL shadows the install.
 	hub.configure({ mine: { url: 'https://docs.example.com/mcp' } });
 	expect(hub.shadowedInstalls()).toEqual(['example-docs']);

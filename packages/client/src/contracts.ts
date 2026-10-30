@@ -275,3 +275,21 @@ export type Transfer = {
   facts: { fact: string; owner: boolean }[];
   usage: { messageId: string; session: string; model: string; input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number; cost: number; durationMs: number; createdAt: number }[];
 };
+
+// Management views use structured data; slash command Markdown is only presentation.
+export type Memory = { id: string; conversationId: string; text: string; owner: boolean };
+export type RememberedApproval = { id: string; conversationId: string; tool: string; scope: string; created: number };
+export type ScheduledPrompt = { id: string; conversationId: string; prompt: string; next: number; repeat?: string; zone?: string };
+export type ProjectConfig = { name: string; path: string; blueprint?: string; checks?: string[] };
+export type Projects = { projects: ProjectConfig[]; blueprints: { name: string; title: string; description: string }[] };
+
+/** Web extension management; paths and credentials remain service-owned. */
+export type SkillSource = { source: string; ref?: string; skillPath: string };
+export type SkillPreview = SkillSource & { commit: string; name: string; description: string; content: string; files: string[]; executableFiles: string[]; folderHash: string };
+export type SkillUpdate = { status: 'current' | 'available' | 'unknown' | 'error'; message: string };
+export type InstalledSkill = { name: string; description: string; compatibility?: string; managed: boolean; source?: string; ref?: string; update?: SkillUpdate };
+export type SkillsOverview = { skills: InstalledSkill[]; warnings: string[] };
+export type MCPOverview = {
+  servers: { name: string; managed: boolean; shadowed: boolean; connected: boolean; status: string; signInUrl?: string; tools: { name: string; description?: string; exposure: string }[] }[];
+  catalog: { name: string; title?: string; description: string; url: string; source: string; repository?: string; version?: string; requiredHeader?: string }[];
+};

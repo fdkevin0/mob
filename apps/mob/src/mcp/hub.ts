@@ -8,6 +8,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ToolListChangedNotificationSchema, type CallToolResult, type Tool as MCPTool } from '@modelcontextprotocol/sdk/types.js';
 import { createHash } from 'node:crypto';
+import type { MCPOverview } from '@mob/client/contracts';
 import { version } from '../version';
 import { catalogKey, curated, fetchRegistry, hostOf, needs, refreshAfter, sameRegistry, type Catalog, type Listing, type Registry } from './catalog';
 import { exposure, fingerprint, names, same, serverName, target, type Server, type Servers } from './config';
@@ -41,7 +42,7 @@ type State = {
 };
 
 /** Installed is a server installed from the catalog. */
-type Installed = { listing: Listing; at: string; approvalId: string };
+type Installed = { listing: Listing; at: string; approvalId?: string; installedBy?: 'user' };
 type InstallRequest = { server: string; name: string; title?: string; version?: string; url: string; repository?: string; source: string; description?: string };
 type CallRequest = { server: string; tool: string; arguments?: Record<string, unknown>; target: string; config: string };
 
@@ -303,16 +304,43 @@ export class Hub {
 	}
 
 	/** install keeps a server the owner approved and connects to it; it returns why reconnecting failed, if it did. */
-	async install(r: InstallRequest, approvalId: string): Promise<string> {
+	async install(r: InstallRequest, approvalId?: string): Promise<string> {
 		if (!this.settings) throw new Error('installed servers cannot be kept');
 		const installs = await this.serialize(() => {
+			const listing = this.listing(r.url);
+			if (!listing || needs(listing)) throw new Error('the catalog no longer offers this server for installation');
+			if (this.servers[r.server] || !serverName.test(r.server)) throw new Error(`the name ${r.server} is taken now; ask again`);
 			const installs = this.installs();
 			if (installs[r.server]) throw new Error(`a server named ${r.server} is installed already`);
-			installs[r.server] = { listing: { name: r.name, title: r.title, description: r.description ?? '', version: r.version, repository: r.repository, url: r.url, source: r.source }, at: new Date().toISOString(), approvalId };
+			installs[r.server] = { listing, at: new Date().toISOString(), approvalId, ...approvalId ? {} : { installedBy: 'user' as const } };
 			this.settings!.saveSetting(installedKey, installs);
 			return installs;
 		});
 		try { await this.apply(installs); return ''; } catch (err) { return 'installed, but reconnecting failed: ' + (err as Error).message; }
+	}
+
+	async installFromWeb(url: string) {
+		const listing = this.listing(url);
+		if (!listing || needs(listing)) throw new Error('This server is unavailable or requires headers in config.yaml');
+		const name = localName(url, this.servers);
+		return { name, error: await this.install({ ...listing, server: name }) };
+	}
+
+	overview(): MCPOverview {
+		const installs = this.installs();
+		return {
+			catalog: this.listings().map(l => ({ ...l, requiredHeader: needs(l) || undefined })),
+			servers: [...new Set([...names(this.servers), ...Object.keys(installs)])].map(name => {
+				const managed = Object.hasOwn(installs, name);
+				const state = this.states?.get(name);
+				const status = state?.status ?? 'not running';
+				return { name, managed, shadowed: managed && this.shadowed(name, installs[name]!), connected: !!state?.client,
+					status: status.startsWith(signInPrefix) ? 'Sign in to connect' : status,
+					signInUrl: status.startsWith(signInPrefix) ? status.slice(signInPrefix.length) : undefined,
+					tools: (state?.tools ?? []).map(t => ({ name: t.name, description: t.description, exposure: exposure(this.servers[name] ?? {}, t.name) })),
+				};
+			}),
+		};
 	}
 
 	/** remove forgets an installed server, and its sign-in unless config.yaml has a server of that name. */

@@ -1,0 +1,6 @@
+/* The workspace's Tailwind entry: the site theme, this package's classes and
+ * the ones Streamdown renders. */
+@import '@mob/ui/theme.css';
+@source '.';
+@source '../node_modules/streamdown/dist';
+@source '../node_modules/@streamdown/code/dist';

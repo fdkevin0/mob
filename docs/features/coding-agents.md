@@ -61,6 +61,20 @@ it. Its login methods are interactive, so without a login (or
 
 ## Mob as project manager
 
+Mob's instructions distinguish work on host projects (delegated over ACP)
+from isolated calculations and skill scripts (run in the sandbox). Each
+delegated prompt is asked to include the goal and project, scope and user
+constraints, known evidence and decisions, and acceptance checks. Earlier
+constraints still apply unless the user changes them; analysis-only tasks
+must explicitly forbid file changes. The agent does not automatically receive
+the parent conversation. Later corrections go to the existing task.
+
+The brief asks the agent to read applicable project instructions, including
+`AGENTS.md`, and report changes, verification and unfinished work. Reading and
+following those files remains the external agent's responsibility; Mob does
+not load them into its own system prompt. These are model instructions, not
+additional runtime permissions or a guarantee that an agent follows them.
+
 Owner-only tools:
 
 - `task_start` (project, prompt, optional title, agent and blueprint) asks
@@ -456,3 +470,19 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
 - Delegated conversations reuse `ConversationService`: `SetDelegate` hands the
   turns of the conversations a `chat.Delegate` owns to it instead of the model
   loop, and `chat.DelegateTurn` writes and saves the reply as the engine does.
+
+## Project forms
+
+**Agents → Manage projects** opens Web's **Manage Mob → Projects**. Add a
+repository using its absolute path on the connected Mob (spaces are supported),
+choose a blueprint, and edit checks as an ordered list of commands. Each check
+may contain multiple lines. Saving checks authorizes their automatic execution
+in finished tasks' worktrees; the form explains this before saving. Removing a
+project requires confirmation and keeps its tasks, branches and worktrees.
+The form and `/projects` use the same project service and blueprint validation.
+Adding an already-saved name or repository path in the form reports an error;
+it does not rename or replace the existing project.
+
+Telegram's `/tasks [PROJECT]` and **More → Tasks** show paged task summaries.
+Selecting a task switches to its conversation; the list does not execute task
+configuration changes.

@@ -43,7 +43,7 @@ help, completion and execution from the same definition.
   the suggestion changes a partly typed token, so a complete command still
   sends. Stale answers are dropped.
 - The contract types live in `packages/client/src/contracts.ts`, which the
-  service and every client import. `webapp/src/chat/contracts.ts` re-exports
+  service and every client import. `packages/app/src/contracts.ts` re-exports
   them for existing Web imports.
 
 ## Terminal
@@ -76,8 +76,17 @@ first to keep it running after exit.
   checked by the service, while multiline input goes to chat without being interpreted
   as a client command. The terminal uses `client: 'tui'`.
 - In Web, a bare `/` lists only commands without a button of their own:
-  `/new`, `/list`, `/open`, `/model`, `/models`, `/approve` and `/deny` are left
-  out of that list but still complete once their name is typed.
+  conversation, model, approval, context, usage, plugin and management commands
+  are left out of that list but still complete once their name is typed.
+- **Manage Mob** opens memories, remembered approvals, schedules and projects.
+  Each section reads structured API data, not command
+  Markdown. Sections unavailable on the connected Mob explain that a runner is
+  needed. Refresh reloads the current section; section URLs survive reload and
+  browser back/forward. Desktop uses section navigation beside the content; mobile
+  uses a section picker. Bulk memory deletion, approval revocation and schedule
+  cancellation live in **More actions** and require confirmation. MCP servers
+  and skills are managed in **Plugins & cloud services**. Commands remain
+  available to existing clients.
 - Clients own their forms (plugin settings, mail compose); an action opens them.
 - Messaging channels run commands through the registry too; see
   [Channels](channels.md). After each connection the Telegram bot calls

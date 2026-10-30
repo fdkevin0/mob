@@ -1,10 +1,10 @@
 ---
-// The site's three-way theme picker (webapp/src/theme/ThemePicker.tsx) in
+// The site's three-way theme picker (packages/ui/src/theme/ThemePicker.tsx) in
 // place of Starlight's select. It reads and writes the same localStorage key
 // ('starlight-theme': 'light', 'dark' or '' for the system), so a choice made
 // here holds on the landing page and in the app too. Starlight's ThemeProvider
 // has already set data-theme before this renders.
-import '../../../../webapp/src/theme/picker.css';
+import '@mob/ui/picker.css';
 const name = `theme-${Math.random().toString(36).slice(2, 8)}`;
 const choices = [
 	{ value: 'auto', label: 'System', icon: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>' },

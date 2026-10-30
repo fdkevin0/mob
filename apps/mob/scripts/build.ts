@@ -2,13 +2,13 @@
 // bun scripts/build.ts [--outfile PATH] [--target bun-linux-x64] [--version V]
 import { Glob } from 'bun';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({ options: { outfile: { type: 'string' }, target: { type: 'string' }, version: { type: 'string' } } });
 const root = resolve(import.meta.dir, '../../..');
-const dist = resolve(root, 'webapp/dist');
-if (!existsSync(resolve(dist, 'index.html'))) throw new Error('webapp/dist is empty; run bun run build first');
+const dist = resolve(dirname(Bun.resolveSync('@mob/app/package.json', import.meta.dir)), 'dist');
+if (!existsSync(resolve(dist, 'index.html'))) throw new Error('@mob/app has no build; run bun run build first');
 const assets = [...new Glob('**/*').scanSync({ cwd: dist, onlyFiles: true })];
 // Each file is imported as a file, which a compiled executable embeds as it is.
 const web = assets.map((f, i) => `import f${i} from ${JSON.stringify(resolve(dist, f))} with { type: 'file' };`).join('\n') +

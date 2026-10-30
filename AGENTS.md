@@ -1,5 +1,8 @@
 # AGENTS.md
 
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
+- When a repository's documentation and its existing code disagree, follow the conventions used in the existing code, and in your final reply point out each inconsistency you found between the documentation and the code.
+
 Mob is a local TypeScript assistant: one Bun service with SQLite, used from a
 React UI (browser and Electron desktop), an OpenTUI terminal UI, the `mob` CLI
 and messaging channels.
@@ -12,10 +15,18 @@ and messaging channels.
   asking.
 - `./build/mob serve --demo` runs the app on an offline model when you want to
   see a change working.
+- Web code lives in three packages: `packages/ui` (`@mob/ui`, the design
+  system), `packages/app` (`@mob/app`, the workspace UI that `mob` embeds) and
+  `apps/web` (`@mob/web`, usemob.app and its Worker). Each declares its own
+  dependencies; import across packages by name (`@mob/ui/button`), never by a
+  relative path into another package.
 - `packages/client/src/contracts.ts` is the wire contract the service and its
   clients share; change both sides in the same pull request.
 - Tests fail when `docs/environment-variables.md` is stale; regenerate it with
   `bun run generate:configdocs`.
+- Show a UI change with screenshots taken by `bun scripts/screenshot.ts <url>`
+  (desktop and mobile, light and dark, 2x). `docs/screenshots.md` has the
+  settings, which app to capture and how to reach dialogs or several tabs.
 
 ## Rules tooling does not catch
 
@@ -47,3 +58,4 @@ Reduce total variable count by inlining when a value is only used once.
 - `docs/architecture.md` when a change crosses packages.
 - `docs/features/` for how the feature you are changing behaves.
 - `CONTRIBUTING.md` before opening a pull request.
+- `docs/screenshots.md` before capturing a state the script cannot reach.

@@ -9,8 +9,13 @@ install:
 build:
     bun run build:cli
 
-build-web:
+# Build the web UI that mob embeds (packages/app).
+build-app:
     bun run build
+
+# Build the public site (apps/web) with /app and /docs.
+build-web:
+    bun run build:web
 
 build-desktop:
     bun run build:desktop
@@ -18,6 +23,10 @@ build-desktop:
 # Frontend development; run the local service separately.
 dev:
     bun run dev
+
+# The public site: landing, demo, account and /app.
+dev-web:
+    bun run dev:web
 
 desktop:
     bun run desktop
@@ -27,13 +36,18 @@ desktop:
 mob *args:
     ./build/mob "$@"
 
+# Capture a page in each size and theme, e.g. just screenshot http://127.0.0.1:5174/app.html --name workspace.
+[positional-arguments]
+screenshot *args:
+    bun scripts/screenshot.ts "$@"
+
 test: test-core test-web test-integration test-dsh
 
 test-core:
     bun run test:core
 
 test-web:
-    bun run test:webapp
+    bun run test:web
     bun run test:docs
 
 test-integration:

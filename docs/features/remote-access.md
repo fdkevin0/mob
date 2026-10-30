@@ -6,7 +6,7 @@ Mob runs on the user's machine and serves its clients over loopback.
 
 The site at https://usemob.app is deployed to Cloudflare Workers, so web
 changes reach users when they merge, without a release. It has five parts,
-served by the Worker in `worker/`:
+served by the Worker in `apps/web/worker/`:
 
 - `/` is the landing page, scrolled through in pages over one pinned isometric
   voxel office. Each load lays out a new square open-plan floor of shared
@@ -26,7 +26,7 @@ served by the Worker in `worker/`:
   are idealised, not a picture of what Mob does today.
 - Links to the site show a preview card in Telegram, Slack, X and other apps:
   the landing page and every docs page carry Open Graph and Twitter card tags
-  with the 1200×630 image `webapp/public/og.png` (served at `/og.png`, straight
+  with the 1200×630 image `apps/web/public/og.png` (served at `/og.png`, straight
   from static assets). `/app` and `/account` send visitors without a session,
   crawlers included, to the landing page, so their links preview the same.
   Telegram caches a preview per URL; after changing the image or tags, send
@@ -96,7 +96,7 @@ served by the Worker in `worker/`:
   It needs no sign-in and has local search.
 
 The landing, demo, documentation and account pages share one header
-(`webapp/src/components/site/`): Home, Demo, Docs and GitHub, a theme picker,
+(`apps/web/src/site/`): Home, Demo, Docs and GitHub, a theme picker,
 Open Mob, and a Log in button or the visitor's avatar. On the React pages the
 avatar opens a menu with Account and Sign out; the documentation loads no
 framework, so there it links to the account page, which has Sign out too. On
@@ -112,7 +112,7 @@ the page at once. The pages also opt into cross-document view transitions: the
 header stays in place while the content cross-fades, unless the visitor asks
 for reduced motion. Every page preloads its Latin Geist face, and hashed build
 files (`/assets/*`, `/docs/_astro/*`) are cached as immutable
-(`webapp/public/_headers`), so later pages paint in Geist straight away instead
+(`apps/web/public/_headers`), so later pages paint in Geist straight away instead
 of swapping from a fallback font.
 
 The landing page and workspace share the dark theme, Geist fonts and pixel
@@ -166,12 +166,13 @@ Pairing with Mob on your computer works as before:
 
 Deployment:
 
-- `bun run build:web` builds `webapp/dist-public` (Vite `--mode public`):
-  `landing.html` and the web UI's `index.html`, then the documentation into
-  `webapp/dist-public/docs`. Hashed documentation assets (`/docs/_astro/`,
-  `/docs/pagefind/`) are served without running the Worker. Cloudflare Workers Builds
-  deploys `wrangler.jsonc` with build command
-  `bun install --frozen-lockfile && bun run build:web` and deploy command
+- `bun run build:web` builds `apps/web/dist` (Vite `--mode public`): the
+  landing, demo and account pages and the web UI's `app.html` (from
+  `@mob/app`), then the documentation (`apps/docs`) into `apps/web/dist/docs`.
+  Hashed documentation assets (`/docs/_astro/`, `/docs/pagefind/`) are served
+  without running the Worker. Cloudflare Workers Builds deploys
+  `apps/web/wrangler.jsonc` with root directory `apps/web`, build command
+  `bun install --frozen-lockfile && bun run build` and deploy command
   `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
   The custom domain route serves production at `usemob.app` and, with
   `previews_enabled: true`, previews at `<preview-name>.usemob.app`.
@@ -181,7 +182,7 @@ Deployment:
   This automatically applies pending preview database migrations before deployment;
   a migration failure stops deployment, and applied migrations are skipped.
   Wrangler requires the explicit
-  `previews` block in `wrangler.jsonc`: public variables and the `DB` binding
+  `previews` block in `apps/web/wrangler.jsonc`: public variables and the `DB` binding
   do not inherit their production values. Previews share the separate
   `mob-auth-preview` database.
   Keep that file's database ID aligned with `previews.d1_databases`.
@@ -193,15 +194,15 @@ Deployment:
 - Secrets: `BETTER_AUTH_SECRET`, `TURNSTILE_SECRET_KEY`,
   `GITHUB_CLIENT_SECRET` and `CLOUDFLARE_CLIENT_SECRET`. The public
   `TURNSTILE_SITE_KEY`, `GITHUB_CLIENT_ID` and `CLOUDFLARE_CLIENT_ID` are
-  vars in `wrangler.jsonc`. The OAuth callback URLs are
+  vars in `apps/web/wrangler.jsonc`. The OAuth callback URLs are
   `https://usemob.app/api/auth/callback/github` and
   `https://usemob.app/api/auth/callback/cloudflare`. Cloudflare always asks
   for `user-details.read`; the `CLOUDFLARE_SCOPES` var (space-separated scope
   IDs as the Cloudflare OAuth client lists them) adds account read, Workers
   AI and `offline_access`, which Workers AI in the browser needs.
-- Locally, put the secrets in `.dev.vars`, which overrides the vars too
-  (Turnstile's test keys work), run
-  `npx wrangler d1 migrations apply DB --local`, `bun run build:web` and
+- Locally, put the secrets in `apps/web/.dev.vars`, which overrides the vars too
+  (Turnstile's test keys work), and in `apps/web` run
+  `npx wrangler d1 migrations apply DB --local`, `bun run build` and
   `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799` (the flag
   keeps the request host local instead of the production domain; port 8787 is
   Mob's own). The GitHub OAuth app then needs the local callback URL.
@@ -283,28 +284,48 @@ locally with fake account sessions and an offline demo model.
 ## Mob in the browser
 
 The public web can run Mob's core service, `@mob/core`, in a dedicated Web
-Worker in the tab (`webapp/src/chat/browser/`), so no runner is needed. The
+Worker in the tab (`packages/app/src/browser/`), so no runner is needed. The
 page reaches it through a `fetch` that posts each request to the worker and
 streams the response back, the same way the relay is a `fetch` for paired
 runners; the API, the chat stream and the change feed are unchanged. The
 database is the usual SQLite schema on sqlite-wasm, stored in the origin
 private file system (OPFS) with the `opfs-sahpool` VFS, and `providers.json`
 is a setting in that database. Where OPFS is unavailable, such as in some
-private windows, conversations last until the tab closes. One tab at a time
-owns the database; another tab says so until it is reloaded after the first
-one closes.
+private windows, conversations live in the memory of the leading tab's worker
+(below): closing or reloading that tab loses them, even while other Mob tabs
+stay open, since a follower that takes over starts an empty database.
+
+Every Mob tab in the browser shares one runner. The pool's file handles are
+exclusive, so the worker of one tab leads: it holds the `mob-browser-runner`
+Web Lock, owns the database and serves the other tabs over a
+`BroadcastChannel`. A follower's worker passes its page's requests to the
+leader and streams the answers back, so every tab sees the same conversations
+and the change feed reaches them all.
+
+Followers queue for the lock. When the leader's tab closes, one of them opens
+the database and leads, retrying while the closed tab's file handles are
+released. Once the browser has saved conversations (the pool's files exist in
+OPFS), no runner, whether taking over or started anew after a failure, serves
+an empty in-memory database in their place: if it still cannot open the saved
+one, it fails, its page reports it and starts a new runner on the next
+request, and the next follower in line tries. Requests in flight at a
+handover fail once, which the client retries (the change stream reconnects by
+itself). Each worker also holds a lock named after its tab, so the leader ends
+a closed follower's streams. A turn the leader was running stops with its tab,
+so while one runs, closing or reloading the leader's tab asks first (the
+browser's own leave-page prompt).
 
 The browser runner has what needs no process of its own: conversations,
 approvals, memory, commands, token usage and the demo model. Model calls go
 straight from the browser to the provider, so they work only with providers
 that allow cross-origin requests; OpenCode Zen does not, so the browser
-runner starts on the offline demo model. **Model provider** in the runner menu
+runner starts on the offline demo model. **Model providers** in the runner menu
 saves one provider: a preset (OpenAI, Anthropic, OpenRouter and other vendors
 that take a key) or a custom OpenAI Chat Completions or Anthropic Messages
 base URL, with its API key and optionally a model. Saving lists the
 provider's models and makes the named model, or the first listed, the
 default (`POST /api/plugins/browser/provider`). An Anthropic-only provider is
-sent `anthropic-dangerous-direct-browser-access`. With OpenRouter selected,
+sent `anthropic-dangerous-direct-browser-access`. With OpenRouter chosen,
 **Sign in with OpenRouter** gets a key without copying one: OpenRouter's PKCE
 flow returns to `/app?code=…`, and the worker trades the code, with the
 verifier kept in the tab's session storage, for a key of the user's account
@@ -402,7 +423,7 @@ Spaces (Docker Spaces on free hardware need PRO since July 2026), ClawCloud
 Run (shutting down), Google Cloud Run (scales to zero and needs billing, so
 an always-on runner costs money). Railway and Northflank are candidates
 (see [Candidate hosts](#candidate-hosts)). The dialog lists the hosts in
-`webapp/src/chat/hosts.ts`; it shows a host picker once there is more than
+`packages/app/src/hosts.ts`; it shows a host picker once there is more than
 one.
 
 ### Render

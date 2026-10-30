@@ -1,7 +1,7 @@
 // The Telegram channel: Mob answers its owner's private messages to a bot,
 // polling the Bot API, with buttons standing in for typed commands.
 import { sleep as wait } from '@mob/core/sleep';
-import { Bridge, clientTelegram, ReplyError, describeApproval, NotFound, type ChannelMessage, type CommandSpec, type ConversationService, type Notice, type PendingApproval, type Reply, type Store, type Suggestion, type Texts, useText } from '@mob/core';
+import { Bridge, clientTelegram, ReplyError, describeApproval, NotFound, type ChannelMessage, type CommandSpec, type ConversationService, type Notice, type PendingApproval, type Reply, type Store, type Texts, useText } from '@mob/core';
 import { Bot, buttons, decided, type Button, type Config, type Keyboard, type Shown, type Update } from './api';
 
 /** placeholderDelay is how long a reply may take before Mob shows that it is being written. */
@@ -14,17 +14,18 @@ export const setPlaceholderTimings = (t: { delay?: number; draft?: number; typin
 export const menuButtons: Button[][] = [
 	[{ text: 'New conversation', callback_data: '/new' }, { text: 'Conversations', callback_data: '/list' }],
 	[{ text: 'Model', callback_data: '/model' }, { text: 'Compact', callback_data: '/compact' }],
-	[{ text: 'Remembered approvals', callback_data: '/grants' }],
+	[{ text: 'Memories', callback_data: '/memories' }, { text: 'Remembered approvals', callback_data: '/grants' }],
+	[{ text: 'Usage', callback_data: '/usage' }, { text: 'More', callback_data: '/_more' }],
 ];
 const stopButton: Button[][] = [[{ text: 'Stop', callback_data: '/stop' }]];
 
 /** picks names, for a command whose reply offers things to pick from, the command a button for each of them sends. */
-const picks: Record<string, string> = { '/list': '/open', '/open': '/open', '/model': '/model', '/models': '/model', '/grants': '/revoke', '/revoke': '/revoke' };
+const picks: Record<string, string> = { '/list': '/open', '/open': '/open', '/model': '/model', '/models': '/model', '/grants': '/revoke', '/revoke': '/revoke', '/forget': '/forget', '/unschedule': '/unschedule', '/_confirm': '/_confirm' };
 
 const pickConversation = 'Conversations, most recent first. Tap one to continue it here; ✓ marks the current one.';
 export const expired = 'That button has expired. Here is the menu again.';
-/** callbackLimit is the most bytes a button's data may hold; keyboardLimit the most buttons a message may hold; labelLimit what a phone shows on one line. */
-const callbackLimit = 64, keyboardLimit = 100, labelLimit = 48;
+/** callbackLimit is the most bytes a button's data may hold; labelLimit what a phone shows on one line. */
+const callbackLimit = 64, labelLimit = 48;
 export const mediaUnsupported = 'Mob reads only text here for now; send photos, files and voice notes from the desktop app, or describe them in a message.';
 
 /** fence is text as a Markdown code block, fenced so nothing in it ends the block. */
@@ -220,16 +221,12 @@ export class Service {
 			const placeholding = new AbortController();
 			const shown = this.placeholder(bot, u.message!.chat.id, draft, AbortSignal.any([signal, placeholding.signal]));
 			try {
-				let r: Reply;
-				try {
-					this.bindApproval(m);
-					r = await this.bridge.answer(m, signal);
-				} catch (err) {
-					if (err instanceof ReplyError) { let p; [p, rows] = await this.present(bot.config, botId, m.text, err.reply); Object.assign(err.reply, p); }
-					throw err;
-				}
-				[r, rows] = await this.present(bot.config, botId, m.text, r);
+				const [r, buttons] = await this.answer(bot.config, botId, m, signal);
+				rows = buttons;
 				return r;
+			} catch (err) {
+				if (err instanceof ReplyError) { let p; [p, rows] = await this.present(bot.config, botId, m.text, err.reply); Object.assign(err.reply, p); }
+				throw err;
 			} finally {
 				this.stops.delete(draft);
 				placeholding.abort();
@@ -294,51 +291,94 @@ export class Service {
 	async reply(c: Config, botId: string, requestId: string, text: string, signal: AbortSignal) {
 		const m = this.message(c, botId, { update_id: 0, message: { text, from: { id: c.userId }, chat: { id: c.userId, type: 'private' } } });
 		m.id = requestId;
-		return (await this.present(c, botId, m.text, await this.bridge.answer(m, signal)))[0].text;
+		return (await this.answer(c, botId, m, signal))[0].text;
+	}
+
+	/** answer renders read-only menus directly; state-changing commands still run through the bridge. */
+	private async answer(c: Config, botId: string, m: ChannelMessage, signal: AbortSignal): Promise<[Reply, Button[][]]> {
+		const text = m.text.trim();
+		const name = text.split(/\s+/, 1)[0]!.slice(1);
+		if (m.text.startsWith('/') && !/[\r\n]/.test(m.text) && (/^\/_(page |confirm |more$)/.test(text) ||
+			(/^\/(list|models|memories|grants|tasks)( |$)/.test(text) || /^\/(model|open|forget|revoke|schedules)$/.test(text)) &&
+			this.conversation.commands.specs(clientTelegram).some(c => c.name === name))) {
+			m.started?.();
+			return this.present(c, botId, text, { text: '' });
+		}
+		this.bindApproval(m);
+		return this.present(c, botId, m.text, await this.bridge.answer(m, signal));
 	}
 
 	/** announce sends the owner notice n, with buttons for the approvals it says wait. */
 	private announce(bot: Bot, n: Notice, signal: AbortSignal) {
 		let text = n.text + (n.approvals ?? []).map(approval).join('');
 		if (n.approvals?.length) text += '\n\nTap a button to decide, or reply /deny ID with a reason.';
-		return bot.send(bot.config.userId, text, buttons(n.approvals ?? []), signal);
+		return bot.send(bot.config.userId, text, [...buttons(n.approvals ?? []), [{ text: 'Open conversation', callback_data: '/open ' + n.conversationId }], ...(this.conversation.commands.specs(clientTelegram).some(c => c.name === 'schedules') ? [[{ text: 'Schedules', callback_data: '/schedules' }]] : [])], signal);
 	}
 
 	/** present is the reply to sent as the bot shows it, with the buttons that go under it. */
 	async present(c: Config, botId: string, sent: string, r: Reply): Promise<[Reply, Button[][]]> {
 		if (r.text === texts.busy) return [r, stopButton];
-		const trimmed = sent.trim();
+		if (!sent.startsWith('/') || /[\r\n]/.test(sent)) return [r, []];
+		const paged = /^\/_page (list|models|memories|grants|schedules|tasks) (\d+) ?(.*)$/.exec(sent);
+		const offset = paged ? Number(paged[2]) : 0;
+		const trimmed = paged ? '/' + paged[1] + (paged[3] ? ' ' + paged[3] : '') : sent.trim();
 		const i = trimmed.indexOf(' ');
 		const name = i < 0 ? trimmed : trimmed.slice(0, i), rest = i < 0 ? '' : trimmed.slice(i + 1).trim();
-		// The menu replaces the command list, which stays in the / menu.
+		if (name === '/_more') {
+			const specs = this.conversation.commands.specs(clientTelegram);
+			return [{ text: 'More actions' }, [...['schedules', 'tasks'].filter(n => specs.some(s => s.name === n)).map(n => [{ text: n === 'tasks' ? 'Tasks' : 'Schedules', callback_data: '/' + n }]), [{ text: 'Menu', callback_data: '/help' }]]];
+		}
+		if (name === '/_confirm') {
+			const match = /^\/(forget|revoke|unschedule) (all|[a-f0-9]{32})$/.exec(rest);
+			if (!match) return [{ text: expired }, menuButtons];
+			const target = match[2] === 'all' ? 'all entries' : match[1] === 'forget' ? this.store.facts().find(f => f.id === match[2])?.text : this.store.schedules(0).find(s => s.id === match[2])?.prompt;
+			if (!target) return [{ text: 'This entry no longer exists.' }, menuButtons];
+			return [{ text: (match[1] === 'forget' ? 'Delete this memory? This cannot be undone.' : match[1] === 'revoke' ? 'Revoke remembered approvals? Future calls will ask again.' : 'Cancel this schedule?') + '\n\n' + fence(target) }, [[{ text: 'Confirm', callback_data: this.callback(rest) }, { text: 'Keep unchanged', callback_data: '/help' }]]];
+		}
 		if (name === '/help') return [{ ...r, text: texts.help! }, menuButtons];
 		if (name === '/open' && rest && !r.text) return [{ ...r, text: `Switched to ${this.title(rest)}.` }, []];
-		const command = picks[name];
-		if (!command || (rest && (name !== '/models' || /[ \t]/.test(rest)))) return [r, []];
-		const rows = await this.choices(c, botId, command, rest);
-		if (command === '/open') return [{ ...r, text: pickConversation }, [...rows, menuButtons[0]!.slice(0, 1)]];
-		return [r, rows];
-	}
-
-	/** choices are buttons sending command with each value the registry suggests for its argument. */
-	private async choices(c: Config, botId: string, command: string, filter: string): Promise<Button[][]> {
-		let current: string;
-		try { current = this.store.setting<string>(conversationKey(botId, c)) ?? ''; } catch { return []; }
-		let suggestions: Suggestion[];
-		if (command === '/revoke') {
-			// Completion keeps 20 suggestions; every remembered approval needs a button, up to the most a message can hold.
-			suggestions = [{ value: 'all', label: '' }, ...this.store.grants().slice(0, keyboardLimit - 1).map(g => ({ value: g.id, label: g.tool, detail: g.scope }))];
-		} else suggestions = await this.conversation.commands.complete({ client: clientTelegram, conversationId: current, text: command + ' ' + filter }, true);
-		return suggestions.map(choice => {
-			let label = choice.label;
-			if (command === '/open' && !label.trim()) label = 'Untitled';
-			else if (command === '/model' && choice.value === 'default') label = 'Follow the default model';
-			else if (command === '/revoke' && choice.value === 'all') label = 'Forget all';
-			else if (command === '/revoke') label = 'Forget ' + label + (choice.detail ? ' · ' + choice.detail : '');
-			label = clip(label);
-			if (command === '/open' && choice.value === current) label = '✓ ' + label;
-			return [{ text: label, callback_data: this.callback(command + ' ' + choice.value) }];
-		});
+		const current = this.store.setting<string>(conversationKey(botId, c)) ?? '';
+		let entries: { label: string; command: string; detail?: string }[] = [];
+		let heading = '', warnings = '', pageName = name.slice(1);
+		if (name === '/list' || (name === '/open' && !rest)) {
+			heading = pickConversation; pageName = 'list';
+			entries = this.store.list().map(c => ({ label: (c.id === current ? '✓ ' : '') + (c.title || 'Untitled'), command: '/open ' + c.id }));
+		} else if ((name === '/model' && !rest) || name === '/models') {
+			heading = 'Choose a model for this conversation.'; pageName = 'models';
+			entries = [{ label: 'Follow the default model', command: '/model default' }];
+			for (const group of await this.conversation.models?.list(rest, AbortSignal.timeout(10_000)) ?? []) {
+				if (group.error) warnings += '\n\nWarning:\n' + fence(group.provider + ': ' + group.error);
+				for (const model of group.models) {
+					const ref = group.provider + '/' + model.id;
+					entries.push({ label: (current && this.conversation.model(current) === ref ? '✓ ' : '') + ref, command: '/model ' + ref });
+				}
+			}
+		} else if (name === '/memories' || (name === '/forget' && !rest)) {
+			heading = 'Saved memories'; pageName = 'memories';
+			entries = this.store.facts().map(f => ({ label: 'Delete: ' + f.text, command: '/_confirm /forget ' + f.id, detail: f.text + ' — ' + (f.owner ? 'all your conversations' : 'conversation ' + f.conversationId) }));
+		} else if (name === '/grants' || (name === '/revoke' && !rest)) {
+			heading = 'Remembered approvals'; pageName = 'grants';
+			entries = this.store.grants().map(g => ({ label: 'Revoke: ' + g.tool, command: '/revoke ' + g.id, detail: g.tool + ': ' + (g.scope || 'every call') + ' — ' + (g.conversationId ? 'conversation ' + g.conversationId : 'every conversation') }));
+		} else if (name === '/schedules' && !rest && this.conversation.commands.specs(clientTelegram).some(c => c.name === 'schedules')) {
+			heading = 'Scheduled prompts';
+			entries = this.store.schedules(0).map(s => ({ label: 'Cancel: ' + s.prompt, command: '/_confirm /unschedule ' + s.id, detail: s.prompt + ' — ' + new Date(s.next).toISOString() + ' · ' + (s.repeat || 'once') + (s.zone ? ' · ' + s.zone : '') }));
+		} else if (name === '/tasks' && this.conversation.commands.specs(clientTelegram).some(c => c.name === 'tasks')) {
+			heading = 'Coding tasks';
+			entries = this.store.tasks().filter(t => !rest || t.project === rest).map(t => ({ label: t.title || t.id, command: '/open ' + t.conversationId, detail: t.project + ' · ' + t.status + ' · ' + t.title }));
+		} else {
+			const back = ({ '/forget': '/memories', '/revoke': '/grants', '/unschedule': '/schedules' } as Record<string, string>)[name];
+			return [r, back ? [[{ text: 'Back to list', callback_data: back }]] : []];
+		}
+		const size = 8;
+		const start = Math.min(offset, Math.max(0, Math.floor((entries.length - 1) / size) * size));
+		const shown = entries.slice(start, start + size);
+		const rows: Button[][] = shown.map((entry, i) => [{ text: clip((entry.detail ? `${start + i + 1}. ` : '') + entry.label), callback_data: this.callback(entry.command) }]);
+		const navigation: Button[] = [];
+		for (const [label, next] of [['Previous', start - size], ['Next', start + size]] as const) if (next >= 0 && next < entries.length) navigation.push({ text: label, callback_data: this.callback(`/_page ${pageName} ${next} ${rest}`.trim()) });
+		if (navigation.length) rows.push(navigation);
+		if (entries.length && ['memories', 'grants', 'schedules'].includes(pageName)) rows.push([{ text: pageName === 'memories' ? 'Delete all memories…' : pageName === 'grants' ? 'Revoke all approvals…' : 'Cancel all schedules…', callback_data: '/_confirm /' + ({ memories: 'forget', grants: 'revoke', schedules: 'unschedule' } as Record<string, string>)[pageName] + ' all' }]);
+		rows.push([{ text: 'Refresh', callback_data: this.callback(`/_page ${pageName} ${start} ${rest}`.trim()) }, { text: 'Menu', callback_data: '/help' }]);
+		return [{ ...r, text: heading + (entries.length ? ` (${start + 1}–${start + shown.length} of ${entries.length})` : ': none.') + warnings + shown.map((entry, i) => entry.detail ? `\n\n${start + i + 1}. ${fence(entry.detail)}` : '').join('') }, rows];
 	}
 
 	/** title is how the conversation with id is named on a button. */

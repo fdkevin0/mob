@@ -56,4 +56,5 @@ export const pages: Page[] = [
 	{ source: 'CONTRIBUTING.md', slug: 'contributing', group: 'Contributing' },
 	{ source: 'docs/architecture.md', slug: 'contributing/architecture', group: 'Contributing' },
 	{ source: 'docs/sandbox-verification.md', slug: 'contributing/sandbox-verification', group: 'Contributing' },
+	{ source: 'docs/screenshots.md', slug: 'contributing/screenshots', group: 'Contributing' },
 ];

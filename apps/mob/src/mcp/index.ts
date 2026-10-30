@@ -1,6 +1,7 @@
 // The MCP plugin: tools of the configured and installed MCP servers, the
 // catalog tool_install draws on, /mcp and /signin.
-import { clientEmail, clientTelegram, clientTUI, clientWeb, clientWeChat, CommandError, interactive, type Plugin, type Server } from '@mob/core';
+import { body, clientEmail, clientTelegram, clientTUI, clientWeb, clientWeChat, CommandError, interactive, type Plugin, type Server } from '@mob/core';
+import { z } from 'zod';
 import { validators, type Environment } from '../config';
 import { hostPlugins, reloads } from '../local';
 import { validateRegistry } from './catalog';
@@ -19,6 +20,15 @@ function configure(hub: Hub, e: Environment) {
 function plugin(hub: Hub): Plugin {
 	return {
 		name: 'mcp',
+		routes: [
+			{ method: 'GET', path: 'overview', handle: async () => hub.overview() },
+			{ method: 'POST', path: 'install', handle: async req => hub.installFromWeb(z.object({ url: z.string().url() }).parse(await body(req)).url) },
+			{ method: 'POST', path: 'remove', handle: async req => {
+				await hub.remove(z.object({ name: z.string().min(1) }).parse(await body(req)).name);
+				return { removed: true };
+			} },
+			{ method: 'POST', path: 'signin', handle: async req => ({ name: hub.finishSignIn(z.object({ address: z.string().min(1) }).parse(await body(req)).address) }) },
+		],
 		commands: [{
 			name: 'mcp', usage: '/mcp [remove NAME]', summary: 'Show MCP servers and their tools, or remove an installed one', clients: interactive, ownerOnly: true,
 			run: async call => {
