@@ -9,7 +9,7 @@ import { Story } from './Story';
 
 const installs = {
 	npm: { note: 'Linux, macOS and Windows.', lines: ['npm install -g usemob', 'mob start'], href: '/docs/install/', action: 'Install guide' },
-	Bun: { note: 'The same package, installed with Bun.', lines: ['bun add -g usemob', 'mob start'], href: '/docs/install/', action: 'Install guide' },
+	Bun: { note: 'The same package; --trust lets it install the native binary.', lines: ['bun add -g --trust usemob', 'mob start'], href: '/docs/install/', action: 'Install guide' },
 	Download: { note: 'Archives for Linux, macOS and Windows. Every change to main is published as a nightly build.', lines: ['mob start', 'mob open --web'], href: 'https://github.com/fdkevin0/mob/releases', action: 'Download' },
 	Source: { note: 'Needs Bun and just.', lines: ['git clone https://github.com/fdkevin0/mob && cd mob', 'just install && just build', './build/mob start'], href: '/docs/contributing/', action: 'Contributing guide' },
 };

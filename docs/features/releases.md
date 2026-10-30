@@ -43,8 +43,11 @@ minor version. Other commit types are left out of the changelog.
   `dist/npm`, and `scripts/npm/publish.ts` publishes them with provenance once
   the GitHub release exists. `usemob` holds the `mob` launcher
   (`scripts/npm/mob.js`) and lists one `usemob-OS-ARCH` package per binary as
-  an optional dependency; npm and Bun install only the one for the machine, and
-  the launcher runs its binary. A stable `vX.Y.Z` is published as `X.Y.Z` under
+  an optional dependency; npm and Bun install only the one for the machine. On
+  Linux and macOS the package's postinstall (`scripts/npm/install.js`) hard
+  links that binary over the launcher, so the command runs natively; on
+  Windows, or when install scripts are skipped, the launcher runs the binary
+  with Node.js. A stable `vX.Y.Z` is published as `X.Y.Z` under
   the `latest` tag, a nightly `{date}.{sha}` as `0.0.0-nightly.{date}-{sha}`
   under the `nightly` tag. Installing them is described in
   [Install](../install.md).

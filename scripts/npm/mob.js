@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// The `mob` command of the usemob npm package. npm and bun install only the
+// The `mob` command of the usemob npm package until scripts/npm/install.js
+// replaces it with the binary, and on Windows. npm and bun install only the
 // platform package that matches this machine (usemob-OS-ARCH); this runs its
 // compiled binary, which needs neither Node.js nor Bun.
 'use strict';

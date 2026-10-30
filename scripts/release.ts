@@ -77,7 +77,7 @@ if (values.npm) {
 	}
 	const main = join(out, 'usemob');
 	mkdirSync(join(main, 'bin'), { recursive: true });
-	copyFileSync(join(root, 'scripts/npm/mob.js'), join(main, 'bin', 'mob.js'));
+	for (const file of ['mob.js', 'install.js']) copyFileSync(join(root, 'scripts/npm', file), join(main, 'bin', file));
 	for (const file of ['LICENSE', 'README.md']) copyFileSync(join(root, file), join(main, file));
 	await Bun.write(join(main, 'package.json'), JSON.stringify({
 		name: 'usemob',
@@ -85,6 +85,7 @@ if (values.npm) {
 		description: 'Local assistant with desktop, terminal and background service',
 		...meta,
 		bin: { mob: 'bin/mob.js' },
+		scripts: { postinstall: 'node bin/install.js' },
 		files: ['bin'],
 		optionalDependencies: Object.fromEntries(targets.map(t => { const { os, cpu } = platform(t); return [`usemob-${os}-${cpu}`, npmVersion]; })),
 	}, null, '\t') + '\n');

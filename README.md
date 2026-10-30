@@ -9,7 +9,7 @@ anything with an effect waits for your approval.
 ## Install
 
 ```bash
-npm install -g usemob      # or: bun add -g usemob
+npm install -g usemob      # or: bun add -g --trust usemob
 ```
 
 Nightly builds, archives, upgrading and building from source are in

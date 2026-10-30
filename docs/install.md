@@ -5,22 +5,22 @@ npm install -g usemob
 mob start
 ```
 
-That is all most people need. `bun add -g usemob` installs the same package
-with Bun. Then see [Use](../README.md#use) in the README.
+That is all most people need. With Bun, install the same package with
+`bun add -g --trust usemob`. Then see [Use](../README.md#use) in the README.
 
 ## Nightly builds
 
 Every change to `main` is published under the `nightly` tag:
 
 ```bash
-npm install -g usemob@nightly   # or: bun add -g usemob@nightly
+npm install -g usemob@nightly   # or: bun add -g --trust usemob@nightly
 ```
 
 ## Upgrade and uninstall
 
 ```bash
 mob stop                        # a running service keeps the old version
-npm install -g usemob@latest    # or: bun add -g usemob@latest
+npm install -g usemob@latest    # or: bun add -g --trust usemob@latest
 npm uninstall -g usemob         # or: bun remove -g usemob
 ```
 
@@ -30,9 +30,14 @@ where they are.
 ## Platforms
 
 Mob is published for Linux and macOS (x64 and arm64) and Windows (x64). The
-package installs one compiled binary for your machine, so Mob itself needs
-neither Node.js nor Bun; the small `mob` launcher in the package runs with
-Node.js.
+package installs one compiled binary for your machine, and Mob needs neither
+Node.js nor Bun to run.
+
+On Linux and macOS the package's install script puts that binary in place of
+the `mob` command. Bun runs install scripts only for packages you trust, which
+is what `--trust` does. Without it, or with `--ignore-scripts`, `mob` is a small
+launcher that needs Node.js on your `PATH`. On Windows `mob` is always that
+launcher.
 
 ## Without npm
 
@@ -47,6 +52,9 @@ To build from source, see [Contributing](../CONTRIBUTING.md).
 - **`usemob-OS-ARCH is not installed`**: the package for your platform was
   skipped, usually by `--no-optional` or `--omit=optional`. Install again
   without it, or use an archive.
+- **`env: 'node': No such file or directory`**: the install script did not
+  run. Install again with `bun add -g --trust usemob`, or without
+  `--ignore-scripts`.
 - **`mob: command not found` after `bun add -g`**: add Bun's global bin folder
   (`~/.bun/bin`) to your `PATH`.
 
