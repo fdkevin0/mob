@@ -39,16 +39,23 @@ minor version. Other commit types are left out of the changelog.
   desktop app is built by the `desktop` job (see [Desktop app](desktop.md)).
 - Both channels attest their archives with `actions/attest-build-provenance`,
   verified with `gh attestation verify`.
-- Each stable release updates the `mob` cask in `fdkevin0/homebrew-tap`
-  (`brew install fdkevin0/tap/mob`, macOS and Linux). The cask removes the
-  quarantine flag because the binary is not notarized.
+- With `--npm`, `scripts/release.ts` also writes the npm packages to
+  `dist/npm`, and `scripts/npm/publish.ts` publishes them with provenance once
+  the GitHub release exists. `usemob` holds the `mob` launcher
+  (`scripts/npm/mob.js`) and lists one `usemob-OS-ARCH` package per binary as
+  an optional dependency; npm and Bun install only the one for the machine, and
+  the launcher runs its binary. A stable `vX.Y.Z` is published as `X.Y.Z` under
+  the `latest` tag, a nightly `{date}.{sha}` as `0.0.0-nightly.{date}-{sha}`
+  under the `nightly` tag. Installing them is described in
+  [Install](../install.md).
 - An experimental workflow reports how much of the host
   [scriptc](https://github.com/vercel-labs/scriptc) can compile natively, after
   host changes reach `main` and weekly. It never blocks a merge, and no release contains a scriptc build.
 
-Repository setup: a `HOMEBREW_TAP_TOKEN` secret that can push to the tap (without
-it the cask is built but not pushed); a `RELEASE_PLEASE_TOKEN` secret so the
-release PR starts CI; and GitHub Actions allowed to create pull requests.
+Repository setup: an `NPM_TOKEN` secret, a granular npm token that can publish
+`usemob` and `usemob-*` (without it the packages are built but not published); a
+`RELEASE_PLEASE_TOKEN` secret so the release PR starts CI; and GitHub Actions
+allowed to create pull requests.
 
 ## Database upgrades
 

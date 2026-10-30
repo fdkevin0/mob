@@ -8,9 +8,10 @@ import { SiteFooter, SiteHeader } from '../site/Site';
 import { Story } from './Story';
 
 const installs = {
+	npm: { note: 'Linux, macOS and Windows.', lines: ['npm install -g usemob', 'mob start'], href: '/docs/install/', action: 'Install guide' },
+	Bun: { note: 'The same package, installed with Bun.', lines: ['bun add -g usemob', 'mob start'], href: '/docs/install/', action: 'Install guide' },
 	Download: { note: 'Archives for Linux, macOS and Windows. Every change to main is published as a nightly build.', lines: ['mob start', 'mob open --web'], href: 'https://github.com/fdkevin0/mob/releases', action: 'Download' },
-	Homebrew: { note: 'The tap is published with the first stable release.', lines: ['brew install fdkevin0/tap/mob', 'mob start'], href: 'https://github.com/fdkevin0/homebrew-tap', action: 'View the tap' },
-	Source: { note: 'Needs Go, Bun and just.', lines: ['git clone https://github.com/fdkevin0/mob && cd mob', 'just install && just build', './build/mob start'], href: '/docs/contributing/', action: 'Contributing guide' },
+	Source: { note: 'Needs Bun and just.', lines: ['git clone https://github.com/fdkevin0/mob && cd mob', 'just install && just build', './build/mob start'], href: '/docs/contributing/', action: 'Contributing guide' },
 };
 type Install = keyof typeof installs;
 
@@ -20,7 +21,7 @@ export function Landing() {
 	const [siteError, setSiteError] = useState('');
 	const [dialog, setDialog] = useState<{ reason?: string }>();
 	const [signedIn, setSignedIn] = useState(false);
-	const [install, setInstall] = useState<Install>('Download');
+	const [install, setInstall] = useState<Install>('npm');
 	const signInTrigger = useRef<HTMLButtonElement>(null);
 	const user = session.data?.user;
 	function showSignIn(event: MouseEvent<HTMLButtonElement>) {

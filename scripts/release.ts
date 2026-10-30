@@ -1,16 +1,17 @@
 // Builds every Mob release archive (docs/features/releases.md). The web UI must
 // be built first (bun run build) so that it is embedded in each binary.
 //
-//   bun scripts/release.ts --version V [--only linux_amd64] [--cask]
+//   bun scripts/release.ts --version V [--only linux_amd64] [--npm]
 //
-// Writes dist/mob_V_OS_ARCH.{tar.gz,zip} and dist/SHA256SUMS. With --cask and
-// HOMEBREW_TAP_TOKEN set, also publishes the Homebrew cask to fdkevin0/homebrew-tap.
+// Writes dist/mob_V_OS_ARCH.{tar.gz,zip} and dist/SHA256SUMS. With --npm, also
+// writes the usemob npm package and one usemob-OS-ARCH package per binary to
+// dist/npm for scripts/npm/publish.ts.
 import { $ } from 'bun';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
-const { values } = parseArgs({ options: { version: { type: 'string' }, only: { type: 'string', multiple: true }, cask: { type: 'boolean' } } });
+const { values } = parseArgs({ options: { version: { type: 'string' }, only: { type: 'string', multiple: true }, npm: { type: 'boolean' } } });
 const version = values.version;
 if (!version) throw new Error('--version is required');
 const root = resolve(import.meta.dir, '..');
@@ -48,51 +49,48 @@ for (const a of archives) sums[a] = new Bun.CryptoHasher('sha256').update(await 
 await Bun.write(join(dist, 'SHA256SUMS'), archives.map(a => `${sums[a]}  ${a}`).join('\n') + '\n');
 console.log(`Built ${archives.length} archives in ${dist}`);
 
-if (values.cask) {
-	const tag = version;
-	const url = (os: string, arch: string) => `https://github.com/fdkevin0/mob/releases/download/${tag}/mob_${version}_${os}_${arch}.tar.gz`;
-	const sum = (os: string, arch: string) => sums[`mob_${version}_${os}_${arch}.tar.gz`] ?? '';
-	const block = (os: 'darwin' | 'linux') => `    on_intel do
-      url "${url(os, 'amd64')}"
-      sha256 "${sum(os, 'amd64')}"
-    end
-    on_arm do
-      url "${url(os, 'arm64')}"
-      sha256 "${sum(os, 'arm64')}"
-    end`;
-	const cask = `cask "mob" do
-  name "mob"
-  desc "Local assistant with desktop, terminal and background service"
-  homepage "https://usemob.app"
-  version "${version.replace(/^v/, '')}"
-
-  on_macos do
-${block('darwin')}
-  end
-
-  on_linux do
-${block('linux')}
-  end
-
-  binary "mob_${version}_#{OS.mac? ? "darwin" : "linux"}_#{Hardware::CPU.intel? ? "amd64" : "arm64"}/mob"
-
-  # The binary is not notarized, so macOS would refuse to start it.
-  postflight do
-    if OS.mac?
-      system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}"]
-    end
-  end
-end
-`;
-	await Bun.write(join(dist, 'mob.rb'), cask);
-	const token = process.env.HOMEBREW_TAP_TOKEN;
-	// Without a token the cask is written to dist/ but not published.
-	if (token) {
-		const tap = join(dist, 'homebrew-tap');
-		await $`git clone -q --depth 1 https://x-access-token:${token}@github.com/fdkevin0/homebrew-tap.git ${tap}`;
-		mkdirSync(join(tap, 'Casks'), { recursive: true });
-		copyFileSync(join(dist, 'mob.rb'), join(tap, 'Casks', 'mob.rb'));
-		await $`git add Casks/mob.rb && git -c user.name=mob-release -c user.email=noreply@usemob.app commit -qm ${'mob ' + version} && git push -q`.cwd(tap).nothrow();
-		rmSync(tap, { recursive: true, force: true });
+if (values.npm) {
+	// npm wants semver: a stable vX.Y.Z is X.Y.Z under the latest tag, and a
+	// nightly {date}.{sha} is 0.0.0-nightly.{date}-{sha} under the nightly tag.
+	const stable = /^v?(\d+\.\d+\.\d+)$/.exec(version);
+	const npmVersion = stable ? stable[1] : `0.0.0-nightly.${version.replace('.', '-')}`;
+	const tag = stable ? 'latest' : 'nightly';
+	const out = join(dist, 'npm');
+	const meta = {
+		license: 'MIT',
+		homepage: 'https://usemob.app',
+		repository: { type: 'git', url: 'git+https://github.com/fdkevin0/mob.git' },
+	};
+	const platform = (t: Target) => ({ os: t.os === 'windows' ? 'win32' : t.os, cpu: t.arch === 'amd64' ? 'x64' : 'arm64' });
+	const packages: string[] = [];
+	for (const t of targets) {
+		const { os, cpu } = platform(t);
+		const name = `usemob-${os}-${cpu}`;
+		const dir = join(out, name);
+		const exe = t.os === 'windows' ? 'mob.exe' : 'mob';
+		mkdirSync(join(dir, 'bin'), { recursive: true });
+		copyFileSync(join(dist, `mob_${version}_${t.os}_${t.arch}`, exe), join(dir, 'bin', exe));
+		copyFileSync(join(root, 'LICENSE'), join(dir, 'LICENSE'));
+		await Bun.write(join(dir, 'README.md'), `# ${name}\n\nThe ${os}-${cpu} binary of [Mob](https://usemob.app). Install \`usemob\` instead.\n`);
+		await Bun.write(join(dir, 'package.json'), JSON.stringify({ name, version: npmVersion, description: `The ${os}-${cpu} binary of Mob`, ...meta, os: [os], cpu: [cpu], files: ['bin'] }, null, '\t') + '\n');
+		packages.push(dir);
 	}
+	const main = join(out, 'usemob');
+	mkdirSync(join(main, 'bin'), { recursive: true });
+	copyFileSync(join(root, 'scripts/npm/mob.js'), join(main, 'bin', 'mob.js'));
+	for (const file of ['LICENSE', 'README.md']) copyFileSync(join(root, file), join(main, file));
+	await Bun.write(join(main, 'package.json'), JSON.stringify({
+		name: 'usemob',
+		version: npmVersion,
+		description: 'Local assistant with desktop, terminal and background service',
+		...meta,
+		bin: { mob: 'bin/mob.js' },
+		files: ['bin'],
+		optionalDependencies: Object.fromEntries(targets.map(t => { const { os, cpu } = platform(t); return [`usemob-${os}-${cpu}`, npmVersion]; })),
+	}, null, '\t') + '\n');
+	// scripts/npm/publish.ts publishes them in this order, so usemob never names a missing platform package.
+	packages.push(main);
+	await Bun.write(join(out, 'publish.json'), JSON.stringify({ version: npmVersion, tag, packages: packages.map(p => p.slice(out.length + 1)) }, null, '\t') + '\n');
+	console.log(`Wrote ${packages.length} npm packages ${npmVersion} in ${out}`);
+
 }
