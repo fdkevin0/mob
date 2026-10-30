@@ -1,7 +1,7 @@
 // What Mob's model and the owner use to manage tasks: tools and commands.
 import { CommandError, cell, interactive, type Command, type Task, type Tool } from '@mob/core';
 import { isAbsolute } from 'node:path';
-import { blueprint, blueprints, defaultBlueprint, steps } from './blueprints';
+import { blueprint, blueprints, defaultBlueprint, steps, type Stage } from './blueprints';
 import { firstLine, git } from './process';
 import { preset, presets, readers } from './presets';
 import { reviewTools } from './review';
@@ -25,8 +25,10 @@ type StartInput = { project?: string; prompt?: string; title?: string; agent?: s
 
 /** PlanTask is one task of a plan, as the owner approves it. */
 type PlanTask = { title: string; agent: string; blueprint: string; prompt: string };
+/** PlanBlueprint is what a plan's blueprint does: in a line for people, and its stages for the card that draws it. */
+type PlanBlueprint = { does: string; stages: Stage[]; manual?: true };
 /** Plan is what task_plan asks the owner to approve: tasks in one project, and what each of their blueprints does. */
-type Plan = { project: string; summary?: string; tasks: PlanTask[]; blueprints: Record<string, string> };
+type Plan = { project: string; summary?: string; tasks: PlanTask[]; blueprints: Record<string, PlanBlueprint> };
 
 /** planLimit bounds the tasks one plan starts. */
 export const planLimit = 6;
@@ -171,7 +173,10 @@ export async function askPlan(svc: Service, input: { project?: string; summary?:
 		return { title: String(t.title ?? '').trim() || firstLine(prompt, 60), agent: preset(t.agent ?? '').name, blueprint: blueprint(t.blueprint || saved?.blueprint || '').name, prompt };
 	});
 	const summary = String(input.summary ?? '').trim();
-	return { project: path, ...summary ? { summary } : {}, tasks, blueprints: Object.fromEntries([...new Set(tasks.map(t => t.blueprint))].map(n => [n, steps(blueprint(n))])) };
+	return { project: path, ...summary ? { summary } : {}, tasks, blueprints: Object.fromEntries([...new Set(tasks.map(t => t.blueprint))].map(n => {
+		const b = blueprint(n);
+		return [n, { does: steps(b), stages: b.stages, ...b.manual ? { manual: true as const } : {} }];
+	})) };
 }
 
 /** overview is what tasks returns. */

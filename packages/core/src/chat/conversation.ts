@@ -382,6 +382,12 @@ export function describeApproval(tool: string, input: unknown): [string, boolean
 			});
 			continue;
 		}
+		// A map of named items, such as a plan's blueprints, shows one line per name: the item's does when it says what it does.
+		if (value && typeof value === 'object' && !Array.isArray(value) && Object.values(value).every(v => v && typeof v === 'object' && typeof (v as { does?: unknown }).does === 'string')) {
+			b += `\n${key}:`;
+			for (const [k, v] of Object.entries(value)) line(k, (v as { does: string }).does, '   ');
+			continue;
+		}
 		line(key, value, '');
 	}
 	return [b, whole];

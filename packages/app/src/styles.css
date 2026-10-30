@@ -1352,49 +1352,128 @@ button.reply-meta:hover,
 .plan-card.waiting .tool-status {
 	color: var(--wait);
 }
+.plan-card > header .plan-open-flow {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	margin-left: auto;
+	min-height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: var(--surface-raised);
+	color: var(--text);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+.plan-card > header .plan-open-flow:hover {
+	border-color: var(--line-hover);
+}
 .plan-summary {
 	margin: 8px 0 0;
 	color: var(--text-soft);
 }
 .plan-tasks {
 	display: grid;
-	gap: 8px;
+	gap: 6px;
 	margin: 12px 0 0;
 	padding: 0;
 	list-style: none;
-	counter-reset: plan;
 }
 .plan-tasks > li {
-	counter-increment: plan;
-	position: relative;
-	padding: 8px 10px 8px 34px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 8px;
+	padding: 4px 8px 4px 4px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	background: var(--surface-raised);
 }
-.plan-tasks > li::before {
-	content: counter(plan);
-	position: absolute;
-	top: 9px;
-	left: 10px;
-	width: 16px;
+.plan-task-main {
+	display: flex;
+	flex: 1 1 260px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	min-width: 0;
+	padding: 4px 6px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.plan-task-main:hover {
+	background: var(--accent);
+}
+.plan-task-n {
+	width: 14px;
 	font-family: var(--mono);
 	font-size: 12px;
 	color: var(--muted-foreground);
 	text-align: right;
 }
-.plan-task-head {
+.plan-task-text {
 	display: flex;
-	align-items: center;
-	gap: 8px;
+	flex: 1 1 140px;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
 }
 .plan-task-title {
-	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	color: var(--text);
 	font-weight: 500;
+}
+.plan-task-meta {
+	font-size: 12px;
+	color: var(--muted-foreground);
+	overflow-wrap: anywhere;
+}
+.plan-mini {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+}
+.plan-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: var(--accent);
+	color: var(--muted-foreground);
+	font-size: 11px;
+}
+.plan-pill i {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+	opacity: 0.5;
+}
+.plan-pill[data-state='run'] {
+	color: var(--run);
+}
+.plan-pill[data-state='wait'] {
+	color: var(--wait);
+}
+.plan-pill[data-state='done'] {
+	color: var(--ok);
+}
+.plan-pill[data-state='fail'] {
+	color: var(--destructive);
+}
+.plan-pill:not([data-state='idle']) i {
+	opacity: 1;
 }
 .plan-task-status {
 	display: inline-flex;
@@ -1411,7 +1490,9 @@ button.reply-meta:hover,
 	background: var(--accent);
 	cursor: pointer;
 }
-.plan-task-status .spinner {
+.plan-task-status .spinner,
+.plan-node .spinner,
+.plan-inspector-now .spinner {
 	width: 10px;
 	height: 10px;
 }
@@ -1434,46 +1515,370 @@ button.reply-meta:hover,
 	color: var(--destructive);
 	background: color-mix(in srgb, var(--destructive) 10%, transparent);
 }
-.plan-task-meta {
-	margin: 2px 0 0;
-	font-size: 12px;
-	color: var(--muted-foreground);
-	overflow-wrap: anywhere;
-}
-.plan-task-prompt summary {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	margin-top: 4px;
-	font-size: 12px;
-	color: var(--muted-foreground);
-	cursor: pointer;
-	list-style: none;
-}
-.plan-task-prompt summary::-webkit-details-marker {
-	display: none;
-}
-.plan-task-prompt[open] summary svg {
-	transform: rotate(90deg);
-}
-.plan-task-prompt p {
-	margin: 6px 0 0;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	color: var(--text-soft);
-}
-.plan-blueprints {
-	margin: 10px 0 0;
-	padding: 0 0 0 16px;
-	font-size: 12px;
-	color: var(--muted-foreground);
-}
 .plan-failed {
 	margin: 8px 0 0;
 	color: var(--destructive);
 }
 .plan-card .approval-prompt {
 	margin-top: 12px;
+}
+.plan-flow-dialog.dialog-panel {
+	display: flex;
+	flex-direction: column;
+	width: min(1180px, calc(100% - 32px));
+	height: min(760px, calc(100dvh - 32px));
+	padding: 0;
+	overflow: hidden;
+}
+.plan-flow-head {
+	padding: 16px 56px 12px 20px;
+	border-bottom: 1px solid var(--line);
+}
+.plan-flow-head h2 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 560;
+}
+.plan-flow-head p {
+	margin: 4px 0 0;
+	font-size: 13px;
+	color: var(--muted-foreground);
+}
+.plan-flow-body {
+	display: flex;
+	flex: 1;
+	flex-wrap: wrap;
+	min-height: 0;
+	overflow: auto;
+}
+.plan-canvas {
+	position: relative;
+	display: flex;
+	flex: 999 1 560px;
+	min-width: 0;
+	min-height: 320px;
+	background-color: var(--sunken);
+	background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
+	background-size: 20px 20px;
+}
+.plan-canvas-scroll {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	overflow: auto;
+	padding-bottom: 48px;
+}
+.plan-canvas-size {
+	position: relative;
+	flex-shrink: 0;
+	margin: auto;
+}
+.plan-canvas-inner {
+	position: absolute;
+	top: 0;
+	left: 0;
+	transform-origin: 0 0;
+}
+.plan-wires {
+	position: absolute;
+	inset: 0;
+	overflow: visible;
+}
+.plan-wires path {
+	fill: none;
+	stroke: var(--line-hover);
+	stroke-width: 1.5;
+}
+.plan-wires path[data-state='on'] {
+	stroke: color-mix(in srgb, var(--ok) 60%, transparent);
+}
+.plan-wires marker path {
+	fill: var(--line-hover);
+	stroke: none;
+}
+.plan-wires .plan-loop,
+.plan-wires .plan-wire-locked {
+	stroke-dasharray: 5 4;
+}
+.plan-loop-label {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	padding: 1px 8px;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: var(--sunken);
+	color: var(--muted-foreground);
+	font-size: 11px;
+	white-space: nowrap;
+}
+.plan-node {
+	position: absolute;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 9px 12px;
+	border: 1px solid var(--line-strong);
+	border-radius: 12px;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+.plan-node:hover {
+	border-color: var(--line-hover);
+}
+.plan-node[aria-pressed='true'] {
+	border-color: var(--ring);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent);
+}
+.plan-node[data-kind='ship'] {
+	border-style: dashed;
+	background: transparent;
+}
+.plan-node[data-state='run'] {
+	border-color: color-mix(in srgb, var(--run) 55%, transparent);
+}
+.plan-node[data-state='wait'] {
+	border-color: color-mix(in srgb, var(--wait) 55%, transparent);
+}
+.plan-node[data-state='fail'] {
+	border-color: color-mix(in srgb, var(--destructive) 55%, transparent);
+}
+.plan-node-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+.plan-node-head > svg:first-child {
+	color: var(--node-colour, currentColor);
+}
+.plan-node-head > :last-child:not(svg:first-child) {
+	margin-left: auto;
+}
+.plan-node[data-kind='build'] {
+	--node-colour: var(--cyan);
+}
+.plan-node[data-kind='verify'] {
+	--node-colour: var(--lime);
+}
+.plan-node[data-kind='review'],
+.plan-node[data-kind='model'] {
+	--node-colour: var(--violet);
+}
+.plan-node[data-kind='ready'] {
+	--node-colour: var(--ok);
+}
+.plan-node[data-kind='you'] {
+	--node-colour: var(--wait);
+}
+.plan-node[data-state='run'] .plan-node-head > :last-child {
+	color: var(--run);
+}
+.plan-node[data-state='done'] .plan-node-head > :last-child {
+	color: var(--ok);
+}
+.plan-node[data-state='wait'] .plan-node-head > :last-child {
+	color: var(--wait);
+}
+.plan-node-title,
+.plan-node-sub {
+	line-height: 1.4;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.plan-node-title {
+	font-weight: 500;
+	font-size: 13px;
+}
+.plan-node-sub {
+	font-size: 12px;
+	color: var(--muted-foreground);
+}
+.plan-node[data-state='run'] .plan-node-sub {
+	color: var(--run);
+}
+.plan-node[data-state='wait'] .plan-node-sub {
+	color: var(--wait);
+}
+.plan-zoom {
+	position: absolute;
+	left: 12px;
+	bottom: 12px;
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 3px;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: var(--surface);
+	font-size: 12px;
+	color: var(--muted-foreground);
+}
+.plan-zoom button {
+	width: 28px;
+	height: 26px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text);
+	font: inherit;
+	font-size: 15px;
+	cursor: pointer;
+}
+.plan-zoom button:hover {
+	background: var(--accent);
+}
+.plan-zoom span {
+	min-width: 40px;
+	text-align: center;
+}
+.plan-inspector {
+	display: flex;
+	flex: 1 1 280px;
+	flex-direction: column;
+	gap: 14px;
+	max-width: 360px;
+	padding: 18px 20px 24px;
+	border-left: 1px solid var(--line);
+	background: var(--panel);
+	font-size: 13px;
+}
+.plan-inspector-kind {
+	margin: 0;
+	font-size: 11px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+.plan-inspector h3 {
+	margin: -8px 0 0;
+	font-size: 15px;
+	font-weight: 560;
+}
+.plan-inspector h4 {
+	margin: 0 0 6px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--muted-foreground);
+}
+.plan-inspector section p {
+	margin: 0;
+	line-height: 1.5;
+	color: var(--text-soft);
+}
+.plan-inspector-now {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	align-self: flex-start;
+	margin: 0;
+	padding: 2px 8px;
+	border-radius: 8px;
+	background: var(--accent);
+	font-size: 12px;
+}
+.plan-inspector-now[data-state='run'] {
+	color: var(--run);
+}
+.plan-inspector-now[data-state='wait'] {
+	color: var(--wait);
+}
+.plan-inspector-now[data-state='done'] {
+	color: var(--ok);
+}
+.plan-inspector-now[data-state='fail'] {
+	color: var(--destructive);
+}
+.plan-more summary {
+	color: var(--text-soft);
+	cursor: pointer;
+}
+.plan-prompt {
+	margin: 8px 0 0;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: var(--surface);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	line-height: 1.5;
+	color: var(--text-soft);
+}
+.plan-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.plan-chips span {
+	padding: 2px 10px;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	font-size: 12px;
+}
+.plan-checks {
+	display: grid;
+	gap: 4px;
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+.plan-checks li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--ok);
+}
+.plan-checks li[data-passed='false'] {
+	color: var(--wait);
+}
+.plan-checks code {
+	color: var(--text-soft);
+	font-family: var(--mono);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.plan-lock {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: var(--accent);
+	color: var(--text-soft);
+}
+.plan-inspector-open {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	align-self: flex-start;
+	min-height: 32px;
+	padding: 0 12px;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: var(--surface-raised);
+	color: var(--text);
+	font: inherit;
+	cursor: pointer;
+}
+.plan-flow-decide {
+	padding: 12px 20px 16px;
+	border-top: 1px solid var(--line);
+}
+.plan-flow-decide .approval-prompt {
+	margin: 0;
+}
+@media (max-width: 720px) {
+	.plan-inspector {
+		max-width: none;
+		border-left: 0;
+		border-top: 1px solid var(--line);
+	}
 }
 .tool-body {
 	margin: 6px 0 4px 30px;

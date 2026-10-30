@@ -1032,12 +1032,15 @@ test('task_plan asks once, then starts every task', async () => {
 	expect(plan.run(toolCall({ project: 'mob', tasks: [{ title: 'x', prompt: ' ' }] }))).rejects.toThrow("task 1's prompt is empty");
 	expect(plan.run(toolCall({ project: 'other', tasks: [{ title: 'x', prompt: 'x' }] }))).rejects.toThrow('saved projects: mob');
 	// Each task gets its agent and blueprint, the project's by default, and the owner sees what each blueprint does.
-	const asked = await plan.run(toolCall({ project: 'mob', summary: 'Greet twice', tasks: [{ title: 'One', prompt: 'hello', agent: 'claude' }, { prompt: 'hello', blueprint: 'standard' }] })).catch(e => e.asked) as { tasks: Record<string, string>[]; blueprints: Record<string, string> };
+	const asked = await plan.run(toolCall({ project: 'mob', summary: 'Greet twice', tasks: [{ title: 'One', prompt: 'hello', agent: 'claude' }, { prompt: 'hello', blueprint: 'standard' }] })).catch(e => e.asked) as { tasks: Record<string, string>[]; blueprints: Record<string, { does: string; stages: { type: string }[] }> };
 	expect(asked).toMatchObject({ project: h.repo, summary: 'Greet twice', tasks: [{ title: 'One', agent: 'claude', blueprint: 'quick' }, { title: 'hello', agent: 'codex', blueprint: 'standard' }] });
 	expect(Object.keys(asked.blueprints).sort()).toEqual(['quick', 'standard']);
+	// The card draws each blueprint's stages.
+	expect(asked.blueprints.standard.stages.map(s => s.type)).toEqual(['verify', 'review']);
 	expect(plan.scope!(JSON.stringify(asked))).toBe(`${h.repo} plan claude/quick codex/standard`);
 	const [text] = describeApproval('task_plan', asked);
 	expect(text).toContain('tasks:\n1.\n   title: One\n   agent: claude');
+	expect(text).toContain("blueprints:\n   quick: the agent works, then Mob runs the project's checks");
 	// Approving it starts both, from the conversation that asked.
 	const origin = h.store.create();
 	const out = await plan.approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify({ ...asked, tasks: [asked.tasks[0], { ...asked.tasks[1], blueprint: 'quick' }] }), store: h.store, owner: true }) as { tasks: { task: string; title: string }[] };
