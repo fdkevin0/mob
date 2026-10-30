@@ -119,7 +119,9 @@ export type FlowCheck = { command: string; passed: boolean; exitCode?: number; s
  * round, how often failing checks were sent back this round, what the checks
  * and the review last said, and why it is stuck.
  */
-export type Flow = { blueprint: string; stage: string; round: number; tries: number; checks?: FlowCheck[]; review?: string; note?: string };
+export type Flow = { blueprint: string; stages?: FlowStage[]; stage: string; round: number; tries: number; checks?: FlowCheck[]; review?: string; note?: string };
+/** FlowStage is a stage the owner set for one task in place of its blueprint's, when they changed a plan as they approved it. */
+export type FlowStage = { type: string; retries?: number; aspects?: string[]; rounds?: number };
 export const taskRunning = 'running', taskWaiting = 'waiting', taskReview = 'review', taskStopped = 'stopped', taskFailed = 'failed';
 /** How an agent says its work ended: done and holds up; needs the changes its result lists; cannot go on without a decision or something it lacks. */
 export const outcomePassed = 'passed', outcomeRework = 'rework', outcomeBlocked = 'blocked';
@@ -449,24 +451,36 @@ export class Store {
 	// decide records the user's decision, at most once. A denial completes the
 	// call and tells the model, with the user's reason when they gave one; an
 	// approved call is left for complete, so a retry never carries it out twice.
-	decide(conversationID: string, approvalID: string, approved: boolean, reason: string): Decision {
-		return this.decideOnce(conversationID, approvalID, approved, reason, true);
+	// input, when set, is what the owner changed the call's input to as they approved it, as JSON.
+	decide(conversationID: string, approvalID: string, approved: boolean, reason: string, input?: string): Decision {
+		return this.decideOnce(conversationID, approvalID, approved, reason, true, input);
+	}
+
+	/** pendingApproval is the tool and input of approval id while it waits for a decision. */
+	pendingApproval(conversationID: string, approvalID: string): { tool: string; input: string } {
+		const row = this.db.get<{ message_id: string; tool_call_id: string; input: string; status: string; expires_at: number }>('SELECT message_id,tool_call_id,input,status,expires_at FROM approvals WHERE id=? AND conversation_id=?', approvalID, conversationID);
+		if (!row || row.status !== 'pending' || row.expires_at < Date.now()) throw new StaleApproval();
+		let tool = '';
+		const parts = this.db.get<{ parts: string }>('SELECT parts FROM messages WHERE id=?', row.message_id);
+		for (const p of parts ? JSON.parse(parts.parts) as Part[] : []) if (p.toolCallId === row.tool_call_id) tool = String(p.type).replace(/^tool-/, '');
+		return { tool, input: row.input };
 	}
 
 	/** withdraw records a pending approval as denied without telling a model. */
 	withdraw(conversationID: string, approvalID: string) { this.decideOnce(conversationID, approvalID, false, '', false); }
 
-	private decideOnce(conversationID: string, approvalID: string, approved: boolean, reason: string, tell: boolean): Decision {
+	private decideOnce(conversationID: string, approvalID: string, approved: boolean, reason: string, tell: boolean, input?: string): Decision {
 		const d = this.db.transaction(() => {
 			const row = this.db.get<{ message_id: string; tool_call_id: string; input: string; status: string; expires_at: number }>('SELECT message_id,tool_call_id,input,status,expires_at FROM approvals WHERE id=? AND conversation_id=?', approvalID, conversationID);
 			if (!row || row.status !== 'pending' || row.expires_at < Date.now()) throw new StaleApproval();
-			const d: Decision = { approvalId: approvalID, messageId: row.message_id, toolCallId: row.tool_call_id, tool: '', input: row.input };
+			const d: Decision = { approvalId: approvalID, messageId: row.message_id, toolCallId: row.tool_call_id, tool: '', input: approved && input !== undefined ? input : row.input };
 			this.updatePart(d, p => {
 				d.tool = String(p.type).replace(/^tool-/, '');
+				if (d.input !== row.input) p.input = JSON.parse(d.input);
 				p.approval = { id: approvalID, approved };
 				p.state = approved ? 'approval-responded' : 'output-denied';
 			});
-			this.db.run('UPDATE approvals SET status=? WHERE id=?', approved ? 'approved' : 'denied', approvalID);
+			this.db.run('UPDATE approvals SET status=?,input=? WHERE id=?', approved ? 'approved' : 'denied', d.input, approvalID);
 			if (!approved && tell) {
 				const note = reason ? `The user denied the ${d.tool} request and said: ${reason}` : `The user denied the ${d.tool} request. Do not retry unless asked.`;
 				this.db.run("INSERT INTO messages(id,conversation_id,role,parts,status) VALUES(?,?,'user',?,'complete')", newID(), conversationID, JSON.stringify([{ type: 'text', text: note }]));

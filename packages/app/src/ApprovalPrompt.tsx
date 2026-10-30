@@ -12,9 +12,12 @@ export function ApprovalPrompt({
 	request,
 	whole = true,
 	busy,
+	allow = 'Allow once',
 	decide,
 }: {
 	question: string;
+	/** allow names approving once, such as with the changes the owner made. */
+	allow?: string;
 	/** request is the request's details; unset when the card shows them itself. */
 	request?: string;
 	whole?: boolean;
@@ -57,7 +60,7 @@ export function ApprovalPrompt({
 				</form>
 			) : (
 				<div className="approval-actions">
-					{whole && <Button type="button" disabled={busy} onClick={() => decide(true)}>Allow once</Button>}
+					{whole && <Button type="button" disabled={busy} onClick={() => decide(true)}>{allow}</Button>}
 					<Button type="button" variant="outline" disabled={busy} onClick={() => setDenying(true)}>Deny…</Button>
 					{whole && <DropdownMenu>
 						<DropdownMenuTrigger asChild><Button type="button" variant="ghost" disabled={busy}>More permissions…</Button></DropdownMenuTrigger>

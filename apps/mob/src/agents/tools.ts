@@ -1,7 +1,7 @@
 // What Mob's model and the owner use to manage tasks: tools and commands.
 import { CommandError, cell, interactive, type Command, type Task, type Tool } from '@mob/core';
 import { isAbsolute } from 'node:path';
-import { blueprint, blueprints, defaultBlueprint, steps, type Stage } from './blueprints';
+import { blueprint, blueprints, defaultBlueprint, problems, steps, type Stage } from './blueprints';
 import { firstLine, git } from './process';
 import { preset, presets, readers } from './presets';
 import { reviewTools } from './review';
@@ -23,8 +23,8 @@ export const text = (description: string) => ({ type: 'string', description });
 
 type StartInput = { project?: string; prompt?: string; title?: string; agent?: string; share?: string; blueprint?: string };
 
-/** PlanTask is one task of a plan, as the owner approves it. */
-type PlanTask = { title: string; agent: string; blueprint: string; prompt: string };
+/** PlanTask is one task of a plan, as the owner approves it; stages are the owner's own for it, when they changed its blueprint's. */
+type PlanTask = { title: string; agent: string; blueprint: string; prompt: string; stages?: Stage[] };
 /** PlanBlueprint is what a plan's blueprint does: in a line for people, and its stages for the card that draws it. */
 type PlanBlueprint = { does: string; stages: Stage[]; manual?: true };
 /** Plan is what task_plan asks the owner to approve: tasks in one project, and what each of their blueprints does. */
@@ -92,13 +92,14 @@ export function tools(svc: Service): Tool[] {
 			const failed: string[] = [];
 			for (const [index, p] of plan.tasks.entries()) {
 				try {
-					const t = await svc.startTask(call.conversationId, plan.project, p.agent, p.title, p.prompt, p.blueprint);
+					const t = await svc.startTask(call.conversationId, plan.project, p.agent, p.title, p.prompt, p.blueprint, p.stages);
 					started.push({ index, task: t.id, conversation: t.conversationId, title: t.title, agent: t.agent, branch: t.branch });
 				} catch (e) { failed.push(`${p.title}: ${(e as Error).message}`); }
 			}
 			if (!started.length) throw new Error('no task started: ' + failed.join('; '));
 			return { tasks: started, ...failed.length ? { failed } : {}, status: 'started; each agent works on its own, and Mob tells the owner as each task is ready' };
 		},
+		revise: async (raw, changed) => revisePlan(JSON.parse(raw) as Plan, changed),
 		// Remembering covers plans in the same project with the same agents and blueprints.
 		scope: raw => {
 			const v = JSON.parse(raw) as Plan;
@@ -178,6 +179,48 @@ export async function askPlan(svc: Service, input: { project?: string; summary?:
 		const b = blueprint(n);
 		return [n, { does: steps(b), stages: b.stages, ...b.manual ? { manual: true as const } : {} }];
 	})) };
+}
+
+/**
+ * revisePlan applies what the owner changed in plan as they approved it: each
+ * task's instructions, and the stages it runs in place of its blueprint's
+ * (null goes back to the blueprint's). The project, the tasks and their
+ * agents stay as Mob asked.
+ */
+export function revisePlan(plan: Plan, changed: unknown): Plan {
+	const list = (changed as { tasks?: unknown })?.tasks;
+	if (!Array.isArray(list) || list.length !== plan.tasks.length) throw new Error(`a changed plan lists its ${plan.tasks.length} tasks in order`);
+	const tasks = plan.tasks.map((t, i) => {
+		const c = list[i] as { prompt?: unknown; stages?: unknown } | null;
+		if (!c || typeof c !== 'object') return t;
+		const next: PlanTask = { ...t };
+		if (c.prompt !== undefined) {
+			if (typeof c.prompt !== 'string' || !c.prompt.trim()) throw new Error(`task ${i + 1}'s instructions are empty`);
+			next.prompt = c.prompt;
+		}
+		if (c.stages === null) delete next.stages;
+		else if (c.stages !== undefined) {
+			const b = blueprint(t.blueprint);
+			if (b.manual) throw new Error(`task ${i + 1} follows the manual blueprint, whose checking is Mob's model's`);
+			if (!Array.isArray(c.stages)) throw new Error(`task ${i + 1}'s stages are a list`);
+			const stages = c.stages.map(s => stageOf(s, i));
+			const wrong = problems({ ...b, stages });
+			if (wrong.length) throw new Error(`task ${i + 1}: ${wrong.join('; ')}`);
+			// Stages the same as the blueprint's are the blueprint.
+			if (JSON.stringify(stages) === JSON.stringify(b.stages)) delete next.stages;
+			else next.stages = stages;
+		}
+		return next;
+	});
+	return { ...plan, tasks };
+}
+
+// stageOf reads one stage the owner set for task i, keeping only what a stage has.
+function stageOf(s: unknown, i: number): Stage {
+	const v = s as { type?: unknown; retries?: unknown; aspects?: unknown; rounds?: unknown } | null;
+	if (v?.type === 'verify') return { type: 'verify', retries: Number(v.retries) };
+	if (v?.type === 'review') return { type: 'review', aspects: Array.isArray(v.aspects) ? v.aspects.map(String) : [], rounds: Number(v.rounds) };
+	throw new Error(`task ${i + 1} has a stage that is neither verify nor review`);
 }
 
 /** overview is what tasks returns. */

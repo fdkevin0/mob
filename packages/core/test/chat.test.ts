@@ -40,6 +40,33 @@ test('approval, carrying out, and recovery', async () => {
 	s.close();
 });
 
+test('the owner may approve a call with input changed, when its tool can revise it', async () => {
+	const s = open();
+	const c = s.create();
+	const m = s.begin(c.id, 'request-1', '/remember 喜欢中文', 'demo/echo');
+	const events: Event[] = [];
+	await run(new AbortController().signal, s, new DemoModel(), { tools: defaultTools(), hooks: emptyHooks(), owner: false }, c.id, m, '', e => { events.push(e); });
+	const approval = events.find(e => e.kind === 'approval-requested')!.approvalId!;
+	const service = new ConversationService(s, demoModels);
+	const decide = (input: unknown) => service.execute({ id: c.id, text: '', requestId: '', approval: { id: approval, approved: true, input }, owner: true }, () => {});
+	// remember cannot be changed as it is approved: the approval still waits.
+	await expect(decide({ fact: '喜欢英文' })).rejects.toThrow('remember cannot be changed as it is approved');
+	expect(s.pendingApproval(c.id, approval).input).toBe(JSON.stringify({ fact: '喜欢中文' }));
+	// A tool that revises checks the change, and carries out what it returns.
+	const remember = service.tools.list().find(t => t.name === 'remember')!;
+	remember.revise = async (_input, changed) => {
+		const fact = String((changed as { fact?: unknown }).fact ?? '').trim();
+		if (!fact) throw new Error('fact is empty');
+		return { fact };
+	};
+	await expect(decide({ fact: ' ' })).rejects.toThrow('fact is empty');
+	await decide({ fact: ' 喜欢英文 ' });
+	expect(s.memories(c.id, false)).toEqual(['喜欢英文']);
+	// The call shows what was approved.
+	expect(s.history(c.id)[1].parts[0].input).toEqual({ fact: '喜欢英文' });
+	s.close();
+});
+
 test('a turn streams AI SDK chunks and saves the reply', async () => {
 	const s = open();
 	const service = new ConversationService(s, demoModels);

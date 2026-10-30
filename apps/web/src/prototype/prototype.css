@@ -1,0 +1,29 @@
+/* The page the documentation embeds in a frame: the card on the page's own
+ * background, with nothing around it. */
+body {
+	margin: 0;
+	background: var(--background);
+}
+.prototype {
+	display: flow-root;
+	padding: 16px;
+}
+.prototype-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 32px;
+	margin: 8px 2px 0;
+	font-size: 12px;
+	color: var(--muted-foreground);
+}
+/* The flow fills the frame, which is its window here. */
+.prototype-page .plan-flow-dialog.dialog-panel {
+	width: 100%;
+	height: 100%;
+	max-height: none;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+}

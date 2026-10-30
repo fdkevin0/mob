@@ -81,3 +81,13 @@
 site-search button[data-open-modal] {
 	border-radius: 8px;
 }
+
+/* A working prototype from the site (apps/web/src/prototype), framed where the
+ * page shows a screenshot on GitHub; it sets the frame's height to fit. */
+.sl-markdown-content iframe.prototype {
+	display: block;
+	width: 100%;
+	height: 420px;
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 12px;
+}

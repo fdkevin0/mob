@@ -4154,3 +4154,116 @@ button.reply-meta:hover,
 	}
 }
 
+.plan-edited {
+	width: 7px;
+	height: 7px;
+	margin-left: auto;
+	border-radius: 50%;
+	background: var(--wait);
+}
+.plan-decide {
+	display: grid;
+	gap: 8px;
+}
+.plan-card > .plan-decide {
+	margin-top: 12px;
+}
+.plan-decide .approval-prompt {
+	margin: 0;
+}
+.plan-changes {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: 12px;
+}
+.plan-changes span {
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--wait) 12%, transparent);
+	color: var(--wait);
+}
+.plan-changes button,
+.plan-inspector-remove {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted-foreground);
+	font: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+.plan-inspector-remove {
+	align-self: flex-start;
+	margin-top: 10px;
+	font-size: 12px;
+}
+.plan-field {
+	width: 100%;
+	margin-top: 8px;
+	padding: 10px 12px;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	line-height: 1.5;
+	resize: vertical;
+}
+.plan-field:focus {
+	outline: 2px solid color-mix(in srgb, var(--ring) 40%, transparent);
+	outline-offset: 1px;
+}
+.plan-chips button {
+	padding: 2px 10px;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--muted-foreground);
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+.plan-chips button[aria-pressed='true'] {
+	border-color: var(--ring);
+	background: color-mix(in srgb, var(--ring) 10%, transparent);
+	color: var(--text);
+}
+.plan-chips button:disabled {
+	cursor: default;
+}
+.plan-stepper {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	color: var(--text-soft);
+}
+.plan-stepper-box {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	overflow: hidden;
+}
+.plan-stepper-box button {
+	width: 32px;
+	height: 30px;
+	border: 0;
+	background: var(--surface-raised);
+	color: var(--text);
+	font: inherit;
+	font-size: 15px;
+	cursor: pointer;
+}
+.plan-stepper-box button:disabled {
+	color: var(--muted-foreground);
+	cursor: default;
+}
+.plan-stepper-box output {
+	min-width: 36px;
+	text-align: center;
+}

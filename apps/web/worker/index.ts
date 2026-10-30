@@ -4,7 +4,7 @@ import { accountRunners, runnerTransport } from './runners';
 export { RunnerRelay } from './relay';
 
 // Every page runs one inline script, which applies the colour scheme before
-// the first paint (app.html, account.html, landing.html, demo.html).
+// the first paint (app.html, account.html, landing.html, demo.html, prototype.html).
 const themeScript = "'sha256-S6W4VqyCb8qKkLG/FDCsAHhGN7IBdaOVQRlaEQyTHX0='";
 
 // The landing page talks to this Worker (sign-in) and Turnstile.
@@ -36,6 +36,21 @@ const demoPolicy = [
 	"base-uri 'none'",
 	"form-action 'none'",
 	"frame-ancestors 'none'",
+].join('; ');
+
+// The prototypes the documentation embeds (prototype.html) run on sample
+// data, and only the documentation, on this origin, may frame them.
+const prototypePolicy = [
+	"default-src 'self'",
+	`script-src 'self' ${themeScript}`,
+	"connect-src 'self'",
+	"img-src 'self' data:",
+	"style-src 'self' 'unsafe-inline'",
+	"font-src 'self' data:",
+	"object-src 'none'",
+	"base-uri 'none'",
+	"form-action 'none'",
+	"frame-ancestors 'self'",
 ].join('; ');
 
 // The account page talks only to this Worker's auth API.
@@ -88,6 +103,7 @@ const docsPolicy = [
 	"img-src 'self' data: https:",
 	"font-src 'self' data:",
 	"worker-src 'self'",
+	"frame-src 'self'",
 	"object-src 'none'",
 	"base-uri 'none'",
 	"form-action 'none'",
@@ -133,6 +149,7 @@ export default {
 		}
 		if (pathname === '/') return page(env, request, '/landing', landingPolicy);
 		if (pathname === '/demo' || pathname === '/demo/') return page(env, request, '/demo', demoPolicy);
+		if (pathname === '/prototype/plan' || pathname === '/prototype/plan/') return page(env, request, '/prototype', prototypePolicy);
 		if (pathname === '/app' || pathname === '/app/') {
 			const session = await createAuth(env, url.origin).api.getSession({ headers: request.headers });
 			// The browser keeps a #offer= fragment across the redirect, and the

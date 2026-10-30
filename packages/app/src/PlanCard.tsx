@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/d
 import { api, type Connection } from './api';
 import type { AgentNode } from './contracts';
 import { nodeStatus } from './AgentTree';
+import { ApprovalPrompt } from './ApprovalPrompt';
 import { CheckIcon, EyeIcon, HandIcon, OpenIcon, SpinnerIcon, TerminalIcon, UserIcon } from './icons';
 
 /** Stage is a step a blueprint runs after the agent's work: the project's checks, or another agent's review. */
@@ -15,7 +16,8 @@ type PlanBlueprint = string | { does: string; stages: Stage[]; manual?: boolean 
 export type PlanInput = {
 	project?: string;
 	summary?: string;
-	tasks?: { title?: string; agent?: string; blueprint?: string; prompt?: string }[];
+	/** A task's stages are the owner's own for it, when they changed its blueprint's as they approved the plan. */
+	tasks?: { title?: string; agent?: string; blueprint?: string; prompt?: string; stages?: Stage[] }[];
 	blueprints?: Record<string, PlanBlueprint>;
 };
 /** PlanOutput is what an approved plan started; index is the task's place in the plan, missing from plans started before it was sent. */
@@ -30,8 +32,17 @@ const refreshEvery = 5000;
 type StepKind = 'build' | 'verify' | 'review' | 'model' | 'ready';
 /** State is where a started task is at a step. */
 type State = 'idle' | 'run' | 'wait' | 'done' | 'fail';
-type Step = { kind: StepKind; label: string; title: string; sub: string; does: string; state: State; now?: string; stage?: Stage };
-type Lane = { task: PlanTask; run?: Run; node?: AgentNode; steps: Step[] };
+type Step = { kind: StepKind; label: string; title: string; sub: string; does: string; state: State; now?: string; stage?: Stage; edited?: boolean };
+/** Lane is a task as the card draws it; stages are what it runs after the agent's work, unset when the owner cannot change them. */
+type Lane = { task: PlanTask; run?: Run; node?: AgentNode; steps: Step[]; stages?: Stage[] };
+/** Change is what the owner changed in one task while the plan waits: its instructions, and the stages it runs. */
+type Change = { prompt?: string; stages?: Stage[] };
+
+// The aspects a review can look at, and the bounds of a blueprint's loops, as Mob checks them when the owner changes a plan.
+const aspects = ['correctness', 'tests', 'hygiene', 'docs', 'security'];
+const maxRetries = 3,
+	maxRounds = 3;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const kindLabels: Record<StepKind, string> = { build: 'Agent', verify: 'Checks', review: 'Review', model: 'Mob checks', ready: 'Ready' };
 const pillLabels: Record<StepKind, string> = { build: 'Build', verify: 'Checks', review: 'Review', model: 'Mob', ready: 'Ready' };
@@ -51,6 +62,8 @@ export function PlanCard({
 	output,
 	state,
 	open,
+	approval,
+	defaultFlow,
 	children,
 }: {
 	connection: Connection;
@@ -60,7 +73,10 @@ export function PlanCard({
 	/** state is the call's: its icon and label. */
 	state: { kind: string; label: string; icon: ReactNode };
 	open: (conversationId: string) => void;
-	/** children decide the plan while it waits for the owner. */
+	/** approval decides the plan while it waits for the owner, with what they changed in it as input. */
+	approval?: { busy: boolean; decide: (approved: boolean, reason?: string, remember?: string, input?: unknown) => void };
+	/** defaultFlow opens the flow on this step at first, such as "0.build" (the docs' prototypes do). */
+	defaultFlow?: string;
 	children?: ReactNode;
 }) {
 	const done = planOutput(output);
@@ -70,8 +86,12 @@ export function PlanCard({
 		changes,
 		started.map((t) => t.conversation),
 	);
-	const [flow, setFlow] = useState<string | undefined>();
+	const [flow, setFlow] = useState<string | undefined>(defaultFlow);
+	// A flow open from the start leaves focus where it is, so the page around it does not scroll to it.
+	const quiet = useRef(defaultFlow !== undefined);
+	const [changed, setChanged] = useState<Change[]>([]);
 	const tasks = input.tasks ?? [];
+	const editable = !!approval;
 	const project = (input.project ?? '').split(/[\\/]/).filter(Boolean).pop() ?? '';
 	// Each started task names its place in the plan. Older plans did not, and their tasks started in plan order, so each is the next of the plan's with its title and agent.
 	let next = 0;
@@ -80,8 +100,55 @@ export function PlanCard({
 		const s = started[next];
 		const run = indexed ? started.find((r) => r.index === i) : s && s.title === task.title && s.agent === task.agent ? started[next++] : undefined;
 		const node = run && nodes.find((n) => n.conversationId === run.conversation);
-		return { task, run, node, steps: steps(task, input.blueprints?.[task.blueprint ?? ''], project, node) };
+		const b = input.blueprints?.[task.blueprint ?? ''];
+		// Only a blueprint whose stages the card knows, and that Mob does not leave to its model, has stages to change.
+		const asked = typeof b === 'object' && !b.manual ? (task.stages ?? b.stages) : undefined;
+		const c = editable ? changed[i] : undefined;
+		const stages = c?.stages ?? asked;
+		const shown = { ...task, prompt: c?.prompt ?? task.prompt };
+		const lane: Lane = { task: shown, run, node, steps: steps(shown, b, stages, project, node), stages: editable ? stages : undefined };
+		for (const st of lane.steps) {
+			if (st.kind === 'build') st.edited = c?.prompt !== undefined && c.prompt !== task.prompt;
+			else if (st.stage) st.edited = c?.stages !== undefined && !same(st.stage, asked?.find((a) => a.type === st.stage!.type));
+		}
+		return lane;
 	});
+	// count is how many things the owner changed: each task's instructions, and each stage added, changed or removed.
+	let count = 0;
+	const payload = tasks.map((task, i) => {
+		const c = editable ? changed[i] : undefined;
+		const b = input.blueprints?.[task.blueprint ?? ''];
+		const asked = typeof b === 'object' && !b.manual ? (task.stages ?? b.stages) : undefined;
+		const out: Change = {};
+		if (c?.prompt !== undefined && c.prompt !== task.prompt) {
+			out.prompt = c.prompt;
+			count++;
+		}
+		if (c?.stages && !same(c.stages, asked)) {
+			out.stages = c.stages;
+			for (const type of ['verify', 'review']) if (!same(c.stages.find((s) => s.type === type), asked?.find((s) => s.type === type))) count++;
+		}
+		return out;
+	});
+	const change = (i: number, c: Change) => setChanged((all) => Object.assign([...all], { [i]: { ...all[i], ...c } }));
+	const decide = approval && (
+		<div className="plan-decide">
+			{count > 0 && (
+				<p className="plan-changes">
+					<span>{plural(count, 'change')}</span>
+					<button type="button" onClick={() => setChanged([])}>
+						Undo changes
+					</button>
+				</p>
+			)}
+			<ApprovalPrompt
+				question={`Mob wants to start ${tasks.length === 1 ? 'this task' : 'these tasks'} at once.`}
+				busy={approval.busy}
+				allow={count ? `Approve with ${plural(count, 'change')}` : 'Allow once'}
+				decide={(approved, reason, remember) => approval.decide(approved, reason, remember, approved && count ? { tasks: payload } : undefined)}
+			/>
+		</div>
+	);
 	const title = `Plan · ${plural(tasks.length, 'task')}${project ? ` in ${project}` : ''}`;
 	return (
 		<section className={`plan-card ${state.kind}`} aria-label="Plan">
@@ -106,7 +173,7 @@ export function PlanCard({
 								<span className="plan-task-text">
 									<span className="plan-task-title">{lane.task.title}</span>
 									<span className="plan-task-meta">
-										{[lane.task.agent, blueprintLabel(input.blueprints?.[lane.task.blueprint ?? '']), lane.run?.branch]
+										{[lane.task.agent, blueprintLabel(input.blueprints?.[lane.task.blueprint ?? ''], lane.steps), lane.run?.branch]
 											.filter(Boolean)
 											.join(' · ')}
 									</span>
@@ -140,18 +207,34 @@ export function PlanCard({
 					Did not start: {f}
 				</p>
 			))}
+			{decide}
 			{children}
 			<Dialog open={flow !== undefined} onOpenChange={(show) => !show && setFlow(undefined)}>
-				<DialogContent className="plan-flow-dialog" aria-describedby={undefined}>
+				<DialogContent
+					className="plan-flow-dialog"
+					aria-describedby={undefined}
+					onOpenAutoFocus={(e) => {
+						if (quiet.current) e.preventDefault();
+						quiet.current = false;
+					}}
+				>
 					<header className="plan-flow-head">
 						<DialogTitle>{title}</DialogTitle>
 						{input.summary && <DialogDescription>{input.summary}</DialogDescription>}
 					</header>
 					<div className="plan-flow-body">
 						<FlowCanvas lanes={lanes} selected={flow} select={setFlow} />
-						<Inspector lanes={lanes} selected={flow} project={project} open={open} started={started.length > 0} />
+						<Inspector
+							lanes={lanes}
+							selected={flow}
+							select={setFlow}
+							project={project}
+							open={open}
+							started={started.length > 0}
+							change={approval && !approval.busy ? change : undefined}
+						/>
 					</div>
-					{children && <footer className="plan-flow-decide">{children}</footer>}
+					{decide && <footer className="plan-flow-decide">{decide}</footer>}
 				</DialogContent>
 			</Dialog>
 		</section>
@@ -182,7 +265,13 @@ export function planInput(raw: unknown): PlanInput | undefined {
 	return {
 		project: text(raw.project),
 		summary: text(raw.summary),
-		tasks: (raw.tasks as Record<string, unknown>[] | undefined)?.map((t) => ({ title: text(t.title), agent: text(t.agent), blueprint: text(t.blueprint), prompt: text(t.prompt) })),
+		tasks: (raw.tasks as Record<string, unknown>[] | undefined)?.map((t) => ({
+			title: text(t.title),
+			agent: text(t.agent),
+			blueprint: text(t.blueprint),
+			prompt: text(t.prompt),
+			...(Array.isArray(t.stages) && t.stages.every(stage) ? { stages: t.stages } : {}),
+		})),
 		blueprints,
 	};
 }
@@ -207,10 +296,10 @@ function planOutput(raw: unknown): PlanOutput {
 }
 
 // blueprintLabel says in a few words what a task's blueprint runs after the agent's work.
-function blueprintLabel(b: PlanBlueprint | undefined) {
+function blueprintLabel(b: PlanBlueprint | undefined, list: Step[]) {
 	if (!b || typeof b === 'string') return '';
 	if (b.manual) return "Mob's model checks";
-	const has = (type: string) => b.stages.some((s) => s.type === type);
+	const has = (kind: string) => list.some((s) => s.kind === kind);
 	if (has('verify') && has('review')) return 'checks, then review';
 	if (has('verify')) return 'checks only';
 	if (has('review')) return 'review only';
@@ -218,7 +307,7 @@ function blueprintLabel(b: PlanBlueprint | undefined) {
 }
 
 // steps lays out a task's lane, and where a started task is along it.
-function steps(task: PlanTask, b: PlanBlueprint | undefined, project: string, node: AgentNode | undefined): Step[] {
+function steps(task: PlanTask, b: PlanBlueprint | undefined, stages: Stage[] | undefined, project: string, node: AgentNode | undefined): Step[] {
 	const agent = node?.label || task.agent || 'The agent';
 	const list: Step[] = [
 		{
@@ -239,8 +328,8 @@ function steps(task: PlanTask, b: PlanBlueprint | undefined, project: string, no
 			does: `Once ${agent} is done, Mob's model looks at the work and decides what happens next.`,
 			state: 'idle',
 		});
-	else if (b && typeof b === 'object')
-		for (const stage of b.stages) {
+	else
+		for (const stage of stages ?? []) {
 			if (stage.type === 'verify')
 				list.push({
 					kind: 'verify',
@@ -409,6 +498,7 @@ function FlowCanvas({ lanes, selected, select }: { lanes: Lane[]; selected?: str
 					<span className="plan-node-head">
 						<StepIcon kind={s.kind} />
 						{s.label}
+						{s.edited && <i className="plan-edited" title="Changed" />}
 						{s.state !== 'idle' && <StateMark state={s.state} />}
 					</span>
 					<span className="plan-node-title">{s.title}</span>
@@ -483,15 +573,20 @@ function FlowCanvas({ lanes, selected, select }: { lanes: Lane[]; selected?: str
 function Inspector({
 	lanes,
 	selected,
+	select,
 	project,
 	open,
 	started,
+	change,
 }: {
 	lanes: Lane[];
 	selected?: string;
+	select: (key: string) => void;
 	project: string;
 	open: (conversationId: string) => void;
 	started: boolean;
+	/** change, set while the plan waits for the owner, changes a task's instructions or stages. */
+	change?: (index: number, c: Change) => void;
 }) {
 	const [index, kind] = (selected ?? '').split('.');
 	const lane = lanes[Number(index)];
@@ -532,6 +627,16 @@ function Inspector({
 		);
 	}
 	const flow = lane.node?.task?.flow;
+	const i = Number(index);
+	// setStage puts stage in place of the lane's stage of its type, or removes that stage when stage is undefined; checks run before a review.
+	const setStage = (type: Stage['type'], next: Stage | undefined) => {
+		const list = (lane.stages ?? []).filter((s) => s.type !== type);
+		if (next) list.push(next);
+		list.sort((a, b) => (a.type === b.type ? 0 : a.type === 'verify' ? -1 : 1));
+		change?.(i, { stages: list });
+	};
+	const verify = step.stage?.type === 'verify' ? step.stage : undefined;
+	const review = step.stage?.type === 'review' ? step.stage : undefined;
 	return (
 		<aside className="plan-inspector" aria-label="Step">
 			<p className="plan-inspector-kind">
@@ -547,21 +652,99 @@ function Inspector({
 				<h4>What happens</h4>
 				<p>{step.does}</p>
 			</section>
-			{step.kind === 'build' && lane.task.prompt && (
+			{step.kind === 'build' && change && (
+				<details className="plan-more" open={step.edited || undefined}>
+					<summary>Instructions</summary>
+					<textarea
+						className="plan-field"
+						aria-label="Instructions"
+						value={lane.task.prompt ?? ''}
+						rows={6}
+						onChange={(e) => change(i, { prompt: e.target.value })}
+					/>
+				</details>
+			)}
+			{step.kind === 'build' && !change && lane.task.prompt && (
 				<details className="plan-more">
 					<summary>Instructions</summary>
 					<p className="plan-prompt">{lane.task.prompt}</p>
 				</details>
 			)}
-			{step.stage?.type === 'review' && (
+			{verify && change && (
+				<section>
+					<h4>When a check fails</h4>
+					<Stepper
+						label="Retries"
+						value={verify.retries}
+						min={0}
+						max={maxRetries}
+						unit={(n) => (n === 1 ? 'retry, then it needs you' : 'retries, then it needs you')}
+						set={(n) => setStage('verify', { ...verify, retries: n })}
+					/>
+				</section>
+			)}
+			{review && (
 				<section>
 					<h4>Looks at</h4>
 					<p className="plan-chips">
-						{step.stage.aspects.map((a) => (
-							<span key={a}>{a}</span>
-						))}
+						{(change ? aspects : review.aspects).map((a) =>
+							change ? (
+								<button
+									key={a}
+									type="button"
+									aria-pressed={review.aspects.includes(a)}
+									// A review looks at one aspect or more.
+									disabled={review.aspects.length === 1 && review.aspects.includes(a)}
+									onClick={() =>
+										setStage('review', {
+											...review,
+											aspects: review.aspects.includes(a) ? review.aspects.filter((x) => x !== a) : aspects.filter((x) => x === a || review.aspects.includes(x)),
+										})
+									}
+								>
+									{a}
+								</button>
+							) : (
+								<span key={a}>{a}</span>
+							),
+						)}
 					</p>
 				</section>
+			)}
+			{review && change && (
+				<section>
+					<h4>Rework</h4>
+					<Stepper
+						label="Rounds"
+						value={review.rounds}
+						min={1}
+						max={maxRounds}
+						unit={(n) => (n === 1 ? 'round at most' : 'rounds at most')}
+						set={(n) => setStage('review', { ...review, rounds: n })}
+					/>
+					<button
+						type="button"
+						className="plan-inspector-remove"
+						onClick={() => {
+							setStage('review', undefined);
+							select(`${i}.ready`);
+						}}
+					>
+						Remove this review
+					</button>
+				</section>
+			)}
+			{step.kind === 'ready' && change && lane.stages && !lane.stages.some((s) => s.type === 'review') && (
+				<button
+					type="button"
+					className="plan-inspector-open"
+					onClick={() => {
+						setStage('review', { type: 'review', aspects: ['correctness', 'tests'], rounds: 1 });
+						select(`${i}.review`);
+					}}
+				>
+					+ Add a review before this
+				</button>
 			)}
 			{step.kind === 'verify' && flow?.checks && flow.checks.length > 0 && (
 				<details className="plan-more">
@@ -588,6 +771,24 @@ function Inspector({
 				</button>
 			)}
 		</aside>
+	);
+}
+
+// Stepper sets a small count, such as a stage's retries, within its bounds.
+function Stepper({ label, value, min, max, unit, set }: { label: string; value: number; min: number; max: number; unit: (n: number) => string; set: (n: number) => void }) {
+	return (
+		<div className="plan-stepper" role="group" aria-label={label}>
+			<span className="plan-stepper-box">
+				<button type="button" aria-label={`Fewer ${label.toLowerCase()}`} disabled={value <= min} onClick={() => set(value - 1)}>
+					−
+				</button>
+				<output>{value}</output>
+				<button type="button" aria-label={`More ${label.toLowerCase()}`} disabled={value >= max} onClick={() => set(value + 1)}>
+					+
+				</button>
+			</span>
+			<span>{unit(value)}</span>
+		</div>
 	);
 }
 
