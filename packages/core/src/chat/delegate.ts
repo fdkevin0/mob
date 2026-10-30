@@ -7,8 +7,12 @@ import { Aborted, isAbort } from './running';
 import { newID } from './sql';
 import type { Decision, Message, Part, Store } from './store';
 
-/** Answer is the user's decision on a pending approval. A denial may say why, and the model then answers it. */
-export type Answer = { id: string; approved: boolean; reason?: string; remember?: string };
+/**
+ * Answer is the user's decision on a pending approval. A denial may say why,
+ * and the model then answers it; the owner may approve a call with input
+ * changed, when its tool can revise it.
+ */
+export type Answer = { id: string; approved: boolean; reason?: string; remember?: string; input?: unknown };
 
 /**
  * Delegate runs the turns of conversations an outside agent answers. The

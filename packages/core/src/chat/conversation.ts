@@ -189,7 +189,7 @@ export class ConversationService {
 		const a = input.approval;
 		if (a) {
 			a.reason = (a.reason ?? '').trim();
-			const decision = this.store.decide(input.id, a.id, a.approved, a.reason);
+			const decision = this.store.decide(input.id, a.id, a.approved, a.reason, a.approved && a.input !== undefined ? await this.revise(input, a) : undefined);
 			if (delegate) {
 				// The agent goes on either way; this turn follows it.
 				await delegate.decide(input.id, decision, a);
@@ -243,6 +243,17 @@ export class ConversationService {
 		const turn: Turn = { conversationId: id, owner, model: model.info, request: { system: '', messages: [] } };
 		this.recall(turn);
 		return estimate(this.store, model, this.agent(owner), id, turn.request.system);
+	}
+
+	/** revise checks the input the owner changed approval a's call to, and returns it as JSON. */
+	private async revise(input: ChatRequest, a: Answer): Promise<string> {
+		const pending = this.store.pendingApproval(input.id, a.id);
+		const tool = this.tools.list().find(t => t.name === pending.tool);
+		if (!tool?.revise) throw new CommandError(400, `${pending.tool} cannot be changed as it is approved`);
+		if (tool.ownerOnly && !input.owner) throw new CommandError(403, 'only the owner of this Mob can change ' + pending.tool);
+		try { return JSON.stringify(await tool.revise(pending.input, a.input)); } catch (e) {
+			throw new CommandError(400, (e as Error).message);
+		}
 	}
 
 	/** carryOut runs an approved call and records its result, returning the note that tells the model. */

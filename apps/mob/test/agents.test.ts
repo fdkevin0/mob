@@ -1049,3 +1049,32 @@ test('task_plan asks once, then starts every task', async () => {
 	expect(started.map(t => [t.parent, t.agent, t.flow?.blueprint])).toEqual([[origin.id, 'claude', 'quick'], [origin.id, 'codex', 'quick']]);
 	await h.until('not both ready', () => notices.filter(n => n.text.startsWith('**Ready to review')).length === 2);
 });
+
+test('the owner changes a plan as they approve it', async () => {
+	const h = harness();
+	const notices: { conversationId: string; text: string }[] = [];
+	closers.push(h.conv.notices(n => notices.push(n)));
+	await h.svc.addProject(h.repo, 'mob');
+	const plan = h.tool('task_plan');
+	const asked = await plan.run(toolCall({ project: 'mob', tasks: [{ title: 'One', prompt: 'hello' }, { title: 'Two', prompt: 'hello', blueprint: 'manual' }] })).catch(e => e.asked);
+	const raw = JSON.stringify(asked);
+	const revise = (changed: unknown) => plan.revise!(raw, changed);
+	await expect(revise({ tasks: [{}] })).rejects.toThrow('lists its 2 tasks in order');
+	await expect(revise({ tasks: [{ prompt: ' ' }, {}] })).rejects.toThrow("task 1's instructions are empty");
+	await expect(revise({ tasks: [{ stages: [{ type: 'verify', retries: 9 }] }, {}] })).rejects.toThrow('verify retries are 0 to 3');
+	await expect(revise({ tasks: [{ stages: [{ type: 'review', aspects: ['vibes'], rounds: 1 }] }, {}] })).rejects.toThrow('no aspect "vibes"');
+	await expect(revise({ tasks: [{}, { stages: [] }] })).rejects.toThrow('follows the manual blueprint');
+	// Stages the same as the blueprint's are the blueprint; others are the task's own.
+	const same = await revise({ tasks: [{ stages: [{ type: 'verify', retries: 2 }, { type: 'review', aspects: ['correctness', 'tests'], rounds: 2 }] }, {}] }) as { tasks: { stages?: unknown }[] };
+	expect(same.tasks[0].stages).toBeUndefined();
+	const changed = await revise({ tasks: [{ prompt: 'hello there', stages: [{ type: 'verify', retries: 0 }] }, {}] }) as { project: string; tasks: { title: string; prompt: string; stages?: unknown }[] };
+	expect(changed.project).toBe(h.repo);
+	expect(changed.tasks.map(t => [t.title, t.prompt, t.stages])).toEqual([['One', 'hello there', [{ type: 'verify', retries: 0 }]], ['Two', 'hello', undefined]]);
+	// The changed task runs its own stages: checks, and no review, though its blueprint has one.
+	const origin = h.store.create();
+	const out = await plan.approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify(changed), store: h.store, owner: true }) as { tasks: { task: string }[] };
+	const one = h.store.task(out.tasks[0].task)!;
+	expect(one.flow).toMatchObject({ blueprint: 'standard', stages: [{ type: 'verify', retries: 0 }] });
+	await h.until('not ready', () => notices.some(n => n.text.startsWith('**Ready to review') && n.text.includes('One')));
+	expect(h.store.task(one.id)!.flow?.review).toBeUndefined();
+});

@@ -22,9 +22,7 @@ const waiting = { kind: 'waiting', label: 'Waiting for your approval', icon: nul
 
 it('shows each task with the steps its blueprint runs, and the flow on demand', () => {
 	render(
-		<PlanCard connection={connection} input={plan} state={waiting} open={() => {}}>
-			<button type="button">Allow once</button>
-		</PlanCard>,
+		<PlanCard connection={connection} input={plan} state={waiting} open={() => {}} approval={{ busy: false, decide: () => {} }} />,
 	);
 	const card = screen.getByRole('region', { name: 'Plan' });
 	expect(within(card).getByText('Plan · 2 tasks in shop')).toBeTruthy();
@@ -39,7 +37,7 @@ it('shows each task with the steps its blueprint runs, and the flow on demand', 
 	// The step the row opened says what it does, and its instructions are one click further.
 	const step = within(flow).getByRole('complementary', { name: 'Step' });
 	expect(within(step).getByText(/claude works on “UI” in its own worktree and branch of shop/)).toBeTruthy();
-	expect(within(step).getByText('Add the coupon field')).toBeTruthy();
+	expect(within(step).getByDisplayValue('Add the coupon field')).toBeTruthy();
 	fireEvent.click(within(flow).getAllByRole('button', { name: /Review/ })[0]);
 	expect(within(step).getByText(/reviews correctness and tests/)).toBeTruthy();
 	expect(within(flow).getByText('rework → back · ≤ 2 rounds')).toBeTruthy();
@@ -123,4 +121,47 @@ it('reads only what a plan call holds that the card can show', () => {
 		tasks: [{ title: undefined, agent: undefined, blueprint: undefined, prompt: 'x' }],
 		blueprints: { b: 'checks' },
 	});
+});
+
+it('approves the plan with what the owner changed in its steps', () => {
+	const decide = vi.fn();
+	render(<PlanCard connection={connection} input={plan} state={waiting} open={() => {}} approval={{ busy: false, decide }} />);
+	fireEvent.click(screen.getByRole('button', { name: /API/ }));
+	const flow = screen.getByRole('dialog');
+	const step = within(flow).getByRole('complementary', { name: 'Step' });
+	// The API task: shorter instructions, one more retry, and a review of security too, in one round.
+	fireEvent.change(within(step).getByLabelText('Instructions'), { target: { value: 'Add the coupon endpoint, with tests' } });
+	fireEvent.click(within(flow).getAllByRole('button', { name: /Checks/ })[0]);
+	fireEvent.click(within(step).getByRole('button', { name: 'More retries' }));
+	expect(within(step).getByText('3')).toBeTruthy();
+	expect(within(step).getByRole('button', { name: 'More retries' })).toHaveProperty('disabled', true);
+	fireEvent.click(within(flow).getAllByRole('button', { name: /Review/ })[0]);
+	fireEvent.click(within(step).getByRole('button', { name: 'security' }));
+	fireEvent.click(within(step).getByRole('button', { name: 'Fewer rounds' }));
+	// The UI task: a review added after its checks.
+	fireEvent.click(within(flow).getAllByRole('button', { name: /Ready to review/ })[1]);
+	fireEvent.click(within(step).getByRole('button', { name: /Add a review/ }));
+	expect(within(flow).getAllByText('rework → back · ≤ 1 round')).toHaveLength(2);
+	fireEvent.click(within(flow).getAllByRole('button', { name: 'Approve with 4 changes' })[0]);
+	expect(decide).toHaveBeenCalledWith(true, undefined, undefined, {
+		tasks: [
+			{
+				prompt: 'Add the coupon endpoint, with tests',
+				stages: [
+					{ type: 'verify', retries: 3 },
+					{ type: 'review', aspects: ['correctness', 'tests', 'security'], rounds: 1 },
+				],
+			},
+			{ stages: [{ type: 'verify', retries: 2 }, { type: 'review', aspects: ['correctness', 'tests'], rounds: 1 }] },
+		],
+	});
+	// Undoing the changes approves the plan as Mob asked.
+	fireEvent.click(within(flow).getByRole('button', { name: 'Undo changes' }));
+	fireEvent.click(within(flow).getByRole('button', { name: 'Allow once' }));
+	expect(decide).toHaveBeenLastCalledWith(true, undefined, undefined, undefined);
+});
+
+it('draws a task with the stages the owner set for it', () => {
+	render(<PlanCard connection={connection} input={{ ...plan, tasks: [{ ...plan.tasks![1], stages: [{ type: 'verify', retries: 1 }, { type: 'review', aspects: ['docs'], rounds: 1 }] }] }} state={waiting} open={() => {}} />);
+	expect(screen.getByText('claude · checks, then review')).toBeTruthy();
 });

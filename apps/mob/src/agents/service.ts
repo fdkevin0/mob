@@ -6,7 +6,7 @@ import {
 } from '@mob/core';
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import { advance, begin, blueprint, drop, recover } from './blueprints';
+import { advance, begin, blueprint, drop, recover, type Stage } from './blueprints';
 import { firstLine, git, slug, start, type Conn } from './process';
 import { preset, presets, readers, type Preset } from './presets';
 import { Session } from './session';
@@ -270,13 +270,14 @@ export class Service implements Delegate, Tasks {
 	 * startTask makes a worktree of project for a new task and hands prompt to
 	 * the agent in a turn that runs on its own. parent is the conversation that
 	 * started it, if any. A task Mob's conversation started goes through
-	 * blueprint, or its project's; a sub-task is its parent task's to check.
+	 * blueprint, or its project's, with stages in place of the blueprint's when
+	 * the owner set them; a sub-task is its parent task's to check.
 	 */
-	async startTask(parent: string, project: string, agent: string, title: string, prompt: string, blueprintName = ''): Promise<Task> {
+	async startTask(parent: string, project: string, agent: string, title: string, prompt: string, blueprintName = '', stages?: Stage[]): Promise<Task> {
 		const p = this.project(project) ?? await this.addProject(project);
 		const a = preset(agent);
 		title = title.trim() || firstLine(prompt, 60);
-		const flow = parent && !this.owns(parent) ? begin(blueprintName || p.blueprint || '') : undefined;
+		const flow = parent && !this.owns(parent) ? begin(blueprintName || p.blueprint || '', stages) : undefined;
 		const { dir, branch } = await this.worktree(p, title);
 		return this.launch({ project: p.name, agent: a.name, title, worktree: dir, branch, status: taskRunning, parent: parent || undefined, ...flow ? { flow } : {} }, prompt);
 	}

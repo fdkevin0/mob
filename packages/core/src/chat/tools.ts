@@ -31,6 +31,12 @@ export type Tool = LLMTool & {
 	run: (call: ToolCall) => Promise<unknown>;
 	/** approved carries out a call the user approved after run asked with requestApproval. */
 	approved?: (call: ApprovedCall) => Promise<unknown>;
+	/**
+	 * revise checks what the owner changed input to as they approved it, and
+	 * returns the input to carry out; a tool without it is approved only as
+	 * it asked.
+	 */
+	revise?: (input: string, changed: unknown) => Promise<unknown>;
 	/** scope names what remembering an approval of input covers; unset covers every call of the tool. */
 	scope?: (input: string) => string;
 };

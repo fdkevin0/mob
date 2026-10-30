@@ -397,7 +397,7 @@ function useUnseenApproval(composer: RefObject<HTMLDivElement | null>, waiting: 
 	return unseen;
 }
 
-type Decide = (approvalId: string, approved: boolean, reason?: string, remember?: string) => Promise<void> | void;
+type Decide = (approvalId: string, approved: boolean, reason?: string, remember?: string, input?: unknown) => Promise<void> | void;
 type Resend = (id: string, text: string) => Promise<void> | void;
 
 // askedBy is the owner's message the last reply answers, which retrying says again; commands and their replies are not retried.
@@ -484,14 +484,12 @@ const MessageView = memo(function MessageView({
 									input={plan}
 									output={part.state === 'output-available' ? part.output : undefined}
 									state={state}
+									approval={
+										part.state === 'approval-requested'
+											? { busy, decide: (approved, reason, remember, input) => void decide(part.approval.id, approved, reason, remember, input) }
+											: undefined
+									}
 								>
-									{part.state === 'approval-requested' && (
-										<ApprovalPrompt
-											question={`Mob wants to start ${(plan.tasks ?? []).length === 1 ? 'this task' : 'these tasks'} at once.`}
-											busy={busy}
-											decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
-										/>
-									)}
 									{part.state === 'output-error' && <p role="alert">{part.errorText}</p>}
 								</PlanCard>
 							);

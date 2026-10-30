@@ -423,7 +423,8 @@ export class ConversationClient {
 		}
 	}
 
-	decide = async (approvalId: string, approved: boolean, reason?: string, remember?: string) => {
+	// input, when set, is what the owner changed the call's input to as they approved it.
+	decide = async (approvalId: string, approved: boolean, reason?: string, remember?: string, input?: unknown) => {
 		if (!this.active || this.state.busy) return;
 		this.generation++;
 		this.recoveryFailure = '';
@@ -440,7 +441,7 @@ export class ConversationClient {
 				trigger: 'submit-message',
 				messageId: undefined,
 				abortSignal: controller.signal,
-				body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined, remember: remember || undefined } },
+				body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined, remember: remember || undefined, input } },
 			});
 			this.deciding = false;
 			this.update({});

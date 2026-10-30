@@ -235,8 +235,15 @@ export type FlowCheck = {
   exitCode?: number;
   seconds: number;
 };
+export type FlowStage = {
+  type: string;
+  retries?: number;
+  aspects?: string[];
+  rounds?: number;
+};
 export type Flow = {
   blueprint: string;
+  stages?: FlowStage[];
   stage: string;
   round: number;
   tries: number;

@@ -75,8 +75,25 @@ export function steps(b: Blueprint): string {
 	return parts.join(', then ') + ', then the owner hears it is ready';
 }
 
-/** begin is where a new task of blueprint name starts. */
-export const begin = (name: string): Flow => ({ blueprint: blueprint(name).name, stage: 'build', round: 1, tries: 0 });
+/**
+ * begin is where a new task of blueprint name starts; stages, when set, are
+ * the owner's own for the task in place of the blueprint's.
+ */
+export function begin(name: string, stages?: Stage[]): Flow {
+	const b = blueprint(name);
+	if (stages) {
+		const wrong = problems({ ...b, stages, manual: undefined });
+		if (wrong.length) throw new Error(wrong.join('; '));
+	}
+	return { blueprint: b.name, ...stages ? { stages } : {}, stage: 'build', round: 1, tries: 0 };
+}
+
+/** stagesOf is what flow f runs after the agent's work: the owner's stages for the task, else its blueprint's; undefined leaves checking the work to Mob's model. */
+export function stagesOf(f: Flow): Stage[] | undefined {
+	if (f.stages) return f.stages as Stage[];
+	const b = blueprints.find(b => b.name === f.blueprint);
+	return b && !b.manual ? b.stages : undefined;
+}
 
 /** crossReader is the agent that reviews agent's work: one that can read and is not the same agent, where there is one. */
 export const crossReader = (agent: string) => readers().find(r => r !== agent) ?? readers()[0]!;
@@ -89,8 +106,7 @@ export const crossReader = (agent: string) => readers().find(r => r !== agent) ?
  */
 export function advance(svc: Service, t: Task): boolean {
 	const f = t.flow;
-	const b = f && blueprints.find(b => b.name === f.blueprint);
-	if (!f || !b || b.manual || svc.closed) return svc.review(t);
+	if (!f || !stagesOf(f) || svc.closed) return svc.review(t);
 	// Work after a review, or after the owner heard it was ready or stuck, is a new round; work sent back by a failing check is the same one.
 	if (f.stage !== 'build') {
 		drop(svc, t.id);
@@ -155,10 +171,9 @@ const tail = (s: string, n: number) => s.length > n ? '…' + s.slice(-n) : s;
 /** proceed runs task id's stages after its agent's work: the checks, then the review, then the news that it is ready. */
 async function proceed(svc: Service, id: string, run: object) {
 	let t = svc.store.task(id)!;
-	const b = blueprint(t.flow!.blueprint);
 	let f: Flow = t.flow!;
 	const save = (change: Partial<Flow>) => { f = { ...f, ...change }; svc.store.setTaskFlow(id, f); };
-	for (const stage of b.stages) {
+	for (const stage of stagesOf(f) ?? []) {
 		if (stage.type === 'verify') {
 			save({ stage: 'verify', checks: [], note: undefined });
 			const results: FlowCheck[] = [];
@@ -213,10 +228,9 @@ export async function ready(svc: Service, id: string, review?: string) {
 	const t = svc.store.task(id)!;
 	const f: Flow = { ...t.flow!, stage: 'ready', ...review ? { review } : {} };
 	svc.store.setTaskFlow(id, f);
-	const b = blueprint(f.blueprint);
 	const stat = await shortstat(svc, t);
 	const lines = [`**Ready to review:** ${t.agent} · ${t.title}`, `Branch \`${t.branch}\`${stat ? ' · ' + stat : ''}`];
-	if (b.stages.some(s => s.type === 'verify')) {
+	if (stagesOf(f)?.some(s => s.type === 'verify')) {
 		lines.push(f.checks?.length
 			? 'Checks: ' + f.checks.map(c => `${c.passed ? '✓' : '✗'} \`${c.command}\` (${c.seconds}s)`).join(' · ')
 			: `Checks: none are set for ${t.project}; add one with \`/projects check ${t.project} COMMAND\``);
