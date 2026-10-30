@@ -18,8 +18,8 @@ export type PlanInput = {
 	tasks?: { title?: string; agent?: string; blueprint?: string; prompt?: string }[];
 	blueprints?: Record<string, PlanBlueprint>;
 };
-/** PlanOutput is what an approved plan started. */
-type PlanOutput = { tasks?: { task: string; conversation: string; title: string; agent: string; branch: string }[]; failed?: string[] };
+/** PlanOutput is what an approved plan started; index is the task's place in the plan, missing from plans started before it was sent. */
+type PlanOutput = { tasks?: { index?: number; task: string; conversation: string; title: string; agent: string; branch: string }[]; failed?: string[] };
 type Run = NonNullable<PlanOutput['tasks']>[number];
 type PlanTask = NonNullable<PlanInput['tasks']>[number];
 
@@ -63,7 +63,8 @@ export function PlanCard({
 	/** children decide the plan while it waits for the owner. */
 	children?: ReactNode;
 }) {
-	const started = (output as PlanOutput | undefined)?.tasks ?? [];
+	const done = planOutput(output);
+	const started = done.tasks ?? [];
 	const nodes = useTasks(
 		connection,
 		changes,
@@ -72,11 +73,12 @@ export function PlanCard({
 	const [flow, setFlow] = useState<string | undefined>();
 	const tasks = input.tasks ?? [];
 	const project = (input.project ?? '').split(/[\\/]/).filter(Boolean).pop() ?? '';
-	// Tasks start in plan order, so each started task is the next of the plan's with its title and agent; one that failed to start is skipped.
+	// Each started task names its place in the plan. Older plans did not, and their tasks started in plan order, so each is the next of the plan's with its title and agent.
 	let next = 0;
-	const lanes: Lane[] = tasks.map((task) => {
+	const indexed = started.every((s) => s.index !== undefined);
+	const lanes: Lane[] = tasks.map((task, i) => {
 		const s = started[next];
-		const run = s && s.title === task.title && s.agent === task.agent ? started[next++] : undefined;
+		const run = indexed ? started.find((r) => r.index === i) : s && s.title === task.title && s.agent === task.agent ? started[next++] : undefined;
 		const node = run && nodes.find((n) => n.conversationId === run.conversation);
 		return { task, run, node, steps: steps(task, input.blueprints?.[task.blueprint ?? ''], project, node) };
 	});
@@ -133,7 +135,7 @@ export function PlanCard({
 					);
 				})}
 			</ol>
-			{(output as PlanOutput | undefined)?.failed?.map((f) => (
+			{done.failed?.map((f) => (
 				<p key={f} className="plan-failed" role="alert">
 					Did not start: {f}
 				</p>
@@ -154,6 +156,54 @@ export function PlanCard({
 			</Dialog>
 		</section>
 	);
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
+const stage = (v: unknown): v is Stage =>
+	isObject(v) &&
+	((v.type === 'verify' && Number.isInteger(v.retries)) || (v.type === 'review' && Array.isArray(v.aspects) && v.aspects.every((a) => typeof a === 'string') && Number.isInteger(v.rounds)));
+
+/**
+ * planInput reads a task_plan call's input as the card shows it, or undefined
+ * when it is not a plan at all, such as a model's call Mob refused; the
+ * conversation then shows the call as any other tool's.
+ */
+export function planInput(raw: unknown): PlanInput | undefined {
+	// A call whose input is still streaming in has none yet.
+	if (raw === undefined || raw === null) return {};
+	if (!isObject(raw) || (raw.tasks !== undefined && (!Array.isArray(raw.tasks) || !raw.tasks.every(isObject)))) return undefined;
+	const blueprints: Record<string, PlanBlueprint> = {};
+	if (isObject(raw.blueprints))
+		for (const [name, b] of Object.entries(raw.blueprints)) {
+			if (typeof b === 'string') blueprints[name] = b;
+			else if (isObject(b) && Array.isArray(b.stages) && b.stages.every(stage)) blueprints[name] = { does: text(b.does) ?? '', stages: b.stages, manual: b.manual === true };
+		}
+	return {
+		project: text(raw.project),
+		summary: text(raw.summary),
+		tasks: (raw.tasks as Record<string, unknown>[] | undefined)?.map((t) => ({ title: text(t.title), agent: text(t.agent), blueprint: text(t.blueprint), prompt: text(t.prompt) })),
+		blueprints,
+	};
+}
+
+// planOutput reads what an approved plan started, leaving out what is not a started task.
+function planOutput(raw: unknown): PlanOutput {
+	if (!isObject(raw)) return {};
+	const tasks = Array.isArray(raw.tasks)
+		? raw.tasks
+				.filter((t): t is Record<string, unknown> => isObject(t) && typeof t.conversation === 'string')
+				.map((t) => ({
+					index: Number.isInteger(t.index) ? (t.index as number) : undefined,
+					task: text(t.task) ?? '',
+					conversation: t.conversation as string,
+					title: text(t.title) ?? '',
+					agent: text(t.agent) ?? '',
+					branch: text(t.branch) ?? '',
+				}))
+		: undefined;
+	const failed = Array.isArray(raw.failed) ? raw.failed.filter((f): f is string => typeof f === 'string') : undefined;
+	return { tasks, failed };
 }
 
 // blueprintLabel says in a few words what a task's blueprint runs after the agent's work.

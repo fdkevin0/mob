@@ -152,3 +152,14 @@ it('retries a reply only when it answers the owner’s message, not a command', 
 	expect(askedBy([command(said('user', '/list', 'u')), command(said('assistant', 'One', 'a'))])).toBeUndefined();
 	expect(askedBy([said('assistant', 'Reminder', 'a')])).toBeUndefined();
 });
+
+it('shows a task_plan call that is not a plan as any other tool call, with its error', () => {
+	const call = (input: unknown) =>
+		({ id: 'a', role: 'assistant', parts: [{ type: 'dynamic-tool', toolName: 'task_plan', toolCallId: 'c', state: 'output-error', input, errorText: 'a plan has one task or more' }] }) as ChatMessage;
+	for (const input of [{ project: '/repo', tasks: 'bad' }, { project: '/repo', tasks: [null] }, 'bad']) {
+		const view = show({ messages: [call(input)] });
+		expect(view.container.querySelector('.plan-card')).toBeNull();
+		expect(view.container.querySelector('.tool-call')).toBeTruthy();
+		cleanup();
+	}
+});

@@ -1043,8 +1043,8 @@ test('task_plan asks once, then starts every task', async () => {
 	expect(text).toContain("blueprints:\n   quick: the agent works, then Mob runs the project's checks");
 	// Approving it starts both, from the conversation that asked.
 	const origin = h.store.create();
-	const out = await plan.approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify({ ...asked, tasks: [asked.tasks[0], { ...asked.tasks[1], blueprint: 'quick' }] }), store: h.store, owner: true }) as { tasks: { task: string; title: string }[] };
-	expect(out.tasks.map(t => t.title)).toEqual(['One', 'hello']);
+	const out = await plan.approved!({ conversationId: origin.id, approvalId: '', input: JSON.stringify({ ...asked, tasks: [asked.tasks[0], { ...asked.tasks[1], blueprint: 'quick' }] }), store: h.store, owner: true }) as { tasks: { index: number; task: string; title: string }[] };
+	expect(out.tasks.map(t => [t.index, t.title])).toEqual([[0, 'One'], [1, 'hello']]);
 	const started = out.tasks.map(t => h.store.task(t.task)!);
 	expect(started.map(t => [t.parent, t.agent, t.flow?.blueprint])).toEqual([[origin.id, 'claude', 'quick'], [origin.id, 'codex', 'quick']]);
 	await h.until('not both ready', () => notices.filter(n => n.text.startsWith('**Ready to review')).length === 2);

@@ -87,12 +87,13 @@ export function tools(svc: Service): Tool[] {
 		run: async call => call.requestApproval(await askPlan(svc, call.input as { project?: string; summary?: string; tasks?: StartInput[] })),
 		approved: async call => {
 			const plan = JSON.parse(call.input) as Plan;
-			const started: { task: string; conversation: string; title: string; agent: string; branch: string }[] = [];
+			// index is the task's place in the plan, so the card shows each start against its own task even when titles repeat.
+			const started: { index: number; task: string; conversation: string; title: string; agent: string; branch: string }[] = [];
 			const failed: string[] = [];
-			for (const p of plan.tasks) {
+			for (const [index, p] of plan.tasks.entries()) {
 				try {
 					const t = await svc.startTask(call.conversationId, plan.project, p.agent, p.title, p.prompt, p.blueprint);
-					started.push({ task: t.id, conversation: t.conversationId, title: t.title, agent: t.agent, branch: t.branch });
+					started.push({ index, task: t.id, conversation: t.conversationId, title: t.title, agent: t.agent, branch: t.branch });
 				} catch (e) { failed.push(`${p.title}: ${(e as Error).message}`); }
 			}
 			if (!started.length) throw new Error('no task started: ' + failed.join('; '));

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { PlanCard, type PlanInput } from './PlanCard';
+import { PlanCard, planInput, type PlanInput } from './PlanCard';
 import type { AgentNode } from './contracts';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -92,4 +92,35 @@ it('still shows plans asked before blueprints listed their stages', () => {
 	fireEvent.click(screen.getByRole('button', { name: /API/ }));
 	fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: /Ready/ })[0]);
 	expect(screen.getByText('The task follows its blueprint: checks, then review.')).toBeTruthy();
+});
+
+it('shows each start against its own task when titles repeat and one failed to start', () => {
+	const twice: PlanInput = { ...plan, tasks: [{ title: 'Tests', agent: 'codex', blueprint: 'standard', prompt: 'one' }, { title: 'Tests', agent: 'codex', blueprint: 'quick', prompt: 'two' }] };
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([])));
+	const open = vi.fn();
+	render(
+		<PlanCard
+			connection={connection}
+			input={twice}
+			output={{ tasks: [{ index: 1, task: 't2', conversation: 'c2', title: 'Tests', agent: 'codex', branch: 'mob/tests-2' }], failed: ['Tests: no worktree'] }}
+			state={{ kind: 'done', label: 'Done', icon: null }}
+			open={open}
+		/>,
+	);
+	const [first, second] = screen.getAllByRole('listitem');
+	expect(within(first).queryByRole('button', { name: /Started/ })).toBeNull();
+	expect(within(second).getByText('codex · checks only · mob/tests-2')).toBeTruthy();
+	fireEvent.click(within(second).getByRole('button', { name: /Started/ }));
+	expect(open).toHaveBeenCalledWith('c2');
+});
+
+it('reads only what a plan call holds that the card can show', () => {
+	expect(planInput(undefined)).toEqual({});
+	expect(planInput('bad')).toBeUndefined();
+	expect(planInput({ tasks: 'bad' })).toBeUndefined();
+	expect(planInput({ tasks: [null] })).toBeUndefined();
+	expect(planInput({ tasks: [{ title: 3, prompt: 'x' }], blueprints: { a: { does: 'x', stages: 'no' }, b: 'checks' } })).toEqual({
+		tasks: [{ title: undefined, agent: undefined, blueprint: undefined, prompt: 'x' }],
+		blueprints: { b: 'checks' },
+	});
 });

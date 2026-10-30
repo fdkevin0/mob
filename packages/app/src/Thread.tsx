@@ -12,7 +12,7 @@ import {
 import { JsonResponse, Message, MessageContent, MessageResponse } from './ai-elements/message';
 import { Button } from '@mob/ui/button';
 import { ApprovalPrompt } from './ApprovalPrompt';
-import { PlanCard, type PlanInput } from './PlanCard';
+import { PlanCard, planInput } from './PlanCard';
 import { Label } from '@mob/ui/label';
 import { Textarea } from '@mob/ui/textarea';
 import { Dialog, DialogTrigger } from '@mob/ui/dialog';
@@ -475,18 +475,19 @@ const MessageView = memo(function MessageView({
 					if (isToolUIPart(part)) {
 						const name = part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5);
 						const state = toolState(part.state);
-						if (name === 'task_plan')
+						const plan = name === 'task_plan' ? planInput(part.input) : undefined;
+						if (plan)
 							return (
 								<PlanCard
 									key={part.toolCallId}
 									{...plans}
-									input={(part.input ?? {}) as PlanInput}
+									input={plan}
 									output={part.state === 'output-available' ? part.output : undefined}
 									state={state}
 								>
 									{part.state === 'approval-requested' && (
 										<ApprovalPrompt
-											question={`Mob wants to start ${((part.input as PlanInput)?.tasks ?? []).length === 1 ? 'this task' : 'these tasks'} at once.`}
+											question={`Mob wants to start ${(plan.tasks ?? []).length === 1 ? 'this task' : 'these tasks'} at once.`}
 											busy={busy}
 											decide={(approved, reason, remember) => void decide(part.approval.id, approved, reason, remember)}
 										/>
