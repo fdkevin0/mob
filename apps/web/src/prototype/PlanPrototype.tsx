@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import type { Changes } from '@mob/client';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type RefObject } from 'react';
 import { PlanCard } from '@mob/app/PlanCard';
 import { CheckIcon, CrossIcon, HandIcon } from '@mob/app/icons';
 import { Button } from '@mob/ui/button';
@@ -58,7 +57,7 @@ export function PlanPrototype({ search }: { search: string }) {
 			<PlanCard
 				key={run}
 				connection={{ url: '', token: '' }}
-				changes={changes as unknown as Changes}
+				changes={changes as unknown as ComponentProps<typeof PlanCard>['changes']}
 				input={decision?.approved ? approved(decision.input) : plan}
 				output={decision?.approved ? output : undefined}
 				state={state}

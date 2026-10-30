@@ -2,7 +2,6 @@
 // and how its tasks would move once approved: the replies the workspace would
 // get from Mob's /tasks, worked out from the seconds since approval.
 import type { PlanInput } from '@mob/app/PlanCard';
-import type { AgentNode } from '@mob/client';
 
 type Stage = NonNullable<NonNullable<PlanInput['tasks']>[number]['stages']>[number];
 
@@ -62,8 +61,10 @@ export function phases(index: number, stages: Stage[]): [number, Phase][] {
 	return out;
 }
 
+type Node = { conversationId: string; status: string; task: { branch: string; flow: { stage: string; tries: number; stages: Stage[] } } };
+
 // nodes are the started tasks as the agent tree lists them, `seconds` after approval.
-export function nodes(seconds: number, changed?: unknown): AgentNode[] {
+export function nodes(seconds: number, changed?: unknown): Node[] {
 	return plan.tasks!.map((task, index) => {
 		const stages = stagesOf(index, changed);
 		const run = phases(index, stages);
@@ -81,7 +82,7 @@ export function nodes(seconds: number, changed?: unknown): AgentNode[] {
 				branch: branches[index],
 				flow: { blueprint: task.blueprint, stages, stage: p.stage, round: p.round ?? 1, tries: p.tries ?? 0, checks, review: p.stage === 'ready' && stages.some((s) => s.type === 'review') ? 'No findings that hold up.' : undefined },
 			},
-		} as unknown as AgentNode;
+		};
 	});
 }
 
