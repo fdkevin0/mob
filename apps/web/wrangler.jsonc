@@ -6,7 +6,10 @@
 // command `bun install --frozen-lockfile && bun run build` and deploy command
 // `npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`.
 // Secrets: BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, GITHUB_CLIENT_SECRET and
-// CLOUDFLARE_CLIENT_SECRET (Cloudflare sign-in stays off without it).
+// CLOUDFLARE_CLIENT_SECRET (Cloudflare sign-in stays off without it), and for
+// the Mob GitHub App GITHUB_APP_PRIVATE_KEY and GITHUB_WEBHOOK_SECRET, with the
+// vars GITHUB_APP_ID and GITHUB_APP_SLUG (docs/features/github.md); the app
+// stays off until all four are set.
 // The Turnstile site key and the OAuth client IDs are public, so they are vars.
 // CLOUDFLARE_SCOPES (space-separated) adds scopes to Cloudflare's
 // user-details.read: account read, Workers AI and offline_access let Mob in

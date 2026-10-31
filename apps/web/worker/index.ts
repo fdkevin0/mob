@@ -1,6 +1,7 @@
 import { cloudflareReady, configured, createAuth, type Env } from './auth';
 import { cloudflareAI, cloudflareBase } from './ai';
 import { accountRunners, runnerTransport } from './runners';
+import { installations, token, webhook } from './github';
 export { RunnerRelay } from './relay';
 
 // Every page runs one inline script, which applies the colour scheme before
@@ -140,6 +141,15 @@ export default {
 			if (!session) return new Response('Sign in again', { status: 401 });
 			return accountRunners(request, env, session.user.id);
 		}
+		// GitHub and runners authenticate themselves; the account page uses the session.
+		if (pathname === '/api/github/webhook') return webhook(request, env);
+		if (pathname === '/api/github/token') return token(request, env);
+		if (pathname === '/api/github/installations' || pathname.startsWith('/api/github/installations/')) {
+			const session = await createAuth(env, url.origin).api.getSession({ headers: request.headers });
+			if (!session) return new Response('Sign in again', { status: 401 });
+			return installations(request, env, session.user.id);
+		}
+		if (pathname === '/api/github/setup') return Response.redirect(`${url.origin}/account#github`, 302);
 		if (pathname === '/api/site') {
 			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env), cloudflare: cloudflareReady(env) }, { headers: { 'Cache-Control': 'no-store' } });
 		}

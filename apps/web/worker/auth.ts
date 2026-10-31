@@ -17,6 +17,11 @@ export interface Env {
 	CLOUDFLARE_CLIENT_SECRET?: string;
 	/** CLOUDFLARE_SCOPES are the scope IDs asked for besides user-details.read, space-separated, as the OAuth client lists them. */
 	CLOUDFLARE_SCOPES?: string;
+	/** The Mob GitHub App (worker/github.ts) is on once all four are set; the slug and ID are vars, the key and webhook secret secrets. */
+	GITHUB_APP_ID?: string;
+	GITHUB_APP_SLUG?: string;
+	GITHUB_APP_PRIVATE_KEY?: string;
+	GITHUB_WEBHOOK_SECRET?: string;
 }
 
 /** cloudflareReady tells whether Cloudflare can sign in and lend Workers AI. */
