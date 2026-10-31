@@ -58,235 +58,42 @@ export type Config = {
   defaultModel: string;
   demo: boolean;
 };
-export type SecretUpdate = {
-  mode: string;
-  value?: string;
-};
-export type Delivery = {
-  id: string;
-  state: string;
-  reply: string;
-  error: string;
-  updatedAt: number;
-};
-export type CommandSpec = {
-  name: string;
-  usage: string;
-  summary: string;
-  clients: string[];
-  transcript?: boolean;
-};
-export type Suggestion = {
-  value: string;
-  label: string;
-  detail?: string;
-};
-export type CommandRequest = {
-  client: string;
-  conversationId?: string;
-  text: string;
-};
-export type Action = {
-  kind: string;
-  conversationId?: string;
-  approvalId?: string;
-  approved?: boolean;
-  reason?: string;
-  remember?: string;
-};
-export type CommandResult = {
-  handled: boolean;
-  markdown?: string;
-  action?: Action;
-};
-export type ModelUsage = {
-  model: string;
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cost: number;
-  durationMs: number;
-  requests: number;
-};
-export type DayUsage = {
-  date: string;
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cost: number;
-  durationMs: number;
-  requests: number;
-};
-export type TopConversation = {
-  id: string;
-  title: string;
-  agent?: string;
-  /** deleted is set for a conversation that was deleted; its tokens stay counted. */
-  deleted?: boolean;
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cost: number;
-  durationMs: number;
-  requests: number;
-  turns: number;
-};
-export type UsageReport = {
-  since: number;
-  firstDay: string;
-  lastDay: string;
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cost: number;
-  durationMs: number;
-  requests: number;
-  turns: number;
-  models: ModelUsage[];
-  conversations: number;
-  days: DayUsage[];
-  top: TopConversation[];
-};
-export type UsageSummary = {
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  cost: number;
-  durationMs: number;
-  requests: number;
-  turns: number;
-  models: ModelUsage[];
-};
-/** ContextParts splits a prompt's tokens by what they are. */
-export type ContextParts = {
-  system: number;
-  tools: number;
-  summary: number;
-  messages: number;
-  outputs: number;
-};
-/**
- * ContextSnapshot is what a conversation's prompt takes of its model's context window
- * (GET /api/conversations/{id}/context, and the data-context part while a turn runs).
- * limit is the window less what is kept for the reply; history beyond it is summarized.
- * A window of zero is unknown.
- */
-export type ContextSnapshot = {
-  model: string;
-  window: number;
-  reserve: number;
-  limit: number;
-  used: number;
-  /** measured is set once the provider counted the prompt; used is an estimate until then. */
-  measured: boolean;
-  parts?: ContextParts;
-  tools?: number;
-  /** summarized counts the earlier messages read as a summary; omitted is set when older ones are left out without one. */
-  summarized?: number;
-  omitted?: boolean;
-  /** agent is set when an outside coding agent reported the numbers, without parts. */
-  agent?: boolean;
-};
-export type ConversationContext = {
-  context: ContextSnapshot | null;
-  usage?: UsageSummary;
-};
-export type PlanEntry = {
-  content: string;
-  status: string;
-};
-export type Task = {
-  id: string;
-  conversationId: string;
-  project: string;
-  agent: string;
-  title: string;
-  worktree: string;
-  branch: string;
-  session?: string;
-  status: string;
-  parent?: string;
-  readOnly?: boolean;
-  outcome?: string;
-  result?: string;
-  plan?: PlanEntry[];
-  flow?: Flow;
-  createdAt: number;
-  updatedAt: number;
-};
-export type FlowCheck = {
-  command: string;
-  passed: boolean;
-  exitCode?: number;
-  seconds: number;
-};
-export type FlowStage = {
-  type: string;
-  retries?: number;
-  aspects?: string[];
-  rounds?: number;
-};
-export type Flow = {
-  blueprint: string;
-  stages?: FlowStage[];
-  stage: string;
-  round: number;
-  tries: number;
-  checks?: FlowCheck[];
-  review?: string;
-  note?: string;
-};
-export type AgentApproval = {
-  id: string;
-  tool: string;
-  text: string;
-  whole: boolean;
-};
-export type AgentNode = {
-  conversationId: string;
-  parent?: string;
-  agent: string;
-  label: string;
-  model?: string;
-  title: string;
-  status: string;
-  approvals: AgentApproval[];
-  tools: string[];
-  task?: Task;
-  usage?: UsageSummary;
-};
 
-/** Transfer is a conversation moving between Mobs (GET /api/conversations/{id}/export, POST /api/conversations/import). */
-export type Transfer = {
-  v: 1;
-  title: string;
-  model: string;
-  summary: string;
-  summaryThrough: string;
-  messages: { id: string; role: string; parts: string; status: string; error: string; model: string; usage: string; kind: string }[];
-  facts: { fact: string; owner: boolean }[];
-  usage: { messageId: string; session: string; model: string; input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number; cost: number; durationMs: number; createdAt: number }[];
-};
+// The service's own types are the contract: they are imported from @mob/core, never copied,
+// so a field the core adds or changes reaches every client's type checks.
+import type { ContextSnapshot, Fact, Grant, Schedule, UsageSummary } from '@mob/core';
+
+export type {
+  SecretUpdate,
+  Delivery,
+  CommandSpec,
+  Suggestion,
+  CommandRequest,
+  Action,
+  CommandResult,
+  ModelUsageRow as ModelUsage,
+  DayUsage,
+  TopConversation,
+  UsageReport,
+  UsageSummary,
+  ContextParts,
+  ContextSnapshot,
+  PlanEntry,
+  Task,
+  FlowCheck,
+  FlowStage,
+  Flow,
+  AgentApproval,
+  AgentNode,
+  Transfer,
+} from '@mob/core';
+
+export type ConversationContext = { context: ContextSnapshot | null; usage?: UsageSummary };
 
 // Management views use structured data; slash command Markdown is only presentation.
-export type Memory = { id: string; conversationId: string; text: string; owner: boolean };
-export type RememberedApproval = { id: string; conversationId: string; tool: string; scope: string; created: number };
-export type ScheduledPrompt = { id: string; conversationId: string; prompt: string; next: number; repeat?: string; zone?: string };
+export type Memory = Fact;
+export type RememberedApproval = Grant;
+export type ScheduledPrompt = Schedule;
 export type ProjectConfig = { name: string; path: string; blueprint?: string; checks?: string[] };
 export type Projects = { projects: ProjectConfig[]; blueprints: { name: string; title: string; description: string }[] };
 
