@@ -35,6 +35,7 @@ const features = [
 	'desktop',
 	'releases',
 	'remote-access',
+	'github',
 ];
 
 export const pages: Page[] = [

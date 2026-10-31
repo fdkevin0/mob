@@ -24,6 +24,17 @@ export function deployed(raw: string): Credentials {
 	return { url, id: c.id, token: c.token, key: c.key };
 }
 
+/** runnerCredentials reads this Mob's runner credentials: MOB_RUNNER_PAIRING for a deployed runner, else runner.json in dir, which mob runner pair writes. */
+export function runnerCredentials(dir: string): Credentials {
+	const env = process.env.MOB_RUNNER_PAIRING;
+	if (env) {
+		try { return deployed(env); } catch (e) { throw new Error('MOB_RUNNER_PAIRING: ' + (e as Error).message); }
+	}
+	let raw: string;
+	try { raw = readFileSync(join(dir, 'runner.json'), 'utf8'); } catch (e) { throw new Error('pair this browser first with mob runner pair: ' + (e as Error).message); }
+	return JSON.parse(raw);
+}
+
 /** pair claims the pairing JSON's one-time code and saves the runner's credentials in dir. */
 export async function pair(dir: string, input: string, signal?: AbortSignal) {
 	if (input.length > 4096) throw new Error('invalid pairing JSON');
@@ -75,15 +86,7 @@ commands.push(environment => {
 		.option('--keep-awake <url>', 'Request this URL every 10 minutes, so a host that sleeps without inbound requests keeps the runner on')
 		.action(async (o: { serve?: boolean; healthAddr?: string; keepAwake?: string }) => {
 			const c = environment();
-			let creds: Credentials;
-			const env = process.env.MOB_RUNNER_PAIRING;
-			if (env) {
-				try { creds = deployed(env); } catch (e) { throw new Error('MOB_RUNNER_PAIRING: ' + (e as Error).message); }
-			} else {
-				let raw: string;
-				try { raw = readFileSync(join(c.dir, 'runner.json'), 'utf8'); } catch (e) { throw new Error('pair this browser first with mob runner pair: ' + (e as Error).message); }
-				creds = JSON.parse(raw);
-			}
+			const creds = runnerCredentials(c.dir);
 			const abort = new AbortController();
 			process.once('SIGINT', () => abort.abort());
 			process.once('SIGTERM', () => abort.abort());

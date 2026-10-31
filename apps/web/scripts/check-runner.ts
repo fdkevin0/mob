@@ -1,7 +1,8 @@
 // Offline integration: real Worker/D1/Durable Object, mob runner and browser crypto.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { createHmac } from 'node:crypto';
+import { createHmac, generateKeyPairSync } from 'node:crypto';
+import { Database } from 'bun:sqlite';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -17,6 +18,8 @@ const dir = await mkdtemp(join(tmpdir(), 'mob-runner-'));
 const children: ChildProcess[] = [];
 const authSecret = 'offline-test-secret-that-is-at-least-32-characters';
 let mf: InstanceType<typeof Miniflare> | undefined;
+const webhookSecret = 'offline-webhook-secret';
+const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs1', format: 'pem' }).toString();
 const originalFetch = globalThis.fetch;
 async function until(check: () => Promise<boolean>, description: string) {
 	const deadline = Date.now() + 15_000;
@@ -45,6 +48,10 @@ try {
 						GITHUB_CLIENT_SECRET: 'test',
 						TURNSTILE_SITE_KEY: 'test',
 						TURNSTILE_SECRET_KEY: 'test',
+						GITHUB_APP_ID: '1',
+						GITHUB_APP_SLUG: 'usemob',
+						GITHUB_APP_PRIVATE_KEY: appKey,
+						GITHUB_WEBHOOK_SECRET: webhookSecret,
 					},
 				},
 			],
@@ -52,7 +59,7 @@ try {
 	);
 	const origin = (await mf.ready).origin;
 	const db = await mf.getD1Database('DB');
-	for (const file of ['0001_better_auth.sql', '0002_runners.sql', '0003_passkey.sql']) {
+	for (const file of ['0001_better_auth.sql', '0002_runners.sql', '0003_passkey.sql', '0004_github.sql']) {
 		const sql = (await readFile(`worker/migrations/${file}`, 'utf8')).replace(/^--.*$/gm, '');
 		for (const statement of sql.split(';').filter((s) => s.trim())) await db.prepare(statement).run();
 	}
@@ -236,13 +243,71 @@ try {
 	// A restarted runner gets a fresh session, which old envelopes cannot use.
 	runner.kill();
 	await once(runner, 'exit');
-	children.push(spawn(binary, runnerArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] }));
+	let restarted = spawn(binary, runnerArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+	children.push(restarted);
 	await until(async () => {
 		const next = await currentSession();
 		return Boolean(next && next !== session);
 	}, 'fresh session after reconnect');
 	const stale = await account(`/${pair.id}/relay`, 'alice', { method: 'POST', body: JSON.stringify(envelope) });
 	assert.equal(stale.status, 409);
+
+	// The GitHub App: signed webhooks, installations bound by their GitHub owner, and events that reach the runner, waiting while it is offline.
+	await db.prepare(`INSERT INTO account (id,accountId,providerId,userId,createdAt,updatedAt) VALUES ('gh-alice','1001','github','alice',?,?)`)
+		.bind(new Date().toISOString(), new Date().toISOString())
+		.run();
+	const hook = (event: string, payload: unknown, delivery = crypto.randomUUID(), secret = webhookSecret) => {
+		const body = JSON.stringify(payload);
+		return originalFetch(origin + '/api/github/webhook', {
+			method: 'POST',
+			body,
+			headers: {
+				'X-GitHub-Event': event,
+				'X-GitHub-Delivery': delivery,
+				'X-Hub-Signature-256': 'sha256=' + createHmac('sha256', secret).update(body).digest('hex'),
+			},
+		});
+	};
+	const installed = { action: 'created', installation: { id: 77, account: { id: 1001, login: 'fdkevin0', type: 'User' } }, sender: { id: 1001, login: 'fdkevin0' } };
+	assert.equal((await hook('installation', installed, 'install-1', 'wrong')).status, 401);
+	assert.deepEqual(await (await hook('installation', installed, 'install-1')).json(), { recorded: true });
+	assert.deepEqual(await (await hook('installation', installed, 'install-1')).json(), { duplicate: true });
+	const github = (path: string, user = 'alice', init?: RequestInit) =>
+		originalFetch(origin + '/api/github' + path, { ...init, headers: { Cookie: cookies[user], Origin: origin, 'Content-Type': 'application/json', ...init?.headers } });
+	assert.deepEqual(((await (await github('/installations')).json()) as { installations: unknown[] }).installations, [
+		{ id: 77, account: 'fdkevin0', type: 'User', runner: null, suspended: false },
+	]);
+	assert.deepEqual(((await (await github('/installations', 'bob')).json()) as { installations: unknown[] }).installations, []);
+	assert.equal((await github('/installations/77', 'bob', { method: 'POST', body: JSON.stringify({ runner: null }) })).status, 404);
+	const issue = (delivery: string, label: string) =>
+		hook('issues', {
+			action: 'labeled', label: { name: label }, installation: { id: 77 }, repository: { full_name: 'fdkevin0/mob' },
+			issue: { number: 5, title: 'private-issue-title', body: 'private-issue-body', author_association: 'OWNER' },
+			sender: { id: 1001, login: 'fdkevin0', type: 'User' },
+		}, delivery);
+	assert.deepEqual(await (await issue('before-binding', 'bug')).json(), { unbound: true });
+	assert.equal((await github('/installations/77', 'alice', { method: 'POST', body: JSON.stringify({ runner: pair.id }) })).status, 200);
+	const local = new Database(join(dir, 'mob.sqlite'), { readonly: true });
+	const delivered = (id: string) => !!local.query('SELECT 1 FROM deliveries WHERE id = ?').get('github:' + id);
+	assert.deepEqual(await (await issue('while-online', 'bug')).json(), { queued: true });
+	await until(async () => delivered('while-online'), 'GitHub event reaches the runner');
+	restarted.kill();
+	await once(restarted, 'exit');
+	assert.deepEqual(await (await issue('while-offline', 'bug')).json(), { queued: true });
+	assert(!delivered('while-offline'));
+	restarted = spawn(binary, runnerArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+	children.push(restarted);
+	await until(async () => delivered('while-offline'), 'queued GitHub event delivered after reconnect');
+	local.close();
+	// Tokens: only a runner's credential, never workflows, and only for installations bound to it.
+	const runnerToken = JSON.parse(credentialFile).token;
+	const askToken = (body: unknown, bearer = runnerToken) =>
+		originalFetch(origin + '/api/github/token', { method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer ' + bearer } });
+	assert.equal((await askToken({ repo: 'fdkevin0/mob', permissions: { issues: 'read' } }, 'nope')).status, 401);
+	assert.equal((await askToken({ repo: 'fdkevin0/mob', permissions: { workflows: 'write' } })).status, 400);
+	assert.equal((await askToken({ repo: 'someone/else', permissions: { issues: 'read' } })).status, 403);
+	assert.equal((await hook('installation', { ...installed, action: 'deleted' })).status, 200);
+	assert.deepEqual(((await (await github('/installations')).json()) as { installations: unknown[] }).installations, []);
 
 	// A runner deployed to Render gets its credential at once, so a restart without its disk still connects.
 	const deployed = await account('', 'alice', { method: 'POST', body: JSON.stringify({ for: 'deploy' }) });
@@ -288,7 +353,7 @@ try {
 	});
 	assert.equal(revoked.status, 401);
 	console.log(
-		'Runner integration passed: account isolation, passkey binding, one-time pairing, Go/browser encrypted chat, local-only boundaries, replay/reconnect and revocation.',
+		'Runner integration passed: account isolation, passkey binding, one-time pairing, Go/browser encrypted chat, local-only boundaries, replay/reconnect, GitHub App events and revocation.',
 	);
 } finally {
 	globalThis.fetch = originalFetch;

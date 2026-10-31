@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { validEnvelope as sharedValid, type Envelope } from '@mob/core/relay';
 import { limitedText } from './runners';
+import { deliveryID, type GitHubEvent } from '@mob/core/github';
 
 // Only routing metadata is visible here. The endpoints authenticate it as AES-GCM AAD.
 export type { Envelope };
@@ -24,8 +25,44 @@ export class RunnerRelay extends DurableObject {
 		return socket?.deserializeAttachment()?.session ?? null;
 	}
 
+	/**
+	 * github queues a GitHub event for the runner and sends it at once if it is
+	 * connected. The runner acknowledges each by delivery; the rest are sent
+	 * again when it next connects, for up to a week, at most 500 of them.
+	 */
+	async github(event: GitHubEvent) {
+		if (await this.ctx.storage.get('revoked')) return;
+		await this.ctx.storage.put('gh:' + event.delivery, event);
+		const queued = await this.ctx.storage.list<GitHubEvent>({ prefix: 'gh:' });
+		if (queued.size > 500) {
+			const oldest = [...queued.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, queued.size - 500).map(([k]) => k);
+			await this.ctx.storage.delete(oldest);
+		}
+		this.sendGitHub([event]);
+	}
+
+	private async flushGitHub() {
+		const queued = await this.ctx.storage.list<GitHubEvent>({ prefix: 'gh:' });
+		const week = Date.now() - 7 * 86_400_000;
+		const stale = [...queued.entries()].filter(([, e]) => e.at < week).map(([k]) => k);
+		if (stale.length) await this.ctx.storage.delete(stale);
+		const fresh = [...queued.values()].filter(e => e.at >= week).sort((a, b) => a.at - b.at);
+		for (let i = 0; i < fresh.length; i += 50) this.sendGitHub(fresh.slice(i, i + 50));
+	}
+
+	private sendGitHub(events: GitHubEvent[]) {
+		const socket = this.ctx.getWebSockets('runner').find(s => s.readyState === WebSocket.OPEN && s.deserializeAttachment()?.session);
+		if (!socket || !events.length) return;
+		try {
+			socket.send(JSON.stringify({ type: 'github', events }));
+		} catch {
+			// Sent again when the runner reconnects.
+		}
+	}
+
 	async revoke() {
 		await this.ctx.storage.put('revoked', true);
+		await this.ctx.storage.delete([...(await this.ctx.storage.list({ prefix: 'gh:' })).keys()]);
 		for (const socket of this.ctx.getWebSockets()) {
 			socket.close(1008, 'Revoked');
 			this.disconnect(socket);
@@ -127,6 +164,12 @@ export class RunnerRelay extends DurableObject {
 			!socket.deserializeAttachment()
 		) {
 			socket.serializeAttachment({ session: frame.session });
+			void this.flushGitHub();
+			return;
+		}
+		if (frame.type === 'github-ack' && Array.isArray(frame.ids) && socket.deserializeAttachment()) {
+			const keys = frame.ids.filter((id: unknown) => typeof id === 'string' && deliveryID.test(id)).slice(0, 128).map((id: string) => 'gh:' + id);
+			if (keys.length) void this.ctx.storage.delete(keys);
 			return;
 		}
 		if (!validEnvelope(frame)) {

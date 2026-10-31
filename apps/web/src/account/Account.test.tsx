@@ -39,6 +39,8 @@ beforeEach(() => {
 	auth.loadSite.mockResolvedValue({ turnstileSiteKey: 'k', ready: true });
 	auth.accountInfo.mockResolvedValue({ data: { user: {}, data: { login: 'ada-l' } }, error: null });
 	assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
+	// The GitHub App is not set up unless a test says so, which hides its section.
+	vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input) === '/api/runners' ? Response.json([]) : Response.json({ app: null, github: true, installations: [] }));
 });
 afterEach(() => {
 	vi.restoreAllMocks();
@@ -126,4 +128,28 @@ it('says why connecting an account did not finish', async () => {
 	render(<Account />);
 	expect((await screen.findByRole('alert')).textContent).toMatch(/unable_to_link_account/);
 	expect(window.location.search).toBe('');
+});
+
+it('binds a GitHub App installation to a runner', async () => {
+	const posted: unknown[] = [];
+	let runner: string | null = null;
+	const id = '0f6c8f9e-1111-4222-8333-444455556666';
+	vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+		const path = String(input);
+		if (path === '/api/runners') return Response.json([{ id }]);
+		if (path === '/api/github/installations/9' && init?.method === 'POST') {
+			posted.push(JSON.parse(String(init.body)));
+			runner = id;
+			return Response.json({ id: 9, runner });
+		}
+		return Response.json({ app: 'usemob', github: true, installations: [{ id: 9, account: 'fdkevin0', type: 'User', runner, suspended: false }] });
+	});
+	render(<Account />);
+	const select = await screen.findByRole('combobox', { name: 'Runner for fdkevin0' });
+	await screen.findByRole('option', { name: 'Runner 0f6c8f9e' });
+	fireEvent.change(select, { target: { value: id } });
+	await waitFor(() => expect(posted).toEqual([{ runner: id }]));
+	await waitFor(() => expect((screen.getByRole('combobox', { name: 'Runner for fdkevin0' }) as HTMLSelectElement).value).toBe(id));
+	fireEvent.click(screen.getByRole('button', { name: 'Install on GitHub' }));
+	expect(assign).toHaveBeenCalledWith('https://github.com/apps/usemob/installations/new');
 });

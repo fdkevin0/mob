@@ -40,11 +40,28 @@ export async function serve(handler: Handler, req: Request, signal: AbortSignal)
 	} catch { return failure(400, 'invalid runner request'); }
 	if (!pathname.startsWith('/api/') || path.includes('..') || pathname.includes('..') || pathname.includes('\\') || path.includes('\\') || (req.body ?? '').length > 1 << 20 || (req.method !== 'GET' && req.method !== 'POST')) return failure(400, 'invalid runner request');
 	// Remote peers cannot mint local access tokens or shut down the service.
-	for (const local of ['/api/pairing', '/api/token']) if (pathname === local || pathname.startsWith(local + '/')) return failure(403, 'local-only endpoint');
+	// GitHub events come only from the relay itself, through deliver, never from a browser.
+	for (const local of ['/api/pairing', '/api/token', githubEvents]) if (pathname === local || pathname.startsWith(local + '/')) return failure(403, 'local-only endpoint');
 	if (pathname.startsWith('/api/runtime') && req.method !== 'GET') return failure(403, 'local-only endpoint');
 	const headers = new Headers();
 	for (const name of ['Content-Type', 'Accept', 'Last-Event-ID']) for (const v of header(req.headers, name)) headers.append(name, v);
 	return handler(new globalThis.Request('http://runner' + path, { method: req.method, headers, body: req.method === 'POST' ? req.body : undefined, signal }));
+}
+
+/** githubEvents is where the runner hands the local service the GitHub events the relay queued for it. */
+export const githubEvents = '/api/plugins/github/events';
+
+/**
+ * deliver hands GitHub events from the relay to the local service and says
+ * which it accepted, by delivery: those the relay may forget.
+ */
+export async function deliver(handler: Handler, events: unknown[]): Promise<string[]> {
+	const res = await handler(new globalThis.Request('http://runner' + githubEvents, {
+		method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events }),
+	}));
+	if (!res.ok) { await res.body?.cancel(); return []; }
+	const out = await res.json().catch(() => ({})) as { accepted?: unknown };
+	return Array.isArray(out.accepted) ? out.accepted.filter((id): id is string => typeof id === 'string') : [];
 }
 
 /** localHandler forwards only to the local service and adds its token here. */
@@ -173,6 +190,10 @@ export async function connect(base: string, credentials: Credentials, k: CryptoK
 		if (!raw.v) {
 			// Heartbeat replies, and cancellations for requests whose browser left.
 			if (raw.type === 'cancel' && typeof raw.id === 'string') active.get(raw.id)?.abort();
+			// GitHub events the relay queued; unacknowledged ones come again on the next connection.
+			if (raw.type === 'github' && Array.isArray(raw.events) && raw.events.length <= 50) {
+				void deliver(handler, raw.events).then(ids => { if (ids.length) send({ type: 'github-ack', ids }); }).catch(() => {});
+			}
 			return;
 		}
 		const e = raw as unknown as Envelope;

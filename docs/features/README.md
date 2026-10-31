@@ -25,6 +25,7 @@ keep architecture decision records.
 | [Desktop app](desktop.md) | the Electron window, tray and packaging |
 | [Releases and upgrades](releases.md) | nightly and stable channels, database migration windows |
 | [Remote access](remote-access.md) | the public site (landing page, GitHub sign-in, web UI) and encrypted remote runners |
+| [GitHub App](github.md) | a runner watching a repository: label an issue and Mob proposes a plan |
 
 The retired Cloudflare Worker and Telegram Mini App, and the decision records
 written for them, are kept at the `legacy-worker` tag.
