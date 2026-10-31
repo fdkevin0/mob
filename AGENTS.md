@@ -49,7 +49,7 @@ and messaging channels.
 - Before adding complexity for a speculative or vanishingly unlikely race or security edge case, explain the concrete failure mode, likelihood, and complexity cost to the user and get their buy-in. Do not silently expand scope for theoretical robustness.
 - Avoid `try`/`catch` where possible
 - Avoid using the `any` type
-- Use Bun APIs when possible, like `Bun.file()`
+- In the Bun host (`apps/mob`), use Bun APIs when possible, like `Bun.file()`. `packages/core` and `packages/client` also run in browsers and the TUI, so they use neither Bun nor Node APIs; the core's SQLite adapters in `packages/core/src/sqlite` are the exception
 
 Reduce total variable count by inlining when a value is only used once.
 
@@ -59,3 +59,6 @@ Reduce total variable count by inlining when a value is only used once.
 - `docs/features/` for how the feature you are changing behaves.
 - `CONTRIBUTING.md` before opening a pull request.
 - `docs/screenshots.md` before capturing a state the script cannot reach.
+- `docs/ui-style.md` before changing a stylesheet, `docs/website.md` before
+  changing usemob.app's Worker or deployment, `docs/prompt-evals.md` before
+  changing prompts.

@@ -1,26 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
+import { validEnvelope as sharedValid, type Envelope } from '@mob/core/relay';
 import { limitedText } from './runners';
 
 // Only routing metadata is visible here. The endpoints authenticate it as AES-GCM AAD.
-export type Envelope = { v: 1; session: string; id: string; seq: number; final: boolean; nonce: string; data: string };
+export type { Envelope };
+/** validEnvelope is the shared frame check plus the session and request ID forms the runner and browser use. */
 export function validEnvelope(value: unknown): value is Envelope {
-	if (!value || typeof value !== 'object') return false;
-	const e = value as Envelope;
-	return (
-		e.v === 1 &&
-		typeof e.session === 'string' &&
-		/^[a-f0-9]{64}$/.test(e.session) &&
-		typeof e.id === 'string' &&
-		/^[a-f0-9-]{36}$/.test(e.id) &&
-		Number.isSafeInteger(e.seq) &&
-		e.seq >= 0 &&
-		typeof e.final === 'boolean' &&
-		typeof e.nonce === 'string' &&
-		e.nonce.length === 16 &&
-		typeof e.data === 'string' &&
-		e.data.length >= 24 &&
-		e.data.length <= 2 * 1024 * 1024
-	);
+	return sharedValid(value) && /^[a-f0-9]{64}$/.test(value.session) && /^[a-f0-9-]{36}$/.test(value.id);
 }
 type Pending = {
 	socket: WebSocket;

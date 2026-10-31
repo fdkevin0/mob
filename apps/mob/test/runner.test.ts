@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import { deployed, pair } from '../src/runner';
-import { connect, key, localHandler, open, seal, serve, type Credentials, type Envelope, type Handler } from '../src/runner/relay';
+import { relayKey as key, open, seal, type Envelope } from '@mob/core/relay';
+import { connect, localHandler, serve, type Credentials, type Handler } from '../src/runner/relay';
 
 const rawKey = Buffer.alloc(32, 7).toString('base64');
 const id = '00000000-0000-4000-8000-000000000001';

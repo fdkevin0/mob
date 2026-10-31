@@ -13,11 +13,10 @@ export type Host = {
 	summary: string;
 };
 
-const guide = 'https://github.com/fdkevin0/mob/blob/main/docs/features/remote-access.md';
-export const hostGuideURL = `${guide}#runners-in-the-cloud`;
+export const hostGuideURL = 'https://github.com/fdkevin0/mob/blob/main/docs/features/cloud-runners.md';
 
 // Every host builds the repository's Dockerfile and reads the pairing JSON from MOB_RUNNER_PAIRING.
-// Railway and Northflank are candidates; docs/features/remote-access.md says what adding them takes.
+// Railway and Northflank are candidates; docs/features/cloud-runners.md says what adding them takes.
 export const hosts: Host[] = [
 	{
 		id: 'render',

@@ -1,43 +1,15 @@
 // The tree of who started whom: tasks, and Mob's conversations that started them.
-import { brief, describeApproval, outcomeBlocked, outcomePassed, outcomeRework, taskFailed, taskReview, taskRunning, taskStopped, taskWaiting, type Task, type UsageSummary } from '@mob/core';
+import { brief, describeApproval, outcomeBlocked, outcomePassed, outcomeRework, taskFailed, taskReview, taskRunning, taskStopped, taskWaiting, type AgentApproval, type AgentNode, type Task } from '@mob/core';
 import { preset } from './presets';
 import type { Service } from './service';
+
+export type { AgentApproval, AgentNode };
 
 /** mob is the agent of Mob's own conversations in the tree. */
 export const mob = 'mob';
 /** idle is the status of a Mob conversation that is not answering and waits for no decision. */
 export const idle = 'idle';
 
-/** AgentApproval is a decision waiting in an agent's conversation. */
-export type AgentApproval = {
-	id: string;
-	tool: string;
-	/** text is what is asked: one "field: value" line per input field, so that a command shows in full rather than only its title. */
-	text: string;
-	/** whole is false when a field was too long to show; the owner then decides in the conversation. */
-	whole: boolean;
-};
-
-/** AgentNode is one conversation in the tree: a task, or a conversation of Mob's that started tasks. */
-export type AgentNode = {
-	conversationId: string;
-	/** parent is the conversation that started this one; unset for a root. */
-	parent?: string;
-	/** agent is the task's agent, or mob; label is its display name. */
-	agent: string;
-	label: string;
-	/** model is the model the agent runs: the one its running session's options select, else the one that used the most tokens. */
-	model?: string;
-	title: string;
-	/** status is a task status, or running, waiting or idle for Mob. */
-	status: string;
-	/** approvals are the decisions that wait for the owner, oldest first. */
-	approvals: AgentApproval[];
-	/** tools are the kinds of tool the agent used, such as execute or edit. */
-	tools: string[];
-	task?: Task;
-	usage?: UsageSummary;
-};
 
 /** waiting lists the decisions that wait in conversationID. */
 function waiting(svc: Service, conversationID: string): AgentApproval[] {

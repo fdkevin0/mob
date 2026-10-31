@@ -32,6 +32,14 @@ The repository's Markdown is also published at https://usemob.app/docs.
 Write relative links between files as usual; a new page under `docs/` needs an
 entry in [apps/docs/pages.ts](../../../apps/docs/pages.ts).
 
+Organize by progressive disclosure. The README, `docs/README.md` and
+`docs/features/README.md` stay short and link deeper. A feature page opens
+with what the feature does and how to use it (a few steps or a short list),
+then the details a user needs, then internals: API routes, storage, code
+paths. When internals or operator material outgrow a page, move them to a
+deeper page and link it rather than growing the entry page. The sidebar
+groups in `apps/docs/pages.ts` follow the same order.
+
 Keep indexes as navigation, with enough context to choose a page. Link to the
 owning explanation instead of copying its option lists or procedures. When moving
 or deleting a page, update its incoming links and any generator that owns it.

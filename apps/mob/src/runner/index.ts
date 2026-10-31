@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { commands } from '../commands';
 import { writeAtomic } from '../files';
 import { credentials as local, reachable, start } from '../local';
+import { validRelayKey } from '@mob/core/relay';
 import { localHandler, origin, run, type Credentials } from './relay';
 
 type Pairing = { url?: string; id?: string; code?: string; key?: string };
 
-const validKey = (raw: unknown) => typeof raw === 'string' && Buffer.from(raw, 'base64').length === 32 && Buffer.from(raw, 'base64').toString('base64') === raw;
 
 /**
  * deployed reads the credentials of a runner deployed without a terminal, such as on Render.
@@ -20,7 +20,7 @@ export function deployed(raw: string): Credentials {
 	try { c = JSON.parse(raw); } catch { throw new Error('invalid pairing JSON'); }
 	if (!c || typeof c !== 'object') throw new Error('invalid pairing JSON');
 	const url = origin(String(c.url ?? ''));
-	if (!validKey(c.key) || c.id?.length !== 36 || c.token?.length !== 72) throw new Error('invalid runner credentials; create a new Render pairing in the browser');
+	if (!validRelayKey(c.key) || c.id?.length !== 36 || c.token?.length !== 72) throw new Error('invalid runner credentials; create a new Render pairing in the browser');
 	return { url, id: c.id, token: c.token, key: c.key };
 }
 
@@ -31,7 +31,7 @@ export async function pair(dir: string, input: string, signal?: AbortSignal) {
 	try { p = JSON.parse(input); } catch { throw new Error('invalid pairing JSON'); }
 	if (!p || typeof p !== 'object') throw new Error('invalid pairing JSON');
 	const url = origin(String(p.url ?? ''));
-	if (!validKey(p.key) || p.id?.length !== 36 || p.code?.length !== 72) throw new Error('invalid pairing data');
+	if (!validRelayKey(p.key) || p.id?.length !== 36 || p.code?.length !== 72) throw new Error('invalid pairing data');
 	// Only the one-time code is sent to the server. The encryption key stays on this machine.
 	let res: Response;
 	try {

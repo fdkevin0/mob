@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useKeyboard, useTerminalDimensions } from '@opentui/react';
 import type { InputRenderable, ScrollBoxRenderable, TextareaRenderable } from '@opentui/core';
-import { ConversationClient, type MobClient, type Conversation, type Snapshot, type ChatMessage, type Action } from '@mob/client';
+import { ConversationClient, formatSeconds, formatSpeed, formatTokens, modelName, replySpeed, type MobClient, type Conversation, type Snapshot, type ChatMessage, type Action } from '@mob/client';
 import { getToolName, isToolUIPart } from 'ai';
 
 type ToolPart = Extract<ChatMessage['parts'][number], { toolCallId: string }>;
@@ -30,15 +30,14 @@ function Tool({ part, details }: { part: ToolPart; details: boolean }) {
 	);
 }
 
-const short = (n: number) => (n >= 1e4 ? `${Math.round(n / 1e3)}k` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
-
 /** replySummary is one line under a finished reply: its model, the tokens it took, how fast the model wrote and how long it took. */
 export function replySummary(message: ChatMessage) {
 	const { model, usage, stats, command } = message.metadata ?? {};
 	if (message.role !== 'assistant' || command || !usage) return '';
-	const parts = [model ? model.slice(model.indexOf('/') + 1) : '', `${short(usage.inputTokens + usage.outputTokens)} tok`];
-	if (stats?.generationMs && stats.timedOutput) parts.push(`${Math.round((stats.timedOutput * 1000) / stats.generationMs)} tok/s`);
-	if (stats?.finishedAt) parts.push(`${((stats.finishedAt - stats.startedAt) / 1000).toFixed(1)}s`);
+	const speed = replySpeed(stats);
+	const parts = [model ? modelName(model) : '', `${formatTokens(usage.inputTokens + usage.outputTokens)} tok`];
+	if (speed !== undefined) parts.push(formatSpeed(speed));
+	if (stats?.finishedAt) parts.push(formatSeconds(stats.finishedAt - stats.startedAt));
 	return parts.filter(Boolean).join(' · ');
 }
 

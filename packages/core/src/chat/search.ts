@@ -1,5 +1,6 @@
 // tool_search: deferred tools and entries such as skills, ranked by BM25.
-import type { Tool } from './tools';
+import { z } from 'zod';
+import { defineTool, type Tool } from './tools';
 
 /** Exposure is how a tool reaches the model: declared to every turn, once tool_search loads it, or never. */
 export type Exposure = 'direct' | 'deferred' | 'hidden';
@@ -37,24 +38,19 @@ export type SearchResult = { loaded: string[]; results: Found[]; note?: string }
 
 /** toolSearch is the tool_search tool of one turn: it ranks tools not yet declared, and entries, and loads the tools it finds. */
 export function toolSearch(waiting: () => Tool[], loaded: () => Tool[], entries: Entry[], load: (tools: Tool[]) => void): Tool {
-	return {
+	return defineTool({
 		name: searchName,
 		description: 'Find tools and skills that are not declared yet by keywords, such as "github issue" or "send email". Tools found are loaded and can be called in the next step; skills found say how to use them.',
-		parameters: {
-			type: 'object', properties: {
-				query: { type: 'string', description: "Keywords for what the task needs, or a tool's exact name" },
-				limit: { type: 'integer', minimum: 1, maximum: searchMax, description: `Results to return; default ${searchLimit}` },
-			}, required: ['query'], additionalProperties: false,
-		},
+		input: z.object({
+			query: z.string().describe("Keywords for what the task needs, or a tool's exact name"),
+			limit: z.number().int().min(1).max(searchMax).optional().describe(`Results to return; default ${searchLimit}`),
+		}),
 		run: async call => {
-			const query = typeof call.input.query === 'string' ? call.input.query : '';
+			const query = call.input.query;
 			if (!query.trim()) throw new Error('query must name what the task needs');
-			let limit = searchLimit;
-			const n = call.input.limit;
-			if (typeof n === 'number' && n >= 1) limit = Math.min(Math.trunc(n), searchMax);
-			return search(query, limit, waiting(), loaded(), entries, load);
+			return search(query, call.input.limit ?? searchLimit, waiting(), loaded(), entries, load);
 		},
-	};
+	});
 }
 
 export function search(query: string, limit: number, waiting: Tool[], loaded: Tool[], entries: Entry[], load: (tools: Tool[]) => void): SearchResult {

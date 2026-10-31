@@ -1,11 +1,15 @@
-// The coding agents Mob knows how to start, over the Agent Client Protocol.
+// The coding agents Mob knows how to start. Each speaks the Agent Client
+// Protocol unless its preset names another runtime.
 import type { llm } from '@mob/core';
+import type { Runtime } from './runtime';
 import { codexTally } from './usage';
 
 export type Preset = {
 	name: string;
 	title: string;
-	/** commands start the agent's ACP server; the first whose program is installed is used. */
+	/** runtime drives the agent; unset is the Agent Client Protocol's. */
+	runtime?: Runtime;
+	/** commands start the agent's server, for its runtime to talk to; the first whose program is installed is used. */
 	commands: string[][];
 	/** mode is the session mode that lets the agent edit its working directory and run commands there without asking. */
 	mode?: string;

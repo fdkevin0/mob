@@ -32,8 +32,10 @@ minor version. Other commit types are left out of the changelog.
 ## Builds
 
 - `scripts/release.ts` builds both channels with the web UI embedded, using
-  `bun build --compile` from one Linux runner: archives for Linux and macOS
-  (amd64, arm64) and Windows (amd64), plus `SHA256SUMS`. The release job installs
+  `bun build --compile` from one Linux runner: archives for Linux (amd64,
+  arm64, each for glibc and for musl), macOS (amd64, arm64) and Windows
+  (amd64), plus `SHA256SUMS`. A musl build tells OpenTUI to load its musl
+  library (`OPENTUI_LIBC`, set at build time). The release job installs
   every platform's native packages (`bun install --os='*' --cpu='*'`) so each
   target finds them. CI checks that the binary reports the expected version. The
   desktop app is built by the `desktop` job (see [Desktop app](desktop.md)).
@@ -42,21 +44,29 @@ minor version. Other commit types are left out of the changelog.
 - With `--npm`, `scripts/release.ts` also writes the npm packages to
   `dist/npm`, and `scripts/npm/publish.ts` publishes them with provenance once
   the GitHub release exists. `usemob` holds the `mob` launcher
-  (`scripts/npm/mob.js`) and lists one `usemob-OS-ARCH` package per binary as
-  an optional dependency; npm and Bun install only the one for the machine. On
+  (`scripts/npm/mob.js`) and lists one `@usemob/OS-ARCH` package per binary
+  (`@usemob/linux-x64-musl` for musl) as an optional dependency. Their `os`,
+  `cpu` and, on Linux, `libc` fields let npm and Bun install only the one for
+  the machine; `scripts/npm/platform.js` finds it the same way. On
   Linux and macOS the package's postinstall (`scripts/npm/install.js`) hard
   links that binary over the launcher, so the command runs natively; on
   Windows, or when install scripts are skipped, the launcher runs the binary
   with Node.js. A stable `vX.Y.Z` is published as `X.Y.Z` under
-  the `latest` tag, a nightly `{date}.{sha}` as `0.0.0-nightly.{date}-{sha}`
-  under the `nightly` tag. Installing them is described in
-  [Install](../install.md).
+  the `latest` tag. A nightly is published under the `nightly` tag as a
+  prerelease of the next minor version, ordered by commit time, e.g.
+  `0.3.0-nightly.20261030220535.g5caa651`. npm gave `latest` to the first
+  nightly, so until a stable release takes it, each nightly moves `latest` too.
+  Installing them is described in [Install](../install.md).
 - An experimental workflow reports how much of the host
   [scriptc](https://github.com/vercel-labs/scriptc) can compile natively, after
   host changes reach `main` and weekly. It never blocks a merge, and no release contains a scriptc build.
 
-Repository setup: an `NPM_TOKEN` secret, a granular npm token that can publish
-`usemob` and `usemob-*` (without it the packages are built but not published); a
+Repository setup: on npmjs.com, each package (`usemob` and every
+`@usemob/*`) names `fdkevin0/mob`'s `release.yml` as its trusted publisher, so
+the workflow publishes without a long-lived token. An `NPM_TOKEN` secret, a
+granular token for `usemob` and the `@usemob` scope, covers packages that have
+no trusted publisher yet, such as a new platform's first release, and moves
+the `latest` tag (without either, the packages are built but not published); a
 `RELEASE_PLEASE_TOKEN` secret so the release PR starts CI; and GitHub Actions
 allowed to create pull requests.
 

@@ -83,8 +83,8 @@ it('shows cards, filters what needs the owner and opens a conversation', async (
 	render(<AgentTree connection={{ url: 'http://127.0.0.1:1', token: 't' }} open={open} />);
 	expect(await screen.findByText('5 agents')).toBeTruthy();
 	// What the agents used shows on their cards and adds up in the header.
-	expect(screen.getByText('$0.290 · 12k tokens')).toBeTruthy();
-	expect(screen.getByText('$0.290', { selector: '.agents-total' })).toBeTruthy();
+	expect(screen.getByText('$0.29 · 12k tokens')).toBeTruthy();
+	expect(screen.getByText('$0.29', { selector: '.agents-total' })).toBeTruthy();
 	expect(screen.getAllByRole('article')).toHaveLength(5);
 	fireEvent.click(screen.getByRole('button', { name: '1 needs you' }));
 	const cards = screen.getAllByRole('article');

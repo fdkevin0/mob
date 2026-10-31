@@ -2,7 +2,7 @@
 # It serves only loopback inside the container and reaches the web app through
 # the encrypted runner connection, so the container exposes no port.
 
-FROM oven/bun:1.4.3 AS build
+FROM oven/bun:1.4.4 AS build
 WORKDIR /src
 COPY . .
 RUN bun install --frozen-lockfile && bun run build && bun apps/mob/scripts/build.ts --outfile /mob

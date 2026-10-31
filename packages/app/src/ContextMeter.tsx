@@ -5,7 +5,7 @@ import { Button } from '@mob/ui/button';
 import { api, type ChatMessage, type Connection } from './api';
 import type { ContextParts, ContextSnapshot, ConversationContext, UsageSummary } from './contracts';
 import { AlertIcon, ArrowRightIcon, CompactIcon, InfoIcon } from './icons';
-import { tokens } from './format';
+import { money as dollars, tokens } from './format';
 
 /** warnAt and fullAt are the shares of the limit from which the meter turns amber, then red. */
 export const warnAt = 75;
@@ -93,7 +93,6 @@ function Ring({ fraction }: { fraction?: number }) {
 	);
 }
 
-const dollars = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
 
 /**
  * ContextMeter shows, beside Send, how much of the model's window the conversation's prompt

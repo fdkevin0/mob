@@ -79,7 +79,7 @@ SDK:
 - Each tool is `mcp__<server>__<tool>`, offered only to the owner's turns and
   only while its server is connected. A name with characters models refuse, or
   longer than 64, is cut and ends in a hash of the real name, so two tools never
-  share one. Tools are added through `ToolRegistry.RegisterSource`, which allows
+  share one. Tools are added through `ToolRegistry.registerSource`, which allows
   tools that change while Mob runs.
 - Tools wait until the model loads them with `tool_search`, which finds them by
   name, server, description and parameters; see

@@ -43,16 +43,26 @@ scroll, Ctrl+Q exits. See the [terminal UI](apps/tui/README.md) for the rest.
 ## Documentation
 
 The documentation is at https://usemob.app/docs; the pages below are its
-sources.
+sources. Start with the first line and go deeper as you need.
 
-- [Model providers](docs/features/providers.md)
-- [Configuration and running the service](docs/features/configuration.md)
-- [Tools and approvals](docs/features/tools-and-approvals.md)
-- [Sandbox](docs/features/sandbox.md)
-- [Messaging channels](docs/features/channels.md): Telegram, WeChat iLink, email
-- [Plugins: email and Cloudflare](docs/features/plugins.md)
-- [MCP servers](docs/features/mcp.md)
-- [All feature pages](docs/features/README.md) and [architecture](docs/architecture.md)
+- **Set up**: [model providers](docs/features/providers.md),
+  [configuration](docs/features/configuration.md) and the
+  [desktop app](docs/features/desktop.md).
+- **Work with it**: [tools and approvals](docs/features/tools-and-approvals.md),
+  the [sandbox](docs/features/sandbox.md) and
+  [schedules](docs/features/schedules.md).
+- **Hand off coding**: [coding agents](docs/features/coding-agents.md) and
+  [plans](docs/features/plans.md).
+- **Connect it**: [Telegram, WeChat and email](docs/features/channels.md),
+  [MCP servers](docs/features/mcp.md), [skills](docs/features/skills.md) and
+  [remote access](docs/features/remote-access.md).
+- **Everything else**: [all features](docs/features/README.md),
+  [configuration keys](docs/environment-variables.md) and
+  [contributing](CONTRIBUTING.md).
+
+## Security
+
+Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

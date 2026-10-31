@@ -8,9 +8,8 @@ import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 import inlineScriptHashes from './csp.ts';
 import preloadFonts from './fonts.ts';
-import { pages, repositoryUrl } from './pages.ts';
+import { groups, pages, repositoryUrl } from './pages.ts';
 
-const groups = ['Start', 'Features', 'Reference', 'Contributing'];
 
 export default defineConfig({
 	site: 'https://usemob.app',

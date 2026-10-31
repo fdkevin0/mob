@@ -6,11 +6,11 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
+const { binaryPath, platformPackage } = require('./platform.js');
 
 if (process.platform !== 'win32') {
-	const pkg = `usemob-${process.platform}-${process.arch}`;
 	try {
-		const binary = require.resolve(`${pkg}/bin/mob`);
+		const binary = binaryPath();
 		const launcher = path.join(__dirname, 'mob.js');
 		const temp = launcher + '.tmp';
 		fs.rmSync(temp, { force: true });
@@ -20,6 +20,6 @@ if (process.platform !== 'win32') {
 		// The global bin link points at mob.js, so the binary takes its name.
 		fs.renameSync(temp, launcher);
 	} catch (error) {
-		console.warn(`usemob: kept the Node.js launcher, so mob needs Node.js (${pkg}: ${error.code ?? error.message})`);
+		console.warn(`usemob: kept the Node.js launcher, so mob needs Node.js (${platformPackage}: ${error.code ?? error.message})`);
 	}
 }

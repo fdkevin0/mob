@@ -1,5 +1,11 @@
 # Contributing
 
+This page is the short path from a clone to a merged pull request. Where code
+lives is in [Architecture](docs/architecture.md); how each feature behaves is
+in [docs/features/](docs/features/README.md). Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md); report vulnerabilities as described in
+[SECURITY.md](SECURITY.md), not in an issue.
+
 ## Setup
 
 You need Bun (version in `package.json`). The desktop app is Electron in
@@ -66,49 +72,9 @@ they need no keys and send nothing to real models, mailboxes or chats.
 
 ### Prompt evaluations
 
-`apps/mob/scripts/prompts/cases.ts` holds 20 synthetic scenarios with behavior
-rubrics: language, missing context, tool failures, uncertain side effects,
-external instructions, denial, tool discovery, delegation and summarization.
-Capture the baseline **before** changing prompts, then capture the candidate:
-
-```bash
-bun apps/mob/scripts/prompt-eval.ts > /tmp/mob-prompts-before.json
-# Edit prompts, then:
-bun apps/mob/scripts/prompt-eval.ts > /tmp/mob-prompts-after.json
-```
-
-Capture uses the real engine, summary builder and tool definitions with an
-in-memory store and a fake model. It calls no external service or tool. The
-fixture environment offers sandbox and tool search; manager cases also offer
-coding-agent tools. Email turn cases offer the production email tools and
-their prompt guidance, but cannot access email configuration or execute sends.
-This is a controlled fixture, not a user's live setup.
-The host tests check deterministic capture and that replay never runs tools.
-
-Replay is opt-in and uses an OpenAI-compatible Chat Completions endpoint:
-
-```bash
-bun apps/mob/scripts/prompt-eval.ts --input /tmp/mob-prompts-before.json --url http://localhost:1234/v1 --model MODEL > /tmp/mob-results-before.json
-bun apps/mob/scripts/prompt-eval.ts --input /tmp/mob-prompts-after.json --url http://localhost:1234/v1 --model MODEL > /tmp/mob-results-after.json
-```
-
-For an authenticated endpoint, add `--key-file /path/to/key`; keys are not
-included in reports. Replay sends fixture requests to the named endpoint and
-may incur model charges. Each case makes one model decision or one summary;
-proposed tool calls are recorded, never executed. It does not test ACP agents,
-multi-step task completion or resumption after a generated summary.
-
-Grade each rubric item as pass/fail with a short evidence note; do not infer a
-pass from a tool's name alone or exact response wording. Compare paired cases
-with the same model and settings and repeat runs to expose variability.
-Reports record the source revision, a hash of each exact request, responses,
-tool arguments, latency and provider-reported usage. Request hashes distinguish
-uncommitted prompt changes too. Failed requests are recorded alongside the
-other cases and make the command exit unsuccessfully; they are not behavior
-scores, and their usage may be incomplete. Compare tokens and latency alongside rubric
-results; calculate money only with the endpoint's applicable prices. Keep
-reports outside the repository. Add a regression scenario when a real failure
-reveals a missing constraint, using synthetic data rather than user transcripts.
+Changing Mob's prompts or tool descriptions? Capture a baseline before and a
+candidate after with `bun apps/mob/scripts/prompt-eval.ts`, and compare them
+as [Prompt evaluations](docs/prompt-evals.md) describes.
 
 ## Generated references
 
@@ -134,38 +100,22 @@ bun run build:web                 # landing page, web UI and documentation
 bun run test:site                 # offline routing checks against the public build
 ```
 
+Pages follow progressive disclosure: the README and each index are short and
+link deeper; a feature page opens with what the feature does and how to use
+it, and leaves internals (APIs, storage, code paths) for its later sections
+or a deeper page. Changes to the public site itself are in
+[Public site](docs/website.md).
+
 For documentation writing or organization, the repository skill
 [mob-docs](.agents/skills/mob-docs/SKILL.md) points to the relevant sources.
 
 ## UI style
 
 The app, landing page, demo, account page and documentation share one look: a
-quiet rounded workspace, with pixel art kept for the calves.
-
-- Colours, radii and fonts are tokens in `packages/ui/src/styles/theme.css` (the
-  docs palette is in `apps/docs/src/theme.css`). Other stylesheets use the
-  tokens; a new colour becomes a token or a named custom property first.
-- Radii come from one scale: `--radius-code` (4px) for code and keys,
-  `--radius` (8px) for buttons, inputs and menu items, `--radius-card` (12px)
-  for cards and menus, `--radius-dialog` (16px) for dialogs and the composer,
-  and `--radius-pill` or 50% for pills and dots.
-- Shadows are soft and only lift what floats (menus, dialogs, the chat card);
-  no hard offset shadows.
-- Text is Geist Sans. Geist Mono is for code, terminal output, paths and
-  machine values, not for labels, kickers or buttons.
-- Lime marks a signal (the primary action, the current item, success), not
-  decoration. Only the calves are pixel art; other icons are line icons
-  (`packages/ui/src/brand/Icon.tsx`).
-- Reuse the shared pieces: `Segmented` and the other controls in `@mob/ui`
-  (`packages/ui/src/ui`), `SiteHeader`/`SiteFooter` in `apps/web/src/site`,
-  `ThemePicker` in `packages/ui/src/theme`, and the `.btn`,
-  `.ui-input`, `.ui-menu` and `.dialog-panel` classes in
-  `packages/ui/src/styles/base.css`. Every page supports System, Light and Dark.
-
-`packages/ui/src/theme/style-rules.test.ts` (part of `bun run test:web`) checks
-the colour, radius and shadow rules over every stylesheet. The chat styles and
-the demo's copy of them still carry older radii, counted in that test; lower
-the count when you move one onto the scale.
+quiet rounded workspace, with pixel art kept for the calves. Colours, radii and
+fonts are tokens, and `bun run test:web` checks the rules; see
+[UI style](docs/ui-style.md) before changing a stylesheet, and
+[Taking screenshots](docs/screenshots.md) to show the change.
 
 ## Changes
 

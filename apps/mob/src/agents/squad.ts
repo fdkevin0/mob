@@ -1,13 +1,14 @@
 // Review squads: coding agents that each read a finished task's worktree and
 // review one aspect of its work, whose reports Mob's model then checks in the
 // conversation that asked for them.
-import { CommandError, newID, taskRunning, taskWaiting, type Task, type Tool } from '@mob/core';
+import { CommandError, defineTool, newID, taskRunning, taskWaiting, type Task, type Tool } from '@mob/core';
 import { readers, preset } from './presets';
 import { announce, base, reviewLimit } from './review';
 import type { Service } from './service';
 import { judge } from './blueprints';
 import { report, subtaskActive } from './subtasks';
-import { object, text } from './tools';
+import { z } from 'zod';
+import { text } from './tools';
 
 /** aspects are what a squad's reviewers each look at, by name. */
 export const aspects: Record<string, string> = {
@@ -51,14 +52,14 @@ Check every finding against the code with task_diff (and task_check if it helps)
 
 /** squadTool lets Mob's model have a task's work reviewed by coding agents. */
 export function squadTool(svc: Service): Tool {
-	return {
+	return defineTool({
 		name: 'task_review',
 		description: `Ask the owner to approve a review squad for a finished task: up to ${subtaskActive} coding agents that each read the task's worktree read-only and review one aspect of its work, in parallel. Returns at once; once they all end, Mob gives you their reports to check, rank and act on. Use it for changes that are more than trivial.`,
-		parameters: object({
+		input: z.object({
 			task: text("The task's ID"),
-			aspects: { type: 'array', items: { type: 'string', enum: Object.keys(aspects).sort() }, description: 'What the reviewers look at, one reviewer each; default ' + squadAspects.join(' and ') },
-			agent: { type: 'string', enum: readers(), description: "The reviewers' coding agent; default " + readers()[0] },
-		}, 'task'),
+			aspects: z.array(z.enum(Object.keys(aspects).sort() as [string, ...string[]])).optional().describe('What the reviewers look at, one reviewer each; default ' + squadAspects.join(' and ')),
+			agent: z.enum(readers() as [string, ...string[]]).optional().describe("The reviewers' coding agent; default " + readers()[0]),
+		}),
 		ownerOnly: true,
 		available: svc.busy,
 		run: async call => {
@@ -79,7 +80,7 @@ export function squadTool(svc: Service): Tool {
 		approved: async call => startSquad(svc, call.conversationId, JSON.parse(call.input) as Required<SquadInput>),
 		// Remembering covers squads in the same project with the same agent.
 		scope: raw => { const v = JSON.parse(raw) as SquadInput; return `${v.project ?? ''} ${v.agent ?? ''}`; },
-	};
+	});
 }
 
 /** reviewable is task id, if a squad may review it now. */

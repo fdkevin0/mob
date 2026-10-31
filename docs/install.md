@@ -29,8 +29,10 @@ where they are.
 
 ## Platforms
 
-Mob is published for Linux and macOS (x64 and arm64) and Windows (x64). The
-package installs one compiled binary for your machine.
+Mob is published for Linux (x64 and arm64, glibc and musl), macOS (x64 and
+arm64) and Windows (x64). The package installs one compiled binary for your
+machine. On Alpine and other musl systems the binary needs `libstdc++` and
+`libgcc` (`apk add libstdc++ libgcc`).
 
 - **Linux and macOS**: the package's install script puts that binary in place
   of the `mob` command, so Mob runs without Node.js or Bun. Bun runs install
@@ -51,7 +53,7 @@ To build from source, see [Contributing](../CONTRIBUTING.md).
 
 ## Troubleshooting
 
-- **`usemob-OS-ARCH is not installed`**: the package for your platform was
+- **`@usemob/OS-ARCH is not installed`**: the package for your platform was
   skipped, usually by `--no-optional` or `--omit=optional`. Install again
   without it, or use an archive.
 - **`env: 'node': No such file or directory`**: the install script did not

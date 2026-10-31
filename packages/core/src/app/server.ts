@@ -10,7 +10,7 @@ import { encode, type Event } from '../chat/events';
 import type { Running } from '../chat/running';
 import type { Entry } from '../chat/search';
 import { NotFound, newID } from '../chat/sql';
-import { isConversationID, TransferError, type Store, type Transfer } from '../chat/store';
+import { isConversationID, TransferError, type Store, type Task, type Transfer, type UsageSummary } from '../chat/store';
 import type { Tool } from '../chat/tools';
 import { publicProvider } from '../provider/provider';
 import { providerFromForm, saveProvider, type ProviderForm } from '../provider/save';
@@ -38,9 +38,40 @@ export type Plugin = {
 	background?: Extension;
 };
 
+/** AgentApproval is a decision waiting in an agent's conversation. */
+export type AgentApproval = {
+	id: string;
+	tool: string;
+	/** text is what is asked: one "field: value" line per input field, so that a command shows in full rather than only its title. */
+	text: string;
+	/** whole is false when a field was too long to show; the owner then decides in the conversation. */
+	whole: boolean;
+};
+
+/** AgentNode is one conversation in the task tree (GET /api/tasks): a task, or a conversation of Mob's that started tasks. */
+export type AgentNode = {
+	conversationId: string;
+	/** parent is the conversation that started this one; unset for a root. */
+	parent?: string;
+	/** agent is the task's agent, or mob; label is its display name. */
+	agent: string;
+	label: string;
+	/** model is the model the agent runs: the one its running session's options select, else the one that used the most tokens. */
+	model?: string;
+	title: string;
+	/** status is a task status, or running, waiting or idle for Mob. */
+	status: string;
+	/** approvals are the decisions that wait for the owner, oldest first. */
+	approvals: AgentApproval[];
+	/** tools are the kinds of tool the agent used, such as execute or edit. */
+	tools: string[];
+	task?: Task;
+	usage?: UsageSummary;
+};
+
 /** Tasks is the coding agent service as the API reaches it. */
 export interface Tasks {
-	tree(project: string): unknown;
+	tree(project: string): AgentNode[];
 	stopTask(id: string): void;
 	message(id: string, text: string, signal?: AbortSignal): Promise<void>;
 }

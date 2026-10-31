@@ -5,7 +5,9 @@ import { api, type Connection } from './api';
 import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '@mob/ui/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
-import { tokens } from './format';
+import { duration, money as cost, tokens } from './format';
+
+export { duration };
 import { Loading } from './Splash';
 import { Button } from '@mob/ui/button';
 import {
@@ -56,17 +58,6 @@ export function tree(nodes: AgentNode[], now = Date.now()): Branch[] {
 	};
 	return (children.get('') ?? []).map((n) => build(n, new Set())).sort((a, b) => b.end - a.end);
 }
-
-export function duration(ms: number) {
-	if (!Number.isFinite(ms) || ms < 0) return '';
-	const s = Math.round(ms / 1000);
-	if (s < 60) return `${s}s`;
-	if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
-	return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
-
-// cost is a price in dollars, with a tenth of a cent below a dollar.
-export const cost = (n: number) => `$${n < 1 ? n.toFixed(3) : n.toFixed(2)}`;
 
 // spent says what a node's conversation used: its cost when priced, and its tokens.
 function spent(usage: AgentNode['usage']) {

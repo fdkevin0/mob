@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // The `mob` command of the usemob npm package until scripts/npm/install.js
 // replaces it with the binary, and on Windows. npm and bun install only the
-// platform package that matches this machine (usemob-OS-ARCH); this runs its
+// platform package that matches this machine (@usemob/OS-ARCH); this runs its
 // compiled binary, which needs neither Node.js nor Bun.
 'use strict';
 const { spawn } = require('node:child_process');
+const { binaryPath, platformPackage } = require('./platform.js');
 
-const pkg = `usemob-${process.platform}-${process.arch}`;
 let binary;
 try {
-	binary = require.resolve(`${pkg}/bin/${process.platform === 'win32' ? 'mob.exe' : 'mob'}`);
+	binary = binaryPath();
 } catch {
-	console.error(`mob: ${pkg} is not installed. Mob is published for linux-x64, linux-arm64, darwin-x64, darwin-arm64 and win32-x64;`);
+	console.error(`mob: ${platformPackage} is not installed. Mob is published for linux-x64, linux-arm64 (glibc and musl), darwin-x64, darwin-arm64 and win32-x64;`);
 	console.error('reinstall without --no-optional, or download an archive from https://github.com/fdkevin0/mob/releases');
 	process.exit(1);
 }

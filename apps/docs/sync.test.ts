@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pages, type Page } from './pages';
 import { convert, rewriteLinks } from './scripts/sync';
 
-const page: Page = { source: 'docs/features/sandbox.md', slug: 'features/sandbox', group: 'Features' };
+const page: Page = { source: 'docs/features/sandbox.md', slug: 'features/sandbox', group: 'Use' };
 const github = 'https://github.com/fdkevin0/mob';
 
 describe('rewriteLinks', () => {
