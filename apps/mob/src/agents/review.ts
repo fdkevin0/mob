@@ -1,10 +1,11 @@
 // Mob's model checks the tasks' work: a snapshot in the owner's turns, a
 // review once a task it started finishes, and tools to see what a task changed
 // and to run its tests.
-import { cell, newID, taskRunning, taskStopped, taskWaiting, type Running, type Task, type Tool, type Turn } from '@mob/core';
+import { cell, defineTool, newID, taskRunning, taskStopped, taskWaiting, type Running, type Task, type Tool, type Turn } from '@mob/core';
 import { environment, git, grouped, kill } from './process';
 import { noticeLimit, type Service } from './service';
-import { object, text } from './tools';
+import { z } from 'zod';
+import { text } from './tools';
 
 /** snapshotLimit bounds how many tasks the snapshot names. */
 const snapshotLimit = 15;
@@ -75,17 +76,17 @@ export function announce(svc: Service, run: Running, conversation: string, title
 
 /** reviewTools let Mob's model check a task's work: what changed, and whether a command such as the tests passes in its worktree. */
 export function reviewTools(svc: Service): Tool[] {
-	return [{
+	return [defineTool({
 		name: 'task_diff',
 		description: 'Show what a task changed on its branch since it began: commits, changed files with line counts, untracked files, and on request the patch, whole or for one file.',
-		parameters: object({ task: text("The task's ID"), patch: { type: 'boolean', description: 'Include the patch' }, file: text("Only this file's patch, a path in the repository") }, 'task'),
+		input: z.object({ task: text("The task's ID"), patch: z.boolean().optional().describe('Include the patch'), file: text("Only this file's patch, a path in the repository").optional() }),
 		ownerOnly: true,
 		available: svc.busy,
 		run: async call => diff(svc, String(call.input.task ?? ''), call.input.patch === true, String(call.input.file ?? '')),
-	}, {
+	}), defineTool({
 		name: 'task_check',
 		description: "Ask the owner to approve running a shell command, such as the project's tests or build, in a task's worktree on this computer, and return its exit code and the end of its output. The turn stops until the owner approves.",
-		parameters: object({ task: text("The task's ID"), command: text('The command, run with sh -c (cmd /C on Windows) in the worktree') }, 'task', 'command'),
+		input: z.object({ task: text("The task's ID"), command: text('The command, run with sh -c (cmd /C on Windows) in the worktree') }),
 		ownerOnly: true,
 		available: svc.busy,
 		run: async call => {
@@ -101,7 +102,7 @@ export function reviewTools(svc: Service): Tool[] {
 		},
 		// Remembering covers the same command in the same project.
 		scope: input => { const v = JSON.parse(input) as { project?: string; command?: string }; return `${v.project ?? ''} ${v.command ?? ''}`; },
-	}];
+	})];
 }
 
 /** lines splits git's output into lines; none for empty output. */

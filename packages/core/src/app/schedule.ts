@@ -8,7 +8,8 @@ import { CommandError, type ConversationService } from '../chat/conversation';
 import type { Running } from '../chat/running';
 import { newID } from '../chat/sql';
 import type { Schedule, Store } from '../chat/store';
-import { rfc3339, type Tool } from '../chat/tools';
+import { z } from 'zod';
+import { defineTool, rfc3339, type Tool } from '../chat/tools';
 import type { Extension } from './extension';
 import type { Plugin } from './server';
 
@@ -102,8 +103,6 @@ const rfc3339Pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}
 
 type Request = { prompt: string; at: string; repeat?: string; timezone?: string };
 
-const object = (properties: Record<string, unknown>, ...required: string[]) => ({ type: 'object', properties, additionalProperties: false, ...(required.length ? { required } : {}) });
-const text = (description: string) => ({ type: 'string', description });
 
 /** Schedules runs the schedules. */
 export class Schedules {
@@ -178,33 +177,33 @@ export class Schedules {
 
 	/** tools schedule prompts, list them and cancel them. */
 	tools(): Tool[] {
-		return [{
+		return [defineTool({
 			name: 'schedule',
 			description: 'Ask the owner to approve running a prompt on your own later, once or repeatedly, such as a morning summary of the coding tasks or a reminder. It runs as a turn in this conversation and the owner is told its conclusion. Get the current time with datetime first. The turn stops until the owner approves.',
-			parameters: object({
-				prompt: text('What to do when it runs, with everything needed, as an instruction to yourself'),
-				at: text('When it first runs, RFC 3339 with an offset, such as 2026-10-21T09:00:00+08:00'),
-				repeat: { type: 'string', enum: repeats, description: 'Repeat after each run; omit to run once' },
-				timezone: text("IANA time zone repeats keep their time of day in, such as Asia/Shanghai; default the computer's"),
-			}, 'prompt', 'at'),
+			input: z.object({
+				prompt: z.string().describe('What to do when it runs, with everything needed, as an instruction to yourself'),
+				at: z.string().describe('When it first runs, RFC 3339 with an offset, such as 2026-10-21T09:00:00+08:00'),
+				repeat: z.enum(repeats).optional().describe('Repeat after each run; omit to run once'),
+				timezone: z.string().optional().describe("IANA time zone repeats keep their time of day in, such as Asia/Shanghai; default the computer's"),
+			}),
 			prompt: 'You can act later on your own: schedule runs a prompt at a set time, once or repeatedly; schedules lists them and schedule_cancel cancels one.',
 			ownerOnly: true,
 			run: call => this.ask(call.input, r => call.requestApproval(r)),
 			approved: async call => this.add(call.conversationId, JSON.parse(call.input) as Request),
-		}, {
-			name: 'schedules', description: 'List the scheduled prompts: ID, prompt, next run and repeat.', parameters: object({}),
+		}), defineTool({
+			name: 'schedules', description: 'List the scheduled prompts: ID, prompt, next run and repeat.', input: z.object({}),
 			ownerOnly: true, available: this.any,
 			run: async () => ({ schedules: this.store.schedules(0).map(sc => ({ id: sc.id, prompt: sc.prompt, next: rfc3339(new Date(sc.next), zone(sc.zone)), repeat: sc.repeat ?? '', conversation: sc.conversationId })) }),
-		}, {
-			name: 'schedule_cancel', description: 'Cancel a scheduled prompt.', parameters: object({ id: text("The schedule's ID") }, 'id'),
+		}), defineTool({
+			name: 'schedule_cancel', description: 'Cancel a scheduled prompt.', input: z.object({ id: z.string().describe("The schedule's ID") }),
 			ownerOnly: true, available: this.any,
 			run: async call => {
-				const id = typeof call.input.id === 'string' ? call.input.id : '';
+				const id = call.input.id;
 				if (!id || id === 'all') throw new Error("give one schedule's ID");
 				if (!this.store.unschedule(id)) throw new Error(`no schedule ${id}`);
 				return { cancelled: true };
 			},
-		}];
+		})];
 	}
 
 	/** ask checks a schedule call and asks the owner to approve it. */
@@ -226,14 +225,14 @@ export class Schedules {
 	add(conversationId: string, r: Request) {
 		const first = Date.parse(r.at);
 		if (Number.isNaN(first)) throw new Error('invalid time ' + r.at);
-		const z = zone(r.timezone);
-		const sc = { conversationId, prompt: r.prompt, next: first, repeat: r.repeat, zone: r.timezone, clock: clockOf(first, z) };
+		const tz = zone(r.timezone);
+		const sc = { conversationId, prompt: r.prompt, next: first, repeat: r.repeat, zone: r.timezone, clock: clockOf(first, tz) };
 		// A repeat whose first time has passed starts at its next one.
 		const now = this.now();
-		if (sc.repeat && first < now) sc.next = next(first, sc.repeat, z, sc.clock, now);
+		if (sc.repeat && first < now) sc.next = next(first, sc.repeat, tz, sc.clock, now);
 		const saved = this.store.addSchedule(sc);
 		this.poke();
-		return { schedule: saved.id, next: rfc3339(new Date(saved.next), z), repeat: saved.repeat ?? '' };
+		return { schedule: saved.id, next: rfc3339(new Date(saved.next), tz), repeat: saved.repeat ?? '' };
 	}
 
 	/** commands list and cancel schedules. */

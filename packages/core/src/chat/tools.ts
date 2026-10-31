@@ -1,4 +1,5 @@
 // Tools the model may call, how a call asks for approval, and the tools every conversation offers.
+import { z } from 'zod';
 import type { Tool as LLMTool, ToolCall as LLMToolCall } from '../llm/llm';
 import type { Event } from './events';
 import { searchName, type Entry, type Exposure } from './search';
@@ -27,6 +28,8 @@ export type Tool = LLMTool & {
 	namespace?: string;
 	/** available reports whether turns offer the tool now; unset offers it always. */
 	available?: () => boolean;
+	/** input, when set, checks the model's arguments before run sees them; tools defined with defineTool set it. */
+	input?: z.ZodType<Record<string, unknown>>;
 	/** run's output goes back to the model; so does its error, unless it is AwaitingApproval or an Abort. */
 	run: (call: ToolCall) => Promise<unknown>;
 	/** approved carries out a call the user approved after run asked with requestApproval. */
@@ -40,6 +43,37 @@ export type Tool = LLMTool & {
 	/** scope names what remembering an approval of input covers; unset covers every call of the tool. */
 	scope?: (input: string) => string;
 };
+
+/** jsonSchema is a zod schema as the JSON Schema a model reads, without the $schema line every provider ignores
+ * or the safe-integer bounds zod writes for every .int(), which only cost the model tokens. */
+export function jsonSchema(schema: z.ZodType): Record<string, unknown> {
+	const { $schema: _, ...rest } = z.toJSONSchema(schema, {
+		override: ({ jsonSchema: s }) => {
+			if (s.maximum === Number.MAX_SAFE_INTEGER) delete s.maximum;
+			if (s.minimum === Number.MIN_SAFE_INTEGER) delete s.minimum;
+		},
+	}) as Record<string, unknown>;
+	return rest;
+}
+
+/** ToolInput is a tool's arguments as its schema describes them. */
+export type ToolInput<S extends z.ZodObject> = z.output<S>;
+
+/**
+ * defineTool declares a tool by a zod schema of its arguments: the model is
+ * offered the schema as JSON Schema, and the engine checks the model's
+ * arguments against it before run, which receives them parsed.
+ */
+export function defineTool<S extends z.ZodObject>(t: Omit<Tool, 'parameters' | 'input' | 'run'> & { input: S; run: (call: ToolCall & { input: ToolInput<S> }) => Promise<unknown> }): Tool {
+	return { ...t, parameters: jsonSchema(t.input), input: t.input as unknown as z.ZodType<Record<string, unknown>>, run: t.run as Tool['run'] };
+}
+
+/** checkInput is a call's arguments as the tool's schema parses them, or the error the model gets back. */
+export function checkInput(tool: Tool | undefined, input: Record<string, any>): { input: Record<string, any> } | { error: Error } {
+	if (!tool?.input) return { input };
+	const r = tool.input.safeParse(input);
+	return r.success ? { input: r.data } : { error: new Error('invalid tool arguments:\n' + z.prettifyError(r.error)) };
+}
 
 /** ApprovedCall is a call the user approved. input is what run passed to requestApproval, as JSON. */
 export type ApprovedCall = { conversationId: string; approvalId: string; input: string; store: Store; owner: boolean; signal?: AbortSignal };
@@ -144,22 +178,22 @@ const validZone = (zone: string) => { try { new Intl.DateTimeFormat('en-US', { t
 /** defaultTools are the tools every conversation offers. */
 export function defaultTools(): Tool[] {
 	return [
-		{
+		defineTool({
 			name: 'datetime', description: 'Get current date and time in an optional IANA timezone.',
-			parameters: { type: 'object', properties: { timezone: { type: 'string' } }, additionalProperties: false },
+			input: z.object({ timezone: z.string().optional() }),
 			run: async call => {
-				let zone = typeof call.input.timezone === 'string' && call.input.timezone ? call.input.timezone : 'Asia/Shanghai';
+				let zone = call.input.timezone || 'Asia/Shanghai';
 				if (!validZone(zone)) zone = 'UTC';
 				const now = new Date();
 				return { iso: rfc3339(now, 'UTC'), readable: rfc3339(now, zone), timezone: zone };
 			},
-		},
-		{
+		}),
+		defineTool({
 			name: 'remember',
 			description: 'Request permission to save one durable fact about the user locally. Facts the owner approves are recalled in all of their conversations. Stops the turn until the user approves.',
-			parameters: { type: 'object', properties: { fact: { type: 'string' } }, required: ['fact'], additionalProperties: false },
+			input: z.object({ fact: z.string() }),
 			run: async call => {
-				const fact = typeof call.input.fact === 'string' ? call.input.fact.trim() : '';
+				const fact = call.input.fact.trim();
 				if (!fact || new TextEncoder().encode(fact).length > 2000) throw new Error('fact must be 1–2000 bytes');
 				return call.requestApproval({ fact });
 			},
@@ -168,7 +202,7 @@ export function defaultTools(): Tool[] {
 				call.store.saveFact(call.approvalId, call.conversationId, fact, call.owner);
 				return { saved: true };
 			},
-		},
+		}),
 	];
 }
 
@@ -177,17 +211,15 @@ export function sandboxTool(box: Sandbox): Tool {
 	const allowed = box.offline?.()
 		? 'Anything is allowed there, but it has no network: packages cannot be downloaded, so use what the image provides. '
 		: 'Anything is allowed there: install packages, run code, use the network. ';
-	return {
+	return defineTool({
 		name: sandboxName,
 		description: 'Run a shell command (sh -c) in an isolated Linux container. ' + allowed +
 			"Only /workspace, the working directory, persists between calls in this conversation; the user's own files and machine are not reachable.",
-		parameters: {
-			type: 'object', properties: {
-				command: { type: 'string' },
-				timeout: { type: 'integer', minimum: 1, maximum: sandboxMaxTimeout / 1000, description: 'Seconds; default ' + sandboxDefaultTimeout / 1000 },
-			}, required: ['command'], additionalProperties: false,
-		},
+		input: z.object({
+			command: z.string(),
+			timeout: z.number().int().min(1).max(sandboxMaxTimeout / 1000).optional().describe('Seconds; default ' + sandboxDefaultTimeout / 1000),
+		}),
 		prompt: "Use the sandbox for isolated calculations, experiments and installed skill scripts; it needs no permission inside its container. It cannot access the user's host projects. When coding-agent tools are available, hand work on those projects to a coding agent.",
-		run: call => box.exec(call.conversationId, String(call.input.command ?? ''), typeof call.input.timeout === 'number' ? Math.trunc(call.input.timeout) * 1000 : 0, call.signal),
-	};
+		run: call => box.exec(call.conversationId, call.input.command, (call.input.timeout ?? 0) * 1000, call.signal),
+	});
 }
