@@ -3,11 +3,26 @@
 A turn is one reply from the model, including every tool call it makes. This
 page covers how a turn runs, how clients follow it, and what limits apply.
 
+In short:
+
+- A reply belongs to the service, not to the window that asked for it. Close
+  the tab or lose the network and it keeps going; open the conversation again
+  and it catches up. **Stop** ends it.
+- Messages have no length limit of their own. A reply runs until it is done
+  or reaches 20 tool steps (`max_tool_steps`, configurable); then **Continue**
+  carries on.
+- The ring beside Send shows how full the model's context is. When a long
+  conversation no longer fits, Mob clears old tool outputs, then summarizes
+  older messages; **Compact now** (`/compact`) summarizes at once.
+- `/usage` and the **Token usage** page show what conversations cost.
+
+The sections below give the details and where each lives in the code.
+
 ## Turns outlive their request
 
-- `ConversationService.Start` admits a turn and runs it on the service's own
+- `ConversationService.start` admits a turn and runs it on the service's own
   context. Closing the tab, reloading or losing the network does not end it.
-  Only `POST /api/conversations/{id}/stop`, `Close`, or replacing the access
+  Only `POST /api/conversations/{id}/stop`, `close`, or replacing the access
   token that started it end it early. The token is checked at admission and
   watched after it, so a turn started with a replaced token does nothing, and a
   replacement also stops an approved call that runs before the turn's first
@@ -15,8 +30,8 @@ page covers how a turn runs, how clients follow it, and what limits apply.
 - Errors before the turn emits anything (busy, repeated request, stale approval,
   no model) are returned as HTTP errors. One turn runs per conversation; a
   competing send gets 409.
-- Every admitted turn, including those channels start with `Execute`, keeps a
-  `chat.Running` log of its events in memory. Events are numbered from 1 and
+- Every admitted turn, including those channels start with `execute`, keeps a
+  `Running` log of its events in memory. Events are numbered from 1 and
   written as SSE `id:` lines.
 - `GET /api/chat/{id}/stream` replays the running turn from its first event, or
   from the event after `Last-Event-ID`, and then follows it live. It answers 204
@@ -189,7 +204,7 @@ The shared rendering configuration is in
   naming the model and the size, and asks the user to send another message,
   whose turn fits history to the window again.
 - Providers count tokens their own way and can refuse a prompt the estimate let
-  through. Drivers mark that refusal (`llm.ErrContextOverflow`), and the turn
+  through. Drivers mark that refusal (`OverflowError`), and the turn
   then frees about a quarter of the prompt once and asks again: before the
   model has replied, by fitting history to less; after, by clearing outputs the
   model has already read, never those of the step just run. A second refusal,
@@ -341,7 +356,7 @@ The shared rendering configuration is in
   replies and how long the models worked. Cost is the provider's list price;
   a subscription is not charged it.
 - The web workspace's **Token usage** page (`GET /api/usage?days=7|30|0`,
-  `Store.Report`) shows the last 7 days, 30 days or all time: total tokens,
+  `store.report`) shows the last 7 days, 30 days or all time: total tokens,
   the share of input read from the cache, cost and model time; a bar of where
   the tokens went (fresh input, cache reads, cache writes, output); tokens per
   day on the service's calendar stacked the same way, with each day's numbers on hover; tokens,
@@ -349,7 +364,7 @@ The shared rendering configuration is in
   and tasks that used the most, each opening its conversation. Replies
   counted from before the table existed are dated to their conversation's
   last update.
-- `Store.ConversationUsage(ids...)` returns the same summaries
-  (`chat.UsageSummary`) for other features. The code is in
+- `store.conversationUsage(ids)` returns the same summaries
+  (`UsageSummary`) for other features. The code is in
   `packages/core/src/chat/usage.ts`.
 

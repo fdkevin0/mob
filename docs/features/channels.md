@@ -1,7 +1,7 @@
 # Messaging channels
 
 Mob can be reached from Telegram, WeChat iLink and email. A channel is a plugin
-that receives messages and answers them through one shared `channel.Bridge`, so
+that receives messages and answers them through one shared `Bridge` (`packages/core/src/app/channel.ts`), so
 commands, approvals, delivery records and replies behave the same everywhere.
 
 ## The bridge
@@ -13,14 +13,14 @@ commands, approvals, delivery records and replies behave the same everywhere.
   message is answered and sent at most once and an interrupted send is reported,
   not repeated. `/deliveries` lists them. A channel that answers while it
   keeps receiving calls `Accept` as each message arrives and `Finish` once it
-  answers; `Message.Started` hands it the turn's stop as soon as the turn is
+  answers; `started` hands it the turn's stop as soon as the turn is
   admitted, so it can keep later messages in order.
 - A message for a conversation whose turn is still running is answered with
-  `channel.Texts.Busy` instead of waiting, and a turn stopped by the sender ends
-  with what it wrote so far and `channel.Texts.Stopped`. A decision answered
-  that way is not taken; `Reply.Settled` names an approval only once it no
+  `Texts.busy` instead of waiting, and a turn stopped by the sender ends
+  with what it wrote so far and `Texts.stopped`. A decision answered
+  that way is not taken; `settled` names an approval only once it no
   longer waits.
-- `channel.Texts` is what a channel says in its own words: the help greeting,
+- `Texts` is what a channel says in its own words: the help greeting,
   the approval prompt, the line before a decision's reply, and the answers for
   stale approvals, failures and empty turns. Telegram speaks English and WeChat
   iLink Chinese.
@@ -36,9 +36,9 @@ commands, approvals, delivery records and replies behave the same everywhere.
 - The bridge replies with the text of the turn's last step that wrote any, which
   concludes the turn. Text written between tool calls, reasoning and tool calls
   stay in the local conversation, where the web UI and TUI show the whole turn.
-- `channel.Texts.Used`, when set, adds one line naming the tools the turn called
+- `Texts.used`, when set, adds one line naming the tools the turn called
   and how often, so the sender knows work happened and where to read it.
-- A channel's turn sets `chat.ChatRequest.Channel`, and the model is told that
+- A channel's turn sets `ChatRequest.channel`, and the model is told that
   the reader sees only its last text, so it ends with an answer that stands on
   its own. No second model call writes a summary.
 - Failures and approval requests are added after the conclusion. A turn whose

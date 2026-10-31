@@ -9,7 +9,7 @@ task starts.
 ![A plan card in the conversation: three tasks, each with the steps its blueprint runs](../images/plan-card.png)
 
 Each row is one task: its title, its agent, what its
-[blueprint](coding-agents.md#blueprints) runs after the agent's work, and
+[blueprint](task-workflow.md#blueprints) runs after the agent's work, and
 those steps as small pills (Build › Checks › Review › Ready). Approve it from
 the card, or open the flow first.
 
@@ -64,7 +64,7 @@ In the flow, the step a task is on says what is happening, such as
 opens its conversation.
 
 You hear once per task, when it is **Ready to review** or **needs you** (see
-[Blueprints](coding-agents.md#blueprints)).
+[Blueprints](task-workflow.md#blueprints)).
 
 <details>
 <summary>How it works</summary>

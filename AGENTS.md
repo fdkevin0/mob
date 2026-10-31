@@ -59,3 +59,6 @@ Reduce total variable count by inlining when a value is only used once.
 - `docs/features/` for how the feature you are changing behaves.
 - `CONTRIBUTING.md` before opening a pull request.
 - `docs/screenshots.md` before capturing a state the script cannot reach.
+- `docs/ui-style.md` before changing a stylesheet, `docs/website.md` before
+  changing usemob.app's Worker or deployment, `docs/prompt-evals.md` before
+  changing prompts.
