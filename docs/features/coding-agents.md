@@ -3,9 +3,17 @@
 Mob hands coding work to outside coding agents and keeps track of it. Mob's
 own model acts as the owner's project manager: it starts a task in a project,
 reports how tasks are going and what waits for a decision, and passes on
-instructions. The agent writes the code. Agents speak the
-[Agent Client Protocol](https://agentclientprotocol.com) (ACP); the code is in
-`apps/mob/src/agents`, on the official TypeScript SDK `@agentclientprotocol/sdk`.
+instructions. The agent writes the code. The code is in `apps/mob/src/agents`.
+
+Mob drives every agent through one port, `runtime.ts`: a session that takes
+prompts and reports text, reasoning, tool calls updated by their ID, plans,
+context use and how each prompt ended with what it used, and asks permission
+before calls. Its shapes follow ACP v2's. Each agent's preset names the runtime
+behind the port. Today every agent speaks the
+[Agent Client Protocol](https://agentclientprotocol.com) (ACP), the default
+runtime (`acp.ts`, on the official TypeScript SDK `@agentclientprotocol/sdk`);
+an agent whose own protocol does more than its ACP adapter can get a runtime of
+its own without changing tasks, approvals, the agent tree or usage.
 
 ## Agents
 

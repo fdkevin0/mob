@@ -2,7 +2,6 @@
 // work ended and the agents of tasks Mob's conversations started hand parts of
 // their work to sub-tasks; and the summaries that tell whoever started tasks
 // that they all ended.
-import type { McpServer as ACPMcpServer } from '@agentclientprotocol/sdk';
 import { brief, newID, outcomeBlocked, outcomePassed, outcomeRework, taskReview, taskRunning, taskWaiting, CommandError, type Task } from '@mob/core';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
@@ -10,6 +9,7 @@ import { z } from 'zod';
 import { version } from '../version';
 import { firstLine } from './process';
 import { preset, readers } from './presets';
+import type { McpServer as AgentMcpServer } from './runtime';
 import type { Service } from './service';
 import { settleSquad } from './squad';
 import { label } from './tree';
@@ -53,7 +53,7 @@ export class Hub {
 	 * agent takes MCP servers over HTTP, through which it reports how its work
 	 * ended and, if it may, starts sub-tasks.
 	 */
-	servers(t: Task, http: boolean): { servers: ACPMcpServer[]; token: string } {
+	servers(t: Task, http: boolean): { servers: AgentMcpServer[]; token: string } {
 		if (!http) return { servers: [], token: '' };
 		let url: string;
 		try { url = this.listen(); } catch (e) {
@@ -62,7 +62,7 @@ export class Hub {
 		}
 		const token = newID() + newID();
 		this.tokens.set(token, t.id);
-		return { servers: [{ type: 'http', name: mcpName, url, headers: [{ name: 'Authorization', value: 'Bearer ' + token }] }], token };
+		return { servers: [{ name: mcpName, url, headers: { Authorization: 'Bearer ' + token } }], token };
 	}
 
 	/** forget stops token from reaching the MCP server. */
@@ -183,8 +183,8 @@ export class Hub {
 		const call = 'mob-subtask-' + newID();
 		const shown: Record<string, unknown> = { agent: a.name, project: t.project, title, prompt };
 		if (shared) shown.workspace = 'read-only in ' + t.worktree;
-		void session.askOwner(call, (shared ? 'Start a read-only sub-task: ' : 'Start a sub-task: ') + title, shown).then(async outcome => {
-			if (outcome.outcome !== 'selected' || !outcome.optionId.startsWith('allow')) return session.report(call, false, 'The owner did not approve this sub-task.');
+		void session.askOwner(call, (shared ? 'Start a read-only sub-task: ' : 'Start a sub-task: ') + title, shown).then(async choice => {
+			if (choice !== 'allow' && choice !== 'always') return session.report(call, false, 'The owner did not approve this sub-task.');
 			try {
 				this.reserve(t);
 				let child: Task;
