@@ -1,52 +1,8 @@
 // The relay receives only envelopes. Pairing keys never enter a request URL, header or body.
-export type Envelope = { v: 1; session: string; id: string; seq: number; final: boolean; nonce: string; data: string };
-const encoder = new TextEncoder();
-export function base64(bytes: Uint8Array) {
-	let text = '';
-	for (const byte of bytes) text += String.fromCharCode(byte);
-	return btoa(text);
-}
-export function unbase64(text: string) {
-	return Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
-}
-export function newKey() {
-	return base64(crypto.getRandomValues(new Uint8Array(32)));
-}
-async function key(raw: string) {
-	return crypto.subtle.importKey('raw', unbase64(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-function aad(runner: string, direction: string, e: Envelope) {
-	return encoder.encode(JSON.stringify([e.v, runner, e.session, e.id, direction, e.seq, e.final]));
-}
-export async function seal(
-	rawKey: string,
-	runner: string,
-	direction: string,
-	envelope: Omit<Envelope, 'nonce' | 'data'>,
-	value: unknown,
-): Promise<Envelope> {
-	const nonce = crypto.getRandomValues(new Uint8Array(12));
-	const e = { ...envelope, nonce: base64(nonce), data: '' };
-	e.data = base64(
-		new Uint8Array(
-			await crypto.subtle.encrypt(
-				{ name: 'AES-GCM', iv: nonce, additionalData: aad(runner, direction, e) },
-				await key(rawKey),
-				encoder.encode(JSON.stringify(value)),
-			),
-		),
-	);
-	return e;
-}
-export async function open(rawKey: string, runner: string, direction: string, e: Envelope): Promise<unknown> {
-	if (e.v !== 1 || !Number.isSafeInteger(e.seq) || e.seq < 0 || typeof e.final !== 'boolean') throw new Error('Invalid encrypted envelope');
-	const plain = await crypto.subtle.decrypt(
-		{ name: 'AES-GCM', iv: unbase64(e.nonce), additionalData: aad(runner, direction, e) },
-		await key(rawKey),
-		unbase64(e.data),
-	);
-	return JSON.parse(new TextDecoder().decode(plain));
-}
+import { base64, newRelayKey, open, seal, unbase64, type Envelope, type RelayReply as Reply } from '@mob/core/relay';
+
+export { base64, open, seal, unbase64, type Envelope };
+export const newKey = newRelayKey;
 
 export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(`/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
@@ -55,7 +11,6 @@ export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
 	return response.json();
 }
 
-type Reply = { status: number; headers?: Record<string, string[]>; body: string; error?: string };
 export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 	return async (input, init) => {
 		const request = new Request(input, init);
@@ -108,7 +63,7 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 			const e: Envelope = JSON.parse(buffer.slice(0, end));
 			buffer = buffer.slice(end + 1);
 			if (e.id !== id || e.session !== session || e.seq !== sequence) throw new Error('Encrypted response was reordered or replayed');
-			const reply = (await open(rawKey, runner, 'response', e)) as Reply;
+			const reply = await open<Reply>(rawKey, runner, 'response', e);
 			if (!reply || typeof reply.body !== 'string') throw new Error('Invalid encrypted response');
 			sequence++;
 			// The runner authenticates a failed local response as failed, never as complete.

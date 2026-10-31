@@ -3,17 +3,12 @@
 // opened here and answered by the local service, and the answers are sealed
 // with the pairing key, which never leaves this machine and the browser.
 
+import { open, relayKey, seal, base64, type Envelope, type RelayReply as Reply, type RelayRequest } from '@mob/core/relay';
 import { sleep } from '@mob/core/sleep';
 export type Credentials = { url: string; id: string; token: string; key: string };
 
-/** Envelope is one sealed frame; v, runner, session, id, direction, seq and final are authenticated with it. */
-export type Envelope = { v: number; session: string; id: string; seq: number; final: boolean; nonce: string; data: string };
-
 /** Request is what the browser asks the local service, as it sealed it. */
-export type Request = { method: string; path: string; headers?: Record<string, string[]> | null; body: string; expires: number };
-
-/** Reply is one frame of an answer: the first carries the status and headers; error is set only on a final frame whose body is incomplete. */
-type Reply = { status: number; headers?: Record<string, string[]>; body: string; error?: string };
+export type Request = RelayRequest;
 
 /** Handler answers a request the runner checked. */
 export type Handler = (req: globalThis.Request) => Promise<Response>;
@@ -25,37 +20,6 @@ export function origin(raw: string) {
 	if (!u.host || u.username || u.password || u.search || raw.includes('?') || u.hash || raw.includes('#') || (u.pathname !== '/' && u.pathname !== '')) throw new Error('runner URL must be an HTTPS origin');
 	if (u.protocol !== 'https:' && !(u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1'))) throw new Error('runner URL requires HTTPS except on loopback');
 	return u.protocol + '//' + u.host;
-}
-
-const encoder = new TextEncoder();
-const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
-const unb64 = (text: string) => new Uint8Array(Buffer.from(text, 'base64'));
-
-/** key imports the pairing key: 32 base64-encoded bytes. */
-export async function key(raw: string): Promise<CryptoKey> {
-	const bytes = Buffer.from(raw, 'base64');
-	if (bytes.length !== 32 || bytes.toString('base64') !== raw) throw new Error('runner key must be 32 base64-encoded bytes');
-	return crypto.subtle.importKey('raw', bytes, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
-const aad = (runner: string, direction: string, e: Envelope) => encoder.encode(JSON.stringify([e.v, runner, e.session, e.id, direction, e.seq, e.final]));
-
-export async function seal(k: CryptoKey, runner: string, direction: string, e: Omit<Envelope, 'nonce' | 'data'>, value: unknown): Promise<Envelope> {
-	const nonce = crypto.getRandomValues(new Uint8Array(12));
-	const sealed = { ...e, nonce: b64(nonce), data: '' };
-	sealed.data = b64(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, additionalData: aad(runner, direction, sealed) }, k, encoder.encode(JSON.stringify(value)))));
-	return sealed;
-}
-
-export async function open<T>(k: CryptoKey, runner: string, direction: string, e: Envelope): Promise<T> {
-	if (e.v !== 1) throw new Error('unsupported encryption version');
-	const nonce = unb64(e.nonce);
-	if (nonce.length !== 12) throw new Error('invalid nonce');
-	let plain: ArrayBuffer;
-	try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce, additionalData: aad(runner, direction, e) }, k, unb64(e.data)); } catch {
-		throw new Error('encrypted frame authentication failed');
-	}
-	return JSON.parse(new TextDecoder().decode(plain)) as T;
 }
 
 /** failure is the runner's own answer, as plain text. */
@@ -137,7 +101,7 @@ class Answer {
 			try {
 				// Bodies are bytes, not necessarily UTF-8; base64 keeps split multibyte characters whole.
 				for await (const part of res.body as unknown as AsyncIterable<Uint8Array>) {
-					for (let i = 0; i < part.length; i += chunk) await this.emit(res.status, headers, b64(part.subarray(i, i + chunk)), false);
+					for (let i = 0; i < part.length; i += chunk) await this.emit(res.status, headers, base64(part.subarray(i, i + chunk)), false);
 				}
 			} catch (e) {
 				// Never authenticate a truncated local response as a successful completion.
@@ -240,7 +204,7 @@ export async function connect(base: string, credentials: Credentials, k: CryptoK
 /** run reconnects until signal aborts. The handler stays local; only sealed envelopes leave it. */
 export async function run(credentials: Credentials, handler: Handler, status: (line: string) => void, signal: AbortSignal) {
 	const base = origin(credentials.url);
-	const k = await key(credentials.key);
+	const k = await relayKey(credentials.key);
 	while (!signal.aborted) {
 		const err = await connect(base, credentials, k, handler, status, signal);
 		if (signal.aborted) return;
