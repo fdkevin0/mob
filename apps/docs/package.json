@@ -10,11 +10,11 @@
 		"test": "astro sync && tsc --noEmit -p . && bun test"
 	},
 	"dependencies": {
-		"@astrojs/starlight": "0.42.6",
+		"@astrojs/starlight": "0.42.7",
 		"@fontsource-variable/geist": "5.3.0",
 		"@fontsource/geist-mono": "5.3.0",
 		"@mob/ui": "workspace:*",
-		"astro": "7.4.0",
+		"astro": "7.4.3",
 		"starlight-links-validator": "0.27.0"
 	},
 	"devDependencies": {
