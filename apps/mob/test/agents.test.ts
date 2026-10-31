@@ -110,6 +110,15 @@ class Fake implements Agent {
 		} else if (text === 'hold') {
 			await this.text(id, 'holding ');
 			await this.release.promise;
+		} else if (text === 'cleared') {
+			// The call first edits a file in the worktree; an update clears its files before the request names only the call.
+			await this.say(id, { sessionUpdate: 'tool_call', toolCallId: 'call-cleared', title: 'Edit', kind: 'edit', status: 'pending', locations: [{ path: join(this.dir, 'main.go') }] });
+			await this.say(id, { sessionUpdate: 'tool_call_update', toolCallId: 'call-cleared', locations: [] });
+			const answer = await this.conn.requestPermission({ sessionId: id, toolCall: { toolCallId: 'call-cleared' }, options: [
+				{ kind: 'allow_once', name: 'Allow once', optionId: 'allow-once' }, { kind: 'reject_once', name: 'Reject', optionId: 'reject-once' },
+			] });
+			if (answer.outcome.outcome !== 'selected') return { stopReason: 'cancelled' };
+			await this.text(id, answer.outcome.optionId);
 		} else if (text.startsWith('late ')) {
 			// The call is shown before its input is known; an update fills it in, then the request names only the call.
 			await this.say(id, { sessionUpdate: 'tool_call', toolCallId: 'call-late', title: '', kind: 'other', status: 'pending' });
@@ -644,6 +653,13 @@ test('an update fills in what a call first left out', async () => {
 	expect(task.status).toBe('waiting');
 	const [p] = h.conv.pending(task.conversationId);
 	expect([p!.tool, JSON.stringify(p!.input).includes('make lint'), JSON.stringify(p!.input).includes('bash')]).toEqual(['codex_other', true, true]);
+});
+
+test('an update that clears a call\'s files is not allowed as a worktree edit', async () => {
+	const h = harness();
+	const task = await h.start('cleared');
+	expect(task.status).toBe('waiting');
+	expect(JSON.stringify(h.conv.pending(task.conversationId)[0]!.input)).not.toContain('main.go');
 });
 
 test('a message stops with the signal that sent it', async () => {

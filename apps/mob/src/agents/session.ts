@@ -290,18 +290,17 @@ export class Session {
 	 */
 	private async ask(turn: DelegateTurn, p: Permission): Promise<boolean> {
 		const r = p.request;
-		const input = describe(r.title, r.kind, r.locations, r.input);
 		let { kind, locations, input: raw } = r;
 		let title = r.title ?? '';
 		const known = this.calls.get(r.id);
 		if (known) {
-			for (const [k, v] of Object.entries(known.input)) if (!(k in input)) input[k] = v;
-			// The request may name only the call the agent showed before.
-			kind ??= known.kind;
-			if (!locations?.length) locations = known.locations;
+			// The request may name only the call the agent showed before; what it does name, even empty, holds.
+			if (kind === undefined) kind = known.kind;
+			if (locations === undefined) locations = known.locations;
 			title ||= known.title;
-			raw ??= known.raw;
+			if (raw === undefined) raw = known.raw;
 		}
+		const input = describe(title, kind, locations, raw);
 		p.tool = this.toolName(kind);
 		p.scope = p.once ? '' : scope(r.title, title, raw);
 		if (this.task.readOnly && changes(kind)) {
@@ -349,11 +348,11 @@ export class Session {
 					this.calls.set(u.id, c);
 					if (u.start) await turn.tool(u.id, c.name, c.input);
 				} else {
-					// What the update leaves out stays as it was.
-					if (u.title) c.title = u.title;
-					if (u.kind) { c.kind = u.kind; c.name = this.toolName(u.kind); }
-					if (u.locations?.length) c.locations = u.locations;
-					if (u.input !== undefined && u.input !== null) c.raw = u.input;
+					// What the update leaves out stays as it was; what it names, even empty or null, replaces it.
+					if (u.title !== undefined) c.title = u.title ?? '';
+					if (u.kind !== undefined) { c.kind = u.kind; c.name = this.toolName(u.kind); }
+					if (u.locations !== undefined) c.locations = u.locations;
+					if (u.input !== undefined) c.raw = u.input;
 					c.input = describe(c.title, c.kind, c.locations, c.raw);
 				}
 				// A call started in an earlier turn ends in this one.

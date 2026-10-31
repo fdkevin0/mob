@@ -33,7 +33,8 @@ export function outcome(choice: Choice, options: PermissionOption[]): RequestPer
 	return { outcome: 'cancelled' };
 }
 
-const paths = (l?: ToolCallLocation[] | null) => l?.map(l => l.path);
+/** paths are the files of locations; null, which clears them, and undefined, which leaves them, pass through. */
+const paths = (l?: ToolCallLocation[] | null) => l === null ? null : l?.map(l => l.path);
 
 /** content is what a call shows, in the port's terms. */
 function content(c?: ToolCallContent[] | null): ToolContent[] | undefined {
