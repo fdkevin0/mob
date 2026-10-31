@@ -9,9 +9,9 @@
 	},
 	"dependencies": {
 		"@mob/client": "workspace:*",
-		"@opentui/core": "0.6.6",
-		"@opentui/react": "0.6.6",
-		"ai": "7.0.142",
+		"@opentui/core": "0.7.0",
+		"@opentui/react": "0.7.0",
+		"ai": "7.0.155",
 		"react": "^19.3.0"
 	},
 	"exports": {

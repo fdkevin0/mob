@@ -13,23 +13,23 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@agentclientprotocol/sdk": "1.8.0",
+		"@agentclientprotocol/sdk": "1.9.0",
 		"@mob/core": "workspace:*",
 		"@mob/tui": "workspace:*",
 		"@modelcontextprotocol/sdk": "1.32.2",
-		"commander": "14.0.1",
+		"commander": "14.0.3",
 		"imapflow": "2.9.1",
-		"mailparser": "3.7.5",
-		"marked": "16.4.1",
-		"nodemailer": "7.0.10",
+		"mailparser": "3.12.4",
+		"marked": "16.4.2",
+		"nodemailer": "7.0.13",
 		"zod": "4.6.7"
 	},
 	"devDependencies": {
 		"@mob/app": "workspace:*",
 		"@mob/client": "workspace:*",
-		"@types/bun": "1.4.3",
-		"@types/mailparser": "3.4.6",
-		"@types/nodemailer": "7.0.3",
-		"ai": "7.0.142"
+		"@types/bun": "1.4.4",
+		"@types/mailparser": "3.9.0",
+		"@types/nodemailer": "7.0.12",
+		"ai": "7.0.155"
 	}
 }
