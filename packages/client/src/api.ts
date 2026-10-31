@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import type { llm, Stats } from '@mob/core';
 import type { Suggestion, Transfer } from './contracts';
 
 export type Connection = { url: string; token: string };
@@ -12,9 +13,9 @@ export type Conversation = {
 	waiting?: boolean;
 };
 /** ReplyUsage is what a reply's model requests used; outputTokens includes reasoning. */
-export type ReplyUsage = { inputTokens: number; outputTokens: number; reasoningTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number };
+export type ReplyUsage = llm.Usage;
 /** ReplyStats is how long a reply took; timedOutput / generationMs is how fast its model wrote. */
-export type ReplyStats = { startedAt: number; finishedAt?: number; firstTokenMs?: number; generationMs?: number; timedOutput?: number; toolMs?: number; requests?: number };
+export type ReplyStats = Stats;
 export type ChatMessage = UIMessage<{ status?: string; error?: string; model?: string; command?: boolean; usage?: ReplyUsage; stats?: ReplyStats }>;
 export type Snapshot = { messages: ChatMessage[]; active: boolean; model: string };
 export type ClientType = 'web' | 'tui';

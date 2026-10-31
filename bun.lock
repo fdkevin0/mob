@@ -154,6 +154,7 @@
       "name": "@mob/client",
       "dependencies": {
         "@ai-sdk/react": "4.0.146",
+        "@mob/core": "workspace:*",
         "ai": "7.0.142",
       },
       "devDependencies": {
