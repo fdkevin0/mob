@@ -3,7 +3,7 @@ code { font-family: var(--mono); font-size: .92em; }
 /* How much of the office shows behind the title, and the veil that keeps the
    title readable over it: paper needs more office and less veil. Story.tsx
    uses the same opacities as it scrolls. */
-:root { --field-opacity: .4; --hero-veil: 65%; }
+:root { --field-opacity: .4; --hero-veil: 65%; --hero-blur: 10px; }
 :root[data-theme='light'] { --field-opacity: .7; --hero-veil: 45%; }
 .landing {
 	position: relative;
@@ -34,6 +34,10 @@ code { font-family: var(--mono); font-size: .92em; }
 .hero-field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; mask-image: radial-gradient(ellipse 62% 68% at 50% 55%, #000 55%, transparent 100%); }
 .calf-tip { position: absolute; z-index: 4; transform: translate(14px, -130%); padding: 6px 10px; background: var(--panel); border: 1px solid var(--line-strong); font-size: 13px; color: var(--text); white-space: nowrap; pointer-events: none; border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / calc(0.4 * var(--shadow))); }
 
+/* A soft blur over the office behind the title, so the words sit on calm
+   shapes rather than busy pixels. It is its own layer: backdrop-filter on the
+   title would only see the title, which fades and moves. */
+.hero-blur { position: absolute; inset: 0; z-index: 1; pointer-events: none; -webkit-backdrop-filter: blur(var(--hero-blur)); backdrop-filter: blur(var(--hero-blur)); mask-image: radial-gradient(ellipse 46% 40% at 50% 46%, #000 45%, transparent 100%); will-change: opacity; }
 .hero-copy { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 16px 6vh; will-change: transform, opacity; }
 .hero-copy::before { content: ''; position: absolute; inset: 25% 15%; z-index: -1; background: radial-gradient(ellipse at 50% 46%, color-mix(in srgb, var(--bg) var(--hero-veil), transparent), transparent 70%); pointer-events: none; }
 .hero h1, .hero-copy h1 { font-size: clamp(52px, 10vw, 136px); line-height: .95; letter-spacing: -0.055em; font-weight: 600; margin: 0; }
@@ -169,7 +173,7 @@ code { font-family: var(--mono); font-size: .92em; }
 }
 .story.still .stage { position: relative; height: auto; overflow: visible; }
 .story.still .stage-field { position: relative; height: 100svh; opacity: var(--field-opacity); }
-.story.still .hero-copy { inset: 0 0 auto; height: 100svh; }
+.story.still .hero-copy, .story.still .hero-blur { inset: 0 0 auto; height: 100svh; }
 .story.still .flow, .story.still .feature-list { position: relative; inset: auto; transform: none; opacity: 1; pointer-events: auto; margin: 0 auto; padding: 40px 28px; }
 .story.still .feature-list { width: min(560px, calc(100% - 32px)); padding: 40px 0; }
 .story.still .flow-steps p { display: block; }
