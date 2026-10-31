@@ -37,6 +37,14 @@ When something stops Mob, such as missing access, an unknown blueprint, no
 matching project or a closed issue, the issue's conversation says why, and you
 get a notice.
 
+Mob saves each event in its own database before it acknowledges the event to
+usemob.app. It then works through the saved events one at a time, including
+after a restart. GitHub or usemob.app can fail in a way that may pass, such as
+no answer, a timeout, a rate limit or a 5xx. In that case Mob tries the event
+again after 30 seconds, 2 minutes, 10 minutes and 30 minutes. Any other
+failure, or the last retry failing, is reported in the issue's conversation
+with a notice. Label the issue again to start over.
+
 ## What usemob.app sees
 
 The Worker (`apps/web/worker/github.ts`) checks each webhook's
@@ -50,7 +58,7 @@ bodies and comments are never forwarded or stored.
 The installation's runner gets the event over its relay connection. Events
 wait in the runner's Durable Object while the runner is offline, at most 500 of
 them for up to a week. They are sent again until the runner acknowledges them.
-Mob records each delivery it accepts, so an event sent twice runs once.
+Mob records each delivery it saves, so an event sent twice runs once.
 
 ## Tokens
 

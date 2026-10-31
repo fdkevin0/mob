@@ -7,13 +7,28 @@ import { validEvent, type GitHubEvent } from '@mob/core/github';
 import { blueprint } from '../agents/blueprints';
 import { git } from '../agents/process';
 import type { Project } from '../agents/service';
-import type { Client } from './client';
+import { GitHubError, type Client } from './client';
 
 /** label is the label that hands an issue to Mob: mob, or mob:BLUEPRINT for a blueprint other than the project's. */
 export const label = /^mob(?::([a-z][a-z0-9-]{0,31}))?$/i;
 
 /** writers are the repository permissions whose holders may hand Mob work. */
 const writers = new Set(['admin', 'maintain', 'write']);
+
+/** pending is the delivery state of an event saved but not yet done; queueKey the setting that lists them, oldest first. */
+const pending = 'pending', queueKey = 'github-pending';
+
+/** backoff is how long Mob waits before each retry of an event that failed for a reason it may get over. */
+export const backoff = [30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
+
+/** Work is a saved event and how often it was tried. */
+type Work = { event: GitHubEvent; attempts: number; next: number };
+
+/** transient says err may pass if tried again: no answer, a timeout, a rate limit or a server error. */
+export function transient(err: unknown): boolean {
+	if (!(err instanceof GitHubError)) return true;
+	return err.status === 0 || err.status === 408 || err.status === 429 || err.status >= 500;
+}
 
 /** bodyLimit bounds the issue text Mob's model reads, in characters. */
 const bodyLimit = 8000, noticeLimit = 1200;
@@ -45,22 +60,98 @@ export function prompt(e: GitHubEvent, issue: Issue, project: string, plan: stri
 }
 
 export class Watcher {
-	constructor(readonly store: Store, readonly conversations: ConversationService, readonly github: Client) {}
+	constructor(readonly store: Store, readonly conversations: ConversationService, readonly github: Client, readonly now = () => Date.now()) {}
+
+	private running?: Promise<void>;
+	private again = false;
 
 	/**
-	 * receive takes events from the runner and returns those it accepted, by
-	 * delivery, so the relay forgets them. Each is acted on once, even when the
-	 * relay sends it again.
+	 * receive saves events from the runner as pending work and returns those
+	 * it saved, by delivery, so the relay forgets them: from here Mob's own
+	 * database keeps them, across restarts, until each is done or Mob has told
+	 * the owner it gave up. A delivery the relay sends again is saved once.
 	 */
 	receive(events: unknown[]): string[] {
 		const accepted: string[] = [];
 		for (const e of events) {
 			if (!validEvent(e)) continue;
+			const key = 'github:' + e.delivery;
+			if (this.store.acceptDelivery(key, pending)) {
+				this.store.updateDelivery(key, pending, JSON.stringify({ event: e, attempts: 0, next: 0 } satisfies Work));
+				const queue = this.store.setting<string[]>(queueKey) ?? [];
+				this.store.saveSetting(queueKey, [...queue, key]);
+			}
 			accepted.push(e.delivery);
-			if (!this.store.acceptDelivery('github:' + e.delivery, 'accepted')) continue;
-			void this.act(e).catch(err => console.error(`github ${e.repo} ${e.event}.${e.action}:`, err));
 		}
+		void this.work().catch(err => console.error('github:', err));
 		return accepted;
+	}
+
+	/**
+	 * work runs the pending events that are due, one at a time and oldest
+	 * first. A failure GitHub or usemob.app may get over (a timeout, a 5xx, a
+	 * rate limit) is tried again later, up to retries times; any other, or the
+	 * last, goes to the owner in the issue's conversation.
+	 */
+	work(): Promise<void> {
+		// One pass at a time; a call during a pass asks for another and waits for it.
+		if (this.running) { this.again = true; return this.running; }
+		this.running = this.pass(this.now).finally(() => { this.running = undefined; });
+		return this.running;
+	}
+
+	private async pass(now: () => number) {
+		{
+			do {
+				this.again = false;
+				for (const key of this.store.setting<string[]>(queueKey) ?? []) {
+					const d = this.store.delivery(key);
+					let w: Work | undefined;
+					try { w = d?.state === pending ? JSON.parse(d.reply) as Work : undefined; } catch { /* dropped below */ }
+					if (!w) { this.dequeue(key); continue; }
+					if (w.next > now()) continue;
+					try {
+						await this.act(w.event);
+						this.store.updateDelivery(key, 'done', '');
+						this.dequeue(key);
+					} catch (err) {
+						w.attempts++;
+						if (transient(err) && w.attempts <= backoff.length) {
+							w.next = now() + backoff[w.attempts - 1]!;
+							this.store.updateDelivery(key, pending, JSON.stringify(w), err as Error);
+							continue;
+						}
+						this.store.updateDelivery(key, 'failed', '', err as Error);
+						this.dequeue(key);
+						this.tell(w.event, `Mob could not act on the label${w.attempts > 1 ? ` after ${w.attempts} tries` : ''}: ${(err as Error).message}. Label the issue again to retry.`);
+					}
+				}
+			} while (this.again);
+		}
+	}
+
+	/** due is when the next pending event should be tried, if any is waiting. */
+	due(): number | undefined {
+		let first: number | undefined;
+		for (const key of this.store.setting<string[]>(queueKey) ?? []) {
+			try {
+				const w = JSON.parse(this.store.delivery(key)?.reply ?? '') as Work;
+				if (first === undefined || w.next < first) first = w.next;
+			} catch { /* not pending */ }
+		}
+		return first;
+	}
+
+	private dequeue(key: string) {
+		this.store.saveSetting(queueKey, (this.store.setting<string[]>(queueKey) ?? []).filter(k => k !== key));
+	}
+
+	/** tell gives the owner news about the issue event e is about, in its conversation. */
+	private tell(e: GitHubEvent, why: string) {
+		if (!e.number) { console.error(`github ${e.repo} ${e.event}.${e.action}: ${why}`); return; }
+		const conversation = this.conversation(e.repo, e.number);
+		this.conversations.notify({ conversationId: conversation, text: `**${e.repo}#${e.number}:** ${why}` });
+		this.store.note(conversation, why);
 	}
 
 	/** act does what event e asks of Mob, if anything. */
@@ -72,7 +163,7 @@ export class Watcher {
 		if (!m) return;
 		const plan = (m[1] ?? '').toLowerCase();
 		const conversation = this.conversation(e.repo, e.number);
-		const fail = (why: string) => { this.conversations.notify({ conversationId: conversation, text: `**${e.repo}#${e.number}:** ${why}` }); this.store.note(conversation, why); return undefined; };
+		const fail = (why: string) => { this.tell(e, why); return undefined; };
 		const { permission } = await this.github.api<{ permission: string }>(e.repo, { metadata: 'read' }, `/repos/${e.repo}/collaborators/${encodeURIComponent(e.sender.login)}/permission`);
 		// Only people who may push to the repository hand Mob work; anyone else's label is ignored.
 		if (!writers.has(permission)) return fail(`@${e.sender.login} labeled the issue \`${e.label}\` but has only ${permission} access, so Mob did nothing.`);
