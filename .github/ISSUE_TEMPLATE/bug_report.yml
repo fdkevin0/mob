@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in Mob does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem. `mob serve --demo` reproduces many problems without a model key.
+      placeholder: |
+        1. mob serve --demo
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `mob --version`, or the date for usemob.app.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Web UI (local)
+        - usemob.app
+        - Desktop app
+        - Terminal UI
+        - CLI
+        - Telegram, WeChat or email
+        - Coding agents
+        - MCP servers or skills
+        - Sandbox
+        - Install or upgrade
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Operating system and architecture, and the browser if it matters.
+      placeholder: macOS 26 arm64, Safari
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Remove keys, tokens and private messages first.
+      render: text

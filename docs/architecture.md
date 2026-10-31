@@ -20,7 +20,7 @@ a database, files, processes and the command line.
 | `packages/core/src/llm` | the provider-neutral model interface and its drivers (`openai`, `anthropic`, `demo`), and sending with retries (`send.ts`) |
 | `packages/core/src/provider` | `providers.json`, presets and the models.dev catalog |
 | `packages/core/src/app` | the HTTP routes and AI SDK UI stream (`http.ts`, `server.ts`), plugin lifecycle (`extension.ts`), the channel bridge (`channel.ts`), plugin configuration sections and schedules |
-| `packages/core/src/sqlite` | the SQLite adapter for Bun |
+| `packages/core/src/sqlite` | the SQLite adapters: `bun:sqlite` for the host, SQLite WASM for the browser |
 | `apps/mob/src/main.ts`, `config.ts`, `local.ts` | the CLI (commander), option definitions with their generated reference, XDG loading and live reload, process ownership, the database lock and the background lifecycle |
 | `apps/mob/src/plugins.ts` | the host's plugins, each in its own directory: `agents` (coding agents over ACP), `email`, `telegram`, `cloudflare`, `wechat`, `mcp`, `skills`, `sandbox` (container runtimes and the model's `sandbox` tool) and `runner` |
 | `apps/mob/src/runner`, `apps/web/worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `apps/web/worker/runners.ts` |
