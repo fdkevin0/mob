@@ -3,9 +3,9 @@
 //
 //   bun scripts/release.ts --version V [--only linux_amd64] [--npm]
 //
-// Writes dist/mob_V_OS_ARCH.{tar.gz,zip} and dist/SHA256SUMS. With --npm, also
-// writes the usemob npm package and one usemob-OS-ARCH package per binary to
-// dist/npm for scripts/npm/publish.ts.
+// Writes dist/mob_V_OS_ARCH[_musl].{tar.gz,zip} and dist/SHA256SUMS. With --npm,
+// also writes the usemob npm package and one @usemob/OS-ARCH[-musl] package per
+// binary to dist/npm for scripts/npm/publish.ts.
 import { $ } from 'bun';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -17,20 +17,26 @@ if (!version) throw new Error('--version is required');
 const root = resolve(import.meta.dir, '..');
 const dist = join(root, 'dist');
 
-type Target = { os: 'linux' | 'darwin' | 'windows'; arch: 'amd64' | 'arm64'; bun: string };
-const targets: Target[] = [
+// Linux builds come for glibc and for musl (Alpine); `musl` names the second.
+type Target = { os: 'linux' | 'darwin' | 'windows'; arch: 'amd64' | 'arm64'; musl?: true; bun: string };
+const targets: Target[] = ([
 	{ os: 'linux', arch: 'amd64', bun: 'bun-linux-x64' },
 	{ os: 'linux', arch: 'arm64', bun: 'bun-linux-arm64' },
+	{ os: 'linux', arch: 'amd64', musl: true, bun: 'bun-linux-x64-musl' },
+	{ os: 'linux', arch: 'arm64', musl: true, bun: 'bun-linux-arm64-musl' },
 	{ os: 'darwin', arch: 'amd64', bun: 'bun-darwin-x64' },
 	{ os: 'darwin', arch: 'arm64', bun: 'bun-darwin-arm64' },
 	{ os: 'windows', arch: 'amd64', bun: 'bun-windows-x64' },
-].filter(t => !values.only || values.only.includes(`${t.os}_${t.arch}`)) as Target[];
+] as Target[]).filter(t => !values.only || values.only.includes(slug(t)));
+function slug(t: Target) {
+	return `${t.os}_${t.arch}${t.musl ? '_musl' : ''}`;
+}
 
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 const archives: string[] = [];
 for (const t of targets) {
-	const name = `mob_${version}_${t.os}_${t.arch}`;
+	const name = `mob_${version}_${slug(t)}`;
 	const dir = join(dist, name);
 	mkdirSync(dir, { recursive: true });
 	const binary = join(dir, t.os === 'windows' ? 'mob.exe' : 'mob');
@@ -50,10 +56,19 @@ await Bun.write(join(dist, 'SHA256SUMS'), archives.map(a => `${sums[a]}  ${a}`).
 console.log(`Built ${archives.length} archives in ${dist}`);
 
 if (values.npm) {
-	// npm wants semver: a stable vX.Y.Z is X.Y.Z under the latest tag, and a
-	// nightly {date}.{sha} is 0.0.0-nightly.{date}-{sha} under the nightly tag.
+	// npm wants semver: a stable vX.Y.Z is X.Y.Z under the latest tag. A nightly
+	// is a prerelease of the next minor version, ordered by commit time, under
+	// the nightly tag: 0.3.0-nightly.20261030220535.g5caa651 sorts after 0.2.x and
+	// before 0.3.0. The g keeps an all-digit hash from reading as a number.
 	const stable = /^v?(\d+\.\d+\.\d+)$/.exec(version);
-	const npmVersion = stable ? stable[1] : `0.0.0-nightly.${version.replace('.', '-')}`;
+	let npmVersion: string;
+	if (stable) npmVersion = stable[1];
+	else {
+		const [major, minor] = (await Bun.file(join(root, '.release-please-manifest.json')).json())['.'].split('.').map(Number);
+		const time = (await $`git show -s --format=%cd --date=format-local:%Y%m%d%H%M%S HEAD`.cwd(root).env({ ...process.env, TZ: 'UTC' }).text()).trim();
+		const sha = (await $`git rev-parse --short=7 HEAD`.cwd(root).text()).trim();
+		npmVersion = `${major}.${minor + 1}.0-nightly.${time}.g${sha}`;
+	}
 	const tag = stable ? 'latest' : 'nightly';
 	const out = join(dist, 'npm');
 	const meta = {
@@ -61,23 +76,32 @@ if (values.npm) {
 		homepage: 'https://usemob.app',
 		repository: { type: 'git', url: 'git+https://github.com/fdkevin0/mob.git' },
 	};
-	const platform = (t: Target) => ({ os: t.os === 'windows' ? 'win32' : t.os, cpu: t.arch === 'amd64' ? 'x64' : 'arm64' });
+	// The names and fields npm matches against the machine: @usemob/linux-x64-musl
+	// has os linux, cpu x64 and libc musl.
+	const platform = (t: Target) => {
+		const os = t.os === 'windows' ? 'win32' : t.os;
+		const cpu = t.arch === 'amd64' ? 'x64' : 'arm64';
+		const libc = t.os === 'linux' ? (t.musl ? 'musl' : 'glibc') : undefined;
+		return { name: `@usemob/${os}-${cpu}${t.musl ? '-musl' : ''}`, label: `${os}-${cpu}${libc ? ` (${libc})` : ''}`, os, cpu, libc };
+	};
 	const packages: string[] = [];
 	for (const t of targets) {
-		const { os, cpu } = platform(t);
-		const name = `usemob-${os}-${cpu}`;
+		const { name, label, os, cpu, libc } = platform(t);
 		const dir = join(out, name);
 		const exe = t.os === 'windows' ? 'mob.exe' : 'mob';
 		mkdirSync(join(dir, 'bin'), { recursive: true });
-		copyFileSync(join(dist, `mob_${version}_${t.os}_${t.arch}`, exe), join(dir, 'bin', exe));
+		copyFileSync(join(dist, `mob_${version}_${slug(t)}`, exe), join(dir, 'bin', exe));
 		copyFileSync(join(root, 'LICENSE'), join(dir, 'LICENSE'));
-		await Bun.write(join(dir, 'README.md'), `# ${name}\n\nThe ${os}-${cpu} binary of [Mob](https://usemob.app). Install \`usemob\` instead.\n`);
-		await Bun.write(join(dir, 'package.json'), JSON.stringify({ name, version: npmVersion, description: `The ${os}-${cpu} binary of Mob`, ...meta, os: [os], cpu: [cpu], files: ['bin'] }, null, '\t') + '\n');
+		await Bun.write(join(dir, 'README.md'), `# ${name}\n\nThe ${label} binary of [Mob](https://usemob.app). Install \`usemob\` instead.\n`);
+		await Bun.write(join(dir, 'package.json'), JSON.stringify({
+			name, version: npmVersion, description: `The ${label} binary of Mob`, ...meta,
+			os: [os], cpu: [cpu], ...(libc ? { libc: [libc] } : {}), files: ['bin'],
+		}, null, '\t') + '\n');
 		packages.push(dir);
 	}
 	const main = join(out, 'usemob');
 	mkdirSync(join(main, 'bin'), { recursive: true });
-	for (const file of ['mob.js', 'install.js']) copyFileSync(join(root, 'scripts/npm', file), join(main, 'bin', file));
+	for (const file of ['mob.js', 'install.js', 'platform.js']) copyFileSync(join(root, 'scripts/npm', file), join(main, 'bin', file));
 	for (const file of ['LICENSE', 'README.md']) copyFileSync(join(root, file), join(main, file));
 	await Bun.write(join(main, 'package.json'), JSON.stringify({
 		name: 'usemob',
@@ -87,7 +111,7 @@ if (values.npm) {
 		bin: { mob: 'bin/mob.js' },
 		scripts: { postinstall: 'node bin/install.js' },
 		files: ['bin'],
-		optionalDependencies: Object.fromEntries(targets.map(t => { const { os, cpu } = platform(t); return [`usemob-${os}-${cpu}`, npmVersion]; })),
+		optionalDependencies: Object.fromEntries(targets.map(t => [platform(t).name, npmVersion])),
 	}, null, '\t') + '\n');
 	// scripts/npm/publish.ts publishes them in this order, so usemob never names a missing platform package.
 	packages.push(main);
