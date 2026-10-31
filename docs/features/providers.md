@@ -93,7 +93,7 @@ magpie's usage and routing rules see them as Mob's.
 | Catalog | what a model can do: context, output limit, reasoning levels, tools, images, price | `packages/core/src/provider/catalog.ts`, the models.dev catalog cached in XDG cache `mob/models.json` (OpenCode's cache as fallback), refreshed daily |
 | Provider | how to reach a vendor: base URL per protocol, key, picked models, overrides | `packages/core/src/provider`, `providers.json` beside `config.yaml` |
 | Driver | one wire protocol | `packages/core/src/llm/openai.ts` (Chat Completions), `anthropic.ts` (Messages), `demo.ts` |
-| Model | a callable `provider/model[:effort]` | `llm.Model`, from `provider.Registry.Resolve` |
+| Model | a callable `provider/model[:effort]` | `Model`, from `ProviderRegistry.resolve` |
 
 ## providers.json
 

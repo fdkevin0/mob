@@ -36,7 +36,7 @@ tasks, a reminder, a check on something that is still running. The code is in
   next look.
 - Times missed while Mob was stopped run once when it starts, not once for
   each missed time.
-- When the turn ends, the owner gets a `chat.Notice`, "Scheduled", with the
+- When the turn ends, the owner gets a `Notice`, "Scheduled", with the
   first line of the prompt, the turn's conclusion (up to 1200 characters) and
   any approval it waits for; [Telegram](channels.md) sends it with approval
   buttons. A turn that cannot start, such as with no model configured, raises

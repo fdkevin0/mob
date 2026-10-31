@@ -55,69 +55,58 @@ Like tools, hooks that depend on optional configuration must check whether their
 plugin is enabled. Background dependency ordering does not reorder these hooks
 or automatically gate them on connection status.
 
-`chat.Run` takes an `Agent` (tools and hooks).
+The engine's `run` (`packages/core/src/chat/engine.ts`) takes an `Agent`: the
+tools and hooks of one turn.
 
 ## Commands and routes
 
-- Each plugin package exports what it adds, given what it needs from Mob (its
-  configuration reader, the store, the conversation service, the default model
-  or the HTTP transport): `Commands`, `Tools`, `Routes`, and `Extension` for a
-  plugin that runs in the background.
-- An `extension.Route` is an HTTP endpoint at `/api/plugins/<plugin>/<path>`.
-  `Handle` returns a value for the JSON response or an error: a
-  `*chat.CommandError` sets the status, any other error is the plugin's service
-  failing (502). `extension.Decode` reads a bounded JSON body with no unknown
-  fields, refusing anything else with 400.
-- `chat.Reply`, `chat.ReplyJSON` and `chat.Interactive` let plugins answer
-  commands the way the server's own commands do. Plugin commands are listed after
-  the server's own.
+- A plugin's `commands` join the server's command registry and are listed
+  after the server's own. A `Command` (`packages/core/src/chat/commands.ts`)
+  names the clients it is offered in (`interactive` is the web UI and the
+  TUI) and returns Markdown or an action for the UI; `replyJSON` shows a value
+  as indented JSON. A `CommandError` sets the HTTP status of a refusal.
+- A `Route` is an HTTP endpoint at `/api/plugins/<plugin>/<path>`. `handle`
+  returns a value for the JSON response or throws: a `CommandError` or an
+  `HTTPError` sets the status, any other error is the plugin's service
+  failing (502). `body` (`packages/core/src/app/http.ts`) reads a bounded JSON
+  object, optionally refusing fields it does not name, with 400.
 - Commands about plugins in general (`/plugins`, `/test`, `/deliveries`,
   `/clear-secret`) and the configuration routes stay in the server.
 
 ## Background runs
 
-- An `extension.Extension` is a name and a `Start` that reads the extension's
-  current configuration and returns a `Serve` function, or nil when the
-  configuration leaves it off.
-- `Requires` names other background extensions. Before starting anything, the
-  manager rejects missing dependencies and cycles, then calls `Start` in
-  dependency order. A disabled or failed dependency leaves its consumers at
-  `Waiting for <name>`; unrelated extensions still start. Register all
-  extensions before the first start/reload; later registration is refused.
-  Dependencies establish startup order and enabled state, not network readiness:
-  prepare shared resources in `Start`, or make callers wait for an explicit
-  readiness signal owned by the provider.
-- `extension.Manager` starts every registered extension (`StartAll`), restarts
-  one after its configuration is saved (`Reload`), reports each one's status
-  (`Disabled`, `Connecting…`, then whatever the run reports, shown by
-  `/api/plugins`) and stops them all (`Close`).
-- Reloading an extension also reloads its transitive dependents. They stop in
-  reverse dependency order, waiting for each `Serve` to return before stopping
-  its provider, then start in dependency order. `Start` is not called until the
-  old run has released its resources. Use `defer` in `Serve` for that cleanup;
-  return promptly when its context is cancelled. A failed `Start` must release
-  any resources it acquired itself.
-- Reports from earlier runs are dropped. A run returning on its own stops its
-  dependents and is reported as `Stopped` until reloaded. `Close` waits for
-  cleanup in reverse dependency order. Nothing restarts after it closes.
-- `Start` runs under the manager's lock and reads the saved configuration, so
-  concurrent saves end with the last saved configuration running.
+- A plugin that runs while it is enabled, such as a channel polling its app,
+  sets `background`: an `Extension` (`packages/core/src/app/extension.ts`)
+  with a name and a `start` that reads the plugin's current configuration and
+  returns a `Serve` function, or `undefined` when the configuration leaves it
+  off.
+- `Serve` gets an `AbortSignal` and a `status` callback. It runs until the
+  signal aborts, reporting what it is doing (shown by `/api/plugins`), and
+  releases its resources before it returns.
+- `Extensions` starts every registered extension in registration order
+  (`startAll`), restarts one after its configuration is saved (`reload`),
+  reports each one's status (`Disabled`, `Connecting…`, then whatever the run
+  reports) and stops them all in reverse order (`close`). Operations run one
+  at a time, so a reload never races another, and a restart waits for the old
+  run to return before calling `start` again.
+- A run that throws is reported; one that returns on its own is shown as
+  `Stopped` until it is reloaded. Status reports from an earlier run are
+  dropped. Nothing restarts after `close`.
 
 ## Configuration sections
 
-- A `configuration.Section` describes one plugin's part of the saved
-  configuration: its name, a title for menus and a label for messages, the
-  `Fields` a generic form asks for (JSON path, label and kind: `bool`, `int`,
-  `text` or `secret`), its `Secrets`, whether it is enabled, how its connection
-  is tested, and how a submitted configuration is merged with the saved one.
-  Sections are built with `section` and listed once in `sections.go`.
-- A `Secret` names a credential, where it lives in the configuration, and its
-  owner: a blank submission keeps the saved credential only while the owner
-  (such as an IMAP host and username) is unchanged.
-- `UpdatePlugin`, the connection test, `/test` and `/clear-secret` look the
-  plugin up by section. `GET /api/plugins` returns `sections`; the TUI builds its
-  connection menu and forms from them. WeChat iLink signs in by QR code in the
-  web UI, so it has no fields.
-- A test checks every field against the configuration's JSON paths and kinds,
-  and that the secret fields are the section's secrets.
+- A `Section` (`packages/core/src/app/configuration.ts`) describes one
+  plugin's part of the saved configuration: its name, a title for menus and a
+  label for messages, the `fields` a generic form asks for (dotted JSON path,
+  label and kind: `bool`, `int`, `text` or `secret`), its `secrets`, its
+  `defaults` (the only shape a submission may have), whether it is enabled,
+  how a configuration is validated, shown without credentials (`publicView`)
+  and tested.
+- A `Secret` names a credential at a dotted path and its owner: a blank
+  submission keeps the saved credential only while the owner (such as an IMAP
+  host and username) is unchanged.
+- `updatePlugin`, the connection test, `/test` and `/clear-secret` look the
+  plugin up by section. `GET /api/plugins` returns `sections`; the TUI builds
+  its connection menu and forms from them. WeChat iLink signs in by QR code in
+  the web UI, so it has no fields.
 - The web UI still has a hand-written form per plugin.
