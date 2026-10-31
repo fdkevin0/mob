@@ -11,6 +11,7 @@ export { encode as encodeEvent, type Event, type EventKind } from './chat/events
 export * from './chat/running';
 export * from './chat/tools';
 export * from './chat/search';
+export * from './chat/history';
 export * from './chat/commands';
 export { modelOutput, readable, tokens, type Saver } from './chat/output';
 export * from './chat/engine';

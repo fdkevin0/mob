@@ -3,7 +3,7 @@ import { getEventListeners } from 'node:events';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConversationService, DemoModel, Store, defaultTools, emptyHooks, encodeEvent, newID, OverflowError, prompt, rank, run, textOf, words, type Event, type Models } from '../src';
+import { ConversationService, DemoModel, Store, defaultTools, searchHistory, emptyHooks, encodeEvent, newID, OverflowError, prompt, rank, run, textOf, words, type Event, type Models } from '../src';
 import { openBun } from '../src/sqlite/bun';
 
 const temp = () => join(mkdtempSync(join(tmpdir(), 'mob-core-')), 'chat.sqlite');
@@ -372,4 +372,51 @@ test('turns release shared cancellation listeners after completion and failure',
 	expect(getEventListeners(stop.signal, 'abort')).toHaveLength(0);
 	await service.close();
 	s.close();
+});
+
+test('history_search finds the original words of messages a summary stands in for', async () => {
+	const s = open();
+	const c = s.create();
+	const said: { name: string; tools: string[]; result?: string }[] = [];
+	// A small window, so older messages are summarized; the model searches once, then answers.
+	class Recalling extends DemoModel {
+		override readonly info = { ...new DemoModel().info, context: 12000, output: 1000 };
+		override async stream(...[req]: Parameters<DemoModel['stream']>) {
+			const result = { text: '', reasoning: '', signature: '', calls: [] as { id: string; name: string; arguments: string }[] };
+			if (req.system.startsWith('You keep the summary')) return { ...result, text: 'they talked about paths' };
+			const last = req.messages.at(-1)!;
+			said.push({ name: last.role, tools: (req.tools ?? []).map(t => t.name), result: last.role === 'tool' ? last.text : undefined });
+			if (last.role === 'user' && last.text.startsWith('recall') && req.tools?.some(t => t.name === 'history_search')) {
+				return { ...result, calls: [{ id: newID(), name: 'history_search', arguments: JSON.stringify({ query: 'config path' }) }] };
+			}
+			return { ...result, text: 'ok' };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Recalling() });
+	await service.execute({ id: c.id, text: 'the config path is /etc/mob/zebra.yaml', requestId: newID() }, () => {});
+	expect(said.at(-1)!.tools).not.toContain('history_search');
+	for (let i = 0; i < 3; i++) await service.execute({ id: c.id, text: `part ${i} ` + 'word '.repeat(4000), requestId: newID() }, () => {});
+	await service.execute({ id: c.id, text: 'recall the config path', requestId: newID() }, () => {});
+	expect(s.summary(c.id).text).toBe('they talked about paths');
+	const found = said.at(-1)!;
+	expect(found.name).toBe('tool');
+	expect(found.result).toContain('/etc/mob/zebra.yaml');
+	s.close();
+});
+
+test('searchHistory ranks excerpts of text and tool calls, leaving out commands', () => {
+	const messages = [
+		{ id: 'a', role: 'user', parts: [{ type: 'text', text: 'deploy to 北京 region please' }] },
+		{ id: 'b', role: 'assistant', parts: [{ type: 'tool-sandbox', toolCallId: 'x', state: 'output-available', input: { command: 'make' }, output: { stderr: 'error: missing libfoo.so' } }] },
+		{ id: 'c', role: 'user', command: true, parts: [{ type: 'text', text: '/usage libfoo' }] },
+	];
+	expect(searchHistory(messages, 'libfoo error', 5).results.map(r => r.message)).toEqual(['b']);
+	expect(searchHistory(messages, '北京', 5).results[0].text).toBe('User: deploy to 北京 region please');
+	expect(searchHistory(messages, 'a', 5).results.map(r => r.message)).toEqual(['a']);
+	expect(searchHistory(messages, 'nothing here', 5).results).toEqual([]);
+	// A long message is cut into overlapping excerpts.
+	const long = { id: 'l', role: 'assistant', parts: [{ type: 'text', text: 'x '.repeat(2000) + 'needle' }] };
+	const r = searchHistory([long], 'needle', 5).results;
+	expect(r).toHaveLength(1);
+	expect(r[0].text.endsWith('needle')).toBe(true);
 });

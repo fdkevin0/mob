@@ -1,6 +1,7 @@
 // Tools the model may call, how a call asks for approval, and the tools every conversation offers.
 import type { Tool as LLMTool, ToolCall as LLMToolCall } from '../llm/llm';
 import type { Event } from './events';
+import { historyName } from './history';
 import { searchName, type Entry, type Exposure } from './search';
 import type { Message, Part, Store } from './store';
 
@@ -95,7 +96,7 @@ export class ToolCall {
 
 /** sandboxName is reserved for the sandbox tool, which turns add while a sandbox is set. */
 export const sandboxName = 'sandbox';
-const reserved = (name: string) => name === sandboxName || name === searchName;
+const reserved = (name: string) => name === sandboxName || name === searchName || name === historyName;
 
 /** ToolRegistry holds the tools every turn offers. */
 export class ToolRegistry {
