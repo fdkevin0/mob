@@ -35,11 +35,12 @@ try {
 	}
 	// npm made the first nightly `latest`. Until a stable release takes the tag,
 	// keep it on the newest nightly so `npm install -g usemob` is not stuck on it.
+	// A rerun of an older nightly leaves a newer one in place.
 	const main = packages.at(-1)!;
 	if (tag === 'nightly') {
 		const latest = (await $`npm view ${main} dist-tags.latest`.env(env).quiet().nothrow()).stdout.toString().trim();
 		// Trusted publishing covers only publish, so this needs NPM_TOKEN.
-		if (latest.includes('-nightly.')) {
+		if (latest.includes('-nightly.') && Bun.semver.order(version, latest) === 1) {
 			const moved = await $`npm dist-tag add ${main}@${version} latest`.env(env).nothrow();
 			if (moved.exitCode !== 0) console.warn(`Could not move ${main}'s latest tag to ${version}`);
 		}

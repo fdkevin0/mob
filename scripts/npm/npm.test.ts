@@ -5,7 +5,7 @@ import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFil
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 // The package name the launcher looks for on this machine.
-import { platformPackage } from './platform.js';
+import { isMusl, platformPackage } from './platform.js';
 
 const here = import.meta.dir;
 // The fixtures are shell scripts.
@@ -99,4 +99,17 @@ unix('a nightly moves latest only while latest is a nightly', () => {
 	expect(moved.at(-1)).toEndWith('dist-tag add usemob@0.3.0-nightly.1.g1 latest');
 	const kept = publish('0.3.0-nightly.1.g1', 'nightly', '0.2.0').log;
 	expect(kept.at(-1)).toBe('usemob publish --access public --provenance --tag nightly');
+});
+
+unix('a rerun of an older nightly does not move latest back', () => {
+	const log = publish('0.3.0-nightly.20261030160000.g896099c', 'nightly', '0.3.0-nightly.20261030220535.g5caa651').log;
+	expect(log.at(-1)).toBe('usemob publish --access public --provenance --tag nightly');
+});
+
+test('the runtime libc decides before a musl loader in /lib', () => {
+	const alpine = () => ['ld-musl-x86_64.so.1'];
+	expect(isMusl({ header: { glibcVersionRuntime: '2.43' } }, alpine)).toBe(false);
+	expect(isMusl({ header: {} }, alpine)).toBe(true);
+	expect(isMusl(undefined, alpine)).toBe(true);
+	expect(isMusl({ header: {} }, () => ['ld-linux-x86-64.so.2'])).toBe(false);
 });
