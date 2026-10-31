@@ -52,8 +52,8 @@ Native plugins contribute these typed callbacks through their `hooks` field;
 registration appends them after existing core hooks.
 Hooks are registered once, before serving, and keep the engine's error handling.
 Like tools, hooks that depend on optional configuration must check whether their
-plugin is enabled. Background dependency ordering does not reorder these hooks
-or automatically gate them on connection status.
+plugin is enabled; a hook is not gated on its plugin's background run or
+connection status.
 
 The engine's `run` (`packages/core/src/chat/engine.ts`) takes an `Agent`: the
 tools and hooks of one turn.
@@ -69,7 +69,8 @@ tools and hooks of one turn.
   returns a value for the JSON response or throws: a `CommandError` or an
   `HTTPError` sets the status, any other error is the plugin's service
   failing (502). `body` (`packages/core/src/app/http.ts`) reads a bounded JSON
-  object, optionally refusing fields it does not name, with 400.
+  object, refusing a malformed body or fields it does not name with 400 and
+  one over its size limit with 413.
 - Commands about plugins in general (`/plugins`, `/test`, `/deliveries`,
   `/clear-secret`) and the configuration routes stay in the server.
 
