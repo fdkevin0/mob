@@ -16,6 +16,22 @@ export function arc(from: Vec, to: Vec, p: number, height = 5): Vec {
 	return [snap(from[0] + (to[0] - from[0]) * q), snap(from[1] + (to[1] - from[1]) * q + lift), snap(from[2] + (to[2] - from[2]) * q)];
 }
 
+// Signs drawn above a calf: a question (it needs you) and a tick (approved, done).
+export const QUESTION = ['.##.', '#..#', '..#.', '.#..', '....', '.#..'];
+export const TICK_MARK = ['.....#', '....#.', '#..#..', '.##...'];
+
+// A small sign made of half-size cubes, facing the camera, centred above (x, y, z).
+export function glyph(rows: string[], [x, y, z]: Vec, color: RGB): Voxel[] {
+	const v: Voxel[] = [];
+	const w = rows[0].length;
+	rows.forEach((row, iy) => [...row].forEach((c, ix) => {
+		if (c !== '#') return;
+		const d = (ix - w / 2) * 0.5;
+		v.push([x + d * 0.7, y - iy * 0.55, z - d * 0.7, ...color, 1, 0.55]);
+	}));
+	return v;
+}
+
 export const block = (at: Vec, color: RGB, size = 1.6, glow = 0.6): Voxel => [at[0] - 0.5, at[1] - 0.5, at[2] - 0.5, ...color, glow, size];
 
 // A small seeded random number generator (mulberry32), so scenes repeat.

@@ -1,5 +1,5 @@
 import { alarm, calf, colors, hex, leader, lying, move, skin, snore, tea, turn, type CalfStyle, type Pose, type RGB, type Voxel } from './model';
-import { add, arc, block, random, rotate, type Facing, type Vec } from './motion';
+import { add, arc, block, glyph, QUESTION, random, rotate, TICK_MARK, type Facing, type Vec } from './motion';
 import { project } from './project';
 
 // The hero background: a square open-plan office of calves, run as a small
@@ -448,21 +448,6 @@ const office = new Office(Number.isFinite(pinned) ? pinned : Math.floor(Math.ran
 
 function mug(x: number, y: number, z: number): Voxel[] {
 	return [[x, y, z, ...palette.mug, 0, 0.9], [x, y + 0.6, z, ...palette.coffee, 0, 0.7]];
-}
-
-const QUESTION = ['.##.', '#..#', '..#.', '.#..', '....', '.#..'];
-const TICK_MARK = ['.....#', '....#.', '#..#..', '.##...'];
-
-// A small sign made of half-size cubes, facing the camera, centred above (x, y, z).
-function glyph(rows: string[], [x, y, z]: Vec, color: RGB): Voxel[] {
-	const v: Voxel[] = [];
-	const w = rows[0].length;
-	rows.forEach((row, iy) => [...row].forEach((c, ix) => {
-		if (c !== '#') return;
-		const d = (ix - w / 2) * 0.5;
-		v.push([x + d * 0.7, y - iy * 0.55, z - d * 0.7, ...color, 1, 0.55]);
-	}));
-	return v;
 }
 
 function calfVoxels(a: Agent, t: number): Voxel[] {

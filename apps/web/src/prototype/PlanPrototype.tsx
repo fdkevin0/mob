@@ -3,8 +3,9 @@ import { PlanCard } from '@mob/app/PlanCard';
 import { CheckIcon, CrossIcon, HandIcon } from '@mob/app/icons';
 import { Button } from '@mob/ui/button';
 import { approved, done, nodes, output, plan } from './plan';
+import { PlanStudio } from './PlanStudio';
+import type { Decision } from './studio';
 
-type Decision = { approved: boolean; at: number; input?: unknown } | undefined;
 
 // The page talks to no Mob: what the card asks for, /tasks, is the sample's.
 let tasks: () => unknown = () => [];
@@ -19,8 +20,9 @@ const flowHeight = 840;
  * plan and approve it, then watch the tasks move. Nothing reaches a Mob; the
  * replies Mob would send come from plan.ts.
  *
- * ?flow=1.verify opens the flow on a step, and ?started=7 starts as if the plan
- * was approved 7 seconds ago.
+ * ?flow=1.verify opens the flow on a step, ?started=7 starts as if the plan
+ * was approved 7 seconds ago, and ?view=studio shows the plan above the card as
+ * a studio of calves.
  */
 export function PlanPrototype({ search }: { search: string }) {
 	const query = new URLSearchParams(search);
@@ -54,6 +56,7 @@ export function PlanPrototype({ search }: { search: string }) {
 			: { kind: 'failed', label: 'Denied', icon: <CrossIcon /> };
 	return (
 		<div ref={root} className="prototype">
+			{query.get('view') === 'studio' && <PlanStudio decision={decision} />}
 			<PlanCard
 				key={run}
 				connection={{ url: '', token: '' }}
