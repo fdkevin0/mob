@@ -60,6 +60,10 @@ sources. Start with the first line and go deeper as you need.
   [configuration keys](docs/environment-variables.md) and
   [contributing](CONTRIBUTING.md).
 
+## Security
+
+Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 [MIT](LICENSE). AI Elements sources keep

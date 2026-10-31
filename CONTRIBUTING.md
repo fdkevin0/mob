@@ -2,7 +2,9 @@
 
 This page is the short path from a clone to a merged pull request. Where code
 lives is in [Architecture](docs/architecture.md); how each feature behaves is
-in [docs/features/](docs/features/README.md).
+in [docs/features/](docs/features/README.md). Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md); report vulnerabilities as described in
+[SECURITY.md](SECURITY.md), not in an issue.
 
 ## Setup
 
