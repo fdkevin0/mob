@@ -45,6 +45,7 @@ requests; Mob does not keep architecture decision records.
 | [Remote access](remote-access.md) | which way to pick, the web app at usemob.app, pairing with local Mob, encrypted runners |
 | [Mob in the browser](browser-runner.md) | Mob running in the tab with no runner, its models and moving conversations |
 | [Runners in the cloud](cloud-runners.md) | a runner at Render that stays on without your computer |
+| [GitHub App](github.md) | a runner watching a repository: label an issue and Mob proposes a plan |
 
 ## Releases
 

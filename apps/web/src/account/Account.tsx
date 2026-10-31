@@ -5,6 +5,7 @@ import { Button } from '@mob/ui/button';
 import { Input } from '@mob/ui/input';
 import { SiteHeader } from '../site/Site';
 import { Notice } from '@mob/ui/notice';
+import { GitHubApp } from './GitHubApp';
 
 type Passkey = { id: string; name?: string | null; createdAt?: Date | string | null; backedUp: boolean; deviceType: string };
 type Linked = { id: string; providerId: string; createdAt: Date | string };
@@ -20,7 +21,7 @@ function signInAgain() {
 }
 
 // The account page lists how the visitor signs in: GitHub or Cloudflare, and
-// passkeys bound to the account.
+// passkeys bound to the account, and where the Mob GitHub App is installed.
 export function Account() {
 	const session = authClient.useSession();
 	const user = session.data?.user;
@@ -47,6 +48,7 @@ export function Account() {
 				</section>
 				<SignInMethods />
 				<Passkeys />
+				<GitHubApp />
 			</main>
 		</div>
 	);
