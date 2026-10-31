@@ -348,6 +348,13 @@ export class Session {
 					c = { name: this.toolName(u.kind), input: describe(u.title, u.kind, u.locations, u.input), title: u.title ?? '', kind: u.kind ?? null, locations: u.locations, raw: u.input };
 					this.calls.set(u.id, c);
 					if (u.start) await turn.tool(u.id, c.name, c.input);
+				} else {
+					// What the update leaves out stays as it was.
+					if (u.title) c.title = u.title;
+					if (u.kind) { c.kind = u.kind; c.name = this.toolName(u.kind); }
+					if (u.locations?.length) c.locations = u.locations;
+					if (u.input !== undefined && u.input !== null) c.raw = u.input;
+					c.input = describe(c.title, c.kind, c.locations, c.raw);
 				}
 				// A call started in an earlier turn ends in this one.
 				if (!u.start && (u.status === 'completed' || u.status === 'failed') && !turn.hasTool(u.id)) await turn.tool(u.id, c.name, c.input);
