@@ -19,10 +19,22 @@ function scripted(name: string, args: string): llm.Model {
 	};
 }
 
+const received: unknown[] = [];
 const echo = defineTool({
 	name: 'echo', description: 'Echo a count.',
 	input: z.object({ count: z.number().int().min(1), label: z.string().optional() }),
-	run: async call => ({ doubled: call.input.count * 2, label: call.input.label ?? '' }),
+	run: async call => {
+		received.push(call.input);
+		return { doubled: call.input.count * 2, label: call.input.label ?? '' };
+	},
+});
+
+// A field the schema does not declare is a type error in run.
+defineTool({
+	name: 'typo', description: '',
+	input: z.object({ count: z.number() }),
+	// @ts-expect-error coutn is not declared
+	run: async call => call.input.coutn,
 });
 
 async function call(args: string) {
@@ -45,7 +57,9 @@ test('a tool defined by a zod schema is offered as JSON Schema', () => {
 });
 
 test('the engine runs a tool only with arguments its schema accepts', async () => {
+	received.length = 0;
 	const ok = await call('{"count":2,"extra":true}');
+	expect(received).toEqual([{ count: 2 }]);
 	expect(ok.find(e => e.kind === 'tool-output')?.output).toEqual({ doubled: 4, label: '' });
 	const bad = await call('{"count":"two"}');
 	expect(bad.find(e => e.kind === 'tool-output')).toBeUndefined();

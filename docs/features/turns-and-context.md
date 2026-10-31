@@ -248,6 +248,19 @@ The shared rendering configuration is in
   Prompts shorter than the model's minimum (about 1024 tokens) are not cached.
 - Cache reads and writes are reported in usage and priced from the catalog.
 
+## Tool arguments
+
+- Built-in tools declare their arguments with a zod schema, and the model is
+  offered that schema as JSON Schema. The skill, Cloudflare and `tool_install`
+  tools still declare JSON Schema by hand and are not checked yet.
+- Before a tool runs, the turn parses the model's arguments against it.
+  Arguments that do not match never reach the tool: the call fails with an
+  error naming each wrong field, which the model reads and can retry from.
+- Fields the schema does not declare are dropped, so a tool receives only
+  what it declared.
+- Tools without a zod schema, such as MCP server tools, receive their
+  arguments as the model wrote them, as before; the server checks them.
+
 ## Large tool output
 
 - Tools return their whole result. Sandbox commands keep up to 1 MiB of each

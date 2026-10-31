@@ -59,12 +59,15 @@ export function jsonSchema(schema: z.ZodType): Record<string, unknown> {
 /** ToolInput is a tool's arguments as its schema describes them. */
 export type ToolInput<S extends z.ZodObject> = z.output<S>;
 
+/** TypedCall is a call whose input is only the fields the tool declared. */
+export type TypedCall<S extends z.ZodObject> = Omit<ToolCall, 'input'> & { input: ToolInput<S> };
+
 /**
  * defineTool declares a tool by a zod schema of its arguments: the model is
  * offered the schema as JSON Schema, and the engine checks the model's
  * arguments against it before run, which receives them parsed.
  */
-export function defineTool<S extends z.ZodObject>(t: Omit<Tool, 'parameters' | 'input' | 'run'> & { input: S; run: (call: ToolCall & { input: ToolInput<S> }) => Promise<unknown> }): Tool {
+export function defineTool<S extends z.ZodObject>(t: Omit<Tool, 'parameters' | 'input' | 'run'> & { input: S; run: (call: TypedCall<S>) => Promise<unknown> }): Tool {
 	return { ...t, parameters: jsonSchema(t.input), input: t.input as unknown as z.ZodType<Record<string, unknown>>, run: t.run as Tool['run'] };
 }
 
