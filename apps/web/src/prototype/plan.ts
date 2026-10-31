@@ -34,7 +34,7 @@ export function stagesOf(index: number, changed?: unknown): Stage[] {
 	return own ?? (typeof b === 'object' ? (b.stages ?? []) : []);
 }
 
-export type Phase = { status: string; stage: string; round?: number; tries?: number; passed?: boolean };
+type Phase = { status: string; stage: string; round?: number; tries?: number; passed?: boolean };
 
 // phases is a task's run, a few seconds a step: the agent builds, the checks
 // run (the checkout field fails once and goes back to its agent), a review

@@ -3,6 +3,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { PlanCard, planInput, type PlanInput } from './PlanCard';
 import type { AgentNode } from './contracts';
 
+vi.mock('@mob/ui/voxel/VoxelCanvas', () => ({ VoxelCanvas: () => null }));
+
 afterEach(() => vi.unstubAllGlobals());
 
 const connection = { url: 'http://127.0.0.1:1', token: 't' };
@@ -164,4 +166,20 @@ it('approves the plan with what the owner changed in its steps', () => {
 it('draws a task with the stages the owner set for it', () => {
 	render(<PlanCard connection={connection} input={{ ...plan, tasks: [{ ...plan.tasks![1], stages: [{ type: 'verify', retries: 1 }, { type: 'review', aspects: ['docs'], rounds: 1 }] }] }} state={waiting} open={() => {}} />);
 	expect(screen.getByText('claude · checks, then review')).toBeTruthy();
+});
+
+it('draws the plan as a studio, whose desks open their task in the flow', async () => {
+	vi.stubGlobal('fetch', vi.fn(async () => Response.json([])));
+	render(<PlanCard connection={connection} input={plan} state={waiting} open={() => {}} approval={{ busy: false, decide: () => {} }} />);
+	fireEvent.click(screen.getByRole('button', { name: 'Open as flow' }));
+	const flow = screen.getByRole('dialog');
+	fireEvent.click(within(flow).getByRole('button', { name: 'Studio' }));
+	expect(within(flow).queryByRole('complementary', { name: 'Step' })).toBeNull();
+	// The studio is laid out once it knows its size.
+	const desk = await within(flow).findByRole('button', { name: '2. UI: Waiting for your approval. Show its steps' });
+	expect(within(flow).getByText('Review')).toBeTruthy();
+	fireEvent.click(desk);
+	expect(within(within(flow).getByRole('complementary', { name: 'Step' })).getByDisplayValue('Add the coupon field')).toBeTruthy();
+	// The decision stays at the foot of either view.
+	expect(within(flow).getByRole('button', { name: 'Allow once' })).toBeTruthy();
 });

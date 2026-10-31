@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type React
 import { Icon } from '@mob/ui/brand/Icon';
 import type { IconName } from '@mob/ui/brand/Icon';
 import { magnet, type Magnet } from './snap';
-import { VoxelCanvas } from './voxel/VoxelCanvas';
+import { VoxelCanvas } from '@mob/ui/voxel/VoxelCanvas';
 import { onThemeApplied } from '@mob/ui/theme';
 import { calfAt, officeFrame, officeVoxels, setFade, setHighlight, setStory, type Activity } from './voxel/office';
 

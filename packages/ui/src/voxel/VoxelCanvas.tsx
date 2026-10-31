@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Voxel } from './model';
 import { paint, type Frame } from './project';
 import { createVoxelRenderer, type VoxelRenderer } from './gpu';
-import { onThemeApplied } from '@mob/ui/theme';
+import { onThemeApplied } from '../theme/theme';
 
 type Props = {
 	scene: (time: number) => Voxel[];

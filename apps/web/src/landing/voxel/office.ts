@@ -1,6 +1,6 @@
-import { alarm, calf, colors, hex, leader, lying, move, skin, snore, tea, turn, type CalfStyle, type Pose, type RGB, type Voxel } from './model';
-import { add, arc, block, glyph, QUESTION, random, rotate, TICK_MARK, type Facing, type Vec } from './motion';
-import { project } from './project';
+import { alarm, calf, colors, hex, leader, lying, move, skin, snore, tea, turn, type CalfStyle, type Pose, type RGB, type Voxel } from '@mob/ui/voxel/model';
+import { add, arc, block, glyph, QUESTION, random, rotate, TICK_MARK, type Facing, type Vec } from '@mob/ui/voxel/motion';
+import { project } from '@mob/ui/voxel/project';
 
 // The hero background: a square open-plan office of calves, run as a small
 // simulation. The floor is a 3 x 3 grid of cells, each holding a randomly

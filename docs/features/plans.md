@@ -29,6 +29,16 @@ Click a step to see what it does. Details stay a click further: a task's
 instructions sit under **Instructions**, and a started task's last checks and
 the review's conclusion under their own headings.
 
+**Studio**, next to **Flow** at the top, draws the same plan as a studio of
+calves: one row per task, from the agent's desk through the checks booth and
+the reviewer to your tray. Each calf does what its task is doing, and walks to
+the next station as the task moves on; a failed check sends it back to its
+desk with an "!", and finished work lands in your tray. The number on a desk
+says where its task is, and opens that task's steps in the flow.
+
+<!-- prototype: /prototype/plan/?flow=0.build&view=studio -->
+![The plan as a studio: one task in review, one back at its desk after a failed check, one in the booth](../images/plan-studio.png)
+
 ## Change a plan before you approve it
 
 While the plan waits for you, the step inspector edits the task:
@@ -99,7 +109,9 @@ Mob runs those in place of its blueprint's (`stagesOf` in
 
 **Where it lives.** The tool and `revisePlan` are in
 `apps/mob/src/agents/tools.ts`; the card, the flow and the inspector in
-`packages/app/src/PlanCard.tsx`; approving with changes in
+`packages/app/src/PlanCard.tsx`; the studio in `PlanStudio.tsx` and
+`planStudio.ts`, drawn with the landing page's voxel calves
+(`packages/ui/src/voxel/`); approving with changes in
 `packages/core/src/chat/conversation.ts` (`revise`) and `store.ts`
 (`decide`, `pendingApproval`).
 
