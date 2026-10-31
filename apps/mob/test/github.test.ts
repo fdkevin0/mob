@@ -5,8 +5,8 @@ import type { GitHubEvent } from '@mob/core/github';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GitHub, type Client, type Grant } from '../src/github/client';
-import { prompt, remote, Watcher } from '../src/github/watch';
+import { GitHub, GitHubError, type Client, type Grant } from '../src/github/client';
+import { backoff, prompt, remote, transient, Watcher } from '../src/github/watch';
 import { serve, githubEvents } from '../src/runner/relay';
 
 const models: Models = { default: () => 'demo/echo', resolve: () => new DemoModel(), setDefault: () => new DemoModel().ref, list: async () => [] };
@@ -103,8 +103,56 @@ test('each delivery is acted on once and malformed events are refused', async ()
 	w.act = async () => { acted++; return undefined; };
 	const e = event();
 	expect(w.receive([e, { ...e, repo: '../x' }, 'junk'])).toEqual([e.delivery]);
+	await w.work();
 	expect(w.receive([e])).toEqual([e.delivery]);
+	await w.work();
 	expect(acted).toBe(1);
+});
+
+test('a failure GitHub may get over is retried until the event is done, once', async () => {
+	const { store, gh, conversations } = await setup();
+	let clock = 1_000_000;
+	const now = () => clock;
+	const w = new Watcher(store, conversations, gh, now);
+	const api = gh.api.bind(gh);
+	let failures = 1;
+	gh.api = async <T,>(repo: string, grant: Grant, path: string) => {
+		if (failures > 0) { failures--; throw new GitHubError(502, 'GitHub GET: HTTP 502'); }
+		return api<T>(repo, grant, path);
+	};
+	const e = event();
+	// Saved before it is acknowledged, so the relay may forget it.
+	expect(w.receive([e])).toEqual([e.delivery]);
+	await w.work();
+	expect(store.delivery('github:' + e.delivery)?.state).toBe('pending');
+	expect(w.due()).toBe(clock + backoff[0]!);
+	// Not due yet: nothing runs, and a redelivery is not saved again.
+	expect(w.receive([e])).toEqual([e.delivery]);
+	await w.work();
+	expect(gh.calls.length).toBe(0);
+	clock += backoff[0]!;
+	// A restarted Mob reads the same database.
+	const again = new Watcher(store, conversations, gh, now);
+	await again.work();
+	expect(store.delivery('github:' + e.delivery)?.state).toBe('done');
+	expect(gh.calls.map(c => c.path)).toEqual(['/repos/fdkevin0/mob/collaborators/fdkevin0/permission', '/repos/fdkevin0/mob/issues/12']);
+	await again.work();
+	expect(gh.calls.length).toBe(2);
+	expect(again.due()).toBeUndefined();
+	w.conversations.stop(store.setting<string>('github-conversation:fdkevin0/mob#12')!);
+});
+
+test('a failure that will not pass is told to the owner', async () => {
+	const { store, gh, w } = await setup();
+	gh.api = async () => { throw new GitHubError(403, 'usemob.app gave no token for fdkevin0/mob: No installation'); };
+	const e = event();
+	w.receive([e]);
+	await w.work();
+	expect(store.delivery('github:' + e.delivery)?.state).toBe('failed');
+	expect(JSON.stringify(store.history(store.setting<string>('github-conversation:fdkevin0/mob#12')!))).toContain('Mob could not act on the label: usemob.app gave no token');
+	expect(transient(new Error('fetch failed'))).toBe(true);
+	expect(transient(new GitHubError(429, 'rate limited'))).toBe(true);
+	expect(transient(new GitHubError(404, 'gone'))).toBe(false);
 });
 
 test('the blueprint a label names goes into the prompt', () => {
