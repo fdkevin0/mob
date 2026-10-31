@@ -18,6 +18,7 @@ export * from './chat/compact';
 export * from './chat/delegate';
 export * from './chat/conversation';
 export * from './chat/usage';
+export * from './format';
 export { describe as describeModel } from './chat/builtins';
 export * from './provider/provider';
 export * from './provider/presets';

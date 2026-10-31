@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Connection } from './api';
 import { Loading } from './Splash';
-import { tokens } from './format';
+import { duration, money, tokens } from './format';
 export { tokens } from './format';
 import type { DayUsage, UsageReport } from './contracts';
 import { Tabs, TabsList, TabsTrigger } from '@mob/ui/tabs';
@@ -26,13 +26,7 @@ const parts = [
 ] as const;
 
 const percent = (part: number, whole: number) => (whole > 0 ? `${Math.round((part * 100) / whole)}%` : '—');
-const dollars = (n: number) => (n > 0 ? `$${n < 1 ? n.toFixed(3) : n.toFixed(2)}` : '—');
-function duration(ms: number) {
-	const s = Math.round(ms / 1000);
-	if (s < 60) return `${s}s`;
-	if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
-	return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
+const dollars = (n: number) => (n > 0 ? money(n) : '—');
 
 // Every day the report spans gets a column, so quiet days show as gaps. Days
 // are the service's calendar days, which need not be this browser's.

@@ -11,7 +11,8 @@ import type { Event } from './events';
 import { isAbort } from './running';
 import { newID, NotFound } from './sql';
 import { rememberAlways, rememberConversation, type Message } from './store';
-import { duration, usageMarkdown } from './usage';
+import { formatDuration } from '../format';
+import { usageMarkdown } from './usage';
 
 const everyClient = [clientWeb, clientTUI, clientTelegram, clientWeChat, clientEmail];
 const messaging = [clientTelegram, clientWeChat, clientEmail];
@@ -143,7 +144,7 @@ export function builtins(s: ConversationService): Command[] {
 				if (!summary) return reply('This conversation has not used any tokens yet, or its agent does not report them.');
 				let text = usageMarkdown(summary);
 				const t = s.store.task(call.conversationId);
-				if (t && t.conversationId === call.conversationId) text += `\n\nThe task's latest update came ${duration(t.updatedAt - t.createdAt)} after it started.`;
+				if (t && t.conversationId === call.conversationId) text += `\n\nThe task's latest update came ${formatDuration(t.updatedAt - t.createdAt)} after it started.`;
 				return reply(text);
 			},
 		},
