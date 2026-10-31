@@ -20,7 +20,11 @@ const result = await Bun.build({
 		b.onLoad({ filter: /apps[\\/]mob[\\/]src[\\/]web\.ts$/ }, () => ({ contents: web, loader: 'ts' }));
 	} }],
 	compile: { outfile, ...(values.target ? { target: values.target as any } : {}) },
-	define: { 'process.env.MOB_BUILD_VERSION': JSON.stringify(values.version ?? process.env.MOB_BUILD_VERSION ?? 'dev') },
+	define: {
+		'process.env.MOB_BUILD_VERSION': JSON.stringify(values.version ?? process.env.MOB_BUILD_VERSION ?? 'dev'),
+		// OpenTUI picks its glibc native library unless told otherwise.
+		...(values.target?.endsWith('-musl') ? { 'process.env.OPENTUI_LIBC': JSON.stringify('musl') } : {}),
+	},
 	minify: true,
 	sourcemap: 'linked',
 	root,

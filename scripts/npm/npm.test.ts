@@ -4,9 +4,10 @@ import { expect, test } from 'bun:test';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
+// The package name the launcher looks for on this machine.
+import { platformPackage } from './platform.js';
 
 const here = import.meta.dir;
-const platformPackage = `usemob-${process.platform}-${process.arch}`;
 // The fixtures are shell scripts.
 const unix = test.skipIf(process.platform === 'win32');
 
@@ -16,7 +17,7 @@ function fixture(withBinary: boolean) {
 	const modules = join(mkdtempSync(join(tmpdir(), 'usemob-')), 'node_modules');
 	const bin = join(modules, 'usemob', 'bin');
 	mkdirSync(bin, { recursive: true });
-	for (const file of ['mob.js', 'install.js']) copyFileSync(join(here, file), join(bin, file));
+	for (const file of ['mob.js', 'install.js', 'platform.js']) copyFileSync(join(here, file), join(bin, file));
 	if (withBinary) {
 		const dir = join(modules, platformPackage, 'bin');
 		mkdirSync(dir, { recursive: true });
@@ -54,29 +55,48 @@ unix('the launcher runs the platform binary and passes its exit code', () => {
 	expect(run.exitCode).toBe(3);
 });
 
-unix('publish follows publish.json, platform packages first, and skips published versions', () => {
-	const root = mkdtempSync(join(tmpdir(), 'usemob-publish-'));
-	const out = join(root, 'npm');
-	const packages = ['usemob-linux-x64', 'usemob-darwin-arm64', 'usemob'];
-	for (const name of packages) mkdirSync(join(out, name), { recursive: true });
-	writeFileSync(join(out, 'publish.json'), JSON.stringify({ version: '1.2.3', tag: 'latest', packages }));
-	// A fake npm: `view usemob-linux-x64@1.2.3` finds it published; publish logs its directory.
+// A fake npm: `view` finds @usemob/linux-x64@1.2.3 published and reports
+// `latest`; publish and dist-tag are logged with their directory.
+function fakeNpm(root: string, latest: string) {
 	const fake = join(root, 'bin');
-	const log = join(root, 'log');
 	mkdirSync(fake);
 	writeFileSync(join(fake, 'npm'), `#!/bin/sh
-if [ "$1" = view ]; then [ "$2" = usemob-linux-x64@1.2.3 ] && echo 1.2.3; exit 0; fi
-echo "$(basename "$PWD") $*" >> ${JSON.stringify(log)}
+if [ "$1" = view ]; then
+	[ "$2" = @usemob/linux-x64@1.2.3 ] && echo 1.2.3
+	[ "$3" = dist-tags.latest ] && echo ${latest}
+	exit 0
+fi
+echo "\${PWD#${root}/npm/} $*" >> ${JSON.stringify(join(root, 'log'))}
 `);
 	chmodSync(join(fake, 'npm'), 0o755);
+	return fake;
+}
+
+function publish(version: string, tag: string, latest: string) {
+	const root = mkdtempSync(join(tmpdir(), 'usemob-publish-'));
+	const out = join(root, 'npm');
+	const packages = ['@usemob/linux-x64', '@usemob/darwin-arm64', 'usemob'];
+	for (const name of packages) mkdirSync(join(out, name), { recursive: true });
+	writeFileSync(join(out, 'publish.json'), JSON.stringify({ version, tag, packages }));
 	const run = Bun.spawnSync(['bun', join(here, 'publish.ts'), '--dir', out], {
-		env: { ...process.env, NPM_TOKEN: 'test', PATH: fake + delimiter + process.env.PATH },
+		env: { ...process.env, NPM_TOKEN: 'test', PATH: fakeNpm(root, latest) + delimiter + process.env.PATH },
 	});
 	expect(run.exitCode).toBe(0);
-	expect(readFileSync(log, 'utf8')).toBe([
-		'usemob-darwin-arm64 publish --access public --provenance --tag latest',
+	return { log: readFileSync(join(root, 'log'), 'utf8').trimEnd().split('\n'), stdout: run.stdout.toString() };
+}
+
+unix('publish follows publish.json, platform packages first, and skips published versions', () => {
+	const { log, stdout } = publish('1.2.3', 'latest', '1.2.2');
+	expect(log).toEqual([
+		'@usemob/darwin-arm64 publish --access public --provenance --tag latest',
 		'usemob publish --access public --provenance --tag latest',
-		'',
-	].join('\n'));
-	expect(run.stdout.toString()).toContain('usemob-linux-x64@1.2.3 is already published');
+	]);
+	expect(stdout).toContain('@usemob/linux-x64@1.2.3 is already published');
+});
+
+unix('a nightly moves latest only while latest is a nightly', () => {
+	const moved = publish('0.3.0-nightly.1.g1', 'nightly', '0.0.0-nightly.20261030-896099c').log;
+	expect(moved.at(-1)).toEndWith('dist-tag add usemob@0.3.0-nightly.1.g1 latest');
+	const kept = publish('0.3.0-nightly.1.g1', 'nightly', '0.2.0').log;
+	expect(kept.at(-1)).toBe('usemob publish --access public --provenance --tag nightly');
 });
