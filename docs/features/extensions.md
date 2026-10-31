@@ -33,7 +33,8 @@ that the directory pushes onto `hostPlugins`; configuration is one `Section`
   decides which later calls a remembered approval covers. See
   [Tools and approvals](tools-and-approvals.md).
 - `ConversationService.tools` is a `ToolRegistry`. Names are unique, and
-  `sandbox` and `tool_search` are reserved: turns add those tools themselves. A
+  `sandbox`, `tool_search` and `history_search` are reserved: turns add those
+  tools themselves. A
   turn offered two tools with one name fails. `registerSource` adds tools that
   change while Mob runs, and `registerEntries` adds what `tool_search` finds
   besides tools, such as skills.

@@ -324,6 +324,14 @@ The shared rendering configuration is in
   summary that covers it is dropped, and the next turn reads the call as it is.
 - A failed summary, or one that comes out too long, is not used: the turn omits
   the older messages instead.
+- A summary is lossy, so a turn that reads earlier messages only as a summary,
+  or omits them, also offers `history_search`. It ranks excerpts of those
+  messages (text, and tool calls with their results, about 1500 characters
+  each, overlapping on long parts) by BM25 against keywords or a message ID,
+  and returns up to 15 in their original words, marked as historical data.
+  Nothing is indexed ahead of time: it reads the stored history the turn
+  already loaded, so deleted messages are never found. The code is in
+  `packages/core/src/chat/history.ts`.
 - `/compact` summarizes every message since the summary on request, with the
   conversation's model, and records what that cost on its reply, also when it
   is stopped. The code is in
