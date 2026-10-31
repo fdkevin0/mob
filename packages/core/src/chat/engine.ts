@@ -205,12 +205,15 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		}
 		if (summary.text) req.system += summaryNotice + summary.text;
 		if (through) req.system += omittedNotice;
-		hidden = hiddenFrom(through || summary.through);
-		if (recall && hidden.length) {
+		// offerRecall declares history_search once the prompt leaves messages out; its room is already kept in budget.
+		const offerRecall = () => {
+			hidden = hiddenFrom(through || summary.through);
+			if (!recall || !hidden.length || offered.has(historyName)) return;
 			offered.set(historyName, recall);
-			req.tools.push(declaration(recall));
+			req.tools!.push(declaration(recall));
 			req.system += ' ' + recall.prompt;
-		}
+		};
+		offerRecall();
 		if (note) { req.messages.push({ role: 'user', text: note }); saved.push(''); }
 		// size is the prompt's tokens: estimated at first, then as the provider
 		// counted the last step, plus estimates for what was added since.
@@ -238,11 +241,12 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 			if (promptTokens(messages) >= current) return false;
 			if (omitted && !through) req.system += omittedNotice;
 			through = omitted;
-			hidden = hiddenFrom(through || summary.through);
+			offerRecall();
 			if (note) { messages.push({ role: 'user', text: note }); files.push(''); }
 			req.messages = messages; saved = files;
 			groups = each(req.messages, saved);
-			size = tokens(req.system) + toolTokens(req.tools) + promptTokens(req.messages);
+			declaredTokens = toolTokens(req.tools);
+			size = tokens(req.system) + declaredTokens + promptTokens(req.messages);
 			return true;
 		};
 		// Clients show what the prompt takes of the window: estimated now, then as measured after each step.

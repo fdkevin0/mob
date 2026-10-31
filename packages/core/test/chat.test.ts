@@ -404,6 +404,32 @@ test('history_search finds the original words of messages a summary stands in fo
 	s.close();
 });
 
+test('a prompt the provider refuses as too long offers history_search for the messages it then leaves out', async () => {
+	const s = open();
+	const c = s.create();
+	let refused = 0, result = '';
+	// The provider refuses the recall turn's first prompt, which has no summary and omits nothing.
+	class Refusing extends DemoModel {
+		override async stream(...[req]: Parameters<DemoModel['stream']>) {
+			const done = { text: 'ok', reasoning: '', signature: '', calls: [] as { id: string; name: string; arguments: string }[] };
+			const last = req.messages.at(-1)!;
+			const recall = req.tools?.some(t => t.name === 'history_search');
+			if (last.role === 'tool') { result = last.text; return done; }
+			if (!last.text.startsWith('recall')) return done;
+			if (!recall) { refused++; throw new OverflowError('prompt is too long'); }
+			expect(req.system).toContain('history_search');
+			return { ...done, text: '', calls: [{ id: newID(), name: 'history_search', arguments: JSON.stringify({ query: 'config path' }) }] };
+		}
+	}
+	const service = new ConversationService(s, { ...demoModels, resolve: () => new Refusing() });
+	await service.execute({ id: c.id, text: 'the config path is /etc/mob/zebra.yaml', requestId: newID() }, () => {});
+	await service.execute({ id: c.id, text: 'later ' + 'word '.repeat(2000), requestId: newID() }, () => {});
+	await service.execute({ id: c.id, text: 'recall the config path', requestId: newID() }, () => {});
+	expect(refused).toBe(1);
+	expect(result).toContain('/etc/mob/zebra.yaml');
+	s.close();
+});
+
 test('searchHistory ranks excerpts of text and tool calls, leaving out commands', () => {
 	const messages = [
 		{ id: 'a', role: 'user', parts: [{ type: 'text', text: 'deploy to 北京 region please' }] },
