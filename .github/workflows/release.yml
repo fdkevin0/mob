@@ -75,8 +75,12 @@ jobs:
             --title "Mob $NIGHTLY_VERSION (nightly)" \
             --prerelease --latest=false \
             --generate-notes
-      # Trusted publishing needs npm 11.5.1 or newer; NPM_TOKEN covers packages
-      # without a trusted publisher yet.
+      # Trusted publishing needs npm 11.5.1 or newer. The runner's own Node.js
+      # lives in a root-owned prefix, so npm is upgraded in setup-node's.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      # NPM_TOKEN covers packages without a trusted publisher yet.
       - name: Publish to npm
         run: |
           npm install -g npm@^11.5.1
@@ -186,8 +190,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release-please.outputs.tag }}
-      # Trusted publishing needs npm 11.5.1 or newer; NPM_TOKEN covers packages
-      # without a trusted publisher yet.
+      # Trusted publishing needs npm 11.5.1 or newer. The runner's own Node.js
+      # lives in a root-owned prefix, so npm is upgraded in setup-node's.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      # NPM_TOKEN covers packages without a trusted publisher yet.
       - name: Publish to npm
         run: |
           npm install -g npm@^11.5.1
