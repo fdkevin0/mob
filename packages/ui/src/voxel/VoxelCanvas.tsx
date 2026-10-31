@@ -11,6 +11,9 @@ type Props = {
 	gpu?: boolean; // WebGPU when available, Canvas 2D otherwise
 	still?: number; // the time shown when motion is reduced
 	fps?: number; // at most this many frames a second
+	// Changing it draws the scene again, for a scene that reads state of its
+	// own: a still scene (reduced motion) otherwise only redraws on resize.
+	redraw?: unknown;
 	className?: string;
 	label?: string;
 };
@@ -26,8 +29,9 @@ function canvas2d(canvas: HTMLCanvasElement): VoxelRenderer | undefined {
 }
 
 // A voxel scene drawn small and scaled up, so every voxel is crisp pixels.
-export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, fps = 60, className, label }: Props) {
+export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, fps = 60, redraw, className, label }: Props) {
 	const ref = useRef<HTMLCanvasElement>(null);
+	const drawNow = useRef<() => void>(undefined);
 	useEffect(() => {
 		const element = ref.current;
 		if (!element) return;
@@ -39,6 +43,7 @@ export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, f
 			const time = reduced ? still : (performance.now() - started) / 1000;
 			renderer.draw(scene(time), frame(element.width, element.height));
 		};
+		drawNow.current = draw;
 		let last = 0;
 		const loop = (now: number) => {
 			if (now - last >= 1000 / fps - 2) { last = now; draw(); }
@@ -65,7 +70,8 @@ export function VoxelCanvas({ scene, frame, pixel = 3, gpu = false, still = 0, f
 		// The scene's colours follow the page's scheme; a still scene (reduced
 		// motion) is drawn again when it changes.
 		const unwatch = onThemeApplied(draw);
-		return () => { gone = true; cancelAnimationFrame(raf); unwatch(); observer.disconnect(); seen.disconnect(); renderer?.destroy(); };
+		return () => { gone = true; drawNow.current = undefined; cancelAnimationFrame(raf); unwatch(); observer.disconnect(); seen.disconnect(); renderer?.destroy(); };
 	}, [scene, frame, pixel, gpu, still, fps]);
+	useEffect(() => drawNow.current?.(), [redraw]);
 	return <canvas ref={ref} className={className} role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true} />;
 }

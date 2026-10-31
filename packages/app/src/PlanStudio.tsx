@@ -5,6 +5,8 @@ import { rowZ, stations, studioFrame, studioVoxels, type Place, type StudioRow }
 
 const PIXEL = 2;
 
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
 export type StudioTask = { title: string; checks: boolean; review: boolean; place?: Place; fixing?: boolean; status: string; tone: 'run' | 'wait' | 'ok' | 'idle' };
 
 /**
@@ -26,9 +28,12 @@ export function PlanStudio({ tasks, waiting, select }: { tasks: StudioTask[]; wa
 	latest.current = { tasks, waiting };
 	const scene = useCallback((time: number) => {
 		const now = Date.now();
+		// With motion reduced the canvas is still, so each calf is drawn where
+		// its task is now, never halfway through a walk.
+		const settled = reducedMotion();
 		const rows: StudioRow[] = latest.current.tasks.map((task, i) => {
 			const s = seen.current[i];
-			return { checks: task.checks, review: task.review, place: task.place, fixing: task.fixing, from: s?.from, since: s ? (now - s.at) / 1000 : Infinity };
+			return { checks: task.checks, review: task.review, place: task.place, fixing: task.fixing, from: s?.from, since: s && !settled ? (now - s.at) / 1000 : Infinity };
 		});
 		return studioVoxels({ rows, waiting: latest.current.waiting }, time);
 	}, []);
@@ -61,6 +66,7 @@ export function PlanStudio({ tasks, waiting, select }: { tasks: StudioTask[]; wa
 				pixel={PIXEL}
 				fps={20}
 				still={2}
+				redraw={`${waiting} ${tasks.map((t) => `${t.place}:${t.fixing ? 1 : 0}`).join(' ')}`}
 				label="The plan as a studio of calves: one row per task, from the agent's desk through the checks booth and the reviewer to your tray"
 			/>
 					{(['checks', 'review', 'tray'] as const)
