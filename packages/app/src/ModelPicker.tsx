@@ -5,6 +5,7 @@ import { DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Button } from '@mob/ui/button';
 import { BrandIcon, modelBrand } from './brandIcons';
 import { BrainIcon, CheckIcon, EyeIcon, PlusIcon, SearchIcon, WrenchIcon } from './icons';
+import { tokens } from './format';
 import { Notice } from '@mob/ui/notice';
 
 export type ModelInfo = {
@@ -32,11 +33,6 @@ export type ModelGroup = {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// formatContext keeps capability hints short: 131072 becomes 131k.
-function formatContext(tokens: number) {
-	if (tokens >= 1e6) return `${Math.round(tokens / 1e5) / 10}M`;
-	return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens);
-}
 
 /** refOf is how a conversation names a provider's model: provider/model. Some providers list their IDs with that prefix already. */
 export function refOf(provider: string, model: ModelInfo) {
@@ -389,7 +385,7 @@ function ModelRow({ entry, sub, current, onPick, onActive }: { entry: Entry; sub
 					{model.vision && <EyeIcon />}
 					{model.tools && <WrenchIcon />}
 				</span>
-				<span className="model-context">{model.context ? formatContext(model.context) : ''}</span>
+				<span className="model-context">{model.context ? tokens(model.context) : ''}</span>
 				<span className="model-check">{current && <CheckIcon />}</span>
 			</Button>
 		</li>

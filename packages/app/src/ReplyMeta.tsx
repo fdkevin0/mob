@@ -3,24 +3,11 @@ import { Content as DialogContent, Portal as DialogPortal } from '@radix-ui/reac
 import { Dialog, DialogDescription, DialogTitle, DialogTrigger } from '@mob/ui/dialog';
 import type { ChatMessage, ReplyStats, ReplyUsage } from './api';
 import { BrandIcon, modelBrand } from './brandIcons';
-import { seconds, tokens } from './format';
+import { modelName, money as dollars, rate, seconds, speed, tokens } from './format';
 
-/** modelName is how a reply's model reads: its ID without the provider or reasoning level. */
-export function modelName(model: string) {
-	const id = model.slice(model.indexOf('/') + 1);
-	const colon = id.lastIndexOf(':');
-	return colon > 0 && /^(none|minimal|low|medium|high|xhigh|max)$/.test(id.slice(colon + 1)) ? id.slice(0, colon) : id;
-}
+export { modelName, speed };
 
-/** speed is how many output tokens a second the reply's model wrote, once it had started, when that was measured. */
-export function speed(stats?: ReplyStats) {
-	if (!stats?.generationMs || !stats.timedOutput) return undefined;
-	return (stats.timedOutput * 1000) / stats.generationMs;
-}
-
-const rate = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)} tok/s`;
 const total = (u: ReplyUsage) => u.inputTokens + u.outputTokens;
-const dollars = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
 
 /**
  * ReplyMeta says, under a reply, which model wrote it, the tokens it took and
