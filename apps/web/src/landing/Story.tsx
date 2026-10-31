@@ -100,6 +100,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 	const story = useRef<HTMLDivElement>(null);
 	const field = useRef<HTMLDivElement>(null);
 	const title = useRef<HTMLDivElement>(null);
+	const blur = useRef<HTMLDivElement>(null);
 	const flow = useRef<HTMLDivElement>(null);
 	const list = useRef<HTMLDivElement>(null);
 	const [step, setStep] = useState(-1);
@@ -132,6 +133,9 @@ export function Story({ hero }: { hero: ReactNode }) {
 			const out = ramp(p, 0, 0.8);
 			const aside = ramp(p, FEATURES - 0.8, FEATURES);
 			if (title.current) { title.current.style.transform = `translateY(${-out * 45}vh)`; title.current.style.opacity = String(1 - ramp(p, 0.1, 0.65)); }
+			// The blur behind the title clears with it, so the story's pages see
+			// the office sharp.
+			if (blur.current) blur.current.style.opacity = String(1 - ramp(p, 0.05, 0.5));
 			// The spotlight fades in with the conversation and out before the
 			// office moves aside, so the office never jumps in brightness.
 			const spot = ramp(p, 0.45, WORKFLOW) * (1 - ramp(p, WORKFLOW + 4 * STEP - 0.2, FEATURES - 0.6));
@@ -218,6 +222,7 @@ export function Story({ hero }: { hero: ReactNode }) {
 				</div>
 				{tip ? <div className="calf-tip" style={{ left: tip.x, top: tip.y }}>{tip.text}</div> : null}
 
+				<div className="hero-blur" ref={blur} aria-hidden="true" />
 				<div className="hero-copy" ref={title}>{hero}</div>
 
 				<section className="flow" ref={flow} aria-label="How a task runs">
