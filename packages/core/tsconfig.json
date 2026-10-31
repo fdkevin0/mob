@@ -10,5 +10,6 @@
 		"allowImportingTsExtensions": true,
 		"types": ["bun"]
 	},
-	"include": ["src"]
+	// tools.test.ts holds a type assertion on defineTool, so it is typechecked too.
+	"include": ["src", "test/tools.test.ts"]
 }

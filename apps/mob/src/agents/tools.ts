@@ -1,5 +1,6 @@
 // What Mob's model and the owner use to manage tasks: tools and commands.
-import { CommandError, cell, interactive, type Command, type Task, type Tool } from '@mob/core';
+import { CommandError, cell, defineTool, interactive, type Command, type Task, type Tool } from '@mob/core';
+import { z } from 'zod';
 import { isAbsolute } from 'node:path';
 import { blueprint, blueprints, defaultBlueprint, problems, steps, type Stage } from './blueprints';
 import { firstLine, git } from './process';
@@ -17,9 +18,8 @@ Use tasks to report progress and what waits for the owner's decision, task_messa
 /** replyLimit bounds the latest reply tasks shows for each task, in characters. */
 const replyLimit = 600;
 
-export const object = (properties: Record<string, unknown>, ...required: string[]) =>
-	({ type: 'object', properties, additionalProperties: false, ...required.length ? { required } : {} });
-export const text = (description: string) => ({ type: 'string', description });
+/** text is a string argument the model reads described. */
+export const text = (description: string) => z.string().describe(description);
 
 type StartInput = { project?: string; prompt?: string; title?: string; agent?: string; share?: string; blueprint?: string };
 
@@ -36,21 +36,23 @@ export const planLimit = 6;
 /** tools let Mob's model start, follow, instruct and stop tasks. */
 export function tools(svc: Service): Tool[] {
 	const agents = presets.map(p => p.name);
-	return [{
+	const agent = z.enum(agents as [string, ...string[]]);
+	const blueprintName = z.enum(blueprints.map(b => b.name) as [string, ...string[]]);
+	return [defineTool({
 		name: 'task_start',
 		description: "Ask the owner to approve handing coding work to a coding agent. The agent works in a new git worktree and branch of the project; the turn stops until the owner approves.",
-		parameters: object({
-			project: text("A project's name, or the absolute path of a git repository on this computer"),
+		input: z.object({
+			project: text("A project's name, or the absolute path of a git repository on this computer").optional(),
 			prompt: text('Self-contained task brief: goal, scope and user constraints, known evidence and decisions, acceptance checks, and a reminder to read applicable project instructions. The agent does not receive the parent conversation.'),
-			title: text('A short title for the task'),
-			agent: { type: 'string', enum: agents, description: 'The coding agent; default ' + agents[0] },
-			share: text(`A task's ID: work read-only in that task's worktree and branch instead of a new one, seeing its uncommitted changes, such as to review it; project is then that task's. Only ${readers().join(' and ')} can`),
-			blueprint: { type: 'string', enum: blueprints.map(b => b.name), description: "How the work goes from done to ready to review; default the project's blueprint. " + blueprints.map(b => `${b.name}: ${steps(b)}.`).join(' ') },
-		}, 'prompt'),
+			title: text('A short title for the task').optional(),
+			agent: agent.optional().describe('The coding agent; default ' + agents[0]),
+			share: text(`A task's ID: work read-only in that task's worktree and branch instead of a new one, seeing its uncommitted changes, such as to review it; project is then that task's. Only ${readers().join(' and ')} can`).optional(),
+			blueprint: blueprintName.optional().describe("How the work goes from done to ready to review; default the project's blueprint. " + blueprints.map(b => `${b.name}: ${steps(b)}.`).join(' ')),
+		}),
 		prompt: managerPrompt,
 		ownerOnly: true,
 		available: svc.offered,
-		run: async call => askStart(svc, call.input as StartInput, input => call.requestApproval(input)),
+		run: async call => askStart(svc, call.input, input => call.requestApproval(input)),
 		approved: async call => {
 			const input = JSON.parse(call.input) as Required<StartInput>;
 			let t: Task;
@@ -66,25 +68,22 @@ export function tools(svc: Service): Tool[] {
 			// Reading a task's worktree is approved task by task.
 			return v.share ? `${v.project ?? ''} ${v.agent ?? ''} read-only ${v.share}` : `${v.project ?? ''} ${v.agent ?? ''} ${v.blueprint ?? ''}`.trimEnd();
 		},
-	}, {
+	}), defineTool({
 		name: 'task_plan',
 		description: `Ask the owner to approve a plan: up to ${planLimit} coding tasks in one project, each for a coding agent in its own worktree and branch, all started at once when the owner approves. Use it instead of several task_start calls when the work splits into parts that can go on at the same time; give each task everything it needs, since the agents do not see each other's work. The turn stops until the owner decides.`,
-		parameters: object({
+		input: z.object({
 			project: text("A project's name, or the absolute path of a git repository on this computer"),
-			summary: text('What the plan achieves, in a sentence'),
-			tasks: {
-				type: 'array', minItems: 1, maxItems: planLimit, description: 'The tasks, in the order to start them',
-				items: object({
-					title: text('A short title for the task'),
-					prompt: text('What the agent should do, with everything it needs to know'),
-					agent: { type: 'string', enum: agents, description: 'The coding agent; default ' + agents[0] },
-					blueprint: { type: 'string', enum: blueprints.map(b => b.name), description: "How the work goes from done to ready to review; default the project's blueprint" },
-				}, 'title', 'prompt'),
-			},
-		}, 'project', 'tasks'),
+			summary: text('What the plan achieves, in a sentence').optional(),
+			tasks: z.array(z.object({
+				title: text('A short title for the task'),
+				prompt: text('What the agent should do, with everything it needs to know'),
+				agent: agent.optional().describe('The coding agent; default ' + agents[0]),
+				blueprint: blueprintName.optional().describe("How the work goes from done to ready to review; default the project's blueprint"),
+			})).min(1).max(planLimit).describe('The tasks, in the order to start them'),
+		}),
 		ownerOnly: true,
 		available: svc.offered,
-		run: async call => call.requestApproval(await askPlan(svc, call.input as { project?: string; summary?: string; tasks?: StartInput[] })),
+		run: async call => call.requestApproval(await askPlan(svc, call.input)),
 		approved: async call => {
 			const plan = JSON.parse(call.input) as Plan;
 			// index is the task's place in the plan, so the card shows each start against its own task even when titles repeat.
@@ -105,33 +104,33 @@ export function tools(svc: Service): Tool[] {
 			const v = JSON.parse(raw) as Plan;
 			return `${v.project} plan ${[...new Set(v.tasks.map(t => `${t.agent}/${t.blueprint}`))].sort().join(' ')}`;
 		},
-	}, {
+	}), defineTool({
 		name: 'tasks',
 		description: "List coding agent tasks with their status (running, waiting for the owner's approval, review, stopped, failed), branch, plan, latest reply, how the agent said its work ended (outcome passed, rework or blocked, with its result) and the tokens, cache and cost their agent used by model, and the saved projects.",
-		parameters: object({ project: text("Only this project's tasks") }),
+		input: z.object({ project: text("Only this project's tasks").optional() }),
 		ownerOnly: true,
 		available: svc.busy,
-		run: async call => overview(svc, String(call.input.project ?? '')),
-	}, {
+		run: async call => overview(svc, call.input.project ?? ''),
+	}), defineTool({
 		name: 'task_message',
 		description: "Pass the owner's instructions on to a task's coding agent; it works on them on its own.",
-		parameters: object({ task: text("The task's ID"), text: text('The instructions') }, 'task', 'text'),
+		input: z.object({ task: text("The task's ID"), text: text('The instructions') }),
 		ownerOnly: true,
 		available: svc.busy,
 		run: async call => {
-			const message = String(call.input.text ?? '');
+			const message = call.input.text;
 			if (!message.trim()) throw new Error('text is empty');
-			await svc.message(String(call.input.task ?? ''), message);
+			await svc.message(call.input.task, message);
 			return { sent: true };
 		},
-	}, {
+	}), defineTool({
 		name: 'task_stop',
 		description: "Stop a task's coding agent. Its branch and worktree stay.",
-		parameters: object({ task: text("The task's ID") }, 'task'),
+		input: z.object({ task: text("The task's ID") }),
 		ownerOnly: true,
 		available: svc.busy,
-		run: async call => { svc.stopTask(String(call.input.task ?? '')); return { stopped: true }; },
-	}, ...reviewTools(svc), squadTool(svc)];
+		run: async call => { svc.stopTask(call.input.task); return { stopped: true }; },
+	}), ...reviewTools(svc), squadTool(svc)];
 }
 
 /** askStart checks a task_start call and asks the owner to approve it. */

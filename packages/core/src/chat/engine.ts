@@ -10,7 +10,7 @@ import { Aborted, StepLimit, isAbort } from './running';
 import { searchName, searchPrompt, toolSearch, type Entry, type SearchResult } from './search';
 import { newID } from './sql';
 import { textOf, type Message, type Part, type Stats, type Store, type Summary } from './store';
-import { AbortTool, AwaitingApproval, Granted, ToolCall, type Tool } from './tools';
+import { AbortTool, AwaitingApproval, checkInput, Granted, ToolCall, type Tool } from './tools';
 
 /** outputCap bounds a reply below the model's own limit, so that a model with a huge limit still leaves room for history. */
 const outputCap = 32000;
@@ -333,11 +333,12 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				message.parts.push(part);
 				await send({ kind: 'tool-input', toolCallId: call.id, toolName: call.name, input });
 				let output: unknown, toolErr: Error | undefined;
-				if (parseErr) toolErr = new Error('tool arguments must be a JSON object');
+				const checked = parseErr ? { error: new Error('tool arguments must be a JSON object') } : checkInput(offered.get(call.name), input);
+				if ('error' in checked) toolErr = checked.error;
 				else {
 					const ran = Date.now();
 					try {
-						output = await runTool(agent, offered, new ToolCall(call, conversationID, input, part, message, store, send, signal, agent.owner ? offered.get(call.name) : undefined));
+						output = await runTool(agent, offered, new ToolCall(call, conversationID, checked.input, part, message, store, send, signal, agent.owner ? offered.get(call.name) : undefined));
 					} catch (e) {
 						if (e instanceof AwaitingApproval) { pending = true; continue; }
 						if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Aborted();
