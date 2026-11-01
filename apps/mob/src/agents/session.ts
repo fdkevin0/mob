@@ -5,9 +5,8 @@ import { Aborted, rememberAlways, taskFailed, taskReview, taskRunning, taskStopp
 import { lstatSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import type { Conn } from './process';
-import type { Preset } from './presets';
+import { runtime, type Preset } from './presets';
 import type { Service } from './service';
-import { acp } from './acp';
 import {
 	failed, message, signIn, type AgentSession, type Choice, type Ending as AgentEnding, type ModelUsage,
 	type PermissionRequest, type ToolContent, type ToolKind, type ToolStatus, type Update,
@@ -79,7 +78,7 @@ export class Session {
 	static async open(svc: Service, p: Preset, t: Task, conn: Conn, signal: AbortSignal): Promise<Session> {
 		const s = new Session(svc, p, t);
 		try {
-			s.agent = await (p.runtime ?? acp).open({
+			s.agent = await runtime(p).open({
 				preset: p, task: t, conn,
 				servers: http => {
 					const { servers, token } = svc.mcpServers(t, http);
@@ -391,25 +390,11 @@ export class Session {
 
 	/** used records what the prompt that ended with e used. */
 	private async used(turn: DelegateTurn, e: Ending) {
-		let model = this.model || this.preset.name;
+		const model = this.model || this.preset.name;
 		const cost = this.unpriced;
 		this.unpriced = 0;
 		let took = Date.now() - e.began;
 		let rows: ModelUsage[] = e.usage;
-		if (!rows.length && this.preset.tally) {
-			const tallied = await this.preset.tally(this.id);
-			if (tallied.model) model = tallied.model;
-			// The tally counts this session alone; a task whose session could not be loaded again started a new one at zero.
-			const r = this.svc.store.sessionTotal(turn.conversationId, this.id);
-			const u = tallied.usage;
-			const d = {
-				inputTokens: u.inputTokens - r.inputTokens, outputTokens: u.outputTokens - r.outputTokens,
-				reasoningTokens: Math.max((u.reasoningTokens ?? 0) - (r.reasoningTokens ?? 0), 0),
-				cacheReadTokens: Math.max((u.cacheReadTokens ?? 0) - (r.cacheReadTokens ?? 0), 0),
-				cacheWriteTokens: Math.max((u.cacheWriteTokens ?? 0) - (r.cacheWriteTokens ?? 0), 0),
-			};
-			if (d.inputTokens > 0 || d.outputTokens > 0) rows = [{ model: '', usage: d }];
-		}
 		if (!rows.length) {
 			if (!cost) return;
 			rows = [{ model: '', usage: { inputTokens: 0, outputTokens: 0 } }];

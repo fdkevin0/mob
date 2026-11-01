@@ -638,12 +638,6 @@ export class Store {
 		return result;
 	}
 
-	/** sessionTotal sums what conversationID recorded for an outside agent's session. */
-	sessionTotal(conversationID: string, session: string): ModelUsage {
-		const r = this.db.get<{ i: number; o: number; r: number; cr: number; cw: number; c: number }>('SELECT COALESCE(SUM(input),0) AS i,COALESCE(SUM(output),0) AS o,COALESCE(SUM(reasoning),0) AS r,COALESCE(SUM(cache_read),0) AS cr,COALESCE(SUM(cache_write),0) AS cw,COALESCE(SUM(cost),0) AS c FROM usage WHERE conversation_id=? AND session=?', conversationID, session)!;
-		return { inputTokens: r.i, outputTokens: r.o, reasoningTokens: r.r, cacheReadTokens: r.cr, cacheWriteTokens: r.cw, cost: r.c };
-	}
-
 	/** report sums the usage recorded since since (Unix ms), or all of it when since is 0, keeping the top conversations. */
 	report(since: number, top: number): UsageReport {
 		const today = localDate(new Date());

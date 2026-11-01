@@ -9,11 +9,15 @@ Mob drives every agent through one port, `runtime.ts`: a session that takes
 prompts and reports text, reasoning, tool calls updated by their ID, plans,
 context use and how each prompt ended with what it used, and asks permission
 before calls. Its shapes follow ACP v2's. Each agent's preset names the runtime
-behind the port. Today every agent speaks the
-[Agent Client Protocol](https://agentclientprotocol.com) (ACP), the default
-runtime (`acp.ts`, on the official TypeScript SDK `@agentclientprotocol/sdk`);
-an agent whose own protocol does more than its ACP adapter can get a runtime of
-its own without changing tasks, approvals, the agent tree or usage.
+behind the port. The default runtime is the
+[Agent Client Protocol](https://agentclientprotocol.com) (ACP, `acp.ts`, on the
+official TypeScript SDK `@agentclientprotocol/sdk`), which Claude Agent,
+DeepSeek Harness and CodeBuddy Code speak. Codex has a runtime of its own,
+`codex.ts`, on Codex's app server (`codex app-server`, the protocol every
+Codex surface is built on), since that reports what each turn used and its
+ACP adapter does not. An agent whose own protocol does more than its ACP
+adapter gets a runtime of its own the same way, without changing tasks,
+approvals, the agent tree or usage.
 
 ## Getting started
 
@@ -35,7 +39,7 @@ How a task is checked, reviewed and split into sub-tasks is in
 
 | Agent | Started with | Signing in |
 | --- | --- | --- |
-| `codex` (default) | `codex-acp` when installed, otherwise `npx -y @zed-industries/codex-acp@0.16.0` | the ChatGPT subscription `codex login` saved on that computer (`codex login --device-auth` where it has no browser), or `OPENAI_API_KEY` / `CODEX_API_KEY` in the service's environment |
+| `codex` (default) | `codex app-server` when `codex` is installed, otherwise `npx -y @openai/codex@0.166.0 app-server` | the ChatGPT subscription `codex login` saved on that computer (`codex login --device-auth` where it has no browser), or `OPENAI_API_KEY` / `CODEX_API_KEY` in the service's environment |
 | `claude` (Claude Agent) | `claude-agent-acp` when installed, otherwise `npx -y @agentclientprotocol/claude-agent-acp@0.94.0` | the Claude subscription `claude` saved on that computer (run `claude` and `/login`), or `ANTHROPIC_API_KEY` in the service's environment |
 | `dsh` (DeepSeek Harness) | `npx -y @deepseek-ai/dsh@0.2.1-rc.2 --profile acp` (only through `npx`, since other programs are also called `dsh`) | the DeepSeek API key saved in DeepSeek Harness (`npx @deepseek-ai/dsh web`, Models page), or `DEEPSEEK_API_KEY` in the service's environment |
 | `codebuddy` (CodeBuddy Code) | `codebuddy --acp` when installed, otherwise `npx -y @tencent-ai/codebuddy-code@2.171.0 --acp` | the Tencent account `codebuddy` logged in with on that computer (WeChat for the China edition, Google or GitHub for the international one; the same account as WorkBuddy), or `CODEBUDDY_API_KEY` in the service's environment, with `CODEBUDDY_INTERNET_ENVIRONMENT=internal` for the China edition |
@@ -44,7 +48,9 @@ The agent runs on the computer Mob runs on, as the same user, with Mob's
 environment minus its `MOB_*` variables. Mob keeps no agent credentials: the
 agent uses its own sign-in. When it asks to sign in, Mob tries an
 environment-variable method whose variable is set, and otherwise fails the
-turn with how to sign in. Claude Agent only finds out it is not signed in
+turn with how to sign in. Codex is asked for its account first: with none
+saved and neither `OPENAI_API_KEY` nor `CODEX_API_KEY` set, the turn fails
+the same way, as does a turn Codex ends as unauthorized. Claude Agent only finds out it is not signed in
 when it answers a prompt; that turn fails the same way. DeepSeek Harness asks
 for no sign-in; without a key, its first prompt fails and says where to save
 one. Mob never reads or passes on a DeepSeek key, including the one in its own
@@ -195,9 +201,12 @@ task does, which misses the prompt cache once.
 
 ## Approvals
 
-- Codex starts each session in its `auto` mode: it edits files and runs
-  commands in the worktree without asking, and asks before using the network
-  or writing elsewhere. Claude Agent starts in its `acceptEdits` mode: it
+- Codex starts each thread with its `workspace-write` sandbox and the
+  `on-request` approval policy: it edits files and runs commands in the
+  worktree without asking, and asks before using the network or writing
+  elsewhere. Mob answers its command, file change and permission requests;
+  it declines the forms an MCP server asks Codex to fill in, and answers
+  Codex's questions to the user with none. Claude Agent starts in its `acceptEdits` mode: it
   edits files without asking and asks before running commands, so its
   commands are approvals in the task. CodeBuddy Code starts in its
   `acceptEdits` mode too. DeepSeek Harness has no modes: its own
@@ -253,16 +262,12 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
   the cache to its input, as Claude Agent's does, is counted that way.
 - Claude Agent also reports what its run has cost so far (`usage_update`);
   what it added since the last prompt is recorded as that prompt's cost.
-- Codex (`codex-acp` 0.16) reports no tokens over ACP. Its ACP session is a
-  Codex thread of the same ID, so Mob reads the thread's rollout file
-  (`$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<session>.jsonl`, `CODEX_HOME`
-  defaulting to `~/.codex`): the last `token_count` total, less what the task
-  already recorded for that session, is the prompt's (a session that replaces
-  one that could not be loaded counts from zero, and the old one's usage
-  stays), under the model of the last
-  `turn_context`. Codex reports no cost.
+- Codex reports its thread's running total (`thread/tokenUsage/updated`);
+  a turn's usage is the total at its end less the total before its first
+  request, under the thread's model. Its context meter is the last
+  request's tokens against the model's context window. Codex reports no cost.
 - An agent that reports neither shows no usage, and a prompt stopped from
-  Mob may record none. The code is in `apps/mob/src/agents/usage.ts`.
+  Mob may record none. Each runtime reads its own: `acp.ts` and `codex.ts`.
 
 ## Project forms
 

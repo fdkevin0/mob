@@ -8,7 +8,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod';
 import { version } from '../version';
 import { firstLine } from './process';
-import { preset, readers } from './presets';
+import { preset, readers, reads } from './presets';
 import type { McpServer as AgentMcpServer } from './runtime';
 import type { Service } from './service';
 import { settleSquad } from './squad';
@@ -171,10 +171,10 @@ export class Hub {
 		const shared = workspace === 'shared';
 		if (!agent) {
 			agent = t.agent;
-			try { if (shared && !preset(agent).readOnly) agent = readers()[0]!; } catch { /* checked below */ }
+			try { if (shared && !reads(preset(agent))) agent = readers()[0]!; } catch { /* checked below */ }
 		}
 		const a = preset(agent);
-		if (shared && !a.readOnly) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
+		if (shared && !reads(a)) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
 		title ||= firstLine(prompt, 60);
 		// Checked again when the owner approves, which may be much later.
 		this.room(t, 0);

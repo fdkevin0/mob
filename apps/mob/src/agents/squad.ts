@@ -2,7 +2,7 @@
 // review one aspect of its work, whose reports Mob's model then checks in the
 // conversation that asked for them.
 import { CommandError, defineTool, newID, taskRunning, taskWaiting, type Task, type Tool } from '@mob/core';
-import { readers, preset } from './presets';
+import { readers, reads, preset } from './presets';
 import { announce, base, reviewLimit } from './review';
 import type { Service } from './service';
 import { judge } from './blueprints';
@@ -66,7 +66,7 @@ export function squadTool(svc: Service): Tool {
 			const input = call.input as SquadInput;
 			const t = reviewable(svc, String(input.task ?? ''));
 			const a = preset(input.agent || readers()[0]!);
-			if (!a.readOnly) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
+			if (!reads(a)) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
 			const picked: string[] = [];
 			for (let name of input.aspects?.length ? input.aspects : squadAspects) {
 				name = String(name).trim().toLowerCase();

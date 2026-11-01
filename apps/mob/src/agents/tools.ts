@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { isAbsolute } from 'node:path';
 import { blueprint, blueprints, defaultBlueprint, problems, steps, type Stage } from './blueprints';
 import { firstLine, git } from './process';
-import { preset, presets, readers } from './presets';
+import { preset, presets, readers, reads } from './presets';
 import { reviewTools } from './review';
 import { squadTool } from './squad';
 import type { Service } from './service';
@@ -145,7 +145,7 @@ export async function askStart(svc: Service, input: StartInput, ask: (input: unk
 		const base = svc.store.task(input.share);
 		if (!base || base.id !== input.share) throw new Error(`no task ${input.share}`);
 		if (base.readOnly) throw new Error("that task only reads another's worktree; share that one instead");
-		if (!a.readOnly) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
+		if (!reads(a)) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
 		return ask({ project: base.project, agent: a.name, title, prompt, share: base.id, workspace: 'read-only in ' + base.worktree });
 	}
 	const { path, saved } = await projectOf(svc, input.project ?? '');
