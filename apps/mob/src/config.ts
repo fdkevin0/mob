@@ -3,6 +3,7 @@
 import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { webOrigin } from '@mob/core/app/server';
+import type { Driver } from '@mob/core';
 import { windows } from './files';
 import { configHome, dataHome, stateHome } from './paths';
 
@@ -27,6 +28,7 @@ export const options: Option[] = [
 	{ key: 'state_dir', value: () => join(stateHome(), 'mob'), help: 'Background logs; restart required', defaultText: 'XDG state home/mob' },
 	{ key: 'addr', value: '127.0.0.1:8787', help: 'Local service loopback IP and port; restart required' },
 	{ key: 'demo', value: false, help: 'Use offline model simulation; restart required' },
+	{ key: 'driver', value: 'mob', help: "Model driver: mob (Mob's own) or aisdk (the AI SDK's provider packages, being tried); restart required" },
 	{ key: 'max_tool_steps', value: defaultToolSteps, help: 'Model calls per turn (1-100)' },
 	{ key: 'web_url', value: defaultWebURL, help: 'Public web UI URL; an empty flag or file value disables it' },
 	{ key: 'token', value: '', help: 'Local access token (at least 32 bytes); empty uses the managed token file; restart required', secret: true },
@@ -55,6 +57,7 @@ export type Environment = {
 	addr: string;
 	token: string;
 	demo: boolean;
+	driver: Driver;
 	sandbox: SandboxSettings;
 	maxToolSteps: number;
 	mcpServers: MCPServers;
@@ -157,6 +160,7 @@ export class Loader {
 		const host = m![1] ?? m![2], port = Number(m![3]);
 		if (!(host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)) || port < 0 || port > 65535) fail('addr must be a loopback IP and valid port');
 		if (!get.data_dir || !get.state_dir) fail('data_dir and state_dir must not be empty');
+		if (get.driver !== 'mob' && get.driver !== 'aisdk') fail('driver must be mob or aisdk');
 		const steps = get.max_tool_steps as number;
 		if (!Number.isInteger(steps) || steps < 1 || steps > maxToolSteps) fail(`max_tool_steps must be 1 to ${maxToolSteps}`);
 		const token = String(get.token);
@@ -164,7 +168,7 @@ export class Loader {
 		if (mode && !windows && mode & 0o077 && 'token' in values) fail('configuration with tokens must be owner-only (chmod 600)');
 		webOrigin(String(get.web_url));
 		const e: Environment = {
-			dir: resolve(String(get.data_dir)), stateDir: resolve(String(get.state_dir)), addr, token, demo: get.demo as boolean,
+			dir: resolve(String(get.data_dir)), stateDir: resolve(String(get.state_dir)), addr, token, demo: get.demo as boolean, driver: get.driver as Driver,
 			sandbox: { enabled: get['sandbox.enabled'] as boolean, runtime: get['sandbox.runtime'] as string, image: get['sandbox.image'] as string, network: get['sandbox.network'] as string, cpus: get['sandbox.cpus'] as number, memory: get['sandbox.memory'] as string, isolation: get['sandbox.isolation'] as string },
 			maxToolSteps: steps, mcpServers: get.mcp_servers as MCPServers,
 			mcpRegistry: { url: get['mcp_registry.url'] as string, namespaces: String(get['mcp_registry.namespaces']).split(',').map(s => s.trim()).filter(Boolean) },

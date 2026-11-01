@@ -66,6 +66,7 @@ export class OpenAIModel implements Model {
 		}
 		if (response.status !== 200) throw await statusError(response, secrets(this.config.key, this.config.headers));
 		let finished = false, done = false, size = 0;
+		// A failure keeps what arrived before it, as the engine reports it.
 		await readSSE(response.body!, async (_event, data) => {
 			if (data === '[DONE]') { done = true; return; }
 			if (done) throw new Error('model sent data after completion');
@@ -93,7 +94,7 @@ export class OpenAIModel implements Model {
 				v.arguments += call.function?.arguments ?? '';
 				if (byteLength(v.arguments) > maxToolArguments || v.id.length > maxToolCallId || v.name.length > maxToolNameLength) throw new Error('model tool call exceeded limit');
 			}
-		});
+		}).catch(e => { throw Object.assign(e, { result }); });
 		if (!finished && !done) throw Object.assign(new Error('model stream ended before completion'), { result });
 		return result;
 	}

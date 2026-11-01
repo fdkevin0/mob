@@ -83,6 +83,7 @@ export async function start(c: Environment, background = false): Promise<App> {
 	}
 	const catalog = fileCatalog();
 	const providers = new ProviderRegistry(fileProviders(c.loader.providersPath), catalog, c.demo);
+	providers.driver = c.driver;
 	let configError = '', providersError = '';
 	let resolveDone!: () => void;
 	const done = new Promise<void>(r => { resolveDone = r; });
@@ -125,7 +126,7 @@ export async function start(c: Environment, background = false): Promise<App> {
 		try {
 			const next = c.loader.read(true);
 			if (next.dir !== c.dir || next.stateDir !== c.stateDir || next.addr !== c.addr || next.token !== c.token) throw new Error('data_dir, state_dir, addr and token changes require a restart; current configuration retained');
-			if (next.demo !== c.demo) throw new Error('demo changes require a restart; current configuration retained');
+			if (next.demo !== c.demo || next.driver !== c.driver) throw new Error('demo and driver changes require a restart; current configuration retained');
 			server.setToolSteps(next.maxToolSteps);
 			server.setWebURL(next.webURL);
 			for (const reload of reloads) void reload(next, server);

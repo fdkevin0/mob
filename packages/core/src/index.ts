@@ -4,6 +4,7 @@ export * as llm from './llm/llm';
 export { OverflowError, StalledError, isOverflow, type Fetch } from './llm/send';
 export { OpenAIModel } from './llm/openai';
 export { AnthropicModel } from './llm/anthropic';
+export { SDKModel } from './llm/aisdk';
 export { DemoModel, demoID, demoInfo, demoRef } from './llm/demo';
 export * from './chat/sql';
 export * from './chat/store';

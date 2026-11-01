@@ -132,7 +132,7 @@ export class AnthropicModel implements Model {
 					}
 				}
 			});
-			if (!stopped) throw new Error('model stream ended before completion');
+			if (!stopped) throw Object.assign(new Error('model stream ended before completion'), { result });
 		} finally {
 			for (const c of result.calls) if (!c.arguments) c.arguments = '{}';
 			result.usage = usage;
