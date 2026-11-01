@@ -24,10 +24,10 @@ export const backoff = [30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
 /** Work is a saved event and how often it was tried. */
 type Work = { event: GitHubEvent; attempts: number; next: number };
 
-/** transient says err may pass if tried again: no answer, a timeout, a rate limit or a server error. */
+/** transient says err may pass if tried again: no answer, a timeout, a rate limit (429, or a 403 GitHub marks as one) or a server error. */
 export function transient(err: unknown): boolean {
 	if (!(err instanceof GitHubError)) return true;
-	return err.status === 0 || err.status === 408 || err.status === 429 || err.status >= 500;
+	return err.retryAt !== undefined || err.status === 0 || err.status === 408 || err.status === 429 || err.status >= 500;
 }
 
 /** bodyLimit bounds the issue text Mob's model reads, in characters. */
@@ -115,6 +115,13 @@ export class Watcher {
 						this.store.updateDelivery(key, 'done', '');
 						this.dequeue(key);
 					} catch (err) {
+						// A rate limit says when to come back, and waiting it out is not a failed try, for up to the week the relay would have kept the event.
+						const retryAt = err instanceof GitHubError ? err.retryAt : undefined;
+						if (retryAt !== undefined && now() - w.event.at < 7 * 86_400_000) {
+							w.next = Math.max(retryAt, now() + 1000);
+							this.store.updateDelivery(key, pending, JSON.stringify(w), err as Error);
+							continue;
+						}
 						w.attempts++;
 						if (transient(err) && w.attempts <= backoff.length) {
 							w.next = now() + backoff[w.attempts - 1]!;

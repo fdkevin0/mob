@@ -5,7 +5,7 @@ import type { GitHubEvent } from '@mob/core/github';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GitHub, GitHubError, type Client, type Grant } from '../src/github/client';
+import { GitHub, GitHubError, rateLimit, type Client, type Grant } from '../src/github/client';
 import { backoff, prompt, remote, transient, Watcher } from '../src/github/watch';
 import { serve, githubEvents } from '../src/runner/relay';
 
@@ -140,6 +140,42 @@ test('a failure GitHub may get over is retried until the event is done, once', a
 	expect(gh.calls.length).toBe(2);
 	expect(again.due()).toBeUndefined();
 	w.conversations.stop(store.setting<string>('github-conversation:fdkevin0/mob#12')!);
+});
+
+test('a rate-limited 403 waits for the time GitHub gives, then succeeds without using up tries', async () => {
+	const { store, gh, conversations } = await setup();
+	let clock = 2_000_000;
+	const w = new Watcher(store, conversations, gh, () => clock);
+	const api = gh.api.bind(gh);
+	let limited = 6;
+	gh.api = async <T,>(repo: string, grant: Grant, path: string) => {
+		if (limited > 0) { limited--; throw new GitHubError(403, 'API rate limit exceeded', clock + 600_000); }
+		return api<T>(repo, grant, path);
+	};
+	const e = event({ at: clock });
+	w.receive([e]);
+	// More rate limits than there are retries: none of them fails the event.
+	for (let i = 0; i < 6; i++) {
+		await w.work();
+		expect(store.delivery('github:' + e.delivery)?.state).toBe('pending');
+		expect(w.due()).toBe(clock + 600_000);
+		clock += 600_000;
+	}
+	await w.work();
+	expect(store.delivery('github:' + e.delivery)?.state).toBe('done');
+	conversations.stop(store.setting<string>('github-conversation:fdkevin0/mob#12')!);
+});
+
+test('rate limits are told apart from access denials', () => {
+	const h = (o: Record<string, string>) => new Headers(o);
+	expect(rateLimit(403, h({ 'retry-after': '30' }), 'You have exceeded a secondary rate limit', 1000)).toBe(31_000);
+	expect(rateLimit(403, h({ 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '5000' }), 'API rate limit exceeded', 1000)).toBe(5_000_000);
+	expect(rateLimit(403, h({}), 'You have exceeded a secondary rate limit', 1000)).toBe(61_000);
+	expect(rateLimit(429, h({}), '', 1000)).toBe(61_000);
+	expect(rateLimit(403, h({ 'x-ratelimit-remaining': '4999' }), 'Resource not accessible by integration', 1000)).toBeUndefined();
+	expect(rateLimit(404, h({ 'retry-after': '30' }), 'Not Found', 1000)).toBeUndefined();
+	expect(transient(new GitHubError(403, 'rate limited', 5))).toBe(true);
+	expect(transient(new GitHubError(403, 'Resource not accessible by integration'))).toBe(false);
 });
 
 test('a failure that will not pass is told to the owner', async () => {
