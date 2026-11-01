@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Connection } from './api';
+import { api, ok, rpcOf, type Connection } from './api';
 import { Loading } from './Splash';
 import { duration, money, tokens } from './format';
 export { tokens } from './format';
@@ -60,7 +60,7 @@ export function Usage({
 	useEffect(() => {
 		let live = true;
 		setError('');
-		api<UsageReport>(connection, `/usage?days=${period}`)
+		ok(rpcOf(connection).usage.$get({ query: { days: String(period) } }))
 			.then((r) => live && setReport(r))
 			.catch((e) => live && setError(errorText(e)));
 		return () => {

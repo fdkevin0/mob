@@ -66,6 +66,11 @@ export function webClient(connection: Connection) {
 	});
 }
 
+/** rpcOf is a typed client of connection's API; call it with ok(rpcOf(c).conversations.$get()). */
+export const rpcOf = (connection: Connection) => webClient(connection).api;
+export { ok } from '@mob/client';
+
+/** api calls a route by path, for plugins' routes, which the typed client does not know. */
 export function api<T>(connection: Connection, path: string, body?: object): Promise<T> {
 	return webClient(connection).request<T>(path, body);
 }

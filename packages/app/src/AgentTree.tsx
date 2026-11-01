@@ -1,7 +1,7 @@
 import { ApprovalPrompt } from './ApprovalPrompt';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import type { Changes } from '@mob/client';
-import { api, type Connection } from './api';
+import { api, ok, rpcOf, type Connection } from './api';
 import type { AgentApproval, AgentNode } from './contracts';
 import { Calf } from '@mob/ui/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
@@ -614,7 +614,7 @@ export function AgentTree({
 	useEffect(() => {
 		let alive = true;
 		const load = () =>
-			api<AgentNode[]>(connection, '/tasks')
+			ok(rpcOf(connection).tasks.$get({ query: {} }))
 				.then((list) => {
 					if (!alive) return;
 					setNodes(list);

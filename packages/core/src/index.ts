@@ -28,6 +28,7 @@ export * from './provider/catalog';
 export * from './provider/registry';
 export * from './provider/save';
 export * from './app/server';
+export type { AppType } from './app/api';
 export * from './app/configuration';
 export * from './app/plugin-config';
 export * from './app/extension';

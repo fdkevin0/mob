@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type Connection } from './api';
+import { api, ok, rpcOf, type Connection } from './api';
 import type {
 	CommandResult,
 	CommandSpec,
@@ -109,7 +109,7 @@ function Contents({
 		let live = true;
 		setBusy(true);
 		void (async () => {
-			const commands = await api<CommandSpec[]>(connection, '/commands?client=web');
+			const commands = await ok(rpcOf(connection).commands.$get({ query: { client: 'web' } }));
 			const supported = commands.some((c) => c.name === tab);
 			if (!live) return;
 			setAvailable(supported);
@@ -146,7 +146,7 @@ function Contents({
 		}
 	}
 	async function command(text: string) {
-		const result = await api<CommandResult>(connection, '/commands/run', { client: 'web', text });
+		const result = await ok(rpcOf(connection).commands.run.$post({ json: { client: 'web', text } }));
 		if (!result.handled) throw new Error('This command is unavailable.');
 		return result.markdown ?? 'Done.';
 	}

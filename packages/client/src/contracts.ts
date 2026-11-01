@@ -1,9 +1,8 @@
 // The wire contract between Mob and its clients: the host serves these shapes and every client reads them.
 export type { Configs, CloudflareConfig, EmailChannel, EmailConfig, Endpoint, TelegramConfig, WeChatILinkConfig } from '@mob/core';
-export type Config = {
-  defaultModel: string;
-  demo: boolean;
-};
+import type { Answer, Rpc } from './api';
+// Answers of the typed API are taken from its routes.
+export type Config = Answer<Awaited<ReturnType<Rpc['config']['$get']>>>;
 
 // The service's own types are the contract: they are imported from @mob/core, never copied,
 // so a field the core adds or changes reaches every client's type checks.
@@ -34,7 +33,7 @@ export type {
   Transfer,
 } from '@mob/core';
 
-export type ConversationContext = { context: ContextSnapshot | null; usage?: UsageSummary };
+export type ConversationContext = Answer<Awaited<ReturnType<Rpc['conversations'][':id']['context']['$get']>>>;
 
 // Management views use structured data; slash command Markdown is only presentation.
 export type Memory = Fact;

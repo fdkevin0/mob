@@ -16,7 +16,7 @@ import { PlanCard, planInput } from './PlanCard';
 import { Label } from '@mob/ui/label';
 import { Textarea } from '@mob/ui/textarea';
 import { Dialog, DialogTrigger } from '@mob/ui/dialog';
-import { api, type ChatMessage, type Connection, type Snapshot } from './api';
+import { api, ok, rpcOf, type ChatMessage, type Connection, type Snapshot } from './api';
 import type { Action } from './contracts';
 import { ModelPicker } from './ModelPicker';
 import { ReplyMeta, modelName } from './ReplyMeta';
@@ -121,7 +121,7 @@ export function Thread({
 	const [defaultModel, setDefaultModel] = useState<string>();
 	const live = useRef(true);
 	const loadDefault = useCallback(() => {
-		api<{ defaultModel?: string }>(connection, '/config')
+		ok(rpcOf(connection).config.$get())
 			.then((config) => {
 				if (live.current) setDefaultModel(config.defaultModel);
 			})

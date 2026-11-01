@@ -4,7 +4,7 @@ import lmstudio from '@lobehub/icons-static-svg/icons/lmstudio.svg?raw';
 import ollama from '@lobehub/icons-static-svg/icons/ollama.svg?raw';
 import openrouter from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';
 import workersai from '@lobehub/icons-static-svg/icons/workersai-color.svg?raw';
-import { api, type Connection } from './api';
+import { api, ok, rpcOf, type Connection } from './api';
 import { BrandIcon, vendorLogos } from './brandIcons';
 import { Button } from '@mob/ui/button';
 import { Input } from '@mob/ui/input';
@@ -95,7 +95,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		setError('');
 		setDone(undefined);
 		setChosen(undefined);
-		api<Saved>(connection, '/providers').then(setSaved).catch(() => setSaved(undefined));
+		ok(rpcOf(connection).providers.$get()).then(setSaved).catch(() => setSaved(undefined));
 	}, [open, connection]);
 	// A sign-in OpenRouter sent the user back from is finished as the dialog opens.
 	useEffect(() => {
@@ -144,7 +144,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 			const result = await api<{ default: string; models: number }>(connection, path, body);
 			setForm((f) => ({ ...f, key: '' }));
 			setDone({ model: result.default, models: result.models });
-			setSaved(await api<Saved>(connection, '/providers').catch(() => saved));
+			setSaved(await ok(rpcOf(connection).providers.$get()).catch(() => saved));
 			onSaved?.(result.default);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));

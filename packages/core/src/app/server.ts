@@ -18,7 +18,9 @@ import { providerFromForm, saveProvider, type ProviderForm } from '../provider/s
 import type { ProviderRegistry } from '../provider/registry';
 import { PluginSettings, type Section } from './configuration';
 import { Extensions, ExtensionsClosed, type Extension } from './extension';
-import { HTTPError, Router, body, failure, json, sse, text } from './http';
+import { Hono } from 'hono';
+import { api, bearer, chatBody } from './api';
+import { HTTPError, answerError, body, failure, json, sse, text } from './http';
 
 /** Route is a plugin's API route under /api/plugins/NAME/. */
 export type Route = { method: string; path: string; handle: (req: Request) => Promise<unknown> };
@@ -91,21 +93,7 @@ export type ServerOptions = {
 	assets?: (path: string) => Response | undefined | Promise<Response | undefined>;
 };
 
-const pairingLifetime = 5 * 60_000;
-const chatBody = 8 << 20;
-const transferBody = 64 << 20;
-// titleLimit is how long a title an owner gives a conversation may be.
-const titleLimit = 200;
 const eventsHeartbeat = 25_000;
-
-const bearer = (header: string | null, token: string) => {
-	if (!token || !header) return false;
-	const want = 'Bearer ' + token;
-	if (header.length !== want.length) return false;
-	let diff = 0;
-	for (let i = 0; i < want.length; i++) diff |= header.charCodeAt(i) ^ want.charCodeAt(i);
-	return diff === 0;
-};
 
 const loopbackHost = (host: string) => {
 	const h = host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.replace(/:\d+$/, '');
@@ -131,11 +119,14 @@ export class Server extends ConversationService {
 	tasks?: Tasks;
 	private token: string;
 	/** revoked aborts when the token is replaced, ending every request it authorized. */
-	private revoked = new AbortController();
-	private codes = new Map<string, number>();
+	revoked = new AbortController();
+	/** codes are the pairing codes not yet claimed, with when they expire. */
+	readonly codes = new Map<string, number>();
 	private web = '';
 	private closed = new AbortController();
 	private plugins: Plugin[] = [];
+	private pluginRoutes: Route[] = [];
+	private pluginApp?: Hono;
 
 	constructor(readonly options: ServerOptions, plugins: Plugin[] = []) {
 		super(options.store, options.providers);
@@ -161,12 +152,9 @@ export class Server extends ConversationService {
 			if (p.source) this.tools.registerSource(p.source);
 			if (p.entries) this.tools.registerEntries(p.entries);
 			if (p.background) this.extensions.register(p.background);
-			// The router exists before any plugin, so each plugin's routes join it as the plugin does.
-			for (const route of p.routes ?? []) {
-				this.routes.handle(`${route.method} /api/plugins/${p.name}/${route.path}`, async req => {
-					try { return json(200, await route.handle(req)); } catch (e) { return failure(e, 502); }
-				});
-			}
+			// Plugins may join after the server answered requests, so their routes are a router of their own, built again on each.
+			for (const route of p.routes ?? []) this.pluginRoutes.push({ ...route, path: `/api/plugins/${p.name}/${route.path.replace(/\{(\w+)\}/g, ':$1')}` });
+			this.pluginApp = undefined;
 		}
 	}
 
@@ -263,153 +251,15 @@ export class Server extends ConversationService {
 		this.revoked = new AbortController();
 	}
 
-	private router(): Router {
-		const r = new Router();
-		const s = this;
-		r.handle('GET /api/runtime', () => json(200, { background: !!s.options.shutdown, configError: s.options.configurationError?.() ?? '', version: s.options.version }));
-		r.handle('POST /api/runtime/stop', () => {
-			if (!s.options.shutdown) return text(409, 'service belongs to a foreground/UI process');
-			queueMicrotask(() => s.options.shutdown!());
-			return json(202, { stopping: true });
-		});
-		r.handle('GET /api/memories', () => json(200, s.store.facts()));
-		r.handle('POST /api/memories/{id}/delete', (_, p) => json(200, { removed: s.store.forget(p.id) }));
-		r.handle('GET /api/grants', () => json(200, s.store.grants()));
-		r.handle('POST /api/grants/{id}/delete', (_, p) => json(200, { removed: s.store.revoke(p.id) }));
-		r.handle('GET /api/deliveries', () => json(200, s.store.deliveries()));
-		r.handle('GET /api/plugins', () => json(200, {
-			config: s.settings.publicConfig(), sections: s.settings.sections.map(({ name, title, schema, secrets }) => ({ name, title, schema: jsonSchema(schema), secrets: secrets.map(x => x.name) })),
-			telegramStatus: s.extensions.status('telegram'), emailStatus: s.extensions.status('email'), wechatStatus: s.extensions.status('wechat_ilink'),
-		}));
-		r.handle('POST /api/plugins/{plugin}', async (req, p) => {
-			try {
-				return json(200, s.settings.publicConfig(await s.updatePlugin(p.plugin, await body(req))));
-			} catch (e) { return failure(e, 400); }
-		});
-		r.handle('POST /api/plugins/{plugin}/test', async (req, p) => {
-			try { return json(200, await s.testPlugin(p.plugin, req.signal)); } catch (e) { return failure(e, 502); }
-		});
-		r.handle('GET /api/config', () => json(200, { defaultModel: s.providers.default(), demo: s.providers.demo }));
-		r.handle('GET /api/models', async (req, _, url) => json(200, await s.providers.list(url.searchParams.get('q') ?? '', req.signal)));
-		r.handle('GET /api/providers', () => {
-			const f = s.providers.providers();
-			return json(200, { default: f.default ?? '', providers: f.providers.map(publicProvider) });
-		});
-		// The web's Model provider dialog saves a provider here, as `mob provider add` does on the command line.
-		r.handle('POST /api/providers', async req => {
-			const form = await body<ProviderForm>(req, 16 << 10, ['preset', 'url', 'protocol', 'key', 'model']);
-			return json(200, await saveProvider(s.providers, providerFromForm(form), typeof form.model === 'string' ? form.model : undefined));
-		});
-		r.handle('GET /api/conversations', () => {
-			// The list says which conversations are replying or waiting for a decision, so a client can mark them.
-			const waiting = s.store.waiting();
-			return json(200, s.store.list().map(c => ({ ...c, active: s.isActive(c.id), waiting: waiting.has(c.id) })));
-		});
-		r.handle('POST /api/conversations', () => json(200, s.store.create()));
-		r.handle('GET /api/conversations/{id}', (_, p) => {
-			// A conversation a client named but has not said anything in yet is empty until its first message.
-			if (!s.store.exists(p.id) && isConversationID(p.id)) return json(200, { messages: [], active: false, model: s.providers.default() });
-			// A client showing the snapshot must not offer a decision on an approval that has expired.
-			s.store.expireApprovals(p.id);
-			return json(200, { messages: s.store.history(p.id).map(m => ({ id: m.id, role: m.role, parts: m.parts, metadata: m.metadata })), active: s.isActive(p.id), model: s.model(p.id) });
-		});
-		r.handle('GET /api/conversations/{id}/context', (_, p) => {
-			// A conversation a client named but has not said anything in yet is estimated empty.
-			if (!s.store.exists(p.id) && !isConversationID(p.id)) throw new NotFound();
-			return json(200, { context: s.context(p.id, true) ?? null, usage: s.store.conversationUsage(p.id).get(p.id) });
-		});
-		r.handle('POST /api/conversations/{id}/rename', async (req, p) => {
-			const input = await body<{ title?: unknown }>(req, 4 << 10, ['title']);
-			const title = typeof input.title === 'string' ? input.title.replace(/\s+/g, ' ').trim() : '';
-			if (!title || [...title].length > titleLimit) throw new HTTPError(400, `A title has 1 to ${titleLimit} characters.`);
-			s.store.rename(p.id, title);
-			return json(200, { id: p.id, title });
-		});
-		// Choosing a model is a setting of the conversation, for its later replies; it adds nothing to the transcript.
-		r.handle('POST /api/conversations/{id}/model', async (req, p) => {
-			const input = await body<{ model?: unknown }>(req, 4 << 10, ['model']);
-			if (typeof input.model !== 'string') throw new HTTPError(400, 'model must be a provider/model reference, or empty for the default.');
-			return json(200, { model: s.setModel(p.id, input.model.trim()) });
-		});
-		r.handle('POST /api/conversations/{id}/delete', (_, p) => {
-			if (s.isActive(p.id)) throw new HTTPError(409, 'Mob is still replying in this conversation; stop it before deleting the conversation.');
-			s.store.remove(p.id);
-			return json(200, { deleted: true });
-		});
-		r.handle('GET /api/usage', (_, __, url) => {
-			// days limits the report to the last whole days, today included; 0 or none covers everything.
-			const days = Number.parseInt(url.searchParams.get('days') ?? '', 10);
-			let since = 0;
-			if (days > 0) { const now = new Date(); since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1).getTime(); }
-			return json(200, s.store.report(since, 20));
-		});
-		// A conversation moves between Mobs, such as from the browser to a runner, as an export here and an import there.
-		r.handle('GET /api/conversations/{id}/export', (_, p) => {
-			if (s.isActive(p.id)) throw new HTTPError(409, 'Mob is still replying in this conversation; wait for it or stop it before moving the conversation.');
-			try { return json(200, s.store.exportConversation(p.id)); } catch (e) { if (e instanceof TransferError) throw new HTTPError(409, e.message); throw e; }
-		});
-		r.handle('POST /api/conversations/import', async req => {
-			try { return json(200, s.store.importConversation(await body<Transfer>(req, transferBody))); } catch (e) { if (e instanceof TransferError) throw new HTTPError(400, e.message); throw e; }
-		});
-		r.handle('POST /api/conversations/{id}/stop', (_, p) => json(200, { stopped: s.stop(p.id) }));
-		r.handle('GET /api/tasks', (_, __, url) => json(200, s.tasks?.tree(url.searchParams.get('project') ?? '') ?? []));
-		r.handle('POST /api/tasks/{id}/stop', (_, p) => {
-			try { s.tasks?.stopTask(p.id); } catch (e) { return text(404, (e as Error).message); }
-			return json(200, { stopped: true });
-		});
-		r.handle('POST /api/tasks/{id}/message', async (req, p) => {
-			const input = await body<{ text?: unknown }>(req, chatBody).catch(() => ({ text: '' }));
-			if (typeof input.text !== 'string' || !input.text.trim()) return text(400, 'invalid message');
-			try { await s.tasks?.message(p.id, input.text, s.revoked.signal); } catch (e) { return text(409, (e as Error).message); }
-			return json(202, { sent: true });
-		});
-		r.handle('POST /api/conversations/{id}/decide', async (req, p) => {
-			const answer = await body<Answer>(req, 64 << 10).catch(() => undefined);
-			if (!answer?.id) return text(400, 'invalid decision');
-			try {
-				await s.start({ id: p.id, text: '', requestId: newID(), approval: answer, owner: true }, s.revoked.signal);
-				return json(202, { started: true });
-			} catch (e) { return failure(e); }
-		});
-		r.handle('GET /api/commands', (_, __, url) => json(200, s.commands.specs(url.searchParams.get('client') ?? '')));
-		r.handle('POST /api/commands/complete', async req => json(200, await s.commands.complete(await body<CommandRequest>(req, 256 << 10, ['client', 'conversationId', 'text']), true)));
-		r.handle('POST /api/commands/run', async req => {
-			const input = await body<CommandRequest>(req, 256 << 10, ['client', 'conversationId', 'text']);
-			try { return json(200, await s.commands.run(input, true, req.signal)); } catch (e) { return failure(e, 502); }
-		});
-		r.handle('POST /api/chat', req => s.chat(req));
-		r.handle('GET /api/chat/{id}/stream', (req, p) => {
-			const running = s.watch(p.id);
-			if (!running) return new Response(null, { status: 204 });
-			return follow(req, running, Math.max(Number.parseInt(req.headers.get('Last-Event-ID') ?? '0', 10) || 0, 0));
-		});
-		r.handle('GET /api/events', req => s.events(req));
-		r.handle('POST /api/pairing', req => {
-			const code = newID() + newID();
-			const now = Date.now();
-			// Check again: a request authorized just before a rotation must not mint a code that claims the replacement token.
-			if (!bearer(req.headers.get('Authorization'), s.token)) return text(401, 'unauthorized');
-			for (const [c, expires] of s.codes) if (now >= expires) s.codes.delete(c);
-			s.codes.set(code, now + pairingLifetime);
-			return json(200, { code, expiresAt: now + pairingLifetime });
-		});
-		r.handle('POST /api/pairing/claim', async req => {
-			const input = await body<{ code?: unknown }>(req, 1 << 10).catch(() => ({ code: '' }));
-			if (typeof input.code !== 'string' || !input.code) return text(400, 'invalid pairing request');
-			const expires = s.codes.get(input.code);
-			s.codes.delete(input.code);
-			if (!expires || Date.now() >= expires) return text(403, 'pairing code is invalid or expired; run mob open again');
-			return json(200, { token: s.token });
-		});
-		r.handle('POST /api/token/rotate', async req => {
-			const header = req.headers.get('Authorization');
-			try { await s.rotateToken(current => bearer(header, current)); } catch (e) { return failure(e); }
-			return new Response(null, { status: 204 });
-		});
-		return r;
+	/** stream follows the turn running in conversation id, resuming after the client's Last-Event-ID. */
+	stream(req: Request, id: string) {
+		const running = this.watch(id);
+		if (!running) return new Response(null, { status: 204 });
+		return follow(req, running, Math.max(Number.parseInt(req.headers.get('Last-Event-ID') ?? '0', 10) || 0, 0));
 	}
 
-	private chat = async (req: Request) => {
+	/** chat starts a turn from a chat request and streams it. */
+	chat = async (req: Request) => {
 		let input: ChatRequest;
 		try {
 			// Only a defence against runaway bodies: the model's context bounds a message.
@@ -432,7 +282,7 @@ export class Server extends ConversationService {
 	 * events streams what changed in the store, so clients reload only what
 	 * changed instead of polling. A client reloads everything when it connects.
 	 */
-	private events(req: Request) {
+	events(req: Request) {
 		return sse({ 'Cache-Control': 'no-store' }, async (send, signal) => {
 			send('retry: 2000\n: ready\n\n');
 			const stop = this.store.changes.subscribe(change => send(`data: ${JSON.stringify(change)}\n\n`));
@@ -448,42 +298,59 @@ export class Server extends ConversationService {
 	}
 
 	/** fetch serves one request. */
-	fetch = async (req: Request): Promise<Response> => {
-		const url = new URL(req.url);
-		const headers = new Headers({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
-		const origin = req.headers.get('Origin') ?? '';
-		const host = req.headers.get('Host') ?? url.host;
-		if (!allowedOrigin(origin, host) && (!origin || origin !== this.web)) return withHeaders(text(403, 'origin denied'), headers);
-		if (origin) { headers.set('Access-Control-Allow-Origin', origin); headers.set('Vary', 'Origin'); }
-		if (req.method === 'OPTIONS') {
-			headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-			headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-			// Chrome asks before a public page may reach a loopback address.
-			if (req.headers.get('Access-Control-Request-Private-Network') === 'true') headers.set('Access-Control-Allow-Private-Network', 'true');
-			return new Response(null, { status: 204, headers });
-		}
-		const api = url.pathname.startsWith('/api/');
-		if (api) {
-			headers.set('Cache-Control', 'no-store');
-			if (url.pathname !== '/api/pairing/claim' && !bearer(req.headers.get('Authorization'), this.token)) return withHeaders(text(401, 'unauthorized'), headers);
-		}
-		// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.
-		if (!loopbackHost(host)) return withHeaders(text(403, 'host denied'), headers);
-		let response: Response | undefined;
-		try {
-			response = await this.routes.match(req, url);
-			if (!response && !api) response = await this.options.assets?.(url.pathname);
-		} catch (e) {
-			response = failure(e);
-		}
-		return withHeaders(response ?? text(404, '404 page not found'), headers);
-	};
+	fetch = async (req: Request): Promise<Response> => this.app.fetch(req);
 
-	private routes = this.router();
+	private app = new Hono()
+		.use(async (c, next) => {
+			const url = new URL(c.req.url);
+			const headers = new Headers({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
+			const done = () => { c.res = withHeaders(c.res, headers); };
+			const origin = c.req.header('Origin') ?? '';
+			const host = c.req.header('Host') ?? url.host;
+			if (!allowedOrigin(origin, host) && (!origin || origin !== this.web)) { c.res = text(403, 'origin denied'); return done(); }
+			if (origin) { headers.set('Access-Control-Allow-Origin', origin); headers.set('Vary', 'Origin'); }
+			if (c.req.method === 'OPTIONS') {
+				headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+				headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+				// Chrome asks before a public page may reach a loopback address.
+				if (c.req.header('Access-Control-Request-Private-Network') === 'true') headers.set('Access-Control-Allow-Private-Network', 'true');
+				c.res = new Response(null, { status: 204 });
+				return done();
+			}
+			if (url.pathname.startsWith('/api/')) {
+				headers.set('Cache-Control', 'no-store');
+				if (url.pathname !== '/api/pairing/claim' && !bearer(c.req.header('Authorization'), this.token)) { c.res = text(401, 'unauthorized'); return done(); }
+			}
+			// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.
+			if (!loopbackHost(host)) { c.res = text(403, 'host denied'); return done(); }
+			await next();
+			done();
+		})
+		.route('/', api(this))
+		.all('/api/plugins/*', c => (this.pluginApp ??= pluginRouter(this.pluginRoutes)).fetch(c.req.raw))
+		.notFound(async c => (!c.req.path.startsWith('/api/') && await this.options.assets?.(c.req.path)) || text(404, '404 page not found'))
+		.onError(e => answerError(e));
+}
+
+/** pluginRouter answers plugins' routes; a path a plugin serves by another method answers 405. */
+function pluginRouter(routes: Route[]) {
+	const app = new Hono();
+	for (const r of routes) {
+		app.on(r.method, r.path, async c => {
+			try { return json(200, await r.handle(c.req.raw)); } catch (e) { return failure(e, 502); }
+		});
+	}
+	for (const path of new Set(routes.map(r => r.path))) app.all(path, () => text(405, 'method not allowed'));
+	app.notFound(() => text(404, '404 page not found'));
+	return app;
 }
 
 function withHeaders(response: Response, headers: Headers) {
-	for (const [k, v] of headers) if (!response.headers.has(k)) response.headers.set(k, v);
+	// A response may come with immutable headers, such as one fetched; copy it then.
+	try { for (const [k, v] of headers) if (!response.headers.has(k)) response.headers.set(k, v); } catch {
+		response = new Response(response.body, response);
+		for (const [k, v] of headers) if (!response.headers.has(k)) response.headers.set(k, v);
+	}
 	return response;
 }
 

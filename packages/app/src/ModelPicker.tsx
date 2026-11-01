@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { api, type Connection } from './api';
+import { api, ok, rpcOf, type Connection } from './api';
 import { Content as DialogContent } from '@radix-ui/react-dialog';
 import { DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Button } from '@mob/ui/button';
@@ -126,7 +126,7 @@ export function ModelPicker({
 	const [recent] = useState(recentModels);
 	useEffect(() => {
 		let live = true;
-		api<ModelGroup[]>(connection, '/models')
+		ok(rpcOf(connection).models.$get({ query: {} }))
 			.then((next) => {
 				if (live) setGroups(next);
 			})

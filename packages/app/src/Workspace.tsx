@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { newID } from '@mob/core/chat/sql';
 import { Changes } from '@mob/client';
-import { api, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
+import { api, ok, rpcOf, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { ManagementTab } from './Management';
 import type { Action } from './contracts';
 import { Button } from '@mob/ui/button';
@@ -122,7 +122,7 @@ export function Workspace({
 	function load(id: string) {
 		let request = fetching.current.get(id);
 		if (!request) {
-			request = api<Snapshot>(connection, `/conversations/${id}`).finally(() => fetching.current.delete(id));
+			request = webClient(connection).openConversation(id).finally(() => fetching.current.delete(id));
 			fetching.current.set(id, request);
 		}
 		return request;
@@ -134,7 +134,7 @@ export function Workspace({
 	}
 
 	async function refreshList() {
-		const list = await api<Conversation[]>(connection, '/conversations');
+		const list = await webClient(connection).listConversations();
 		setConversations(list);
 		void writeList(scope, list);
 	}
@@ -219,14 +219,14 @@ export function Workspace({
 	// A new title shows at once; the list from Mob replaces it if renaming fails.
 	function rename(id: string, title: string) {
 		setConversations((list) => list.map((c) => (c.id === id ? { ...c, title } : c)));
-		api(connection, `/conversations/${id}/rename`, { title }).catch((e) => {
+		webClient(connection).renameConversation(id, title).catch((e) => {
 			setError(errorText(e));
 			void refreshList().catch(() => { /* the error says what went wrong */ });
 		});
 	}
 	const [removing, setRemoving] = useState<Conversation>();
 	async function remove(c: Conversation) {
-		await api(connection, `/conversations/${c.id}/delete`, {});
+		await webClient(connection).deleteConversation(c.id);
 		deleted.current.add(c.id);
 		setRemoving(undefined);
 		cache.current.delete(c.id);
@@ -268,8 +268,8 @@ export function Workspace({
 		void (async () => {
 			try {
 				const [list, runtime] = await Promise.all([
-					api<Conversation[]>(connection, '/conversations'),
-					api<{ background: boolean }>(connection, '/runtime'),
+					webClient(connection).listConversations(),
+					ok(rpcOf(connection).runtime.$get()),
 				]);
 				await kept;
 				if (!live) return;
