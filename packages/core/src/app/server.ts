@@ -11,7 +11,8 @@ import type { Running } from '../chat/running';
 import type { Entry } from '../chat/search';
 import { NotFound, newID } from '../chat/sql';
 import { isConversationID, TransferError, type Store, type Task, type Transfer, type UsageSummary } from '../chat/store';
-import type { Tool } from '../chat/tools';
+import { jsonSchema, type Tool } from '../chat/tools';
+import { isLoopbackHost, secureURL } from '../url';
 import { publicProvider } from '../provider/provider';
 import { providerFromForm, saveProvider, type ProviderForm } from '../provider/save';
 import type { ProviderRegistry } from '../provider/registry';
@@ -108,7 +109,7 @@ const bearer = (header: string | null, token: string) => {
 
 const loopbackHost = (host: string) => {
 	const h = host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.replace(/:\d+$/, '');
-	return h === 'localhost' || /^127\.\d+\.\d+\.\d+$/.test(h) || h === '::1';
+	return isLoopbackHost(h);
 };
 
 /** allowedOrigin: the desktop window and the service's own pages are same-origin; the Vite dev server may call too. */
@@ -119,9 +120,7 @@ export function webOrigin(raw: string): string {
 	if (!raw) return '';
 	let u: URL;
 	try { u = new URL(raw); } catch { throw new Error('web_url must be an https URL without credentials, query or fragment'); }
-	const host = u.hostname.toLowerCase();
-	const ok = !u.username && !u.password && !u.search && !raw.includes('?') && !raw.includes('#') &&
-		(u.protocol === 'https:' || (u.protocol === 'http:' && (host === 'localhost' || /^127\./.test(host) || host === '[::1]')));
+	const ok = !u.username && !u.password && !u.search && !raw.includes('?') && !raw.includes('#') && secureURL(u);
 	if (!ok) throw new Error('web_url must be an https URL without credentials, query or fragment');
 	return u.origin;
 }
@@ -279,7 +278,7 @@ export class Server extends ConversationService {
 		r.handle('POST /api/grants/{id}/delete', (_, p) => json(200, { removed: s.store.revoke(p.id) }));
 		r.handle('GET /api/deliveries', () => json(200, s.store.deliveries()));
 		r.handle('GET /api/plugins', () => json(200, {
-			config: s.settings.publicConfig(), sections: s.settings.sections.map(({ name, title, fields, secrets }) => ({ name, title, fields, secrets: secrets.map(x => x.name) })),
+			config: s.settings.publicConfig(), sections: s.settings.sections.map(({ name, title, schema, secrets }) => ({ name, title, schema: jsonSchema(schema), secrets: secrets.map(x => x.name) })),
 			telegramStatus: s.extensions.status('telegram'), emailStatus: s.extensions.status('email'), wechatStatus: s.extensions.status('wechat_ilink'),
 		}));
 		r.handle('POST /api/plugins/{plugin}', async (req, p) => {

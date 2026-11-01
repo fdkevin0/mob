@@ -1,11 +1,7 @@
 // The Cloudflare services Mob reaches with the owner's account: Workers AI,
 // Vectorize, D1, KV and R2.
-export type Config = {
-	enabled: boolean; accountId: string; token?: string; hasToken?: boolean; model: string; embeddingModel: string;
-	index: string; databaseId: string; namespaceId: string; bucket: string; accessKey?: string; secretKey?: string; hasSecretKey?: boolean;
-};
-
-export const defaults = (): Config => ({ enabled: false, accountId: '', token: '', model: '', embeddingModel: '', index: '', databaseId: '', namespaceId: '', bucket: '', accessKey: '', secretKey: '' });
+import type { CloudflareConfig } from '@mob/core';
+export type Config = CloudflareConfig;
 
 const accountId = /^[a-fA-F0-9]{32}$/, resource = /^[a-zA-Z0-9_@.:-]+$/;
 
@@ -13,12 +9,6 @@ export function validate(c: Config) {
 	if (!c.enabled) return;
 	if (!accountId.test(c.accountId) || !c.token || /[ \r\n\t]/.test(c.token)) throw new Error('Cloudflare: valid account ID and API token required');
 	for (const id of [c.index, c.databaseId, c.namespaceId, c.bucket]) if (id && (!resource.test(id) || id === '.' || id === '..')) throw new Error('Cloudflare: invalid resource name or ID');
-}
-
-export function publicView(c: Config): Config {
-	const p: Config = { ...c, hasToken: !!c.token, hasSecretKey: !!c.secretKey };
-	delete p.token; delete p.secretKey;
-	return p;
 }
 
 export type Action = { operation: string; text?: string; key?: string; cursor?: string; sql?: string; params?: unknown[] };

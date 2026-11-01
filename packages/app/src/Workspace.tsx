@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { newID } from '@mob/core/chat/sql';
 import { Changes } from '@mob/client';
 import { api, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { ManagementTab } from './Management';
@@ -51,9 +52,7 @@ function route(hash: string, replace: boolean) {
 	else window.history.pushState(window.history.state, '', hash);
 }
 /** newConversationID chooses the ID of a new conversation, in the form Mob gives them. */
-function newConversationID() {
-	return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const newConversationID = newID;
 // Recently opened conversations are kept in memory, so switching back shows them at once while they refresh.
 const cacheSize = 20;
 

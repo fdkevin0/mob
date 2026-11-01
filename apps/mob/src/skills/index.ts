@@ -1,5 +1,6 @@
 // The skills plugin: the skill tool, /skills, and tool_search entries beyond the prompt's list.
-import { body, interactive, type Entry, type Plugin, type Server, type Tool } from '@mob/core';
+import { z } from 'zod';
+import { body, defineTool, interactive, type Entry, type Plugin, type Server, type Tool } from '@mob/core';
 import { join } from 'node:path';
 import { hostPlugins } from '../local';
 import { sandboxOf } from '../sandbox';
@@ -27,22 +28,23 @@ function tools(l: Library): Tool[] {
 	// Many skills are found with tool_search instead of filling the prompt.
 	if (many) catalog += ` ${list.length} skills are installed; find the ones a task needs with tool_search.`;
 	else catalog += ' <available_skills>' + list.map(s => `<skill><name>${s.name}</name><description>${escape(s.description)}</description></skill>`).join('') + '</available_skills>';
-	return [{
+	const names = list.map(s => s.name);
+	return [defineTool({
 		name: 'skill',
 		description: "Load a skill's instructions by name, or read one of its files by its path relative to the skill.",
-		parameters: { type: 'object', properties: {
-			name: many ? { type: 'string', description: "The skill's name, as tool_search gave it" } : { type: 'string', enum: list.map(s => s.name) },
-			path: { type: 'string', description: 'A file in the skill, such as references/guide.md; omit it to load SKILL.md.' },
-		}, required: ['name'], additionalProperties: false },
+		input: z.object({
+			name: many || !names.length ? z.string().describe("The skill's name, as tool_search gave it") : z.enum(names as [string, ...string[]]),
+			path: z.string().optional().describe('A file in the skill, such as references/guide.md; omit it to load SKILL.md.'),
+		}),
 		prompt: catalog,
 		ownerOnly: true,
 		run: async call => {
-			const name = String(call.input.name ?? ''), file = String(call.input.path ?? '');
+			const { name, path: file = '' } = call.input;
 			const s = l.find(name);
 			if (!s) throw new Error(`no skill is named ${JSON.stringify(name)}`);
 			return file ? l.readFile(s, file) : l.load(s, call.conversationId);
 		},
-	}];
+	})];
 }
 
 function plugin(l: Library, market: SkillMarket): Plugin {

@@ -1,9 +1,8 @@
 // The official WeChat iLink bot API.
+import type { WeChatILinkConfig } from '@mob/core';
 export const defaultBaseURL = 'https://ilinkai.weixin.qq.com';
 
-export type Config = { enabled: boolean; baseUrl?: string; botToken?: string; hasToken?: boolean; botId?: string; allowedUsers?: string[] };
-
-export const defaults = (): Config => ({ enabled: false, baseUrl: '', botToken: '', botId: '', allowedUsers: [] });
+export type Config = WeChatILinkConfig;
 
 /** endpoint is the effective API base URL. */
 export const endpoint = (c: Config) => (c.baseUrl ?? '').trim() ? c.baseUrl!.trim().replace(/\/+$/, '') : defaultBaseURL;
@@ -14,8 +13,6 @@ export function validate(c: Config) {
 	try { u = new URL(c.baseUrl); } catch { /* refused below */ }
 	if (!u || (u.protocol !== 'https:' && u.protocol !== 'http:')) throw new Error('WeChat iLink: baseUrl must be a valid HTTP or HTTPS URL');
 }
-
-export const publicView = (c: Config): Config => { const p: Config = { ...c, hasToken: !!c.botToken }; delete p.botToken; return p; };
 
 export async function test(c: Config) {
 	validate(c);

@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import { ConversationService, DemoModel, Store, type Models } from '@mob/core';
+import { ConversationService, DemoModel, emailConfig, Store, type Models } from '@mob/core';
 import { openBun } from '@mob/core/sqlite/bun';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { incoming, Mailer, newer, reSubject } from '../src/email/channel';
 import { recipients } from '../src/email';
-import { address, defaults, parse, plainHTML, validate, validateDraft, type Config } from '../src/email/mail';
+import { address, parse, plainHTML, validate, validateDraft, type Config } from '../src/email/mail';
 
 const owner = { enabled: true, owner: 'me@example.org', verifier: 'mx.example.net' };
 
@@ -60,9 +60,9 @@ test('mail parsing and validation', async () => {
 	expect(() => validateDraft({ to: 'a@example.org', subject: 'x\ny', text: 'hi' })).toThrow('single-line');
 	expect(() => validateDraft({ to: 'nobody', subject: 'x', text: 'hi' })).toThrow('valid recipients');
 	validateDraft({ to: 'A <a@example.org>, b@example.org', subject: 'x', text: 'hi' });
-	const c: Config = { ...defaults(), enabled: true, from: 'me@example.org', imap: { host: 'imap.example.org', port: 993, security: 'tls', username: 'me', password: 'p' }, smtp: { host: 'smtp.example.org', port: 465, security: 'tls', username: 'me', password: 'p' } };
+	const c: Config = { ...emailConfig.parse({}), enabled: true, from: 'me@example.org', imap: { host: 'imap.example.org', port: 993, security: 'tls', username: 'me', password: 'p' }, smtp: { host: 'smtp.example.org', port: 465, security: 'tls', username: 'me', password: 'p' } };
 	validate(c);
-	expect(() => validate({ ...c, imap: { ...c.imap, security: 'none' } })).toThrow('TLS or STARTTLS');
+	expect(() => validate({ ...c, imap: { ...c.imap, security: 'none' as never } })).toThrow('TLS or STARTTLS');
 	expect(() => validate({ ...c, channel: { enabled: true, owner: 'Me <me@example.org>', verifier: 'mx' } })).toThrow("owner's address");
 	expect(recipients('B@x.org, a@x.org,b@x.org')).toBe('a@x.org, b@x.org');
 });
@@ -73,7 +73,7 @@ test('the owner’s mail is answered once, in its thread', async () => {
 	const m = new Mailer(store, new ConversationService(store, models));
 	const replies: unknown[] = [];
 	m.send = async (_c, d, thread) => { replies.push({ d, thread }); return 'id'; };
-	const c = { ...defaults(), channel: owner };
+	const c = { ...emailConfig.parse({}), channel: owner };
 	const raw = ownerMail('Message-ID: <b@example.org>\r\nReferences: <a@example.org>\r\nSubject: plans\r\n', 'hello there');
 	const signal = new AbortController().signal;
 	expect(await m.answer(c, 1, 7, raw, signal)).toBe('mail:b@example.org');

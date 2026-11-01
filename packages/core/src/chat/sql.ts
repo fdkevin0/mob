@@ -12,11 +12,11 @@ export interface SQL {
 	close(): void;
 }
 
-export function newID() {
-	const bytes = new Uint8Array(16);
-	crypto.getRandomValues(bytes);
-	return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-}
+/** randomHex is n random bytes as lowercase hex. */
+export const randomHex = (n: number) => [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, '0')).join('');
+
+/** newID is a new row ID: 16 random bytes as hex. */
+export const newID = () => randomHex(16);
 
 /** NotFound is a row that does not exist, as Go's sql.ErrNoRows. */
 export class NotFound extends Error {

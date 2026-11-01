@@ -2,6 +2,7 @@ import type { RunnerRelay } from './relay';
 import { betterAuth } from 'better-auth';
 import { captcha } from 'better-auth/plugins/captcha';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
+import { isLoopbackHost } from '@mob/core/url';
 
 export interface Env {
 	ASSETS: Fetcher;
@@ -87,6 +88,5 @@ export function createAuth(env: Env, origin: string) {
 }
 
 function isLocal(origin: string) {
-	const { hostname } = new URL(origin);
-	return hostname === 'localhost' || hostname === '127.0.0.1';
+	return isLoopbackHost(new URL(origin).hostname);
 }

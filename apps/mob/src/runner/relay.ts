@@ -5,6 +5,7 @@
 
 import { open, relayKey, seal, base64, type Envelope, type RelayReply as Reply, type RelayRequest } from '@mob/core/relay';
 import { sleep } from '@mob/core/sleep';
+import { secureURL } from '@mob/core/url';
 export type Credentials = { url: string; id: string; token: string; key: string };
 
 /** Request is what the browser asks the local service, as it sealed it. */
@@ -18,7 +19,7 @@ export function origin(raw: string) {
 	let u: URL;
 	try { u = new URL(raw); } catch { throw new Error('runner URL must be an HTTPS origin'); }
 	if (!u.host || u.username || u.password || u.search || raw.includes('?') || u.hash || raw.includes('#') || (u.pathname !== '/' && u.pathname !== '')) throw new Error('runner URL must be an HTTPS origin');
-	if (u.protocol !== 'https:' && !(u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1'))) throw new Error('runner URL requires HTTPS except on loopback');
+	if (!secureURL(u)) throw new Error('runner URL requires HTTPS except on loopback');
 	return u.protocol + '//' + u.host;
 }
 

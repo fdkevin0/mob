@@ -1,5 +1,7 @@
 import { MobClient, type Connection as LocalConnection } from '@mob/client';
+import { unbase64url } from '@mob/core/relay';
 import { encryptedFetch } from './remote';
+import { isLoopbackHost } from '@mob/core/url';
 // A connection reaches Mob on a computer, a paired runner through the relay, or the runner in this browser.
 export type Connection = LocalConnection & { runner?: { id: string; key: string }; browser?: boolean };
 
@@ -27,7 +29,7 @@ export type Offer = { url: string; code: string };
 export function readOffer(encoded: string): Offer {
 	let offer: { v?: unknown; url?: unknown; code?: unknown };
 	try {
-		const bytes = Uint8Array.from(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+		const bytes = unbase64url(encoded);
 		offer = JSON.parse(new TextDecoder().decode(bytes));
 	} catch { throw new Error('This sign-in link is damaged. Run mob open --web again.'); }
 	if (offer?.v !== 1 || typeof offer.url !== 'string' || typeof offer.code !== 'string' || !offer.code) throw new Error('This page does not understand the sign-in link. Run mob open --web again.');
@@ -38,7 +40,7 @@ export function readOffer(encoded: string): Offer {
 export function isLocalMob(url: string) {
 	try {
 		const parsed = new URL(url);
-		return parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') && parsed.origin === url;
+		return parsed.protocol === 'http:' && isLoopbackHost(parsed.hostname) && parsed.origin === url;
 	} catch { return false; }
 }
 

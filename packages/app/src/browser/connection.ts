@@ -1,6 +1,7 @@
 // The connection to the runner in this browser, without the runner's code,
 // which loads only when the connection is used.
 import type { Connection } from '../api';
+import { randomHex } from '@mob/core/chat/sql';
 
 /** browserURL is where requests to the browser runner go; they never reach the network. */
 export const browserURL = 'http://localhost';
@@ -12,7 +13,7 @@ export function browserConnection(): Connection {
 	let token = '';
 	try { token = localStorage.getItem(tokenKey) ?? ''; } catch { /* a new token each time */ }
 	if (!token) {
-		token = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
+		token = randomHex(32);
 		try { localStorage.setItem(tokenKey, token); } catch { /* a new token each time */ }
 	}
 	return { url: browserURL, token, browser: true };

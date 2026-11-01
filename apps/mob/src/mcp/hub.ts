@@ -1,7 +1,8 @@
 // The hub keeps Mob connected to the configured MCP servers and knows the
 // tools each one offers.
 import { sleep } from '@mob/core/sleep';
-import { cell, type Entry, type Tool } from '@mob/core';
+import { z } from 'zod';
+import { cell, defineTool, type Entry, type Tool } from '@mob/core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -362,14 +363,14 @@ export class Hub {
 
 	/** installTool asks the owner to install a server from the catalog, while the catalog has servers to install. */
 	installTool(): Tool {
-		return {
+		return defineTool({
 			name: installName,
 			description: 'Ask the owner to install a remote MCP server that tool_search found, by its URL. Stops the turn until the owner decides; once installed and connected, its tools are found with tool_search.',
-			parameters: { type: 'object', properties: { url: { type: 'string', description: "The server's URL, as tool_search gave it" } }, required: ['url'], additionalProperties: false },
+			input: z.object({ url: z.string().describe("The server's URL, as tool_search gave it") }),
 			ownerOnly: true,
 			available: () => this.listings().length > 0,
 			run: async call => {
-				const l = this.listing(String(call.input.url ?? ''));
+				const l = this.listing(call.input.url);
 				if (!l) throw new Error('no server in the catalog has that URL; find one with tool_search');
 				const header = needs(l);
 				if (header) throw new Error(`this server needs the ${header} header; the owner adds it under mcp_servers in config.yaml`);
@@ -386,7 +387,7 @@ export class Hub {
 			},
 			// Remembering an install covers installing the same server again.
 			scope: input => (JSON.parse(input) as InstallRequest).url,
-		};
+		});
 	}
 
 	/** await waits a little for a new server to connect or to ask the owner to sign in, and says which. */

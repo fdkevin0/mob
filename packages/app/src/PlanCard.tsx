@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { CodeXml, Lock, Workflow } from 'lucide-react';
 import type { Changes } from '@mob/client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { api, type Connection } from './api';
@@ -807,55 +808,9 @@ function StateMark({ state }: { state: State }) {
 	return null;
 }
 
-const FlowIcon = () => (
-	<svg
-		aria-hidden="true"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		strokeWidth="2"
-		strokeLinecap="round"
-		strokeLinejoin="round"
-	>
-		<rect x="3" y="4" width="6" height="5" rx="1.5" />
-		<rect x="15" y="4" width="6" height="5" rx="1.5" />
-		<rect x="9" y="15" width="6" height="5" rx="1.5" />
-		<path d="M9 6.5h6M18 9v3H12v3" />
-	</svg>
-);
-const AgentIcon = () => (
-	<svg
-		aria-hidden="true"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		strokeWidth="2"
-		strokeLinecap="round"
-		strokeLinejoin="round"
-	>
-		<path d="m8 9-3 3 3 3M16 9l3 3-3 3M13.5 6l-3 12" />
-	</svg>
-);
-const LockIcon = () => (
-	<svg
-		aria-hidden="true"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		strokeWidth="2"
-		strokeLinecap="round"
-		strokeLinejoin="round"
-	>
-		<rect x="5" y="11" width="14" height="9" rx="2" />
-		<path d="M8 11V8a4 4 0 0 1 8 0v3" />
-	</svg>
-);
+const FlowIcon = () => <Workflow aria-hidden="true" size={14} />;
+const AgentIcon = () => <CodeXml aria-hidden="true" size={14} />;
+const LockIcon = () => <Lock aria-hidden="true" size={14} />;
 
 // useTasks reads the agent tree's nodes for the conversations listed, again whenever something changes.
 function useTasks(connection: Connection, changes: Changes | undefined, conversations: string[]) {
