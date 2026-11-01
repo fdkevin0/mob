@@ -63,7 +63,12 @@ minor version. Other commit types are left out of the changelog.
 
 Repository setup: on npmjs.com, each package (`usemob` and every
 `@usemob/*`) names `fdkevin0/mob`'s `release.yml` as its trusted publisher, so
-the workflow publishes without a long-lived token. An `NPM_TOKEN` secret, a
+the workflow publishes without a long-lived token. Its "Allowed actions" must
+include `npm publish`: npm allows only `npm stage publish` by default, and once
+a trusted publisher exists npm signs in with it in place of `NPM_TOKEN`, so a
+stage-only publisher fails every release with "403 OIDC permission denied for
+this action". Tick "Allow npm dist-tag" too so the workflow can move `latest`
+without the token. An `NPM_TOKEN` secret, a
 granular token for `usemob` and the `@usemob` scope, covers packages that have
 no trusted publisher yet, such as a new platform's first release, and moves
 the `latest` tag (without either, the packages are built but not published); a
