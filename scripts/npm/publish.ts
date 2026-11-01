@@ -31,7 +31,16 @@ try {
 			console.log(`${name}@${version} is already published`);
 			continue;
 		}
-		await $`npm publish --access public --provenance --tag ${tag}`.cwd(join(out, name)).env(env);
+		const result = await $`npm publish --access public --provenance --tag ${tag}`.cwd(join(out, name)).env(env).nothrow();
+		if (result.exitCode !== 0) {
+			// Once a package has a trusted publisher, npm signs in with it instead of
+			// NPM_TOKEN, and a publisher that allows only `npm stage publish` (npm's
+			// default) refuses the publish.
+			if (result.stderr.toString().includes('OIDC permission denied')) {
+				console.error(`::error::npm refused to publish ${name}: its trusted publisher on npmjs.com does not allow \`npm publish\`. Open https://www.npmjs.com/package/${name}/access, edit the trusted publisher and tick \`npm publish\` (and "Allow npm dist-tag") under Allowed actions, then rerun this workflow.`);
+			}
+			throw new Error(`npm publish ${name}@${version} failed with exit code ${result.exitCode}`);
+		}
 	}
 	// npm made the first nightly `latest`. Until a stable release takes the tag,
 	// keep it on the newest nightly so `npm install -g usemob` is not stuck on it.
