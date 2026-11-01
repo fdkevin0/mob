@@ -1,5 +1,110 @@
 # Changelog
 
+## [0.3.0](https://github.com/fdkevin0/mob/compare/v0.2.0...v0.3.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* replace the OpenCode Zen free-tier workaround with OpenRouter free models ([#110](https://github.com/fdkevin0/mob/issues/110))
+* migrate Mob to TypeScript and Electron, remove Go ([#104](https://github.com/fdkevin0/mob/issues/104))
+
+### Features
+
+* **agents:** add Claude Agent and Telegram task notices ([#80](https://github.com/fdkevin0/mob/issues/80)) ([5c58879](https://github.com/fdkevin0/mob/commit/5c588796faf83d3f63efdf552cc00a8579dc2c1f))
+* **agents:** add DeepSeek Harness and CodeBuddy Code over ACP ([#88](https://github.com/fdkevin0/mob/issues/88)) ([d2d415e](https://github.com/fdkevin0/mob/commit/d2d415efe379fd65b31d6af97b56b0d4dde8bb5c))
+* **agents:** approve a plan with the owner's changes ([#153](https://github.com/fdkevin0/mob/issues/153)) ([5caa651](https://github.com/fdkevin0/mob/commit/5caa651122e592437f0f690bc76722fc2dcf9a03))
+* **agents:** drive Codex through its own app server ([#171](https://github.com/fdkevin0/mob/issues/171)) ([7fc6440](https://github.com/fdkevin0/mob/commit/7fc6440e280aa251d6ffa552f9edaa8e90d613d1))
+* **agents:** hand coding tasks to Codex over ACP ([#77](https://github.com/fdkevin0/mob/issues/77)) ([9148bb4](https://github.com/fdkevin0/mob/commit/9148bb42adfea7bce60222cf71d3cc9dd9d65aba))
+* **agents:** let tasks start sub-tasks over MCP, summarize ended tasks ([#96](https://github.com/fdkevin0/mob/issues/96)) ([24d20ee](https://github.com/fdkevin0/mob/commit/24d20eea6ed396a65dbd54dee7a48d686b17dcf4))
+* **agents:** propose several tasks as one plan the owner approves once ([#145](https://github.com/fdkevin0/mob/issues/145)) ([5ff661f](https://github.com/fdkevin0/mob/commit/5ff661f36f61276bc662ee47965382b2be6b67f4))
+* **agents:** readers: read-only tasks in another task's worktree ([#99](https://github.com/fdkevin0/mob/issues/99)) ([7fd564c](https://github.com/fdkevin0/mob/commit/7fd564c2d8719b0b867935c70704977f6132941b))
+* **agents:** reap sub-task agents once their reports are delivered ([#108](https://github.com/fdkevin0/mob/issues/108)) ([32d156f](https://github.com/fdkevin0/mob/commit/32d156fbd2e86adb115222a1fe181b8555e0977d))
+* **agents:** review squads: parallel read-only reviewers, checked by Mob ([#103](https://github.com/fdkevin0/mob/issues/103)) ([697c969](https://github.com/fdkevin0/mob/commit/697c9690818c336b213f023a1f59863d3c3663ee))
+* **agents:** run finished tasks through blueprints: checks, cross review, ready to review ([#142](https://github.com/fdkevin0/mob/issues/142)) ([f2ddbd4](https://github.com/fdkevin0/mob/commit/f2ddbd44f25f71bef6a872332a27aceb2b076eb6))
+* **agents:** show who started whom in an agent tree ([#84](https://github.com/fdkevin0/mob/issues/84)) ([272f427](https://github.com/fdkevin0/mob/commit/272f427002b6034328e1a2f02fa9d14c13e609e4))
+* **agents:** task_result: agents report how their work ended ([#100](https://github.com/fdkevin0/mob/issues/100)) ([28c3dd4](https://github.com/fdkevin0/mob/commit/28c3dd4a4dceed0a858b68a8a1fed3dc8d9ad8b7))
+* **app:** draw a plan as a studio of calves ([#161](https://github.com/fdkevin0/mob/issues/161)) ([99734c7](https://github.com/fdkevin0/mob/commit/99734c7f22ee18da5bdfb34f8ada2dd03822a779))
+* **chat:** let the model search the original words behind a summary ([#163](https://github.com/fdkevin0/mob/issues/163)) ([a07d916](https://github.com/fdkevin0/mob/commit/a07d916d4190b491c898cc080019d6e0d4f136e3))
+* choose a conversation's model as a setting, not a transcript message ([#134](https://github.com/fdkevin0/mob/issues/134)) ([ee783b8](https://github.com/fdkevin0/mob/commit/ee783b82bc28c8e6e95e0f70fff39a53658c00ac))
+* **commands:** add Web management and Telegram controls ([#148](https://github.com/fdkevin0/mob/issues/148)) ([ec8baf1](https://github.com/fdkevin0/mob/commit/ec8baf107e346424ca97b1cf97b3d9d3f6b406e5))
+* **docs:** give the docs the site's header, theme picker and styling ([#126](https://github.com/fdkevin0/mob/issues/126)) ([0301350](https://github.com/fdkevin0/mob/commit/0301350ceab9703d0aa0c77999e97afad663dc48))
+* **docs:** publish the documentation at /docs with Starlight ([#76](https://github.com/fdkevin0/mob/issues/76)) ([e1eeb3a](https://github.com/fdkevin0/mob/commit/e1eeb3a87f6d303f2f5216089b4292b5de552d4f))
+* **extensions:** add web MCP and Skills markets with update checks ([#149](https://github.com/fdkevin0/mob/issues/149)) ([3b70ccf](https://github.com/fdkevin0/mob/commit/3b70ccf9283dd010335515749737de9b6b59448c))
+* **landing:** magnetic paging for the story: one page per wheel gesture, native snap for touch ([#95](https://github.com/fdkevin0/mob/issues/95)) ([aeab263](https://github.com/fdkevin0/mob/commit/aeab263058a865c5ff8ac2fc1c65c051c0f88842))
+* **landing:** tell the story as Mob running a team of coding agents ([#101](https://github.com/fdkevin0/mob/issues/101)) ([3bb8d1e](https://github.com/fdkevin0/mob/commit/3bb8d1e2de80a8f52eee40f8194d91b600fb8c7b))
+* **mcp:** let the model find and install remote servers from a catalog ([#73](https://github.com/fdkevin0/mob/issues/73)) ([4d565c5](https://github.com/fdkevin0/mob/commit/4d565c526910cc65418d929e706e599fbacc0d7e))
+* record each reply's timing and stream its model, usage and stats ([#137](https://github.com/fdkevin0/mob/issues/137)) ([8414cb3](https://github.com/fdkevin0/mob/commit/8414cb301f5ad5582d4f9ba08302942393ceacea))
+* **release:** publish platform packages under [@usemob](https://github.com/usemob) and add musl builds ([#156](https://github.com/fdkevin0/mob/issues/156)) ([a4fc43c](https://github.com/fdkevin0/mob/commit/a4fc43c265e726244b2c7727f76f3fe3a7186a0d))
+* **release:** publish to npm and drop the Homebrew cask ([#152](https://github.com/fdkevin0/mob/issues/152)) ([896099c](https://github.com/fdkevin0/mob/commit/896099c10139da70369abcca538221bdbab102ca))
+* replace the OpenCode Zen free-tier workaround with OpenRouter free models ([#110](https://github.com/fdkevin0/mob/issues/110)) ([0825fd5](https://github.com/fdkevin0/mob/commit/0825fd58bb3305af704c129c1cd2269a5508c850))
+* retry model requests, cache Anthropic prompts, share the owner's saved facts ([#82](https://github.com/fdkevin0/mob/issues/82)) ([18715ae](https://github.com/fdkevin0/mob/commit/18715ae0c0e3e52e796f4e933cdad7f46c6e5fa1))
+* **runner:** add account-paired end-to-end encrypted remote control ([#69](https://github.com/fdkevin0/mob/issues/69)) ([4b39192](https://github.com/fdkevin0/mob/commit/4b391924c4c8761cfd528cde0e4a4f28f2cc139a))
+* **runner:** deploy a runner to Render's free tier from the connect dialog ([#74](https://github.com/fdkevin0/mob/issues/74)) ([7e1ba2a](https://github.com/fdkevin0/mob/commit/7e1ba2ada37d53d88aa8aeed2d9255c3976deb36))
+* show each reply's model, tokens and speed under it ([#138](https://github.com/fdkevin0/mob/issues/138)) ([19f82ec](https://github.com/fdkevin0/mob/commit/19f82ec7066bc25a8b21f3b1361c41c21f96950f))
+* **skills:** let the model load Agent Skills by name ([#59](https://github.com/fdkevin0/mob/issues/59)) ([1a6264d](https://github.com/fdkevin0/mob/commit/1a6264d7581b2800804e604d35cc862b4f3163ca))
+* task snapshot, task_diff/task_check, automatic task review, schedules ([#86](https://github.com/fdkevin0/mob/issues/86)) ([02e8109](https://github.com/fdkevin0/mob/commit/02e8109f545b580d094d0d61d837f00f31dee05a))
+* **tools:** define tool inputs with zod and check them before tools run ([#164](https://github.com/fdkevin0/mob/issues/164)) ([6cfd679](https://github.com/fdkevin0/mob/commit/6cfd679bc6b3442e5fd9065b8f0854c7cc639bb0))
+* **usage:** record token usage and add a usage page ([#83](https://github.com/fdkevin0/mob/issues/83)) ([8bb76b8](https://github.com/fdkevin0/mob/commit/8bb76b84c09ed860b2ebca37a81d026b82791482))
+* **web:** /demo page: one replayed scene, a conversation and the agents working beside it ([#97](https://github.com/fdkevin0/mob/issues/97)) ([0982ecc](https://github.com/fdkevin0/mob/commit/0982eccc8d5862cab2bd057f7ea946df9798ed3d))
+* **web:** add an account page and passkey sign-in ([#75](https://github.com/fdkevin0/mob/issues/75)) ([d517825](https://github.com/fdkevin0/mob/commit/d5178250a8c85e706cef80d03341dcc7178e6e45))
+* **web:** add Chrome's built-in model to the browser runner ([#131](https://github.com/fdkevin0/mob/issues/131)) ([9fc6b75](https://github.com/fdkevin0/mob/commit/9fc6b750ba5b5c31ba3b3e211e99ebce83db599c))
+* **web:** blur the office behind the landing title ([#154](https://github.com/fdkevin0/mob/issues/154)) ([b402df9](https://github.com/fdkevin0/mob/commit/b402df958e169f227a7f94f1784344141efe1527))
+* **web:** decide, stop and instruct agents from the agent tree ([#90](https://github.com/fdkevin0/mob/issues/90)) ([93eb40c](https://github.com/fdkevin0/mob/commit/93eb40c8918c32dce3af6ba0866ee824004a2f1d))
+* **web:** edit a sent message and retry the last reply ([#127](https://github.com/fdkevin0/mob/issues/127)) ([e67f04b](https://github.com/fdkevin0/mob/commit/e67f04b7a1d7e474f958b6b1b538baf6a2b1e8ed))
+* **web:** landing page with GitHub sign-in in front of the public web UI ([#67](https://github.com/fdkevin0/mob/issues/67)) ([c931fc0](https://github.com/fdkevin0/mob/commit/c931fc01c8159e23db2ec83a21e191dcf215b7fa))
+* **web:** line icons instead of pixel icons; calves stay pixel art ([#98](https://github.com/fdkevin0/mob/issues/98)) ([a268cdf](https://github.com/fdkevin0/mob/commit/a268cdf94e2d742490551698c11cbdf1663fb4ac))
+* **web:** link preview image and Open Graph tags; move to usemob.app ([#93](https://github.com/fdkevin0/mob/issues/93)) ([e5e4842](https://github.com/fdkevin0/mob/commit/e5e48421d4945bd00750c0dde7a864a929388be2))
+* **web:** manage conversations, add model providers from the picker, and redesign loading and empty screens ([#111](https://github.com/fdkevin0/mob/issues/111)) ([56adeb6](https://github.com/fdkevin0/mob/commit/56adeb69b533af869d617bc197e0f878460cdd7a))
+* **web:** open /app without a runner and redesign the chat workspace ([#72](https://github.com/fdkevin0/mob/issues/72)) ([67c6ea2](https://github.com/fdkevin0/mob/commit/67c6ea2c4103465ec541d7a6c6eab512431fd2ff))
+* **web:** open with what the browser kept, then catch up ([#94](https://github.com/fdkevin0/mob/issues/94)) ([db082d0](https://github.com/fdkevin0/mob/commit/db082d07a82ae5da7dbeaddc5781525a2ef26f3d))
+* **web:** rebuild the workspace around one sidebar, and give /app its tab icon ([#109](https://github.com/fdkevin0/mob/issues/109)) ([e0bae22](https://github.com/fdkevin0/mob/commit/e0bae22639d30b7b56c4f734e368407c355e06b0))
+* **web:** redesign the model picker with capability chips, recents, a model card and reasoning levels ([#139](https://github.com/fdkevin0/mob/issues/139)) ([33b7083](https://github.com/fdkevin0/mob/commit/33b7083cdb257dba82b796d938e249f686d4b4bd))
+* **web:** redesign the model providers dialog as provider tiles with a page for each ([#143](https://github.com/fdkevin0/mob/issues/143)) ([607b71a](https://github.com/fdkevin0/mob/commit/607b71afa44183a8f9706427129332a5dc19b8fb))
+* **web:** redraw the calf logo and office calves after the 牛来的 meme ([#79](https://github.com/fdkevin0/mob/issues/79)) ([d9d515a](https://github.com/fdkevin0/mob/commit/d9d515adf43062dc4f848aa66e36f86a3372f9dc))
+* **web:** run Mob in the browser, and move conversations to and from runners ([#106](https://github.com/fdkevin0/mob/issues/106)) ([cbfd742](https://github.com/fdkevin0/mob/commit/cbfd7428ce879026e02b421c6b1d4c6bc782e472))
+* **web:** scroll the landing page through the calves' office in pages ([#71](https://github.com/fdkevin0/mob/issues/71)) ([054d5c9](https://github.com/fdkevin0/mob/commit/054d5c91b7fbfe990b60241b868a6013283b141b))
+* **web:** share one public header and account control across site pages ([#130](https://github.com/fdkevin0/mob/issues/130)) ([3d64e43](https://github.com/fdkevin0/mob/commit/3d64e432a6b97299166ac54747f2ac526797d737))
+* **web:** share the browser runner across tabs and unify notices ([#147](https://github.com/fdkevin0/mob/issues/147)) ([b432dd5](https://github.com/fdkevin0/mob/commit/b432dd5bd40edc0e15f5590796b9d7db0958c891))
+* **web:** show how much of the context window a conversation uses ([#125](https://github.com/fdkevin0/mob/issues/125)) ([92953b5](https://github.com/fdkevin0/mob/commit/92953b5a343b92aa9755b86ca9538fa6cf578fd8))
+* **web:** sign in with Cloudflare and use Workers AI in the browser ([#112](https://github.com/fdkevin0/mob/issues/112)) ([de40ab3](https://github.com/fdkevin0/mob/commit/de40ab35f737d3c10db776eba093ec02d13c39ab))
+* **web:** smoother page changes with prerendering, view transitions and cached fonts ([#136](https://github.com/fdkevin0/mob/issues/136)) ([7999c1c](https://github.com/fdkevin0/mob/commit/7999c1c0454fb96e2e200588036ebcda5294682b))
+* **web:** streamline model selection and tool approvals ([#117](https://github.com/fdkevin0/mob/issues/117)) ([899d128](https://github.com/fdkevin0/mob/commit/899d128ff7be4ad63164c1d853e541f01f091935))
+* **web:** system, light and dark colour schemes across the site ([#102](https://github.com/fdkevin0/mob/issues/102)) ([3add933](https://github.com/fdkevin0/mob/commit/3add933bd425ac7d792d73ec1d298b360db759c3))
+* **web:** tidy the message view, approvals, composer and new conversation ([#122](https://github.com/fdkevin0/mob/issues/122)) ([08f1055](https://github.com/fdkevin0/mob/commit/08f1055fd3eb1e8658406f8b6cf8ccc32d699ae3))
+* **web:** unify workspace with the public site design ([#70](https://github.com/fdkevin0/mob/issues/70)) ([941ee5e](https://github.com/fdkevin0/mob/commit/941ee5e7a32eb2f61e9117abd23d3e955fcd07af))
+
+
+### Bug Fixes
+
+* **app:** rename planStudio.ts so macOS and Windows builds resolve PlanStudio ([#175](https://github.com/fdkevin0/mob/issues/175)) ([ca6d2c2](https://github.com/fdkevin0/mob/commit/ca6d2c2f859fddc5656fd8f5c6d2e31dd3d999cf))
+* **core:** clean up cancellable wait listeners ([#119](https://github.com/fdkevin0/mob/issues/119)) ([b8942db](https://github.com/fdkevin0/mob/commit/b8942dbeb46ad1af5afb3cb1385685c1f672948f))
+* **core:** validate approvals and release completed turn listeners ([#144](https://github.com/fdkevin0/mob/issues/144)) ([1b3a23b](https://github.com/fdkevin0/mob/commit/1b3a23ba041964478fcc9e9876d0ae75d145e7c2))
+* **deps:** update go dependencies ([#64](https://github.com/fdkevin0/mob/issues/64)) ([a72b645](https://github.com/fdkevin0/mob/commit/a72b64540a2e3eca58ce09f153f33fb1698851bc))
+* **deps:** update js dependencies ([#141](https://github.com/fdkevin0/mob/issues/141)) ([9714283](https://github.com/fdkevin0/mob/commit/9714283b6f8b3aaf2f1b2b6c9ff4d4c15e84efc9))
+* **deps:** update js dependencies ([#65](https://github.com/fdkevin0/mob/issues/65)) ([5d94344](https://github.com/fdkevin0/mob/commit/5d9434420b5dc7ab56397783c69e7b1bfadea9e1))
+* **prompts:** preserve constraints through handoffs and summaries ([#146](https://github.com/fdkevin0/mob/issues/146)) ([f5da174](https://github.com/fdkevin0/mob/commit/f5da17434faa196fe469a028ec90a9d4c0b462a0))
+* **release:** explain npm's stage-only trusted publisher refusal ([#172](https://github.com/fdkevin0/mob/issues/172)) ([768d6a4](https://github.com/fdkevin0/mob/commit/768d6a4bf49133565f4a1316d4be2ca00e181a1c))
+* **release:** upgrade npm inside setup-node before publishing ([#159](https://github.com/fdkevin0/mob/issues/159)) ([dba95ce](https://github.com/fdkevin0/mob/commit/dba95cefbf223dbbbd05f7d4921279bbcad88b7c))
+* **web:** configure usemob.app for production and previews ([#78](https://github.com/fdkevin0/mob/issues/78)) ([4de96cc](https://github.com/fdkevin0/mob/commit/4de96cc6ac5eb896cc16900e18f18f30a0807d7c))
+* **web:** draw the Turnstile widget in the page's colour scheme ([#107](https://github.com/fdkevin0/mob/issues/107)) ([647d32f](https://github.com/fdkevin0/mob/commit/647d32f219bc831db5ecc255add2df54200e3589))
+* **web:** highlight code in conversations ([#116](https://github.com/fdkevin0/mob/issues/116)) ([b2cb622](https://github.com/fdkevin0/mob/commit/b2cb622f4d96d269ee3ee2dcacb48c9fddc86b0c))
+* **web:** make the calf logo mirror-symmetric ([#81](https://github.com/fdkevin0/mob/issues/81)) ([0bf812c](https://github.com/fdkevin0/mob/commit/0bf812c3f7b3ad585a1d8e25a651c499ed1b9a42))
+* **web:** preserve drafts and recover workspace interactions ([#114](https://github.com/fdkevin0/mob/issues/114)) ([4fecfa3](https://github.com/fdkevin0/mob/commit/4fecfa3ca3b8887eb2d9ac782ee967a64447ee40))
+* **web:** preserve workspace while choosing a runner ([#120](https://github.com/fdkevin0/mob/issues/120)) ([57621f2](https://github.com/fdkevin0/mob/commit/57621f2a52a486f4ab63895bbdba124ab0b4020a))
+* **web:** render transparent logo PNG from SVG artwork ([#115](https://github.com/fdkevin0/mob/issues/115)) ([2aa95b3](https://github.com/fdkevin0/mob/commit/2aa95b3e8b203fd03bc87f0eed90a3904b3615e4))
+* **web:** restore lobby layout when opening runner connection ([#118](https://github.com/fdkevin0/mob/issues/118)) ([1f69f45](https://github.com/fdkevin0/mob/commit/1f69f45e3e8537deb16324cde0c83ae01c4c5ff0))
+* **web:** serve public logo and return proper not-found responses ([#113](https://github.com/fdkevin0/mob/issues/113)) ([35768df](https://github.com/fdkevin0/mob/commit/35768df2cb6aee59b1019cba2bf0a3fbaf852e81))
+
+
+### Performance
+
+* **web:** smoother web UI: lighter first load, targeted re-renders, pushed changes instead of polling ([#92](https://github.com/fdkevin0/mob/issues/92)) ([479ed41](https://github.com/fdkevin0/mob/commit/479ed4145093ac3c2a64f56991d64d22798e6da2))
+
+
+### Refactoring
+
+* migrate Mob to TypeScript and Electron, remove Go ([#104](https://github.com/fdkevin0/mob/issues/104)) ([577a230](https://github.com/fdkevin0/mob/commit/577a23024511e566c7f194528ea2e91c1a5475fe))
+
 ## [0.2.0](https://github.com/fdkevin0/mob/compare/v0.1.1...v0.2.0) (2026-10-18)
 
 
