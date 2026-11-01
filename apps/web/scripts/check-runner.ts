@@ -210,7 +210,7 @@ try {
 			path: '/api/conversations/import',
 			headers: {},
 			body: JSON.stringify({ v: 1, title: 'Replayed', model: '', summary: '', summaryThrough: '', facts: [], usage: [],
-				messages: [{ id: 'replayed', role: 'user', parts: JSON.stringify([{ type: 'text', text: 'once' }]), status: 'complete', error: '', model: '', usage: '', kind: '' }] }),
+				messages: [{ id: 'replayed', role: 'user', parts: JSON.stringify([{ type: 'text', text: 'once' }]), status: 'complete', error: '', model: '', usage: '', kind: '', stats: '' }] }),
 			expires: Date.now() + 30000,
 		},
 	);
