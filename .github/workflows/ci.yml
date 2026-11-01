@@ -23,6 +23,15 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
+      # macOS and Windows runners (the desktop release) see Foo.tsx and foo.ts
+      # as one file, so './Foo' resolves to the wrong one there.
+      - name: Check no paths differ only by case
+        run: |
+          clash=$(git ls-files | sort -f | uniq -di)
+          if [ -n "$clash" ]; then
+            echo "::error::These paths differ only by case: $clash"
+            exit 1
+          fi
       - run: bun install --frozen-lockfile
       - name: Typecheck and test
         run: |

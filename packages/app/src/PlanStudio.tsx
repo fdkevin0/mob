@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { VoxelCanvas } from '@mob/ui/voxel/VoxelCanvas';
 import { project } from '@mob/ui/voxel/project';
-import { rowZ, stations, studioFrame, studioVoxels, type Place, type StudioRow } from './planStudio';
+import { rowZ, stations, studioFrame, studioVoxels, type Place, type StudioRow } from './studioScene';
 
 const PIXEL = 2;
 

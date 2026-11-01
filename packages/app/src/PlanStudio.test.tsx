@@ -1,9 +1,9 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PlanStudio, type StudioTask } from './PlanStudio';
-import { studioVoxels } from './planStudio';
+import { studioVoxels } from './studioScene';
 
-vi.mock('./planStudio', async (actual) => ({ ...(await actual<typeof import('./planStudio')>()), studioVoxels: vi.fn(() => []) }));
+vi.mock('./studioScene', async (actual) => ({ ...(await actual<typeof import('./studioScene')>()), studioVoxels: vi.fn(() => []) }));
 
 beforeEach(() => {
 	vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), addEventListener() {}, removeEventListener() {} }));

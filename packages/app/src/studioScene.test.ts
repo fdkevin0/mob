@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { Voxel } from '@mob/ui/voxel/model';
-import { rowZ, stations, studioVoxels, type StudioRow } from './planStudio';
+import { rowZ, stations, studioVoxels, type StudioRow } from './studioScene';
 
 const row = (r: Partial<StudioRow>): StudioRow => ({ checks: true, review: true, since: Infinity, ...r });
 const near = (v: Voxel[], x: number, z: number, d = 3) => v.filter((p) => Math.abs(p[0] - x) <= d && Math.abs(p[2] - z) <= d && p[1] >= 0);
