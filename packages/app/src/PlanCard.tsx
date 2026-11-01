@@ -8,7 +8,7 @@ import type { AgentNode } from './contracts';
 import { nodeStatus } from './AgentTree';
 import { ApprovalPrompt } from './ApprovalPrompt';
 import { PlanStudio, type StudioTask } from './PlanStudio';
-import type { Place } from './planStudio';
+import type { Place } from './studioScene';
 import { CheckIcon, EyeIcon, HandIcon, OpenIcon, SpinnerIcon, TerminalIcon, UserIcon } from './icons';
 
 /** Stage is a step a blueprint runs after the agent's work: the project's checks, or another agent's review. */
