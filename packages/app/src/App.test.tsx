@@ -1,11 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 // Local pairing tests keep runner discovery isolated; Runners.test.tsx covers that flow.
 vi.mock('./Runners', () => ({ Runners: () => null }));
 // The browser runner's worker is replaced by whatever fetch a test stubs.
 vi.mock('./browser/browser', () => ({ startBrowser: async () => ({ persistent: true }), browserFetch: (input: string, init?: RequestInit) => fetch(input, init) }));
 import { App } from './App';
 import { chooseFromRunnerMenu } from './runnerMenu.test-helper';
+
+// App loads the workspace lazily. Waiting for it here keeps that cold load,
+// slow on a busy machine, out of the first test's 1 s findBy timeout.
+beforeAll(async () => { await import('./Workspace'); }, 30_000);
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.mobDesktop; localStorage.clear(); sessionStorage.clear(); });
 
