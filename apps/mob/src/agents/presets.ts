@@ -1,8 +1,8 @@
 // The coding agents Mob knows how to start. Each speaks the Agent Client
 // Protocol unless its preset names another runtime.
-import type { llm } from '@mob/core';
+import { acp } from './acp';
+import { codex } from './codex';
 import type { Runtime } from './runtime';
-import { codexTally } from './usage';
 
 export type Preset = {
 	name: string;
@@ -11,22 +11,15 @@ export type Preset = {
 	runtime?: Runtime;
 	/** commands start the agent's server, for its runtime to talk to; the first whose program is installed is used. */
 	commands: string[][];
-	/** mode is the session mode that lets the agent edit its working directory and run commands there without asking. */
-	mode?: string;
 	/**
-	 * readOnly is the session mode in which the agent asks before editing
-	 * anything, for tasks that only read another task's worktree; Mob then
-	 * refuses its edits. Agents without one cannot do such tasks.
+	 * acp holds the session modes an ACP agent works in: mode lets it edit its
+	 * working directory and run commands there without asking; readOnly makes
+	 * it ask before editing anything, for tasks that only read another task's
+	 * worktree, whose edits Mob then refuses.
 	 */
-	readOnly?: string;
+	acp?: { mode?: string; readOnly?: string };
 	/** signIn tells the owner how to sign the agent in. */
 	signIn: string;
-	/**
-	 * tally, for agents whose prompt responses do not say what they used,
-	 * reads what the agent recorded its session used so far, and the model it
-	 * last used.
-	 */
-	tally?: (session: string) => Promise<{ model: string; usage: llm.Usage }>;
 	/** env is added to the agent's environment. */
 	env?: Record<string, string>;
 	/** patch, when set, is a DeepSeek Harness configuration layer the agent is started with. */
@@ -37,17 +30,15 @@ export type Preset = {
 export const presets: Preset[] = [{
 	name: 'codex',
 	title: 'Codex',
-	commands: [['codex-acp'], ['npx', '-y', '@zed-industries/codex-acp@0.16.0']],
-	mode: 'auto',
-	readOnly: 'read-only',
+	// Codex's own app server, rather than its ACP adapter.
+	runtime: codex,
+	commands: [['codex', 'app-server'], ['npx', '-y', '@openai/codex@0.166.0', 'app-server']],
 	signIn: 'run `codex login` on the computer Mob runs on (`codex login --device-auth` without a browser there), or set OPENAI_API_KEY or CODEX_API_KEY for the Mob service',
-	tally: codexTally,
 }, {
 	name: 'claude',
 	title: 'Claude Agent',
 	commands: [['claude-agent-acp'], ['npx', '-y', '@agentclientprotocol/claude-agent-acp@0.94.0']],
-	mode: 'acceptEdits',
-	readOnly: 'default',
+	acp: { mode: 'acceptEdits', readOnly: 'default' },
 	signIn: 'run `claude` and sign in with your Claude subscription (/login) on the computer Mob runs on, or set ANTHROPIC_API_KEY for the Mob service',
 }, {
 	name: 'dsh',
@@ -63,8 +54,7 @@ export const presets: Preset[] = [{
 	name: 'codebuddy',
 	title: 'CodeBuddy Code',
 	commands: [['codebuddy', '--acp'], ['npx', '-y', '@tencent-ai/codebuddy-code@2.171.0', '--acp']],
-	mode: 'acceptEdits',
-	readOnly: 'default',
+	acp: { mode: 'acceptEdits', readOnly: 'default' },
 	signIn: 'run `codebuddy` on the computer Mob runs on and log in with the Tencent account you use for WorkBuddy or CodeBuddy (WeChat for the China edition), or set CODEBUDDY_API_KEY for the Mob service, with CODEBUDDY_INTERNET_ENVIRONMENT=internal for the China edition',
 }];
 
@@ -76,8 +66,14 @@ export function preset(name: string): Preset {
 	return p;
 }
 
+/** runtime is what drives p's agent. */
+export const runtime = (p: Preset) => p.runtime ?? acp;
+
+/** reads reports whether p's agent can work read-only. */
+export const reads = (p: Preset) => runtime(p).reads(p);
+
 /** readers names the agents that can work read-only. */
-export const readers = () => presets.filter(p => p.readOnly).map(p => p.name);
+export const readers = () => presets.filter(reads).map(p => p.name);
 
 /** command is the first of p's commands whose program is installed. */
 export const command = (p: Preset) => p.commands.find(c => Bun.which(c[0]!));

@@ -7,11 +7,12 @@ import { ConversationService, describeApproval, newID, rememberAlways, Store, ty
 import { openBun } from '@mob/core/sqlite/bun';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { start as startAgent, type Conn } from '../src/agents/process';
-import type { Preset } from '../src/agents/presets';
+import { acp } from '../src/agents/acp';
+import { presets, type Preset } from '../src/agents/presets';
 import { check, diff, Limited, reviewLimit, snapshot } from '../src/agents/review';
 import { inside } from '../src/agents/session';
 import { Service } from '../src/agents/service';
@@ -19,6 +20,10 @@ import { subtaskActive } from '../src/agents/subtasks';
 import { blueprints, problems, recover } from '../src/agents/blueprints';
 import { commands, overview, tools } from '../src/agents/tools';
 import { mob, idle, outline, type AgentNode } from '../src/agents/tree';
+
+// These tests drive every agent through a fake ACP agent, Codex too, as it was driven before it had a runtime of its own; codex.test.ts tests that runtime.
+const codexAt = presets.findIndex(p => p.name === 'codex');
+presets[codexAt] = { ...presets[codexAt]!, runtime: acp, acp: { mode: 'auto', readOnly: 'read-only' } };
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const temp = () => mkdtempSync(join(tmpdir(), 'mob-agents-'));
@@ -452,36 +457,14 @@ test('notices tell the owner', async () => {
 });
 
 test('what agents use is recorded', async () => {
-	const home = temp();
-	const before = process.env.CODEX_HOME;
-	process.env.CODEX_HOME = home;
-	closers.push(() => { if (before === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = before; });
 	const h = harness();
-	// Codex says what its session used only in its own records.
-	const dir = join(home, 'sessions', '2026', '10', '20');
-	mkdirSync(dir, { recursive: true });
-	const rollout = join(dir, 'rollout-2026-10-20T10-00-00-s1.jsonl');
-	const line = (input: number, cached: number, output: number) => JSON.stringify({ timestamp: 't', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: input, cached_input_tokens: cached, output_tokens: output, reasoning_output_tokens: 5, total_tokens: input + output }, last_token_usage: {} }, rate_limits: null } }) + '\n';
-	writeFileSync(rollout, JSON.stringify({ timestamp: 't', type: 'turn_context', payload: { cwd: '/', model: 'gpt-test' } }) + '\n' + line(1000, 800, 100));
 	let task = await h.start('hello');
-	appendFileSync(rollout, line(1500, 1200, 150));
-	task = await h.say(task, 'again');
-	let u = h.store.conversationUsage(task.conversationId).get(task.conversationId)!;
-	expect([u.inputTokens, u.cacheReadTokens, u.outputTokens, u.reasoningTokens, u.turns, u.requests, u.models.map(m => m.model)]).toEqual([1500, 1200, 150, 5, 2, 2, ['gpt-test']]);
-	// A session that cannot be loaded again is replaced by one counting from zero; what the old one used stays.
-	h.svc.stopTask(task.id);
-	await h.wait(task);
-	h.fakes.options = { session: 's2', failLoad: true };
-	writeFileSync(join(dir, 'rollout-2026-10-20T11-00-00-s2.jsonl'), line(100, 0, 20));
-	task = await h.say(task, 'more');
-	u = h.store.conversationUsage(task.conversationId).get(task.conversationId)!;
-	expect([task.session, u.inputTokens, u.outputTokens, u.turns]).toEqual(['s2', 1600, 170, 3]);
 	// Agents that report usage in their responses are taken at their word, with input counted with the cache, and the cost they report.
 	task = await h.say(task, 'tokens');
 	task = await h.say(task, 'tokens');
-	u = h.store.conversationUsage(task.conversationId).get(task.conversationId)!;
+	const u = h.store.conversationUsage(task.conversationId).get(task.conversationId)!;
 	const top = u.models[0]!;
-	expect([u.models.length, top.model, top.inputTokens, top.cacheReadTokens, top.cacheWriteTokens, top.outputTokens, u.cost.toFixed(2)]).toEqual([3, 'claude-test', 2000, 1800, 180, 80, '0.50']);
+	expect([u.models.length, top.model, top.inputTokens, top.cacheReadTokens, top.cacheWriteTokens, top.outputTokens, u.cost.toFixed(2)]).toEqual([1, 'claude-test', 2000, 1800, 180, 80, '0.50']);
 	const listed = (overview(h.svc, '').tasks[0]!.usage as { totalTokens: number }).totalTokens;
 	expect(listed).toBe(u.totalTokens);
 });

@@ -115,6 +115,8 @@ export interface AgentSession {
 
 /** Runtime opens sessions with agents that speak one protocol. */
 export interface Runtime {
+	/** reads reports whether an agent of preset p can be kept from editing, to work read-only. */
+	reads(p: Preset): boolean;
 	/** open starts a session: the task's own, again, or a new one in its worktree. It throws, with the agent's preset title, why it could not. */
 	open(o: Options, signal: AbortSignal): Promise<AgentSession>;
 }

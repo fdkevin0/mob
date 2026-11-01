@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { advance, begin, blueprint, drop, recover, type Stage } from './blueprints';
 import { firstLine, git, slug, start, type Conn } from './process';
-import { preset, presets, readers, type Preset } from './presets';
+import { preset, presets, readers, reads, type Preset } from './presets';
 import { Session } from './session';
 import { review } from './review';
 import type { Squad } from './squad';
@@ -285,7 +285,7 @@ export class Service implements Delegate, Tasks {
 	/** startReader starts a read-only task in the worktree and branch of task base, such as to review its work, and hands prompt to the agent. parent is the conversation that started it. */
 	async startReader(parent: string, base: Task, agent: string, title: string, prompt: string, saved?: (t: Task) => void): Promise<Task> {
 		const a = preset(agent);
-		if (!a.readOnly) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
+		if (!reads(a)) throw new Error(`${a.title} cannot work read-only; use ${readers().join(' or ')}`);
 		if (base.readOnly) throw new Error("a read-only task's worktree is another task's; share that task's instead");
 		title = title.trim() || firstLine(prompt, 60);
 		return this.launch({ project: base.project, agent: a.name, title, worktree: base.worktree, branch: base.branch, status: taskRunning, parent: parent || undefined, readOnly: true }, prompt, saved);

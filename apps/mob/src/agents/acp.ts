@@ -5,9 +5,9 @@ import {
 	type Client, type McpServer as ACPMcpServer, type PermissionOption, type RequestPermissionOutcome, type SessionConfigOption,
 	type SessionModeState, type SessionUpdate, type ToolCallContent, type ToolCallLocation, type Usage as ACPUsage,
 } from '@agentclientprotocol/sdk';
+import type { llm } from '@mob/core';
 import { version } from '../version';
 import { failed, signIn, type AgentSession, type Choice, type Ending, type McpServer, type ModelUsage, type Options, type Runtime, type ToolContent, type Update } from './runtime';
-import { normal } from './usage';
 
 /** openWait bounds starting a session. */
 const openWait = 2 * 60_000;
@@ -77,6 +77,16 @@ export function modelOption(options?: SessionConfigOption[] | null): string {
 		return value;
 	}
 	return '';
+}
+
+/**
+ * normal counts input as every prompt token, as llm.Usage does. Agents that
+ * count input without the cache, as Anthropic does, give a total that adds
+ * the cache to it.
+ */
+export function normal(input: number, cacheRead: number, cacheWrite: number, output: number, reasoning: number, total: number): llm.Usage {
+	if (cacheRead + cacheWrite > 0 && total >= input + cacheRead + cacheWrite + output) input += cacheRead + cacheWrite;
+	return { inputTokens: input, outputTokens: output, reasoningTokens: reasoning, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite };
 }
 
 type Tokens = { inputTokens?: number; cachedInputTokens?: number; cachedWriteTokens?: number; outputTokens?: number; reasoningOutputTokens?: number; totalTokens?: number };
@@ -164,11 +174,11 @@ class Session implements AgentSession {
 			[this.id, modes, this.model] = [created.sessionId, created.modes, modelOption(created.configOptions)];
 			this.o.created(this.id);
 		}
-		let mode = p.mode ?? '';
+		let mode = p.acp?.mode ?? '';
 		const offered = (m: string) => !!modes?.availableModes.some(o => o.id === m);
 		if (t.readOnly) {
 			// A reader that cannot be kept from editing does not start.
-			mode = p.readOnly ?? '';
+			mode = p.acp?.readOnly ?? '';
 			if (!mode || !offered(mode)) throw this.failed('work read-only', new Error(`it offers no ${JSON.stringify(mode)} mode`));
 		}
 		if (mode && modes && modes.currentModeId !== mode && offered(mode)) {
@@ -221,6 +231,7 @@ class Session implements AgentSession {
 }
 
 export const acp: Runtime = {
+	reads: p => !!p.acp?.readOnly,
 	async open(o, signal) {
 		const s = new Session(o);
 		try {
