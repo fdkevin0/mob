@@ -62,7 +62,7 @@ test('mail parsing and validation', async () => {
 	validateDraft({ to: 'A <a@example.org>, b@example.org', subject: 'x', text: 'hi' });
 	const c: Config = { ...emailConfig.parse({}), enabled: true, from: 'me@example.org', imap: { host: 'imap.example.org', port: 993, security: 'tls', username: 'me', password: 'p' }, smtp: { host: 'smtp.example.org', port: 465, security: 'tls', username: 'me', password: 'p' } };
 	validate(c);
-	expect(() => validate({ ...c, imap: { ...c.imap, security: 'none' as never } })).toThrow('TLS or STARTTLS');
+	expect(() => validate({ ...c, imap: { ...c.imap, security: 'none' } })).toThrow('TLS or STARTTLS');
 	expect(() => validate({ ...c, channel: { enabled: true, owner: 'Me <me@example.org>', verifier: 'mx' } })).toThrow("owner's address");
 	expect(recipients('B@x.org, a@x.org,b@x.org')).toBe('a@x.org, b@x.org');
 });

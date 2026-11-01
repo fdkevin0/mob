@@ -104,7 +104,9 @@ tools and hooks of one turn.
 - The schema is the only shape a submission may have: unknown fields, wrong
   types and fractional numbers are refused with 400, and missing values take
   the schema's defaults. A plugin never saved has the defaults of an empty
-  object. The bundled plugins' schemas are in
+  object. A saved configuration that no longer parses is shown as defaults
+  but kept as saved until that plugin itself is saved again; saving one plugin
+  never rewrites another's. The bundled plugins' schemas are in
   `packages/core/src/app/plugin-config.ts`, where clients take their types.
 - A `Secret` names a credential at a dotted path, the `flag` that tells clients
   whether one is saved, and its owner: a blank submission keeps the saved

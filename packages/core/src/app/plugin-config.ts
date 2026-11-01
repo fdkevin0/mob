@@ -9,7 +9,7 @@
 import { z } from 'zod';
 
 /** FieldMeta is what a form needs to show one value: a credential names its flag, the field beside it saying whether one is saved. */
-export type FieldMeta = { title?: string; description?: string; secret?: boolean; flag?: string };
+export type FieldMeta = { title?: string; description?: string; secret?: boolean; flag?: string; options?: string[] };
 
 const text = (title: string, description?: string) => z.string().default('').meta({ title, description });
 const secret = (title: string, flag: string, description?: string) => z.string().optional().meta({ title, description, secret: true, flag });
@@ -19,7 +19,9 @@ const on = (title: string) => z.boolean().default(false).meta({ title });
 const endpoint = (name: string, ports: string) => z.strictObject({
 	host: text(`${name} host`),
 	port: z.number().int().default(0).meta({ title: `${name} port`, description: ports }),
-	security: z.enum(['', 'tls', 'starttls']).default('').meta({ title: `${name} security` }),
+	// Any text, as before schemas: validate requires tls or starttls only once email is enabled, so a disabled
+	// plugin's saved value still parses. options are what the form offers.
+	security: z.string().default('').meta({ title: `${name} security`, options: ['', 'tls', 'starttls'] }),
 	username: text(`${name} username`),
 	password: secret(`${name} password`, 'hasPassword'),
 	hasPassword: flag(),

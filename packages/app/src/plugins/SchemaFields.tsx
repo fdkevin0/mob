@@ -7,7 +7,7 @@ import { jsonSchema, pluginConfigs } from '@mob/core';
 import { Field, Toggle } from './shared';
 
 /** Node is the part of a JSON Schema the form reads. */
-export type Node = { type?: string; title?: string; description?: string; secret?: boolean; flag?: string; enum?: string[]; properties?: Record<string, Node> };
+export type Node = { type?: string; title?: string; description?: string; secret?: boolean; flag?: string; enum?: string[]; options?: string[]; properties?: Record<string, Node> };
 
 /** schemas are the bundled plugins' configuration schemas, as JSON Schema. */
 export const schemas = Object.fromEntries(Object.entries(pluginConfigs).map(([k, s]) => [k, jsonSchema(s) as Node])) as Record<keyof typeof pluginConfigs, Node>;
@@ -23,7 +23,8 @@ export function SchemaFields({ schema, value, onChange, keys }: { schema: Node; 
 		const title = n.title!;
 		if (n.type === 'object') return <section key={k}><h2>{title}</h2><SchemaFields schema={n} value={value[k] ?? {}} onChange={v => set(k, v)} /></section>;
 		if (n.type === 'boolean') return <Toggle key={k} value={!!value[k]} onChange={v => set(k, v)}>{title}</Toggle>;
-		if (n.enum) return <Label key={k} className="plugin-field">{title}<select value={value[k] ?? ''} onChange={e => set(k, e.target.value)}>{n.enum.map(o => <option key={o} value={o}>{choice(o)}</option>)}</select></Label>;
+		const options = n.enum ?? n.options;
+		if (options) return <Label key={k} className="plugin-field">{title}<select value={value[k] ?? ''} onChange={e => set(k, e.target.value)}>{options.map(o => <option key={o} value={o}>{choice(o)}</option>)}</select></Label>;
 		if (n.type === 'integer' || n.type === 'number') return <Field key={k} label={title} type="number" value={value[k] || ''} hint={n.description} onChange={v => set(k, Number(v))} />;
 		const saved = n.secret && n.flag && value[n.flag];
 		return <Field key={k} label={title} secret={n.secret} value={value[k]} hint={saved ? 'Saved. Leave blank to keep it.' : n.description} onChange={v => set(k, v)} />;

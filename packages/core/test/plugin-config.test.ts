@@ -47,3 +47,20 @@ test('a configuration of the wrong shape is refused and not saved', () => {
 	expect(() => s.update('telegram', { secrets: { userId: { mode: 'clear' } } })).toThrow('unknown secret field');
 	expect(s.config().telegram).toEqual({ enabled: false, userId: 0 });
 });
+
+test('an old saved configuration still loads, and saving another plugin leaves one that no longer parses as it was', () => {
+	const st = store();
+	const imap = { host: 'imap.example', port: 993, security: 'TLS', username: 'me', password: 'secret' };
+	const stale = { enabled: false, from: 'me@example', imap, smtp: { ...imap, port: 465 }, channel: { enabled: false, owner: '', verifier: '' } };
+	st.saveSetting('plugins', { email: stale, telegram: { enabled: false, userId: 0, legacy: 1 } });
+	const s = new PluginSettings(st, [telegram, email]);
+	// A disabled mailbox's security was free text before schemas, and still is.
+	expect(s.config().email.imap).toEqual(imap);
+	// Telegram's saved value has a field no schema names, so it shows as defaults, but is not overwritten by saving email.
+	expect(s.config().telegram).toEqual({ enabled: false, userId: 0 });
+	s.update('email', { ...s.publicConfig().email, from: 'you@example' });
+	expect(st.setting<any>('plugins').telegram).toEqual({ enabled: false, userId: 0, legacy: 1 });
+	expect(s.config().email.imap.password).toBe('secret');
+	s.update('telegram', { userId: 3 });
+	expect(st.setting<any>('plugins').email.imap.password).toBe('secret');
+});

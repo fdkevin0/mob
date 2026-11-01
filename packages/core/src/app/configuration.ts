@@ -69,7 +69,7 @@ export class PluginSettings {
 
 	lookup(name: string) { return this.sections.find(s => s.name === name); }
 
-	/** config is every plugin's saved configuration, defaults where none is saved. */
+	/** config is every plugin's saved configuration, defaults where none is saved or the saved one no longer parses. */
 	config(): Record<string, any> {
 		const saved = this.store.setting<Record<string, unknown>>('plugins') ?? {};
 		const out: Record<string, any> = {};
@@ -105,7 +105,10 @@ export class PluginSettings {
 		for (const key of Object.keys(updates)) if (!section.secrets.some(s => s.name === key)) throw new Error('unknown secret field');
 		section.validate(next);
 		c[name] = next;
-		this.store.saveSetting('plugins', c);
+		// Only this plugin's configuration changes: another's saved value is kept as it was,
+		// even when it no longer parses and config() shows defaults in its place.
+		const saved = this.store.setting<Record<string, unknown>>('plugins') ?? {};
+		this.store.saveSetting('plugins', { ...saved, [name]: next });
 		return c;
 	}
 }
