@@ -3,30 +3,24 @@ import { Textarea } from '@mob/ui/textarea';
 import { Label } from '@mob/ui/label';
 import { useState } from 'react';
 import { api, type Connection } from '../api';
-import { Field, Toggle, Feedback, Result, Actions, usePlugin, requestId } from './shared';
-import type { EmailChannel, EmailConfig, Endpoint, Summary, Mail, Draft } from './types';
+import { Field, Feedback, Result, Actions, usePlugin, requestId } from './shared';
+import { ClearSecrets, SchemaFields, schemas } from './SchemaFields';
+import type { EmailChannel, EmailConfig, Summary, Mail, Draft } from './types';
 const emptyDraft:Draft={to:'',subject:'',text:''};
 export function EmailPlugin({connection,initial,active,status}:{connection:Connection;initial:EmailConfig;active:boolean;status?:string}) {
  const {config,setConfig,busy,error,notice,setNotice,result,setResult,perform,save,test,unavailable,clearSecret,secrets}=usePlugin('email',initial,connection);
 const [inbox,setInbox]=useState<Summary[]>(); const [mail,setMail]=useState<Mail>();const [draft,setDraft]=useState<Draft>(emptyDraft);const [review,setReview]=useState(false);const [sendID,setSendID]=useState(requestId);
- function endpoint(kind:'imap'|'smtp',key:keyof Endpoint,value:string|number) {setConfig(c=>({...c,[kind]:{...c[kind],[key]:value}}));}
- function channel(key:keyof EmailChannel,value:string|boolean) {setConfig(c=>({...c,channel:{...c.channel,[key]:value}}));}
  function editDraft(key:keyof Draft,value:string){setDraft(d=>({...d,[key]:value}));setReview(false);setSendID(requestId());}
 if (!active) return null;
- return <><Feedback error={error} notice={notice}/><form onSubmit={save}><fieldset disabled={busy}><Toggle value={config.enabled} onChange={enabled=>setConfig({...config,enabled})}>Enable email</Toggle><p>Read INBOX over IMAP and send mail over SMTP. Use an app password if your provider requires one.</p>
-          <Field label="From address" value={config.from} onChange={v => setConfig( { ...config, from: v })} />
+ return <><Feedback error={error} notice={notice}/><form onSubmit={save}><fieldset disabled={busy}><SchemaFields schema={schemas.email} value={config} onChange={v=>setConfig(v as EmailConfig)} keys={['enabled']}/><p>Read INBOX over IMAP and send mail over SMTP. Use an app password if your provider requires one.</p>
+          <SchemaFields schema={schemas.email} value={config} onChange={v=>setConfig(v as EmailConfig)} keys={['from']}/>
           <div className="plugin-columns">{(['imap', 'smtp'] as const).map(kind => <section key={kind}><h2>{kind.toUpperCase()}</h2>
-            <Field label={`${kind.toUpperCase()} host`} value={config[kind].host} onChange={v => endpoint(kind, 'host', v)} />
-            <Field label={`${kind.toUpperCase()} port`} type="number" value={config[kind].port || ''} hint={kind === 'imap' ? 'Usually 993 (TLS) or 143 (STARTTLS)' : 'Usually 465 (TLS) or 587 (STARTTLS)'} onChange={v => endpoint(kind, 'port', Number(v))} />
-            <Label className="plugin-field">{kind.toUpperCase()} security<select value={config[kind].security || ''} onChange={e => endpoint(kind, 'security', e.target.value)}><option value="">Choose…</option><option value="tls">TLS</option><option value="starttls">STARTTLS</option></select></Label>
-            <Field label={`${kind.toUpperCase()} username`} value={config[kind].username} onChange={v => endpoint(kind, 'username', v)} />
-            <Field label={`${kind.toUpperCase()} password`} secret value={config[kind].password} hint={config[kind].hasPassword ? 'Saved. Leave blank to keep it for the same host and username.' : undefined} onChange={v => endpoint(kind, 'password', v)} />
+            <SchemaFields schema={schemas.email.properties![kind]!} value={config[kind]} onChange={v=>setConfig(c=>({...c,[kind]:v}))}/>
           </section>)}</div>
-          <section><h2>Answer mail</h2><Toggle value={config.channel?.enabled ?? false} onChange={enabled=>channel('enabled',enabled)}>Answer the owner's mail</Toggle><p>Mob answers mail the owner sends to this mailbox and replies in the same thread. Each thread is its own conversation. Mail the provider did not verify as the owner's is ignored.</p>
-            <Field label="Owner's address" value={config.channel?.owner} onChange={v => channel('owner', v)} />
-            <Field label="Provider's authserv-id" value={config.channel?.verifier} hint="The name your provider writes first in the Authentication-Results header of mail it receives, such as mx.google.com." onChange={v => channel('verifier', v)} />
+          <section><h2>Answer mail</h2><p>Mob answers mail the owner sends to this mailbox and replies in the same thread. Each thread is its own conversation. Mail the provider did not verify as the owner's is ignored.</p>
+            <SchemaFields schema={schemas.email.properties!.channel!} value={config.channel} onChange={v=>setConfig(c=>({...c,channel:v as EmailChannel}))}/>
             {config.channel?.enabled && <p role="status">{status || 'Disabled'}</p>}
-          </section><div><Button type="button" variant="ghost" disabled={config.enabled || !!secrets['imap.password']} onClick={()=>clearSecret('imap.password')}>{secrets['imap.password'] ? "Will clear imap.password on save" : "Clear saved imap.password"}</Button><Button type="button" variant="ghost" disabled={config.enabled || !!secrets['smtp.password']} onClick={()=>clearSecret('smtp.password')}>{secrets['smtp.password'] ? "Will clear smtp.password on save" : "Clear saved smtp.password"}</Button><small>Disable the plugin before clearing saved credentials, then save.</small></div><Actions busy={busy} unavailable={unavailable} test={test}/></fieldset></form><section><h2>Mailbox</h2><Button disabled={unavailable} onClick={() => void perform(async () => { setInbox(await api(connection, '/plugins/email/inbox')); setMail(undefined); })}>Refresh INBOX</Button><p className="muted">Latest 50 messages. Reading previews leaves messages unread. Attachments are listed only.</p>
+          </section><ClearSecrets schema={schemas.email} enabled={config.enabled} secrets={secrets} clear={clearSecret}/><Actions busy={busy} unavailable={unavailable} test={test}/></fieldset></form><section><h2>Mailbox</h2><Button disabled={unavailable} onClick={() => void perform(async () => { setInbox(await api(connection, '/plugins/email/inbox')); setMail(undefined); })}>Refresh INBOX</Button><p className="muted">Latest 50 messages. Reading previews leaves messages unread. Attachments are listed only.</p>
         {inbox?.length === 0 && <p>INBOX is empty.</p>}{inbox?.map(m => <Button variant="ghost" className="mail-row" key={`${m.validity}:${m.uid}`} disabled={unavailable} onClick={() => void perform(async () => setMail(await api(connection, `/plugins/email/messages/${m.uid}?validity=${m.validity}`)))}><strong>{m.subject || '(no subject)'}</strong><span>{m.from} · {m.date}</span></Button>)}
         {mail && <article><h3>{mail.subject}</h3><p>{mail.from}</p><pre className="mail-body">{mail.text}</pre><Button disabled={unavailable} onClick={() => void perform(async () => { setResult(await api(connection, '/plugins/email/analyze', { uid: mail.uid, validity: mail.validity })); })}>Analyze with AI</Button><p className="muted">Analysis sends the email text to your configured model.</p>{mail.attachments.length > 0 && <p>Attachments: {mail.attachments.join(', ')}</p>}<Button disabled={unavailable} onClick={() => { setDraft({ to: mail.from, subject: `Re: ${mail.subject}`, text: '' }); setSendID(requestId()); setReview(false); }}>Compose reply</Button></article>}
         <h2>Compose email</h2><form onSubmit={e => { e.preventDefault(); setReview(true); }}><fieldset disabled={unavailable || review}>

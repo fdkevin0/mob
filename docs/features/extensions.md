@@ -99,16 +99,25 @@ tools and hooks of one turn.
 
 - A `Section` (`packages/core/src/app/configuration.ts`) describes one
   plugin's part of the saved configuration: its name, a title for menus and a
-  label for messages, the `fields` a generic form asks for (dotted JSON path,
-  label and kind: `bool`, `int`, `text` or `secret`), its `secrets`, its
-  `defaults` (the only shape a submission may have), whether it is enabled,
-  how a configuration is validated, shown without credentials (`publicView`)
-  and tested.
-- A `Secret` names a credential at a dotted path and its owner: a blank
-  submission keeps the saved credential only while the owner (such as an IMAP
-  host and username) is unchanged.
+  label for messages, its zod `schema`, its `secrets`, whether it is enabled,
+  how an enabled configuration is validated beyond its shape, and how it is
+  tested.
+- The schema is the only shape a submission may have: unknown fields, wrong
+  types and fractional numbers are refused with 400, and missing values take
+  the schema's defaults. A plugin never saved has the defaults of an empty
+  object. A saved configuration that no longer parses is shown as defaults
+  but kept as saved until that plugin itself is saved again; saving one plugin
+  never rewrites another's. The bundled plugins' schemas are in
+  `packages/core/src/app/plugin-config.ts`, where clients take their types.
+- A `Secret` names a credential at a dotted path, the `flag` that tells clients
+  whether one is saved, and its owner: a blank submission keeps the saved
+  credential only while the owner (such as an IMAP host and username) is
+  unchanged. Clients never receive a credential, only its flag; flags they send
+  back are dropped.
 - `updatePlugin`, the connection test, `/test` and `/clear-secret` look the
-  plugin up by section. `GET /api/plugins` returns `sections`; the TUI builds
-  its connection menu and forms from them. WeChat iLink signs in by QR code in
-  the web UI, so it has no fields.
-- The web UI still has a hand-written form per plugin.
+  plugin up by section. `GET /api/plugins` returns `sections`, each with its
+  schema as JSON Schema.
+- The web UI builds the Telegram, Cloudflare and email configuration forms
+  from schema metadata: `title` labels a field, `description` hints at it, and
+  `secret` with `flag` makes a password field with a clear button. WeChat
+  iLink signs in by QR code, so its form is its own.

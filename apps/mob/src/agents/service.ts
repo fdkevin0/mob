@@ -14,6 +14,7 @@ import { review } from './review';
 import type { Squad } from './squad';
 import { children, Hub, settle } from './subtasks';
 import { tree } from './tree';
+import { sleep } from '@mob/core/sleep';
 
 /**
  * Project is a git repository tasks work on. Projects are saved in the
@@ -28,7 +29,6 @@ const startWait = 30_000;
 export const noticeLimit = 1200;
 
 const stopping = () => new Error('Mob is stopping');
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class Service implements Delegate, Tasks {
 	/** sessions are the agents running, by task ID. */

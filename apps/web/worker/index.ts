@@ -7,79 +7,39 @@ export { RunnerRelay } from './relay';
 // the first paint (app.html, account.html, landing.html, demo.html, prototype.html).
 const themeScript = "'sha256-S6W4VqyCb8qKkLG/FDCsAHhGN7IBdaOVQRlaEQyTHX0='";
 
+// Every page's policy starts from this one: only its own files, no plugins,
+// forms or framing; each page widens only the directives it needs.
+const basePolicy: Record<string, string> = {
+	'default-src': "'self'",
+	'script-src': `'self' ${themeScript}`,
+	'connect-src': "'self'",
+	'img-src': "'self' data: https:",
+	'style-src': "'self' 'unsafe-inline'",
+	'font-src': "'self' data:",
+	'object-src': "'none'",
+	'base-uri': "'none'",
+	'form-action': "'none'",
+	'frame-ancestors': "'none'",
+};
+const policy = (overrides: Record<string, string> = {}) => Object.entries({ ...basePolicy, ...overrides }).map(([k, v]) => `${k} ${v}`).join('; ');
+
 // The landing page talks to this Worker (sign-in) and Turnstile.
-const landingPolicy = [
-	"default-src 'self'",
-	`script-src 'self' ${themeScript} https://challenges.cloudflare.com`,
-	'frame-src https://challenges.cloudflare.com',
-	"connect-src 'self'",
-	"img-src 'self' data: https:",
-	"style-src 'self' 'unsafe-inline'",
-	"font-src 'self' data:",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-ancestors 'none'",
-].join('; ');
+const landingPolicy = policy({ 'script-src': `'self' ${themeScript} https://challenges.cloudflare.com`, 'frame-src': 'https://challenges.cloudflare.com' });
 
 // The demo page replays recorded runs; it needs only its own files, plus the
 // signed-in visitor's avatar (an HTTPS URL from GitHub or Cloudflare) in the
 // shared header.
-const demoPolicy = [
-	"default-src 'self'",
-	`script-src 'self' ${themeScript}`,
-	"connect-src 'self'",
-	"img-src 'self' data: https:",
-	"style-src 'self' 'unsafe-inline'",
-	"font-src 'self' data:",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-ancestors 'none'",
-].join('; ');
+const demoPolicy = policy();
 
 // The prototypes the documentation embeds (prototype.html) run on sample
 // data, and only the documentation, on this origin, may frame them.
-const prototypePolicy = [
-	"default-src 'self'",
-	`script-src 'self' ${themeScript}`,
-	"connect-src 'self'",
-	"img-src 'self' data:",
-	"style-src 'self' 'unsafe-inline'",
-	"font-src 'self' data:",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-ancestors 'self'",
-].join('; ');
+const prototypePolicy = policy({ 'img-src': "'self' data:", 'frame-ancestors': "'self'" });
 
 // The account page talks only to this Worker's auth API.
-const accountPolicy = [
-	"default-src 'self'",
-	`script-src 'self' ${themeScript}`,
-	"connect-src 'self'",
-	"img-src 'self' data: https:",
-	"style-src 'self' 'unsafe-inline'",
-	"font-src 'self' data:",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-ancestors 'none'",
-].join('; ');
+const accountPolicy = policy();
 
 // The app reaches loopback Mob or its own encrypted runner relay.
-const appPolicy = [
-	"default-src 'self'",
-	`script-src 'self' ${themeScript}`,
-	"connect-src 'self' http://127.0.0.1:* http://localhost:*",
-	"img-src 'self' data: blob: https:",
-	"style-src 'self' 'unsafe-inline'",
-	"font-src 'self' data:",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-ancestors 'none'",
-].join('; ');
+const appPolicy = policy({ 'connect-src': "'self' http://127.0.0.1:* http://localhost:*", 'img-src': "'self' data: blob: https:" });
 
 // The browser runner (packages/app/src/browser) is a worker with its own
 // policy: it compiles sqlite-wasm and calls model providers, which may be
@@ -95,20 +55,7 @@ const runnerPolicy = [
 // The build puts a <meta> policy at the top of every page's <head> (and fails
 // without one) that narrows scripts and styles to what it hashed; this header
 // covers the other directives and framing.
-const docsPolicy = [
-	"default-src 'self'",
-	"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
-	"style-src 'self' 'unsafe-inline'",
-	"connect-src 'self'",
-	"img-src 'self' data: https:",
-	"font-src 'self' data:",
-	"worker-src 'self'",
-	"frame-src 'self'",
-	"object-src 'none'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-ancestors 'none'",
-].join('; ');
+const docsPolicy = policy({ 'script-src': "'self' 'unsafe-inline' 'wasm-unsafe-eval'", 'worker-src': "'self'", 'frame-src': "'self'" });
 
 // Hovering a link to another public page prerenders it (in browsers that
 // support speculation rules), so the click shows it at once instead of a full

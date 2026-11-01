@@ -32,6 +32,11 @@ export function unbase64(text: string): Uint8Array<ArrayBuffer> {
 	return Uint8Array.from(atob(text), c => c.charCodeAt(0));
 }
 
+/** base64url is base64 safe in URLs, without padding, as PKCE and links use it. */
+export const base64url = (bytes: Uint8Array) => base64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+export const unbase64url = (text: string) => unbase64(text.replace(/-/g, '+').replace(/_/g, '/'));
+
 /** validRelayKey reports whether raw is a pairing key: exactly 32 bytes in canonical base64. */
 export function validRelayKey(raw: unknown): raw is string {
 	if (typeof raw !== 'string') return false;

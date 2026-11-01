@@ -2,9 +2,9 @@
 // user copying one: OpenRouter's PKCE flow sends the user back here with a
 // code, which only the verifier kept in this tab turns into a key.
 import type { OpenRouterSignIn } from './providers';
+import { base64url } from '@mob/core/relay';
 
 const verifierKey = 'mob-openrouter-verifier';
-const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 /** startOpenRouter leaves for OpenRouter's sign-in, which returns to this page with ?code=. */
 export async function startOpenRouter() {

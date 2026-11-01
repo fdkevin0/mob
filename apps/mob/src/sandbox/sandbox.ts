@@ -2,7 +2,7 @@
 // directory is the conversation's workspace.
 import { mkdirSync, openSync, writeSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { sandboxDefaultTimeout, sandboxMaxTimeout, type Sandbox as CoreSandbox, type SandboxResult, type Saver } from '@mob/core';
+import { randomHex, sandboxDefaultTimeout, sandboxMaxTimeout, type Sandbox as CoreSandbox, type SandboxResult, type Saver } from '@mob/core';
 import type { SandboxSettings } from '../config';
 import { Runtime, gvisor, containerd, noNetwork, parseMemory, runtimeNames, Unavailable, type Limits } from './container';
 
@@ -36,7 +36,7 @@ function limits(s: SandboxSettings): Limits {
 	return l;
 }
 
-const random = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
+const random = () => randomHex(8);
 
 /** capture keeps at most outputCap bytes of a stream. */
 function capture() {

@@ -2,6 +2,7 @@
 // user entered, and which of its models they picked. Everything is in
 // providers.json beside config.yaml; keys are never read from the environment.
 import { parseRef, type Cost } from '../llm/llm';
+import { secureURL } from '../url';
 import { demoID } from '../llm/demo';
 import { findPreset } from './presets';
 
@@ -79,15 +80,12 @@ export function publicProvider(p: Provider): Provider {
 
 const idPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
-const loopback = (host: string) => host === 'localhost' || /^127\.\d+\.\d+\.\d+$/.test(host) || host === '[::1]' || host === '::1';
-
 /** validateURL accepts HTTPS, and HTTP only for loopback servers. */
 export function validateURL(raw: string) {
 	let u: URL;
 	try { u = new URL(raw); } catch { throw new Error('must be an HTTP(S) API base URL without credentials, query or fragment'); }
 	if (!u.host || u.username || u.password || u.search || u.hash || raw.includes('#') || raw.includes('?')) throw new Error('must be an HTTP(S) API base URL without credentials, query or fragment');
-	if (u.protocol === 'https:') return;
-	if (u.protocol === 'http:' && loopback(u.hostname)) return;
+	if (secureURL(u)) return;
 	throw new Error('requires HTTPS except for localhost servers');
 }
 

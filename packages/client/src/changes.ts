@@ -1,3 +1,4 @@
+import { EventSourceParserStream } from 'eventsource-parser/stream';
 import type { MobClient } from './api';
 
 /** Change says what a write on the service changed: a conversation, the conversation list, or the task tree. */
@@ -51,30 +52,22 @@ export class Changes {
 			// A service from before the stream answers 404; its clients poll instead.
 			if (response.status === 404) unsupported = true;
 			if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
-			const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-			let buffer = '';
+			const live = () => {
+				if (this.live) return;
+				// The first event or comment confirms the subscription; anything before it may have been missed.
+				this.live = true;
+				this.retry = firstRetry;
+				this.emit('reset');
+			};
+			const events = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(new EventSourceParserStream({ onComment: live })).getReader();
 			for (;;) {
-				const { value, done } = await reader.read();
+				const { value, done } = await events.read();
 				if (done) break;
-				buffer += value;
-				let end: number;
-				while ((end = buffer.indexOf('\n\n')) >= 0) {
-					const block = buffer.slice(0, end);
-					buffer = buffer.slice(end + 2);
-					if (!this.live) {
-						// The first block confirms the subscription; anything before it may have been missed.
-						this.live = true;
-						this.retry = firstRetry;
-						this.emit('reset');
-					}
-					for (const line of block.split('\n')) {
-						if (!line.startsWith('data:')) continue;
-						try {
-							this.emit(JSON.parse(line.slice(5)) as Change);
-						} catch {
-							/* an unreadable change is skipped; the next reset catches up */
-						}
-					}
+				live();
+				try {
+					this.emit(JSON.parse(value.data) as Change);
+				} catch {
+					/* an unreadable change is skipped; the next reset catches up */
 				}
 			}
 		} catch {

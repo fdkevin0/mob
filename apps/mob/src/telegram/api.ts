@@ -1,18 +1,14 @@
 // The Telegram Bot API, as much as Mob uses.
-import { rememberAlways, type PendingApproval } from '@mob/core';
+import { rememberAlways, type PendingApproval, type TelegramConfig } from '@mob/core';
 import { chunks, chunkLimit } from './format';
 
-export type Config = { enabled: boolean; token?: string; hasToken?: boolean; userId: number };
-
-export const defaults = (): Config => ({ enabled: false, token: '', userId: 0 });
+export type Config = TelegramConfig;
 
 const tokenPattern = /^[0-9]+:[a-zA-Z0-9_-]+$/;
 
 export function validate(c: Config) {
 	if (c.enabled && (!tokenPattern.test(c.token ?? '') || c.userId <= 0)) throw new Error('Telegram: Bot Token and allowed user ID are required');
 }
-
-export const publicView = (c: Config): Config => { const p: Config = { ...c, hasToken: !!c.token }; delete p.token; return p; };
 
 /** APIError is a request the Bot API refused. */
 export class APIError extends Error {

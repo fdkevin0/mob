@@ -1,10 +1,10 @@
 // The email plugin: the web UI's mailbox, /mail and /email, tools to read and
 // send mail, and the channel that answers the owner's mail.
 import { z } from 'zod';
-import { body, cell, choices, CommandError, composeMail, defineTool, demoID, fence, interactive, type Plugin, type Section, type Server, type Store, type Tool } from '@mob/core';
+import { body, cell, emailConfig, choices, CommandError, composeMail, defineTool, demoID, fence, interactive, type Plugin, type Section, type Server, type Store, type Tool } from '@mob/core';
 import { hostPlugins } from '../local';
 import { Mailer } from './channel';
-import { active, defaults, inbox, publicView, read, send, test, validate, validateDraft, type Config, type Draft } from './mail';
+import { active, inbox, read, send, test, validate, validateDraft, type Config, type Draft } from './mail';
 
 /** analyzeTimeout bounds reading and summarizing one message; toolTimeout one mail server round trip made for the model. */
 const analyzeTimeout = 45_000, toolTimeout = 45_000;
@@ -12,14 +12,9 @@ const timeout = (ms: number, signal?: AbortSignal) => AbortSignal.any([...signal
 
 export const section: Section<Config> = {
 	name: 'email', title: 'Email plugin · SMTP / IMAP', label: 'email plugin',
-	fields: [
-		{ path: 'enabled', label: 'Enable email (true/false)', kind: 'bool' }, { path: 'from', label: 'From address', kind: 'text' },
-		{ path: 'imap.host', label: 'IMAP host', kind: 'text' }, { path: 'imap.port', label: 'IMAP port (993 TLS / 143 STARTTLS)', kind: 'int' }, { path: 'imap.security', label: 'IMAP security (tls/starttls)', kind: 'text' }, { path: 'imap.username', label: 'IMAP username', kind: 'text' }, { path: 'imap.password', label: 'IMAP password (blank keeps existing for same host/user)', kind: 'secret' },
-		{ path: 'smtp.host', label: 'SMTP host', kind: 'text' }, { path: 'smtp.port', label: 'SMTP port (465 TLS / 587 STARTTLS)', kind: 'int' }, { path: 'smtp.security', label: 'SMTP security (tls/starttls)', kind: 'text' }, { path: 'smtp.username', label: 'SMTP username', kind: 'text' }, { path: 'smtp.password', label: 'SMTP password (blank keeps existing for same host/user)', kind: 'secret' },
-		{ path: 'channel.enabled', label: "Answer the owner's mail (true/false)", kind: 'bool' }, { path: 'channel.owner', label: "Owner's address", kind: 'text' }, { path: 'channel.verifier', label: "Provider's authserv-id in Authentication-Results (e.g. mx.google.com)", kind: 'text' },
-	],
-	secrets: [{ name: 'imap.password', owner: c => c.imap.host + '\0' + c.imap.username }, { name: 'smtp.password', owner: c => c.smtp.host + '\0' + c.smtp.username }],
-	defaults, validate, publicView,
+	schema: emailConfig,
+	secrets: [{ name: 'imap.password', flag: 'imap.hasPassword', owner: c => c.imap.host + '\0' + c.imap.username }, { name: 'smtp.password', flag: 'smtp.hasPassword', owner: c => c.smtp.host + '\0' + c.smtp.username }],
+	validate,
 	enabled: c => c.enabled,
 	test: (c, signal) => test(c, signal),
 };

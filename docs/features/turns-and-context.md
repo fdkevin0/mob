@@ -266,8 +266,7 @@ The shared rendering configuration is in
 ## Tool arguments
 
 - Built-in tools declare their arguments with a zod schema, and the model is
-  offered that schema as JSON Schema. The skill, Cloudflare and `tool_install`
-  tools still declare JSON Schema by hand and are not checked yet.
+  offered that schema as JSON Schema.
 - Before a tool runs, the turn parses the model's arguments against it.
   Arguments that do not match never reach the tool: the call fails with an
   error naming each wrong field, which the model reads and can retry from.

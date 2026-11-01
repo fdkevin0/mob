@@ -3,32 +3,12 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser, type ParsedMail } from 'mailparser';
 import nodemailer from 'nodemailer';
 import addressparser from 'nodemailer/lib/addressparser';
+import type { EmailChannel, EmailConfig, Endpoint } from '@mob/core';
 
-export type Endpoint = { host: string; port: number; security: string; username: string; password?: string; hasPassword?: boolean };
-
+export type { Endpoint } from '@mob/core';
+export type Config = EmailConfig;
 /** Channel is whether and to whom Mob answers mail in INBOX. */
-export type Channel = {
-	enabled: boolean;
-	/** owner is the only address whose mail Mob answers, as the owner. */
-	owner: string;
-	/**
-	 * verifier is the authserv-id the mail provider names itself with in the
-	 * Authentication-Results header it adds, such as mx.google.com. Mail is
-	 * answered only when that header says the owner's domain signed it.
-	 */
-	verifier: string;
-};
-
-export type Config = { enabled: boolean; from: string; imap: Endpoint; smtp: Endpoint; channel: Channel };
-
-const endpoint = (): Endpoint => ({ host: '', port: 0, security: '', username: '', password: '' });
-export const defaults = (): Config => ({ enabled: false, from: '', imap: endpoint(), smtp: endpoint(), channel: { enabled: false, owner: '', verifier: '' } });
-
-export function publicView(c: Config): Config {
-	const p = structuredClone(c);
-	for (const e of [p.imap, p.smtp]) { e.hasPassword = !!e.password; delete e.password; }
-	return p;
-}
+export type Channel = EmailChannel;
 
 type Address = { name: string; address: string };
 

@@ -1,13 +1,12 @@
-// The WeChat iLink plugin; it signs in by QR code in the web UI, so its section has no fields.
-import { body, CommandError, type Plugin, type Section, type Server } from '@mob/core';
+// The WeChat iLink plugin; it signs in by QR code in the web UI, so the web UI's form for it is its own.
+import { body, CommandError, wechatConfig, type Plugin, type Section, type Server } from '@mob/core';
 import { hostPlugins } from '../local';
-import { Client, defaults, publicView, test, validate, type Config } from './client';
+import { Client, test, validate, type Config } from './client';
 import { Service } from './service';
 
 export const section: Section<Config> = {
 	name: 'wechat_ilink', title: 'WeChat iLink', label: 'WeChat iLink',
-	fields: [], secrets: [{ name: 'botToken' }],
-	defaults, validate, publicView,
+	schema: wechatConfig, secrets: [{ name: 'botToken', flag: 'hasToken' }], validate,
 	enabled: c => c.enabled,
 	test: c => test(c),
 };

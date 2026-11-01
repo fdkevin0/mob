@@ -10,6 +10,7 @@ import type { Environment } from './config';
 import { Lock, windows, writeAtomic } from './files';
 import { catalogPath, fileCatalog, fileProviders } from './providers';
 import { version } from './version';
+import { sleep } from '@mob/core/sleep';
 
 export type Connection = { url: string; token: string };
 
@@ -212,7 +213,6 @@ export async function status(c: Environment): Promise<RuntimeStatus> {
 	return response.json() as Promise<RuntimeStatus>;
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** startBackground runs mob serve --background detached, logging to the state directory. */
 export async function startBackground(c: Environment) {
