@@ -19,8 +19,9 @@ const flowHeight = 840;
  * plan and approve it, then watch the tasks move. Nothing reaches a Mob; the
  * replies Mob would send come from plan.ts.
  *
- * ?flow=1.verify opens the flow on a step, and ?started=7 starts as if the plan
- * was approved 7 seconds ago.
+ * ?flow=1.verify opens the flow on a step, ?view=studio draws it as a studio
+ * of calves instead, and ?started=7 starts as if the plan was approved 7
+ * seconds ago.
  */
 export function PlanPrototype({ search }: { search: string }) {
 	const query = new URLSearchParams(search);
@@ -63,6 +64,7 @@ export function PlanPrototype({ search }: { search: string }) {
 				state={state}
 				open={() => {}}
 				defaultFlow={query.get('flow') ?? undefined}
+				defaultView={query.get('view') === 'studio' ? 'studio' : 'flow'}
 				approval={decision ? undefined : { busy: false, decide: (approved, _reason, _remember, input) => setDecision({ approved, at: Date.now(), input }) }}
 			>
 				{decision && !decision.approved && <p className="plan-failed">You denied the plan, so nothing started.</p>}

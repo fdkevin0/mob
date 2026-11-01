@@ -1,4 +1,4 @@
-// Voxel models for the landing page: anthropomorphic calves (the agents),
+// Voxel models for Mob's pictures: anthropomorphic calves (the agents),
 // desks, blocks and small props. A voxel is [x, y, z, r, g, b, glow, size];
 // size scales a cube about its own centre, so blocks can be smaller than a
 // grid cell. Models are built facing +z and turned in quarter steps.

@@ -1,10 +1,13 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Changes } from '@mob/client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
+import { Segmented } from '@mob/ui/segmented';
 import { api, type Connection } from './api';
 import type { AgentNode } from './contracts';
 import { nodeStatus } from './AgentTree';
 import { ApprovalPrompt } from './ApprovalPrompt';
+import { PlanStudio, type StudioTask } from './PlanStudio';
+import type { Place } from './planStudio';
 import { CheckIcon, EyeIcon, HandIcon, OpenIcon, SpinnerIcon, TerminalIcon, UserIcon } from './icons';
 
 /** Stage is a step a blueprint runs after the agent's work: the project's checks, or another agent's review. */
@@ -64,6 +67,7 @@ export function PlanCard({
 	open,
 	approval,
 	defaultFlow,
+	defaultView = 'flow',
 	children,
 }: {
 	connection: Connection;
@@ -77,6 +81,8 @@ export function PlanCard({
 	approval?: { busy: boolean; decide: (approved: boolean, reason?: string, remember?: string, input?: unknown) => void };
 	/** defaultFlow opens the flow on this step at first, such as "0.build" (the docs' prototypes do). */
 	defaultFlow?: string;
+	/** defaultView is how the open plan is drawn at first: as a flow, or as a studio of calves. */
+	defaultView?: View;
 	children?: ReactNode;
 }) {
 	const done = planOutput(output);
@@ -87,6 +93,7 @@ export function PlanCard({
 		started.map((t) => t.conversation),
 	);
 	const [flow, setFlow] = useState<string | undefined>(defaultFlow);
+	const [view, setView] = useState<View>(defaultView);
 	// A flow open from the start leaves focus where it is, so the page around it does not scroll to it.
 	const quiet = useRef(defaultFlow !== undefined);
 	const [changed, setChanged] = useState<Change[]>([]);
@@ -219,27 +226,69 @@ export function PlanCard({
 					}}
 				>
 					<header className="plan-flow-head">
-						<DialogTitle>{title}</DialogTitle>
-						{input.summary && <DialogDescription>{input.summary}</DialogDescription>}
+						<div>
+							<DialogTitle>{title}</DialogTitle>
+							{input.summary && <DialogDescription>{input.summary}</DialogDescription>}
+						</div>
+						<Segmented label="Draw the plan as" value={view} onChange={setView} options={views} className="plan-view" />
 					</header>
-					<div className="plan-flow-body">
-						<FlowCanvas lanes={lanes} selected={flow} select={setFlow} />
-						<Inspector
-							lanes={lanes}
-							selected={flow}
-							select={setFlow}
-							project={project}
-							open={open}
-							started={started.length > 0}
-							change={approval && !approval.busy ? change : undefined}
+					{view === 'studio' ? (
+						<PlanStudio
+							tasks={lanes.map(studioTask(editable))}
+							waiting={editable}
+							select={(i) => {
+								setView('flow');
+								setFlow(`${i}.build`);
+							}}
 						/>
-					</div>
+					) : (
+						<div className="plan-flow-body">
+							<FlowCanvas lanes={lanes} selected={flow} select={setFlow} />
+							<Inspector
+								lanes={lanes}
+								selected={flow}
+								select={setFlow}
+								project={project}
+								open={open}
+								started={started.length > 0}
+								change={approval && !approval.busy ? change : undefined}
+							/>
+						</div>
+					)}
 					{decide && <footer className="plan-flow-decide">{decide}</footer>}
 				</DialogContent>
 			</Dialog>
 		</section>
 	);
 }
+
+type View = 'flow' | 'studio';
+const views: { value: View; label: string }[] = [
+	{ value: 'flow', label: 'Flow' },
+	{ value: 'studio', label: 'Studio' },
+];
+
+// studioTask is a lane as the studio draws it: which stations its stages have, and where its task is.
+const studioTask =
+	(waiting: boolean) =>
+	(lane: Lane): StudioTask => {
+		const has = (kind: StepKind) => lane.steps.some((s) => s.kind === kind);
+		const base = { title: lane.task.title ?? '', checks: has('verify'), review: has('review') };
+		const node = lane.node;
+		if (!node) return { ...base, status: waiting ? 'Waiting for your approval' : lane.run ? 'Started' : 'Not started', tone: waiting ? 'wait' : 'idle' };
+		const status = nodeStatus(node).label;
+		const flow = node.task?.flow;
+		const stage = flow?.stage;
+		if (node.status === 'review' && (stage === 'verify' || stage === 'review' || stage === 'ready' || stage === 'stuck')) {
+			const place: Place = stage;
+			return { ...base, place, status, tone: place === 'ready' ? 'ok' : place === 'stuck' ? 'wait' : 'run' };
+		}
+		if (node.status === 'running') {
+			const fixing = !!flow && (flow.tries > 0 || flow.round > 1);
+			return { ...base, place: 'build', fixing, status: flow ? (fixing ? 'Fixing what was found' : 'Building') : status, tone: fixing ? 'wait' : 'run' };
+		}
+		return { ...base, status, tone: 'idle' };
+	};
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown) => (typeof v === 'string' ? v : undefined);

@@ -2,7 +2,7 @@
 	"name": "@mob/ui",
 	"private": true,
 	"type": "module",
-	"description": "The site's design system: tokens, theme, calf brand, shadcn/Radix controls and the shared header",
+	"description": "The site's design system: tokens, theme, calf brand, voxel calves, shadcn/Radix controls and the shared header",
 	"exports": {
 		"./theme.css": "./src/styles/theme.css",
 		"./tokens.css": "./src/styles/tokens.css",
@@ -16,6 +16,10 @@
 		"./brand/Logo": "./src/brand/Logo.tsx",
 		"./brand/Icon": "./src/brand/Icon.tsx",
 		"./brand/calfHead": "./src/brand/calfHead.ts",
+		"./voxel/model": "./src/voxel/model.ts",
+		"./voxel/motion": "./src/voxel/motion.ts",
+		"./voxel/project": "./src/voxel/project.ts",
+		"./voxel/VoxelCanvas": "./src/voxel/VoxelCanvas.tsx",
 		"./vite": "./vite.ts",
 		"./*": "./src/ui/*.tsx"
 	},
@@ -39,6 +43,7 @@
 		"@types/node": "^26.5.1",
 		"@types/react": "^19.3.0",
 		"@vitejs/plugin-react": "^6.1.1",
+		"@webgpu/types": "^0.1.74",
 		"happy-dom": "^21.0.4",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.0"

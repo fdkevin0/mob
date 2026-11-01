@@ -9,7 +9,7 @@ vi.mock('./auth', () => ({
 	loadSite: async () => ({ ready: false, turnstileSiteKey: '' }),
 	openApp: vi.fn(),
 }));
-vi.mock('./voxel/VoxelCanvas', () => ({ VoxelCanvas: () => null }));
+vi.mock('@mob/ui/voxel/VoxelCanvas', () => ({ VoxelCanvas: () => null }));
 
 import { Landing } from './Landing';
 

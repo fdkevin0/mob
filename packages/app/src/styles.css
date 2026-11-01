@@ -1531,8 +1531,73 @@ button.reply-meta:hover,
 	overflow: hidden;
 }
 .plan-flow-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 16px;
 	padding: 16px 56px 12px 20px;
 	border-bottom: 1px solid var(--line);
+}
+.plan-flow-head > div {
+	min-width: 0;
+}
+.plan-flow-head .plan-view {
+	flex-shrink: 0;
+	margin-left: auto;
+}
+/* The plan as a studio of calves (PlanStudio), with its labels laid over the scene. */
+.plan-studio {
+	position: relative;
+	flex: 1;
+	min-height: 320px;
+	overflow: hidden;
+	background: var(--sunken);
+}
+.plan-studio-canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	image-rendering: pixelated;
+}
+.plan-studio-station,
+.plan-studio-task {
+	position: absolute;
+	transform: translate(-50%, -100%);
+	white-space: nowrap;
+}
+.plan-studio-station {
+	pointer-events: none;
+	font-size: 11px;
+	color: var(--muted-foreground);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+/* Each desk's task number, ringed in its status colour. */
+.plan-studio-task {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: 1.5px solid var(--line-strong);
+	border-radius: 50%;
+	background: var(--surface);
+	color: var(--text);
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.plan-studio-task:hover {
+	background: var(--surface-raised);
+}
+.plan-studio-task[data-tone='run'] {
+	border-color: var(--run);
+}
+.plan-studio-task[data-tone='wait'] {
+	border-color: var(--wait);
+}
+.plan-studio-task[data-tone='ok'] {
+	border-color: var(--ok);
 }
 .plan-flow-head h2 {
 	margin: 0;
