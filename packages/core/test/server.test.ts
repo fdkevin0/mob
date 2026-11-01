@@ -18,6 +18,12 @@ test('plugin routes answer whether the plugin comes with the server or after it'
 	expect(await (await call('POST', '/api/plugins/late/ping', 'late')).json()).toEqual({ pong: 'late' });
 	expect((await call('GET', '/api/plugins/late/ping')).status).toBe(405);
 	expect((await call('GET', '/api/plugins/missing/ping')).status).toBe(404);
+	// The server's own routes answer an unsupported method with 405 and an unknown path with 404.
+	expect((await call('PUT', '/api/config')).status).toBe(405);
+	expect((await call('GET', '/api/conversations/abc/rename')).status).toBe(405);
+	expect((await call('GET', '/api/config')).status).toBe(200);
+	expect((await call('HEAD', '/api/config')).status).toBe(200);
+	expect((await call('GET', '/api/nothing')).status).toBe(404);
 });
 
 test('models list which ones are free', async () => {

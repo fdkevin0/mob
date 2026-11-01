@@ -300,36 +300,44 @@ export class Server extends ConversationService {
 	/** fetch serves one request. */
 	fetch = async (req: Request): Promise<Response> => this.app.fetch(req);
 
-	private app = new Hono()
-		.use(async (c, next) => {
-			const url = new URL(c.req.url);
-			const headers = new Headers({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
-			const done = () => { c.res = withHeaders(c.res, headers); };
-			const origin = c.req.header('Origin') ?? '';
-			const host = c.req.header('Host') ?? url.host;
-			if (!allowedOrigin(origin, host) && (!origin || origin !== this.web)) { c.res = text(403, 'origin denied'); return done(); }
-			if (origin) { headers.set('Access-Control-Allow-Origin', origin); headers.set('Vary', 'Origin'); }
-			if (c.req.method === 'OPTIONS') {
-				headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-				headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-				// Chrome asks before a public page may reach a loopback address.
-				if (c.req.header('Access-Control-Request-Private-Network') === 'true') headers.set('Access-Control-Allow-Private-Network', 'true');
-				c.res = new Response(null, { status: 204 });
-				return done();
-			}
-			if (url.pathname.startsWith('/api/')) {
-				headers.set('Cache-Control', 'no-store');
-				if (url.pathname !== '/api/pairing/claim' && !bearer(c.req.header('Authorization'), this.token)) { c.res = text(401, 'unauthorized'); return done(); }
-			}
-			// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.
-			if (!loopbackHost(host)) { c.res = text(403, 'host denied'); return done(); }
-			await next();
-			done();
-		})
-		.route('/', api(this))
-		.all('/api/plugins/*', c => (this.pluginApp ??= pluginRouter(this.pluginRoutes)).fetch(c.req.raw))
-		.notFound(async c => (!c.req.path.startsWith('/api/') && await this.options.assets?.(c.req.path)) || text(404, '404 page not found'))
-		.onError(e => answerError(e));
+	private app = this.build();
+
+	private build() {
+		const core = api(this);
+		const app = new Hono()
+			.use(async (c, next) => {
+				const url = new URL(c.req.url);
+				const headers = new Headers({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
+				const done = () => { c.res = withHeaders(c.res, headers); };
+				const origin = c.req.header('Origin') ?? '';
+				const host = c.req.header('Host') ?? url.host;
+				if (!allowedOrigin(origin, host) && (!origin || origin !== this.web)) { c.res = text(403, 'origin denied'); return done(); }
+				if (origin) { headers.set('Access-Control-Allow-Origin', origin); headers.set('Vary', 'Origin'); }
+				if (c.req.method === 'OPTIONS') {
+					headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+					headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+					// Chrome asks before a public page may reach a loopback address.
+					if (c.req.header('Access-Control-Request-Private-Network') === 'true') headers.set('Access-Control-Allow-Private-Network', 'true');
+					c.res = new Response(null, { status: 204 });
+					return done();
+				}
+				if (url.pathname.startsWith('/api/')) {
+					headers.set('Cache-Control', 'no-store');
+					if (url.pathname !== '/api/pairing/claim' && !bearer(c.req.header('Authorization'), this.token)) { c.res = text(401, 'unauthorized'); return done(); }
+				}
+				// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.
+				if (!loopbackHost(host)) { c.res = text(403, 'host denied'); return done(); }
+				await next();
+				done();
+			})
+			.route('/', core);
+		// A path the API serves by another method answers 405, not 404.
+		for (const path of new Set(core.routes.map(r => r.path))) app.all(path, () => text(405, 'method not allowed'));
+		return app
+			.all('/api/plugins/*', c => (this.pluginApp ??= pluginRouter(this.pluginRoutes)).fetch(c.req.raw))
+			.notFound(async c => (!c.req.path.startsWith('/api/') && await this.options.assets?.(c.req.path)) || text(404, '404 page not found'))
+			.onError(e => answerError(e));
+	}
 }
 
 /** pluginRouter answers plugins' routes; a path a plugin serves by another method answers 405. */
