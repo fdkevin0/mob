@@ -20,6 +20,17 @@ export function failure(err: unknown, fallback = 500): Response {
 	return text(fallback, err instanceof Error ? err.message : String(err));
 }
 
+/** Fallback carries an error up to the error handler with the status it answers when the error does not say one, as failure(err, status) would. */
+export class Fallback extends Error {
+	constructor(readonly error: unknown, readonly status: number) { super(error instanceof Error ? error.message : String(error)); }
+}
+
+/** answerError is the response for an error a route threw. */
+export const answerError = (err: unknown) => err instanceof Fallback ? failure(err.error, err.status) : failure(err);
+
+/** orFail rethrows a route's error so the error handler answers it with fallback when it says no status of its own. */
+export const orFail = (fallback: number) => (err: unknown): never => { throw new Fallback(err, fallback); };
+
 export class HTTPError extends Error {
 	constructor(readonly status: number, message: string) { super(message); }
 }
@@ -51,33 +62,4 @@ export function sse(headers: Record<string, string>, write: (send: (chunk: strin
 		cancel() { controller.abort(); },
 	});
 	return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream', 'X-Accel-Buffering': 'no', ...headers } });
-}
-
-type Handler = (req: Request, params: Record<string, string>, url: URL) => Response | Promise<Response>;
-
-/** Router matches "METHOD /path/{param}" patterns, as Go's ServeMux does. */
-export class Router {
-	private routes: { method: string; parts: string[]; handler: Handler }[] = [];
-
-	handle(pattern: string, handler: Handler) {
-		const [method, path] = pattern.split(' ');
-		this.routes.push({ method, parts: path.split('/'), handler });
-	}
-
-	match(req: Request, url: URL): Response | Promise<Response> | undefined {
-		const parts = url.pathname.split('/');
-		let allowed = false;
-		for (const r of this.routes) {
-			if (r.parts.length !== parts.length) continue;
-			const params: Record<string, string> = {};
-			const ok = r.parts.every((p, i) => {
-				if (p.startsWith('{') && p.endsWith('}')) { if (!parts[i]) return false; params[p.slice(1, -1)] = decodeURIComponent(parts[i]); return true; }
-				return p === parts[i];
-			});
-			if (!ok) continue;
-			if (r.method !== req.method && !(r.method === 'GET' && req.method === 'HEAD')) { allowed = true; continue; }
-			return r.handler(req, params, url);
-		}
-		return allowed ? text(405, 'method not allowed') : undefined;
-	}
 }

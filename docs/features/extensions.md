@@ -71,7 +71,13 @@ tools and hooks of one turn.
   `HTTPError` sets the status, any other error is the plugin's service
   failing (502). `body` (`packages/core/src/app/http.ts`) reads a bounded JSON
   object, refusing a malformed body or fields it does not name with 400 and
-  one over its size limit with 413.
+  one over its size limit with 413. A path may name a parameter as
+  `messages/{uid}`; a path a plugin serves only by another method answers 405.
+- The server's own routes are one Hono app (`packages/core/src/app/api.ts`).
+  Its type, `AppType`, is what `@mob/client`'s typed client (`MobClient.api`,
+  built with Hono's `hc`) calls: paths, request bodies and answers are checked
+  against the routes, so clients declare no copies of them. Plugin routes join
+  at run time and are called by path.
 - Commands about plugins in general (`/plugins`, `/test`, `/deliveries`,
   `/clear-secret`) and the configuration routes stay in the server.
 

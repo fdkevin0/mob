@@ -3,7 +3,7 @@ import { CodeXml, Lock, Workflow } from 'lucide-react';
 import type { Changes } from '@mob/client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Segmented } from '@mob/ui/segmented';
-import { api, type Connection } from './api';
+import { api, ok, rpcOf, type Connection } from './api';
 import type { AgentNode } from './contracts';
 import { nodeStatus } from './AgentTree';
 import { ApprovalPrompt } from './ApprovalPrompt';
@@ -870,7 +870,7 @@ function useTasks(connection: Connection, changes: Changes | undefined, conversa
 		let alive = true;
 		const wanted = new Set(key.split(' '));
 		const load = () =>
-			api<AgentNode[]>(connection, '/tasks')
+			ok(rpcOf(connection).tasks.$get({ query: {} }))
 				.then((list) => alive && setNodes(list.filter((n) => wanted.has(n.conversationId))))
 				.catch(() => {});
 		void load();

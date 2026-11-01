@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent, type Connection } from './api';
+import { api, ok, rpcOf, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent, type Connection } from './api';
 import { Logo } from '@mob/ui/brand/Logo';
 import { Button } from '@mob/ui/button';
 import { Input } from '@mob/ui/input';
@@ -197,7 +197,7 @@ function signInLink() {
 }
 // verify checks a saved token before opening the workspace; a 401 signs out through unauthorizedEvent.
 async function verify(connection: Connection) {
-  await api(connection, '/config');
+  await ok(rpcOf(connection).config.$get());
   return connection;
 }
 async function claimPairing({ url, code }: { url: string; code: string }): Promise<Connection> {

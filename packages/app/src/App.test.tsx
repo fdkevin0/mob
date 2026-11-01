@@ -544,7 +544,7 @@ it('starts a new conversation only with its first message, and renames and delet
   let list = [{ id: 'one', title: 'Existing' }, { id: 'two', title: 'Other' }];
   const posts: { url: string; body: Record<string, unknown> }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (init?.method === 'POST') posts.push({ url, body: JSON.parse(String(init.body)) });
+    if (init?.method === 'POST') posts.push({ url, body: init.body ? JSON.parse(String(init.body)) : {} });
     if (url.endsWith('/runtime')) return Response.json({ background: false });
     if (url.endsWith('/config')) return Response.json({ defaultModel: 'demo/echo' });
     if (url.endsWith('/conversations')) return Response.json(list);
@@ -566,7 +566,7 @@ it('starts a new conversation only with its first message, and renames and delet
   fireEvent.change(screen.getByLabelText('Conversation title'), { target: { value: 'Renamed' } });
   fireEvent.submit(screen.getByLabelText('Conversation title').closest('form')!);
   expect(nav().getByRole('button', { name: 'Renamed' })).toBeTruthy();
-  expect(posts).toContainEqual({ url: 'http://localhost/api/conversations/two/rename', body: { title: 'Renamed' } });
+  await waitFor(() => expect(posts).toContainEqual({ url: 'http://localhost/api/conversations/two/rename', body: { title: 'Renamed' } }));
 
   // Deleting the open conversation asks first, then opens the next one.
   fireEvent.click(menu('Existing').getByRole('menuitem', { name: 'Delete' }));

@@ -157,6 +157,7 @@
         "@mob/core": "workspace:*",
         "ai": "7.0.155",
         "eventsource-parser": "3.1.1",
+        "hono": "4.13.13",
       },
       "devDependencies": {
         "@types/node": "^26.5.1",
@@ -166,6 +167,7 @@
     "packages/core": {
       "name": "@mob/core",
       "dependencies": {
+        "hono": "4.13.13",
         "zod": "4.6.7",
       },
       "devDependencies": {
