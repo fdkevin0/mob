@@ -45,12 +45,9 @@ export class Changes {
 	}
 
 	private async follow(signal: AbortSignal) {
-		let unsupported = false;
 		try {
 			const { url, token } = this.client.connection;
 			const response = await this.client.fetch(`${url}/api/events`, { headers: { Authorization: `Bearer ${token}` }, signal });
-			// A service from before the stream answers 404; its clients poll instead.
-			if (response.status === 404) unsupported = true;
 			if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
 			const live = () => {
 				if (this.live) return;
@@ -78,7 +75,7 @@ export class Changes {
 		this.live = false;
 		// Polling takes over at once while the stream is down.
 		if (wasLive) this.emit('reset');
-		const wait = unsupported ? 5 * 60_000 : this.retry;
+		const wait = this.retry;
 		this.retry = Math.min(this.retry * 2, maxRetry);
 		this.timer = setTimeout(() => {
 			if (!signal.aborted) void this.follow(signal);

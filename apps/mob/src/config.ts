@@ -116,7 +116,6 @@ export class Loader {
 			if (!windows && mode & 0o022) fail('configuration must not be writable by group or others');
 		}
 		if ('config' in file) fail('config is a file selector, not a configuration field');
-		if ('gateway' in file) fail('the experimental gateway was removed; delete the gateway section (remote access uses mob runner)');
 		const values: Record<string, unknown> = {};
 		const known = new Set(options.map(o => o.key));
 		const flat = (obj: Record<string, unknown>, prefix = '') => {
@@ -217,8 +216,8 @@ This reference covers runtime configuration. Provider keys and plugin settings
 use their own stores; command actions such as open --print are not settings.
 XDG_* directory conventions and CI/build variables belong to their respective tools.
 
-See [Configuration](features/configuration.md) for file safety, reload behavior
-and migration; [Sandbox](features/sandbox.md) and [MCP](features/mcp.md) describe
+See [Configuration](features/configuration.md) for file safety and reload
+behavior; [Sandbox](features/sandbox.md) and [MCP](features/mcp.md) describe
 their execution and environment boundaries.
 `;
 }

@@ -73,7 +73,7 @@ const slots = 64;
 const maxPayload = 2 << 20;
 const readWait = 90_000;
 const pingEvery = 30_000;
-/** canonical are the response headers the browser reads, as the Go runner named them. */
+/** canonical are the response headers the browser reads, spelled as it looks them up. */
 const canonical = ['Content-Type', 'X-Content-Type-Options', 'X-Vercel-Ai-Ui-Message-Stream'];
 
 /** Answer seals a response into frames, the first with its status and headers. */
