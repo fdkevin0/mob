@@ -12,9 +12,25 @@ export interface Client {
 	api<T>(repo: string, grant: Grant, path: string, init?: RequestInit): Promise<T>;
 }
 
-/** GitHubError is GitHub's, or usemob.app's, refusal. */
+/** GitHubError is GitHub's, or usemob.app's, refusal. retryAt is set for a rate limit: when GitHub says to try again, as epoch milliseconds. */
 export class GitHubError extends Error {
-	constructor(readonly status: number, message: string) { super(message); }
+	constructor(readonly status: number, message: string, readonly retryAt?: number) { super(message); }
+}
+
+/**
+ * rateLimit reads when to try again from a rate-limited answer, or undefined
+ * for any other. GitHub answers rate limits with 429 or 403: a 403 counts as
+ * one only with Retry-After, x-ratelimit-remaining 0 or a message saying so,
+ * so a real access denial stays one. Retry-After wins, then the reset time,
+ * then a minute, as GitHub's guide says.
+ */
+export function rateLimit(status: number, headers: Headers, message: string, now = Date.now()): number | undefined {
+	const after = headers.get('retry-after'), remaining = headers.get('x-ratelimit-remaining'), reset = headers.get('x-ratelimit-reset');
+	const limited = status === 429 || (status === 403 && (after !== null || remaining === '0' || /rate limit/i.test(message)));
+	if (!limited) return;
+	if (after !== null && Number.isFinite(Number(after))) return now + Math.max(1, Number(after)) * 1000;
+	if (remaining === '0' && reset !== null && Number.isFinite(Number(reset))) return Math.max(now + 1000, Number(reset) * 1000);
+	return now + 60_000;
 }
 
 const api = 'https://api.github.com';
@@ -53,7 +69,7 @@ export class GitHub implements Client {
 			const text = await res.text().catch(() => '');
 			let message = text.slice(0, 300);
 			try { message = String(JSON.parse(text).message ?? message); } catch { /* not JSON */ }
-			throw new GitHubError(res.status, `GitHub ${init.method ?? 'GET'} ${path}: HTTP ${res.status} ${message}`.trim());
+			throw new GitHubError(res.status, `GitHub ${init.method ?? 'GET'} ${path}: HTTP ${res.status} ${message}`.trim(), rateLimit(res.status, res.headers, message));
 		}
 		return res.status === 204 ? undefined as T : await res.json() as T;
 	}

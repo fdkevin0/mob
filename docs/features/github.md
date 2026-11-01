@@ -40,8 +40,11 @@ get a notice.
 Mob saves each event in its own database before it acknowledges the event to
 usemob.app. It then works through the saved events one at a time, including
 after a restart. GitHub or usemob.app can fail in a way that may pass, such as
-no answer, a timeout, a rate limit or a 5xx. In that case Mob tries the event
-again after 30 seconds, 2 minutes, 10 minutes and 30 minutes. Any other
+no answer, a timeout or a 5xx. In that case Mob tries the event again after 30
+seconds, 2 minutes, 10 minutes and 30 minutes. A rate limit, which GitHub
+answers with a 429 or a 403 marked as one, does not count as a try. Mob waits
+until the time GitHub gives, taken from `Retry-After` or the reset time, for up
+to a week after the event. Any other
 failure, or the last retry failing, is reported in the issue's conversation
 with a notice. Label the issue again to start over.
 
