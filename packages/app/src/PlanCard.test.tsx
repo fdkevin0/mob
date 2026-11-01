@@ -65,8 +65,8 @@ it('shows where each started task is, and opens it', async () => {
 			input={plan}
 			output={{
 				tasks: [
-					{ task: 't1', conversation: 'c1', title: 'API', agent: 'codex', branch: 'mob/api-1' },
-					{ task: 't2', conversation: 'c2', title: 'UI', agent: 'claude', branch: 'mob/ui-2' },
+					{ index: 0, task: 't1', conversation: 'c1', title: 'API', agent: 'codex', branch: 'mob/api-1' },
+					{ index: 1, task: 't2', conversation: 'c2', title: 'UI', agent: 'claude', branch: 'mob/ui-2' },
 				],
 			}}
 			state={{ kind: 'done', label: 'Done', icon: null }}
@@ -85,13 +85,6 @@ it('shows where each started task is, and opens it', async () => {
 	expect(within(step).getByText('Round 2')).toBeTruthy();
 	fireEvent.click(within(step).getByRole('button', { name: 'Open its conversation' }));
 	expect(open).toHaveBeenCalledTimes(2);
-});
-
-it('still shows plans asked before blueprints listed their stages', () => {
-	render(<PlanCard connection={connection} input={{ ...plan, blueprints: { standard: 'checks, then review', quick: 'checks' } }} state={waiting} open={() => {}} />);
-	fireEvent.click(screen.getByRole('button', { name: /API/ }));
-	fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: /Ready/ })[0]);
-	expect(screen.getByText('The task follows its blueprint: checks, then review.')).toBeTruthy();
 });
 
 it('shows each start against its own task when titles repeat and one failed to start', () => {
@@ -121,7 +114,7 @@ it('reads only what a plan call holds that the card can show', () => {
 	expect(planInput({ tasks: [null] })).toBeUndefined();
 	expect(planInput({ tasks: [{ title: 3, prompt: 'x' }], blueprints: { a: { does: 'x', stages: 'no' }, b: 'checks' } })).toEqual({
 		tasks: [{ title: undefined, agent: undefined, blueprint: undefined, prompt: 'x' }],
-		blueprints: { b: 'checks' },
+		blueprints: {},
 	});
 });
 

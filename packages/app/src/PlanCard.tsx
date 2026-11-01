@@ -13,8 +13,8 @@ import { CheckIcon, EyeIcon, HandIcon, OpenIcon, SpinnerIcon, TerminalIcon, User
 
 /** Stage is a step a blueprint runs after the agent's work: the project's checks, or another agent's review. */
 type Stage = { type: 'verify'; retries: number } | { type: 'review'; aspects: string[]; rounds: number };
-/** PlanBlueprint is what a blueprint does; plans asked before the card drew them say it in a line only. */
-type PlanBlueprint = string | { does: string; stages: Stage[]; manual?: boolean };
+/** PlanBlueprint is what a blueprint does. */
+type PlanBlueprint = { does: string; stages: Stage[]; manual?: boolean };
 
 /** PlanInput is what task_plan asks the owner to approve: tasks in one project, and what each blueprint does. */
 export type PlanInput = {
@@ -24,8 +24,8 @@ export type PlanInput = {
 	tasks?: { title?: string; agent?: string; blueprint?: string; prompt?: string; stages?: Stage[] }[];
 	blueprints?: Record<string, PlanBlueprint>;
 };
-/** PlanOutput is what an approved plan started; index is the task's place in the plan, missing from plans started before it was sent. */
-type PlanOutput = { tasks?: { index?: number; task: string; conversation: string; title: string; agent: string; branch: string }[]; failed?: string[] };
+/** PlanOutput is what an approved plan started; index is the task's place in the plan. */
+type PlanOutput = { tasks?: { index: number; task: string; conversation: string; title: string; agent: string; branch: string }[]; failed?: string[] };
 type Run = NonNullable<PlanOutput['tasks']>[number];
 type PlanTask = NonNullable<PlanInput['tasks']>[number];
 
@@ -101,16 +101,13 @@ export function PlanCard({
 	const tasks = input.tasks ?? [];
 	const editable = !!approval;
 	const project = (input.project ?? '').split(/[\\/]/).filter(Boolean).pop() ?? '';
-	// Each started task names its place in the plan. Older plans did not, and their tasks started in plan order, so each is the next of the plan's with its title and agent.
-	let next = 0;
-	const indexed = started.every((s) => s.index !== undefined);
 	const lanes: Lane[] = tasks.map((task, i) => {
-		const s = started[next];
-		const run = indexed ? started.find((r) => r.index === i) : s && s.title === task.title && s.agent === task.agent ? started[next++] : undefined;
+		// Each started task names its place in the plan.
+		const run = started.find((r) => r.index === i);
 		const node = run && nodes.find((n) => n.conversationId === run.conversation);
 		const b = input.blueprints?.[task.blueprint ?? ''];
 		// Only a blueprint whose stages the card knows, and that Mob does not leave to its model, has stages to change.
-		const asked = typeof b === 'object' && !b.manual ? (task.stages ?? b.stages) : undefined;
+		const asked = b && !b.manual ? (task.stages ?? b.stages) : undefined;
 		const c = editable ? changed[i] : undefined;
 		const stages = c?.stages ?? asked;
 		const shown = { ...task, prompt: c?.prompt ?? task.prompt };
@@ -126,7 +123,7 @@ export function PlanCard({
 	const payload = tasks.map((task, i) => {
 		const c = editable ? changed[i] : undefined;
 		const b = input.blueprints?.[task.blueprint ?? ''];
-		const asked = typeof b === 'object' && !b.manual ? (task.stages ?? b.stages) : undefined;
+		const asked = b && !b.manual ? (task.stages ?? b.stages) : undefined;
 		const out: Change = {};
 		if (c?.prompt !== undefined && c.prompt !== task.prompt) {
 			out.prompt = c.prompt;
@@ -309,8 +306,7 @@ export function planInput(raw: unknown): PlanInput | undefined {
 	const blueprints: Record<string, PlanBlueprint> = {};
 	if (isObject(raw.blueprints))
 		for (const [name, b] of Object.entries(raw.blueprints)) {
-			if (typeof b === 'string') blueprints[name] = b;
-			else if (isObject(b) && Array.isArray(b.stages) && b.stages.every(stage)) blueprints[name] = { does: text(b.does) ?? '', stages: b.stages, manual: b.manual === true };
+			if (isObject(b) && Array.isArray(b.stages) && b.stages.every(stage)) blueprints[name] = { does: text(b.does) ?? '', stages: b.stages, manual: b.manual === true };
 		}
 	return {
 		project: text(raw.project),
@@ -331,9 +327,9 @@ function planOutput(raw: unknown): PlanOutput {
 	if (!isObject(raw)) return {};
 	const tasks = Array.isArray(raw.tasks)
 		? raw.tasks
-				.filter((t): t is Record<string, unknown> => isObject(t) && typeof t.conversation === 'string')
+				.filter((t): t is Record<string, unknown> => isObject(t) && typeof t.conversation === 'string' && Number.isInteger(t.index))
 				.map((t) => ({
-					index: Number.isInteger(t.index) ? (t.index as number) : undefined,
+					index: t.index as number,
 					task: text(t.task) ?? '',
 					conversation: t.conversation as string,
 					title: text(t.title) ?? '',
@@ -347,7 +343,7 @@ function planOutput(raw: unknown): PlanOutput {
 
 // blueprintLabel says in a few words what a task's blueprint runs after the agent's work.
 function blueprintLabel(b: PlanBlueprint | undefined, list: Step[]) {
-	if (!b || typeof b === 'string') return '';
+	if (!b) return '';
 	if (b.manual) return "Mob's model checks";
 	const has = (kind: string) => list.some((s) => s.kind === kind);
 	if (has('verify') && has('review')) return 'checks, then review';
@@ -369,7 +365,7 @@ function steps(task: PlanTask, b: PlanBlueprint | undefined, stages: Stage[] | u
 			state: 'idle',
 		},
 	];
-	if (b && typeof b === 'object' && b.manual)
+	if (b?.manual)
 		list.push({
 			kind: 'model',
 			label: kindLabels.model,
@@ -406,10 +402,7 @@ function steps(task: PlanTask, b: PlanBlueprint | undefined, stages: Stage[] | u
 		label: kindLabels.ready,
 		title: 'Ready to review',
 		sub: 'You hear once',
-		does:
-			typeof b === 'string'
-				? `The task follows its blueprint: ${b}.`
-				: 'You get one notice with the branch, the checks, the review’s conclusion and the cost, and decide what happens next.',
+		does: 'You get one notice with the branch, the checks, the review’s conclusion and the cost, and decide what happens next.',
 		state: 'idle',
 	});
 	if (node) place(list, node);

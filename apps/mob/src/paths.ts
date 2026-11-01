@@ -1,5 +1,5 @@
 // Where Mob keeps its files: the XDG base directories on Linux, and their
-// counterparts on macOS and Windows, as the Go release placed them.
+// counterparts on macOS and Windows.
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 

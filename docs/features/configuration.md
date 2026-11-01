@@ -61,16 +61,3 @@ Model providers and keys live in `providers.json` beside it (see
   secret flags through its child environment instead of child arguments.
 - Browser dev origins on localhost port 5173 and the `web_url` origin are
   allowed; the desktop window loads the service itself.
-
-## Migrating older configuration
-
-There are no legacy aliases. Update scripts and service definitions:
-
-| Previous setting | Current setting |
-| --- | --- |
-| `MOB_WEB_URL=` to disable public Web | `--web-url=` or `web_url: ""` in the file |
-| `mob gateway`, `gateway.*`, `--gateway-*`, `MOB_GATEWAY_*` | removed; use `mob runner` (see [Remote access](remote-access.md#encrypted-remote-runners)) |
-
-A file that still has a `gateway` section is refused with a message saying to
-delete it. Empty environment values
-now fall back to the file or default.
