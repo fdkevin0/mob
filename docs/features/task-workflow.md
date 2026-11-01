@@ -158,7 +158,9 @@ worktree and branch, seeing its uncommitted changes, without changing them,
 such as to review it. It gets no worktree or branch of its own, lends its
 worktree to no one, is never reviewed by Mob's model (it changed nothing),
 and its card on the Agents page says Read-only. Codex starts with its
-`read-only` sandbox, which cannot write at all. An ACP agent starts in its
+`read-only` sandbox, which cannot write at all; when it asks for more
+permissions, Mob drops any write access from the request, asks only about
+the rest, and refuses outright when nothing else is left. An ACP agent starts in its
 preset's read-only mode, Claude Agent's and CodeBuddy Code's `default`, in
 which they ask before editing; a session that does not offer that mode fails
 to start. Mob refuses every edit, delete or move it asks

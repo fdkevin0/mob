@@ -176,6 +176,38 @@ test('calls, approvals, plans and what a turn used', async () => {
 	session.close();
 });
 
+test('a reader is never granted writing, even when the owner allows', async () => {
+	const server = new Server();
+	const answers: unknown[] = [];
+	const write = { read: null, write: ['/work'], entries: [{ path: { type: 'path', path: '/work' }, access: 'write' }] };
+	server.turn = async (s, _, id) => {
+		const base = { threadId: 't1', turnId: id, environmentId: null, startedAtMs: 0, cwd: '/work', reason: 'needs it' };
+		answers.push(await s.ask('item/permissions/requestApproval', { ...base, itemId: 'p1', permissions: { network: null, fileSystem: write } }));
+		answers.push(await s.ask('item/permissions/requestApproval', { ...base, itemId: 'p2', permissions: { network: { enabled: true }, fileSystem: { ...write, read: ['/data'] } } }));
+		s.notify('turn/completed', { threadId: 't1', turn: { id, status: 'completed', error: null } });
+	};
+	const { session, asked } = await open(server, { readOnly: true }, 'always');
+	await session.prompt('go');
+	const readOnly = { read: ['/data'], write: null, entries: [] };
+	expect(answers).toEqual([{ permissions: {}, scope: 'turn' }, { permissions: { network: { enabled: true }, fileSystem: readOnly }, scope: 'session' }]);
+	expect(asked.map(r => [r.id, (r.input as { permissions: unknown }).permissions])).toEqual([['p2', { network: { enabled: true }, fileSystem: readOnly }]]);
+	session.close();
+});
+
+test('a writer is granted what the owner allows', async () => {
+	const server = new Server();
+	const answers: unknown[] = [];
+	const permissions = { network: null, fileSystem: { read: null, write: ['/work'] } };
+	server.turn = async (s, _, id) => {
+		answers.push(await s.ask('item/permissions/requestApproval', { threadId: 't1', turnId: id, itemId: 'p1', cwd: '/work', reason: null, permissions }));
+		s.notify('turn/completed', { threadId: 't1', turn: { id, status: 'completed', error: null } });
+	};
+	const { session } = await open(server, {}, 'allow');
+	await session.prompt('go');
+	expect(answers).toEqual([{ permissions, scope: 'turn' }]);
+	session.close();
+});
+
 test('a stopped turn ends cancelled, and a turn signed out or too long says so', async () => {
 	const server = new Server();
 	let fail: unknown = null;

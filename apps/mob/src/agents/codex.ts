@@ -92,6 +92,23 @@ const minus = (a: Tokens, b: Tokens): Tokens => ({
 	cacheWriteInputTokens: a.cacheWriteInputTokens - b.cacheWriteInputTokens, outputTokens: a.outputTokens - b.outputTokens, reasoningOutputTokens: a.reasoningOutputTokens - b.reasoningOutputTokens,
 });
 
+type Profile = {
+	network?: { enabled: boolean | null } | null;
+	fileSystem?: { read: string[] | null; write: string[] | null; entries?: { path: unknown; access: 'read' | 'write' | 'deny' }[]; globScanMaxDepth?: number } | null;
+};
+
+/** readable is a requested permission profile without what it would let the agent write. */
+export function readable(p: Profile): Profile {
+	const out: Profile = {};
+	if (p.network) out.network = p.network;
+	const fs = p.fileSystem;
+	if (fs) {
+		const entries = fs.entries?.filter(e => e.access !== 'write');
+		if (fs.read?.length || entries?.length) out.fileSystem = { ...fs, write: null, ...(fs.entries ? { entries } : {}) };
+	}
+	return out;
+}
+
 /** status is an item's status as a tool call's. */
 function status(s: unknown): ToolStatus {
 	if (s === 'completed') return 'completed';
@@ -304,9 +321,12 @@ class Session implements AgentSession {
 				return { decision: ({ allow: 'accept', always: 'acceptForSession', reject: 'decline', cancel: 'cancel' } as const)[choice] };
 			}
 			case 'item/permissions/requestApproval': {
-				const choice = await this.ask({ id: p.itemId, title: 'Grant ' + JSON.stringify(p.permissions), kind: 'other', input: { permissions: p.permissions, reason: p.reason } });
+				// A reader is never granted writing, whatever the owner answers; it is asked only about the rest.
+				const permissions = this.o.task.readOnly ? readable(p.permissions as Profile) : p.permissions as Profile;
+				if (this.o.task.readOnly && !permissions.network?.enabled && !permissions.fileSystem) return { permissions: {}, scope: 'turn' };
+				const choice = await this.ask({ id: p.itemId, title: 'Grant ' + JSON.stringify(permissions), kind: 'other', input: { permissions, reason: p.reason } });
 				const granted = choice === 'allow' || choice === 'always';
-				return { permissions: granted ? p.permissions : {}, scope: choice === 'always' ? 'session' : 'turn' };
+				return { permissions: granted ? permissions : {}, scope: choice === 'always' ? 'session' : 'turn' };
 			}
 			// Mob has no way to ask the owner for a form's answers.
 			case 'mcpServer/elicitation/request': return { action: 'decline', content: null, _meta: null };
