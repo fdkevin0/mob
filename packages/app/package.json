@@ -27,7 +27,7 @@
 		"@radix-ui/react-dropdown-menu": "2.2.1",
 		"@sqlite.org/sqlite-wasm": "3.53.4-build2",
 		"@streamdown/code": "2.0.0",
-		"ai": "7.0.155",
+		"ai": "7.0.157",
 		"lucide-react": "1.66.0",
 		"qrcode.react": "4.2.0",
 		"react": "^19.3.0",

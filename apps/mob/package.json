@@ -18,8 +18,8 @@
 		"@mob/tui": "workspace:*",
 		"@modelcontextprotocol/sdk": "1.32.2",
 		"commander": "14.0.3",
-		"imapflow": "2.9.1",
-		"mailparser": "3.12.4",
+		"imapflow": "2.10.0",
+		"mailparser": "3.14.1",
 		"marked": "16.4.2",
 		"nodemailer": "10.3.1",
 		"zod": "4.6.7"
@@ -30,6 +30,6 @@
 		"@types/bun": "1.4.4",
 		"@types/mailparser": "3.9.0",
 		"@types/nodemailer": "8.0.2",
-		"ai": "7.0.155"
+		"ai": "7.0.157"
 	}
 }
