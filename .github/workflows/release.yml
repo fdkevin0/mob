@@ -77,7 +77,7 @@ jobs:
             --generate-notes
       # Trusted publishing needs npm 11.5.1 or newer. The runner's own Node.js
       # lives in a root-owned prefix, so npm is upgraded in setup-node's.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       # NPM_TOKEN covers packages without a trusted publisher yet.
@@ -192,7 +192,7 @@ jobs:
           TAG: ${{ needs.release-please.outputs.tag }}
       # Trusted publishing needs npm 11.5.1 or newer. The runner's own Node.js
       # lives in a root-owned prefix, so npm is upgraded in setup-node's.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       # NPM_TOKEN covers packages without a trusted publisher yet.
