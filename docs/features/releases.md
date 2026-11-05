@@ -26,8 +26,9 @@ migration window, so old schema code does not stay in the tree forever.
   becomes the latest one.
 
 Stable releases start at `v0.1.0`. Below 1.0, a `feat` raises the minor version,
-a `fix` the patch version, and a breaking change (`!` or `BREAKING CHANGE:`) the
-minor version. Other commit types are left out of the changelog.
+a `fix`, `perf` or `revert` the patch version, and a breaking change (`!` or
+`BREAKING CHANGE:`) the minor version. `feat`, `fix`, `perf` and `revert`
+appear in the changelog; other commit types are left out.
 
 ## Builds
 
@@ -37,8 +38,8 @@ minor version. Other commit types are left out of the changelog.
   (amd64), plus `SHA256SUMS`. A musl build tells OpenTUI to load its musl
   library (`OPENTUI_LIBC`, set at build time). The release job installs
   every platform's native packages (`bun install --os='*' --cpu='*'`) so each
-  target finds them. CI checks that the binary reports the expected version. The
-  desktop app is built by the `desktop` job (see [Desktop app](desktop.md)).
+  target finds them. The desktop app is built by the `desktop` job (see
+  [Desktop app](desktop.md)).
 - Both channels attest their archives with `actions/attest-build-provenance`,
   verified with `gh attestation verify`.
 - With `--npm`, `scripts/release.ts` also writes the npm packages to
@@ -70,8 +71,8 @@ stage-only publisher fails every release with "403 OIDC permission denied for
 this action". Tick "Allow npm dist-tag" too so the workflow can move `latest`
 without the token. An `NPM_TOKEN` secret, a
 granular token for `usemob` and the `@usemob` scope, covers packages that have
-no trusted publisher yet, such as a new platform's first release, and moves
-the `latest` tag (without either, the packages are built but not published); a
+no trusted publisher yet, such as a new platform's first release (without
+either, the packages are built but not published); a
 `RELEASE_PLEASE_TOKEN` secret so the release PR starts CI; and GitHub Actions
 allowed to create pull requests.
 

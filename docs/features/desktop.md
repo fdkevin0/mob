@@ -37,5 +37,5 @@ resources (`bin/mob`), then `mob` on `PATH`.
 - `bun run build:desktop` stages `build/mob` and the icon, then runs
   electron-builder: a DMG and zip on macOS, an NSIS installer on Windows,
   AppImage and deb on Linux, in `apps/desktop/release/`.
-- The `desktop` job of the release workflow builds these for each nightly and
-  attaches them to the release. Packages are not signed or notarized yet.
+- The `desktop` job of the release workflow builds these on each run and
+  attaches them to the GitHub release. Packages are not signed or notarized yet.
