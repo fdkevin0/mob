@@ -35,7 +35,7 @@ export const pages: Page[] = [
 	...feature('Use', 'providers', 'configuration', 'turns-and-context', 'tools-and-approvals', 'sandbox', 'commands', 'schedules', 'desktop'),
 	...feature('Coding agents', 'coding-agents', 'task-workflow', 'plans'),
 	...feature('Extend', 'channels', 'plugins', 'mcp', 'skills', 'deepseek-harness', 'extensions'),
-	...feature('Remote access', 'remote-access', 'browser-runner', 'cloud-runners'),
+	...feature('Remote access', 'remote-access', 'browser-runner', 'cloud-runners', 'github'),
 	{
 		source: 'docs/environment-variables.md',
 		slug: 'reference/configuration',
