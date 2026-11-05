@@ -9,8 +9,7 @@ export const endpoint = (c: Config) => (c.baseUrl ?? '').trim() ? c.baseUrl!.tri
 
 export function validate(c: Config) {
 	if (!c.enabled || !c.baseUrl) return;
-	let u: URL | undefined;
-	try { u = new URL(c.baseUrl); } catch { /* refused below */ }
+	const u = URL.parse(c.baseUrl);
 	if (!u || (u.protocol !== 'https:' && u.protocol !== 'http:')) throw new Error('WeChat iLink: baseUrl must be a valid HTTP or HTTPS URL');
 }
 

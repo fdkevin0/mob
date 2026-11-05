@@ -222,8 +222,7 @@ class Session implements AgentSession {
 			},
 			requestPermission: async request => {
 				const tc = request.toolCall;
-				const answer = h.permission({ id: tc.toolCallId, title: tc.title, kind: tc.kind, locations: paths(tc.locations), input: tc.rawInput });
-				const choice = await Promise.race([answer, this.end.promise.then(() => 'cancel' as const)]);
+				const choice = await Promise.race([h.permission({ id: tc.toolCallId, title: tc.title, kind: tc.kind, locations: paths(tc.locations), input: tc.rawInput }), this.end.promise.then(() => 'cancel' as const)]);
 				return { outcome: outcome(choice, request.options) };
 			},
 		};

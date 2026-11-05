@@ -122,7 +122,8 @@ export class ConversationService {
 			(input.replace !== undefined && (a || typeof input.replace !== 'string' || !input.replace || input.replace.length > 100)) ||
 			(a && (input.text !== '' || typeof a.id !== 'string' || a.id.length !== 32 || typeof a.approved !== 'boolean' ||
 				(a.reason !== undefined && (typeof a.reason !== 'string' || a.reason.length > 2000)) ||
-				(a.remember !== undefined && typeof a.remember !== 'string') || (a.approved && !!a.reason) || !rememberable(a)))) {
+				(a.remember !== undefined && typeof a.remember !== 'string') || (a.approved && !!a.reason) ||
+				(!!a.remember && (!a.approved || (a.remember !== rememberConversation && a.remember !== rememberAlways)))))) {
 			throw new CommandError(400, 'invalid conversation, text, request ID, or approval');
 		}
 		if (a?.remember && !input.owner) throw new CommandError(403, 'only the owner of this Mob can remember approvals');
@@ -338,28 +339,21 @@ export class ConversationService {
 
 	/** pending lists the conversation's tool calls awaiting a decision, oldest first. */
 	pending(id: string): PendingApproval[] {
-		if (!id) return [];
-		try {
-			this.store.expireApprovals(id);
-			const list: PendingApproval[] = [];
-			for (const m of this.store.history(id)) for (const p of m.parts) {
-				if (p.state !== 'approval-requested') continue;
-				const approval = p.approval && typeof p.approval === 'object' ? String(p.approval.id ?? '') : '';
-				if (approval) list.push({ id: approval, tool: String(p.type).replace(/^tool-/, ''), input: p.input });
-			}
-			return list;
-		} catch {
-			return [];
+		if (!id || !this.store.exists(id)) return [];
+		this.store.expireApprovals(id);
+		const list: PendingApproval[] = [];
+		for (const m of this.store.history(id)) for (const p of m.parts) {
+			if (p.state !== 'approval-requested') continue;
+			const approval = p.approval?.id ?? '';
+			if (approval) list.push({ id: approval, tool: String(p.type).replace(/^tool-/, ''), input: p.input });
 		}
+		return list;
 	}
 }
 
 /** channelPrompt tells the model that the reader of a channel turn sees only its last step's text. */
 export const channelPrompt = (app: string) =>
 	'The user is reading in ' + app + ', where they see only the text you write after your last tool call, not your tool calls or earlier text. End with a complete, concise answer that says what you found or did.';
-
-/** rememberable reports whether a's remember is one an answer may carry. */
-const rememberable = (a: Answer) => !a.remember || (a.approved && (a.remember === rememberConversation || a.remember === rememberAlways));
 
 /** approvalField bounds each input field a summary shows, in characters. */
 const approvalField = 600;

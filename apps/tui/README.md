@@ -74,7 +74,8 @@ or an embedded browser. Approval scope is determined by the service, not
 the renderer. Inspect `/grants` and use `/revoke`; approval is not isolation.
 
 Opening an active conversation follows the existing service turn. The shared
-client polls, reconnects/replays and reconciles stored history; switching or
+client follows `/api/events` changes (falling back to polling when the event
+stream is unavailable), reconnects/replays and reconciles stored history; switching or
 exiting detaches only this client. This is **not** a guarantee that backend work
 survives a service restart. Errors remain explicit rather than silently claiming
 successful delivery. Plugin management and other custom forms are not implemented;
@@ -99,7 +100,7 @@ A locally injected SSE interruption verified visible failure and reconciliation
 to one persisted reply. Native framebuffer captures and Linux tmux PTY captures
 were inspected; they are not claims about every terminal emulator.
 
-Validated: Linux x64, Bun 1.4.2, OpenTUI 0.6.1, 80×24 and 48×16 frames, local tmux.
+Validated: Linux x64, Bun 1.4.4, OpenTUI 0.7.0, 80×24 and 48×16 frames, local tmux.
 Not validated: actual Chinese IME composition/candidate windows, SSH transport,
 Windows/macOS, terminal-specific Shift+Enter encodings, screen readers, clipboard
 copy/export, or very small windows below 48×16. These remain acceptance work in

@@ -1,4 +1,4 @@
-// The shared formatters, under the names the web app uses; @mob/core/format defines them for every client.
+// The shared formatters, under the names the web app uses; @mob/client re-exports them for every client.
 export {
 	formatDuration as duration,
 	formatMoney as money,
@@ -7,4 +7,4 @@ export {
 	formatTokens as tokens,
 	modelName,
 	replySpeed as speed,
-} from '@mob/core/format';
+} from '@mob/client';

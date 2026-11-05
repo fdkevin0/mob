@@ -209,11 +209,6 @@ async function proceed(svc: Service, id: string, run: object) {
 	await ready(svc, id);
 }
 
-/** shortstat is task t's change as git counts it, such as "2 files changed, 14 insertions(+), 6 deletions(-)"; empty when it cannot tell. */
-async function shortstat(svc: Service, t: Task) {
-	try { return await git(t.worktree, 'diff', '--shortstat', await base(svc, t)); } catch { return ''; }
-}
-
 /** tell adds text to the conversation that started task t and sends it to the owner. */
 function tell(svc: Service, t: Task, text: string) {
 	try { svc.store.note(t.parent!, text); } catch (e) {
@@ -228,7 +223,7 @@ export async function ready(svc: Service, id: string, review?: string) {
 	const t = svc.store.task(id)!;
 	const f: Flow = { ...t.flow!, stage: 'ready', ...review ? { review } : {} };
 	svc.store.setTaskFlow(id, f);
-	const stat = await shortstat(svc, t);
+	const stat = await git(t.worktree, 'diff', '--shortstat', await base(svc, t)).catch(() => '');
 	const lines = [`**Ready to review:** ${t.agent} · ${t.title}`, `Branch \`${t.branch}\`${stat ? ' · ' + stat : ''}`];
 	if (stagesOf(f)?.some(s => s.type === 'verify')) {
 		lines.push(f.checks?.length

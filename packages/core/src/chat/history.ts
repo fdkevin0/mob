@@ -1,9 +1,10 @@
 // history_search: the original words of earlier messages a turn reads only as a summary, or not at all.
+import { z } from 'zod';
 import { outcome } from './engine';
 import { encode } from './output';
 import { rank } from './search';
 import type { Message } from './store';
-import type { Tool } from './tools';
+import { defineTool, type Tool } from './tools';
 
 export const historyName = 'history_search';
 const historyLimit = 8, historyMax = 15;
@@ -22,24 +23,19 @@ export type HistoryResult = { results: Excerpt[]; note: string };
  * as they were said.
  */
 export function historySearch(hidden: () => Message[]): Tool {
-	return {
+	return defineTool({
 		name: historyName,
 		description: 'Search the earlier messages of this conversation that you see only as a summary, or not at all, by keywords or a message ID. Returns excerpts in their original words, such as exact paths, commands, errors, numbers and what the user said.',
 		prompt: 'Earlier messages of this conversation are summarized or left out; when you need their exact words, call history_search instead of guessing.',
-		parameters: {
-			type: 'object', properties: {
-				query: { type: 'string', description: 'Keywords for what to find, or a message ID' },
-				limit: { type: 'integer', minimum: 1, maximum: historyMax, description: `Excerpts to return; default ${historyLimit}` },
-			}, required: ['query'], additionalProperties: false,
-		},
+		input: z.object({
+			query: z.string().describe('Keywords for what to find, or a message ID'),
+			limit: z.number().int().min(1).max(historyMax).optional().describe(`Excerpts to return; default ${historyLimit}`),
+		}),
 		run: async call => {
-			const query = typeof call.input.query === 'string' ? call.input.query : '';
-			if (!query.trim()) throw new Error('query must name what to find');
-			const n = call.input.limit;
-			const limit = typeof n === 'number' && n >= 1 ? Math.min(Math.trunc(n), historyMax) : historyLimit;
-			return searchHistory(hidden(), query, limit);
+			if (!call.input.query.trim()) throw new Error('query must name what to find');
+			return searchHistory(hidden(), call.input.query, call.input.limit ?? historyLimit);
 		},
-	};
+	});
 }
 
 /** searchHistory ranks excerpts of messages against query and returns at most limit, best first. */

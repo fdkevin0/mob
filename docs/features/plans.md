@@ -110,7 +110,7 @@ Mob runs those in place of its blueprint's (`stagesOf` in
 **Where it lives.** The tool and `revisePlan` are in
 `apps/mob/src/agents/tools.ts`; the card, the flow and the inspector in
 `packages/app/src/PlanCard.tsx`; the studio in `PlanStudio.tsx` and
-`planStudio.ts`, drawn with the landing page's voxel calves
+`studioScene.ts`, drawn with the landing page's voxel calves
 (`packages/ui/src/voxel/`); approving with changes in
 `packages/core/src/chat/conversation.ts` (`revise`) and `store.ts`
 (`decide`, `pendingApproval`).

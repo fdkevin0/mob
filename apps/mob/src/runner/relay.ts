@@ -16,9 +16,8 @@ export type Handler = (req: globalThis.Request) => Promise<Response>;
 
 /** origin permits TLS in production and loopback HTTP for local development. */
 export function origin(raw: string) {
-	let u: URL;
-	try { u = new URL(raw); } catch { throw new Error('runner URL must be an HTTPS origin'); }
-	if (!u.host || u.username || u.password || u.search || raw.includes('?') || u.hash || raw.includes('#') || (u.pathname !== '/' && u.pathname !== '')) throw new Error('runner URL must be an HTTPS origin');
+	const u = URL.parse(raw);
+	if (!u?.host || u.username || u.password || u.search || raw.includes('?') || u.hash || raw.includes('#') || (u.pathname !== '/' && u.pathname !== '')) throw new Error('runner URL must be an HTTPS origin');
 	if (!secureURL(u)) throw new Error('runner URL requires HTTPS except on loopback');
 	return u.protocol + '//' + u.host;
 }

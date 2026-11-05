@@ -108,8 +108,7 @@ program.addCommand(providerCommand(() => environment().loader.providersPath));
 for (const add of commands) program.addCommand(add(environment));
 
 function openBrowser(url: string) {
-	const command = process.platform === 'darwin' ? ['open', url] : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : ['xdg-open', url];
-	try { Bun.spawn(command, { stdio: ['ignore', 'ignore', 'ignore'] }).unref(); } catch { /* print only */ }
+	try { Bun.spawn(process.platform === 'darwin' ? ['open', url] : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : ['xdg-open', url], { stdio: ['ignore', 'ignore', 'ignore'] }).unref(); } catch { /* print only */ }
 }
 
 program.parseAsync().catch(e => {

@@ -7,6 +7,7 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, posix, relative, sep } from 'node:path';
+import { cell } from '@mob/core';
 import { workdir } from '../sandbox/sandbox';
 
 /** maxSkills bounds how many skills one root offers. */
@@ -158,7 +159,6 @@ export class Library {
 
 /** copies is where loaded skills are copied in a sandbox workspace. */
 const copies = '.mob/skills';
-const cell = (text: string) => text.split(/\s+/).filter(Boolean).join(' ').replaceAll('|', '\\|');
 
 /** safeDir creates rel's directories under root, refusing any that is a link, and returns the last. */
 function safeDir(root: string, rel: string) {

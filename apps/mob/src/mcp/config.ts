@@ -1,6 +1,5 @@
 // How Mob reaches MCP servers, as mcp_servers in config.yaml lists them.
 import { parseExposure, type Exposure } from '@mob/core';
-import { createHash } from 'node:crypto';
 
 /**
  * Server is how Mob reaches one MCP server: a command it starts and talks to
@@ -94,8 +93,7 @@ export function validate(servers: Servers) {
 		}
 		if (!s.command === !s.url) fail('set either command or url');
 		if (s.url) {
-			let u: URL | undefined;
-			try { u = new URL(s.url); } catch { /* refused below */ }
+			const u = URL.parse(s.url);
 			if (!u || (u.protocol !== 'https:' && u.protocol !== 'http:') || !u.host) fail('url must be an http or https URL');
 			if (s.args?.length || s.env?.length || s.dir) fail('args, env and dir are for a command');
 			if (s.oauth && Object.keys(s.headers ?? {}).some(k => k.toLowerCase() === 'authorization')) fail('oauth sets the Authorization header itself');
@@ -114,10 +112,8 @@ export function exposure(s: Server, tool: string): Exposure {
 	let best = -1, chosen = '', value = s.exposure ?? '';
 	for (const [pattern, e] of Object.entries(s.toolExposure ?? {})) {
 		const weight = pattern === tool ? Number.MAX_SAFE_INTEGER : pattern.length;
-		let ok = false;
-		try { ok = glob(pattern, tool); } catch { /* validated */ }
 		// Equal globs are told apart by their text, so the choice is stable.
-		if (ok && (weight > best || (weight === best && pattern < chosen))) { best = weight; chosen = pattern; value = e; }
+		if (glob(pattern, tool) && (weight > best || (weight === best && pattern < chosen))) { best = weight; chosen = pattern; value = e; }
 	}
 	try { return parseExposure(value); } catch { return 'deferred'; }
 }
@@ -136,7 +132,7 @@ export function fingerprint(s: Server) {
 	// Go's encoding/json field order, so approvals given before the TypeScript host still hold.
 	const canonical: Record<string, unknown> = { Command: s.command ?? '', Dir: s.dir ?? '', URL: s.url ?? '', Args: s.args?.length ? s.args : null, Env: s.env?.length ? s.env : null, Headers: sorted(s.headers) };
 	if (s.oauth) canonical.OAuth = true;
-	return createHash('sha256').update(JSON.stringify(canonical)).digest('hex').slice(0, 24);
+	return new Bun.CryptoHasher('sha256').update(JSON.stringify(canonical)).digest('hex').slice(0, 24);
 }
 
 /** same reports whether two server lists are alike. */

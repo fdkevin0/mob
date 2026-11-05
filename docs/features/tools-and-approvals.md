@@ -21,8 +21,9 @@ before it has an effect, and the owner can decide from any client or channel.
   Cloudflare plugin offers `cloudflare`. Each is defined in its own package and
   offered only while its plugin is enabled.
 - [Coding agents](coding-agents.md) add `task_start` (asks for approval),
-  `tasks`, `task_message`, `task_stop`, `task_diff` and `task_check` (asks
-  for approval).
+  `task_plan` (asks for approval), `tasks`, `task_message`, `task_stop`,
+  `task_diff`, `task_check` (asks for approval) and `task_review` (asks for
+  approval).
 - [Schedules](schedules.md) add `schedule` (asks for approval), `schedules`
   and `schedule_cancel`.
 - [MCP servers](mcp.md) add `mcp__<server>__<tool>` tools, and `tool_install`
@@ -83,7 +84,8 @@ owner's turns.
 - Reading runs at once. Sending mail, Workers AI (`ai.run`, and
   `vectorize.query`, which embeds with Workers AI), D1 queries that may write,
   `remember`, every MCP call, installing an MCP server with `tool_install`,
-  starting a coding task, running a `task_check` command and scheduling a
+  starting a coding task or plan (`task_start`, `task_plan`), running a
+  `task_check` command, starting a review squad (`task_review`) and scheduling a
   prompt wait for approval. A single D1 `SELECT`
   statement runs without approval; SQL the check cannot be sure of still asks.
 - The approval names what the call acts on (the sender and SMTP account, or the
@@ -102,8 +104,8 @@ rejected before changing the pending approval or running its tool.
 - Before an approval decision, the web UI shows the full tool input above the
   approval buttons, including all parameters and long command or content text.
 - The web UI and TUI show the request in the conversation; `/approve` and
-  `/deny` work in every client. Telegram shows Approve, Always allow and Deny
-  buttons; WeChat iLink accepts 批准 and 拒绝, or a bare reply when one request is
+  `/deny` work in every client. Telegram shows Approve, Deny, Allow in
+  conversation and Always allow buttons; WeChat iLink accepts 批准 and 拒绝, or a bare reply when one request is
   pending. `/approve` and `/deny` without an ID decide the only pending request.
 - A denial may carry a reason (`Answer.reason`). It is written into the
   denial note, and the model answers in a new turn. A denial without a reason
@@ -133,8 +135,8 @@ rejected before changing the pending approval or running its tool.
   request."
 
 In the Web UI, chat and Agents cards show request details expanded by default.
-Long inputs wrap and scroll without truncation. **Allow once** and **Deny** are
-the primary actions; **More permissions** offers conversation-only or
+Long inputs wrap and scroll without truncation. **Allow once** and **Deny…** are
+the primary actions; **More permissions…** offers conversation-only or
 cross-conversation remembered approval and explains its scope. Partial requests
 on Agents cards cannot be approved there; open the conversation to review the
 complete request. Decision controls are disabled while submitting; failures

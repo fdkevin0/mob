@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Ref } from 'react';
-import { newID } from '@mob/core/chat/sql';
-import { Changes } from '@mob/client';
+import { Changes, newID } from '@mob/client';
 import { api, ok, rpcOf, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { ManagementTab } from './Management';
 import type { Action } from './contracts';
@@ -51,8 +50,6 @@ function route(hash: string, replace: boolean) {
 	if (replace) window.history.replaceState(window.history.state, '', hash);
 	else window.history.pushState(window.history.state, '', hash);
 }
-/** newConversationID chooses the ID of a new conversation, in the form Mob gives them. */
-const newConversationID = newID;
 // Recently opened conversations are kept in memory, so switching back shows them at once while they refresh.
 const cacheSize = 20;
 
@@ -214,7 +211,7 @@ export function Workspace({
 		choice.current++;
 		setSwitching(false);
 		setError('');
-		show(newConversationID(), { messages: [], active: false, model: '' }, replace);
+		show(newID(), { messages: [], active: false, model: '' }, replace);
 	}
 	// A new title shows at once; the list from Mob replaces it if renaming fails.
 	function rename(id: string, title: string) {
@@ -279,7 +276,7 @@ export function Workspace({
 				// A conversation the owner picked meanwhile stays open.
 				if (choice.current !== start) return;
 				// With none yet, a new conversation waits behind the page the address names.
-				if (!list.length) showBehind(newConversationID(), { messages: [], active: false, model: '' });
+				if (!list.length) showBehind(newID(), { messages: [], active: false, model: '' });
 				else if (routedView() !== 'chat') {
 					const id = pick(list);
 					showBehind(id, cache.current.get(id) ?? (await load(id)));

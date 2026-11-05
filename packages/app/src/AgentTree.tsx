@@ -654,15 +654,16 @@ export function AgentTree({
 	}, [connection, changes]);
 
 	// An action changes the tree at once, and again when the turn it starts gets going.
-	const post = async (path: string, body: object) => {
-		await api(connection, path, body);
+	const after = async (call: Promise<unknown>) => {
+		await call;
 		reload.current();
 		setTimeout(() => reload.current(), 1000);
 	};
+	const rpc = rpcOf(connection);
 	const act: Act = {
-		decide: (conversationId, approval, approved, extra) => post(`/conversations/${conversationId}/decide`, { id: approval, approved, ...extra }),
-		stop: (node) => post(node.task ? `/tasks/${node.task.id}/stop` : `/conversations/${node.conversationId}/stop`, {}),
-		message: (task, text) => post(`/tasks/${task}/message`, { text }),
+		decide: (id, approval, approved, extra) => after(ok(rpc.conversations[':id'].decide.$post({ param: { id }, json: { id: approval, approved, ...extra } }))),
+		stop: (node) => after(node.task ? api(connection, `/tasks/${node.task.id}/stop`, {}) : ok(rpc.conversations[':id'].stop.$post({ param: { id: node.conversationId } }))),
+		message: (task, text) => after(api(connection, `/tasks/${task}/message`, { text })),
 	};
 
 	const all = nodes ?? [];

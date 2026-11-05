@@ -19,14 +19,14 @@ a database, files, processes and the command line.
 | `packages/core/src/chat` | conversations and turns: `ConversationService`, the model loop, tool registry, hooks, command registry, approvals, context fitting (`prune.ts`, `compact.ts`), usage, search, and the SQLite store and schema |
 | `packages/core/src/llm` | the provider-neutral model interface and its drivers (`openai`, `anthropic`, `demo`), and sending with retries (`send.ts`) |
 | `packages/core/src/provider` | `providers.json`, presets and the models.dev catalog |
-| `packages/core/src/app` | the HTTP routes and AI SDK UI stream (`http.ts`, `server.ts`), plugin lifecycle (`extension.ts`), the channel bridge (`channel.ts`), plugin configuration sections and schedules |
+| `packages/core/src/app` | the HTTP routes and AI SDK UI stream (`api.ts`, `http.ts`, `server.ts`), plugin lifecycle (`extension.ts`), the channel bridge (`channel.ts`), plugin configuration sections and schedules |
 | `packages/core/src/sqlite` | the SQLite adapters: `bun:sqlite` for the host, SQLite WASM for the browser |
 | `apps/mob/src/main.ts`, `config.ts`, `local.ts` | the CLI (commander), option definitions with their generated reference, XDG loading and live reload, process ownership, the database lock and the background lifecycle |
-| `apps/mob/src/plugins.ts` | the host's plugins, each in its own directory: `agents` (coding agents over ACP), `email`, `telegram`, `cloudflare`, `wechat`, `mcp`, `skills`, `sandbox` (container runtimes and the model's `sandbox` tool) and `runner` |
+| `apps/mob/src/plugins.ts` | the host's plugins, each in its own directory (except `schedules.ts`): `agents` (coding agents over ACP and Codex's app server), `email`, `telegram`, `cloudflare`, `wechat`, `mcp`, `skills`, `schedules.ts`, `sandbox` (container runtimes and the model's `sandbox` tool) and `runner` |
 | `apps/mob/src/runner`, `apps/web/worker/relay.ts` | end-to-end encrypted remote control, with account ownership in `apps/web/worker/runners.ts` |
 | `apps/mob/scripts/build.ts`, `scripts/release.ts` | the single-executable build and the release archives |
 | `packages/client` | the wire contract (`contracts.ts`), authenticated HTTP, AI SDK message state, commands, approvals, polling and stream recovery, shared by Web and the terminal |
-| `packages/ui` (`@mob/ui`) | the design system: tokens and theme, the calf brand, source-owned shadcn/Radix controls and the header markup the site and docs share; no authentication or conversation state |
+| `packages/ui` (`@mob/ui`) | the design system: tokens and theme, the calf brand, source-owned shadcn/Radix controls, and the header styles and navigation links (`header.css`, `navigation.ts`) the site and docs share; no authentication or conversation state |
 | `packages/app` (`@mob/app`) | the React workspace (`/app`), with adapted AI Elements; browser authentication/storage, DOM input/completion and presentation adapt the shared client. `mob` embeds its build, the desktop app loads it and the site deploys it |
 | `apps/web` (`@mob/web`) | https://usemob.app: the landing page with GitHub sign-in and voxel scenes, the demo and account pages, the Cloudflare Worker (`worker/`) and the build that adds `/app` and `/docs` |
 | `apps/docs` | the Starlight documentation built from this repository's Markdown |
@@ -55,7 +55,7 @@ a database, files, processes and the command line.
   beside their own code; the engine does not name them (see
   [Extensions](features/extensions.md)). Code from outside Mob arrives only over
   MCP, including the optional [DeepSeek Harness tools bridge](features/deepseek-harness.md),
-  and as [coding agents](features/coding-agents.md) over ACP, which answer
+  and as [coding agents](features/coding-agents.md) over ACP and Codex's app server, which answer
   their tasks' conversations through a `Delegate`.
 - SQLite is the only persistence dependency: no generic repository and no
   external queue. Schema changes are upgrades in `packages/core/src/chat/schema.ts`

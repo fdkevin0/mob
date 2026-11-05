@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Context, Logger } from '@deepseek-ai/cordis';
 import { ToolCallId } from '@deepseek-ai/dsh-llm';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
@@ -55,7 +54,7 @@ export async function createBridge(plugins: LoadedPlugin[]) {
 		}));
 		server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
 			const call = ctx.tools.execute({
-				callId: ToolCallId(randomUUID()),
+				callId: ToolCallId(crypto.randomUUID()),
 				name: request.params.name,
 				arguments: request.params.arguments ?? {},
 				signal: AbortSignal.any([extra.signal, lifetime.signal]),

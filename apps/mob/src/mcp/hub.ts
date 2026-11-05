@@ -1,17 +1,16 @@
 // The hub keeps Mob connected to the configured MCP servers and knows the
 // tools each one offers.
-import { sleep } from '@mob/core/sleep';
 import { z } from 'zod';
 import { cell, defineTool, type Entry, type Tool } from '@mob/core';
+import { sleep } from '@mob/core/sleep';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ToolListChangedNotificationSchema, type CallToolResult, type Tool as MCPTool } from '@modelcontextprotocol/sdk/types.js';
-import { createHash } from 'node:crypto';
 import type { MCPOverview } from '@mob/client/contracts';
 import { version } from '../version';
-import { catalogKey, curated, fetchRegistry, hostOf, needs, refreshAfter, sameRegistry, type Catalog, type Listing, type Registry } from './catalog';
+import { catalogKey, curated, fetchRegistry, needs, refreshAfter, sameRegistry, type Catalog, type Listing, type Registry } from './catalog';
 import { exposure, fingerprint, names, same, serverName, target, type Server, type Servers } from './config';
 import { finishSignIn, Grants, signInHint, signInTimeout, SignIn, type Settings, type Waiting } from './oauth';
 
@@ -47,14 +46,10 @@ type Installed = { listing: Listing; at: string; approvalId?: string; installedB
 type InstallRequest = { server: string; name: string; title?: string; version?: string; url: string; repository?: string; source: string; description?: string };
 type CallRequest = { server: string; tool: string; arguments?: Record<string, unknown>; target: string; config: string };
 
-const installedServer = (i: Installed): Server => ({ url: i.listing.url, oauth: true });
-
 export function oneLine(text: string) {
 	text = text.split(/\s+/).filter(Boolean).join(' ');
 	return text.length > 300 ? text.slice(0, 300) + '…' : text;
 }
-
-const brief = (s: string) => { const c = [...s.trim()]; return c.length > 300 ? c.slice(0, 300).join('') + '…' : s.trim(); };
 
 /**
  * toolName is mcp__<server>__<tool> when that uses only the characters models
@@ -65,7 +60,7 @@ export function toolName(server: string, tool: string) {
 	const name = `mcp__${server}__${tool}`;
 	const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_');
 	if (safe === name && name.length <= 64) return name;
-	return safe.slice(0, 47) + '_' + createHash('sha256').update(server + '\0' + tool).digest('hex').slice(0, 16);
+	return safe.slice(0, 47) + '_' + new Bun.CryptoHasher('sha256').update(server + '\0' + tool).digest('hex').slice(0, 16);
 }
 
 /** parameters is a tool's input schema as models take it: a JSON object schema, or one that accepts any object. */
@@ -281,7 +276,7 @@ export class Hub {
 
 	private merge(installs: Record<string, Installed>) {
 		const merged: Servers = { ...this.config };
-		for (const [name, i] of Object.entries(installs)) if (!this.shadowed(name, i)) merged[name] = installedServer(i);
+		for (const [name, i] of Object.entries(installs)) if (!this.shadowed(name, i)) merged[name] = { url: i.listing.url, oauth: true };
 		if (same(this.servers, merged)) return false;
 		this.servers = merged;
 		return true;
@@ -374,7 +369,8 @@ export class Hub {
 				if (!l) throw new Error('no server in the catalog has that URL; find one with tool_search');
 				const header = needs(l);
 				if (header) throw new Error(`this server needs the ${header} header; the owner adds it under mcp_servers in config.yaml`);
-				return call.requestApproval({ server: localName(l.url, this.servers), name: l.name, title: l.title, version: l.version, url: l.url, repository: l.repository, source: l.source, description: brief(l.description) } satisfies InstallRequest);
+				const chars = [...l.description.trim()];
+				return call.requestApproval({ server: localName(l.url, this.servers), name: l.name, title: l.title, version: l.version, url: l.url, repository: l.repository, source: l.source, description: chars.length > 300 ? chars.slice(0, 300).join('') + '…' : l.description.trim() } satisfies InstallRequest);
 			},
 			approved: async call => {
 				const r = JSON.parse(call.input) as InstallRequest;
@@ -443,7 +439,7 @@ export class Hub {
 	/** entries are the servers the catalog offers, for tool_search to find. */
 	entries(): Entry[] {
 		return this.listings().map(l => {
-			const host = hostOf(l.url);
+			const host = URL.parse(l.url)?.host || l.url;
 			const header = needs(l);
 			return {
 				kind: 'MCP server',

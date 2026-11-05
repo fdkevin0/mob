@@ -1,8 +1,8 @@
 import { Chat } from '@ai-sdk/react';
 import { DefaultChatTransport, generateId, readUIMessageStream } from 'ai';
-import { MobClient, type ChatMessage, type ClientType, type Snapshot } from './api';
+import { MobClient, ok, type ChatMessage, type ClientType, type Snapshot } from './api';
 import type { Changes } from './changes';
-import type { Action, CommandResult } from './contracts';
+import type { Action } from './contracts';
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const pollInterval = 2000;
@@ -209,7 +209,7 @@ export class ConversationClient {
 		}
 	};
 
-	private async reload() {
+	async reload() {
 		if (
 			!this.active ||
 			this.state.streaming ||
@@ -358,11 +358,11 @@ export class ConversationClient {
 		this.update({});
 		const generation = this.generation;
 		try {
-			const result = await this.options.client.request<CommandResult>('/commands/run', {
-				client: this.options.clientType,
-				conversationId: this.options.id,
-				text,
-			});
+			const result = await ok(
+				this.options.client.api.commands.run.$post({
+					json: { client: this.options.clientType, conversationId: this.options.id, text },
+				}),
+			);
 			if (!this.active || generation !== this.generation) return;
 			this.running = false;
 			this.update({ commandResult: result.markdown });
@@ -467,7 +467,7 @@ export class ConversationClient {
 
 	cancel = async () => {
 		try {
-			await this.options.client.request(`/conversations/${this.options.id}/stop`, {});
+			await ok(this.options.client.api.conversations[':id'].stop.$post({ param: { id: this.options.id } }));
 			this.approvalController?.abort();
 			this.followController?.abort();
 			if (this.pendingSend) this.pendingSend.uncertain = true;

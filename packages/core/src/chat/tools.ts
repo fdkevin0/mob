@@ -73,7 +73,7 @@ export function defineTool<S extends z.ZodObject>(t: Omit<Tool, 'parameters' | '
 }
 
 /** checkInput is a call's arguments as the tool's schema parses them, or the error the model gets back. */
-export function checkInput(tool: Tool | undefined, input: Record<string, any>): { input: Record<string, any> } | { error: Error } {
+export function checkInput(tool: Tool | undefined, input: Record<string, unknown>): { input: Record<string, unknown> } | { error: Error } {
 	if (!tool?.input) return { input };
 	const r = tool.input.safeParse(input);
 	return r.success ? { input: r.data } : { error: new Error('invalid tool arguments:\n' + z.prettifyError(r.error)) };
@@ -104,7 +104,7 @@ export class ToolCall {
 	readonly id: string;
 	readonly name: string;
 	readonly arguments: string;
-	constructor(call: LLMToolCall, readonly conversationId: string, readonly input: Record<string, any>,
+	constructor(call: LLMToolCall, readonly conversationId: string, readonly input: Record<string, unknown>,
 		/** part is the call as stored in message; a tool may change what it records. */
 		readonly part: Part, readonly message: Message, readonly store: Store, readonly send: (e: Event) => Promise<void>,
 		readonly signal: AbortSignal,

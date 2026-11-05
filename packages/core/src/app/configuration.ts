@@ -36,18 +36,18 @@ function parse<C>(section: Section<C>, raw: unknown): C {
 /** defaults is the configuration of a plugin never saved. */
 export const sectionDefaults = <C>(section: Section<C>) => parse(section, {});
 
-const get = (c: unknown, path: string) => path.split('.').reduce<any>((v, k) => v?.[k], c) as string | undefined;
+const get = (c: unknown, path: string) => path.split('.').reduce<unknown>((v, k) => (v as Record<string, unknown> | undefined)?.[k], c) as string | undefined;
 function setValue(c: unknown, path: string, value: unknown) {
 	const keys = path.split('.');
 	const last = keys.pop()!;
-	(keys.reduce<any>((v, k) => v[k], c))[last] = value;
+	(keys.reduce<unknown>((v, k) => (v as Record<string, unknown>)[k], c) as Record<string, unknown>)[last] = value;
 }
 
 function unset(c: unknown, path: string) {
 	const keys = path.split('.');
 	const last = keys.pop()!;
-	const parent = keys.reduce<any>((v, k) => v?.[k], c);
-	if (parent && typeof parent === 'object') delete parent[last];
+	const parent = keys.reduce<unknown>((v, k) => (v as Record<string, unknown> | undefined)?.[k], c);
+	if (parent && typeof parent === 'object') delete (parent as Record<string, unknown>)[last];
 }
 
 function resolveSecret(old: string, submitted: string, sameOwner: boolean, update?: SecretUpdate): string {
@@ -70,9 +70,9 @@ export class PluginSettings {
 	lookup(name: string) { return this.sections.find(s => s.name === name); }
 
 	/** config is every plugin's saved configuration, defaults where none is saved or the saved one no longer parses. */
-	config(): Record<string, any> {
+	config(): Record<string, unknown> {
 		const saved = this.store.setting<Record<string, unknown>>('plugins') ?? {};
-		const out: Record<string, any> = {};
+		const out: Record<string, unknown> = {};
 		for (const s of this.sections) {
 			try { out[s.name] = parse(s, saved[s.name] ?? {}); } catch { out[s.name] = sectionDefaults(s); }
 		}
@@ -80,16 +80,16 @@ export class PluginSettings {
 	}
 
 	/** publicConfig is every plugin's configuration with its credentials withheld, each replaced by whether it is set. */
-	publicConfig(c = this.config()) {
+	publicConfig(c = this.config()): Record<string, Record<string, unknown>> {
 		return Object.fromEntries(this.sections.map(s => {
-			const p = structuredClone(c[s.name]);
+			const p = structuredClone(c[s.name]) as Record<string, unknown>;
 			for (const v of s.secrets) { setValue(p, v.flag, !!get(p, v.name)); unset(p, v.name); }
 			return [s.name, p];
 		}));
 	}
 
 	/** update saves one plugin's submitted configuration and returns every plugin's. */
-	update(name: string, raw: Record<string, unknown>): Record<string, any> {
+	update(name: string, raw: Record<string, unknown>): Record<string, unknown> {
 		const section = this.lookup(name);
 		if (!section) throw new Error('unknown plugin');
 		const c = this.config();

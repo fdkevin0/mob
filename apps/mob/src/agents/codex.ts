@@ -259,56 +259,50 @@ class Session implements AgentSession {
 		ending.resolve({ reason: 'end_turn', usage: rows });
 	}
 
-	private update(u: Update) { this.o.handler.update(u); }
-
 	private notified(method: string, params: unknown) {
 		const p = params as { threadId?: string; turnId?: string; [k: string]: unknown };
 		if (p?.threadId !== undefined && p.threadId !== this.id) return;
 		switch (method) {
 			case 'item/agentMessage/delta':
 				this.streamed.add(String(p.itemId));
-				return this.update({ type: 'text', text: String(p.delta) });
+				return this.o.handler.update({ type: 'text', text: String(p.delta) });
 			case 'item/reasoning/summaryTextDelta':
-				return this.update({ type: 'reasoning', text: String(p.delta) });
+				return this.o.handler.update({ type: 'reasoning', text: String(p.delta) });
 			case 'item/started': case 'item/completed': {
 				const item = p.item as Item;
 				const start = method === 'item/started';
-				if (item.type === 'agentMessage' && !start && !this.streamed.has(item.id) && item.text) return this.update({ type: 'text', text: String(item.text) });
+				if (item.type === 'agentMessage' && !start && !this.streamed.has(item.id) && item.text) return this.o.handler.update({ type: 'text', text: String(item.text) });
 				const u = tool(item, start);
 				if (!u) return;
 				this.items.set(item.id, item);
-				return this.update(u);
+				return this.o.handler.update(u);
 			}
 			case 'turn/plan/updated': {
 				const plan = p.plan as { step: string; status: string }[];
-				return this.update({ type: 'plan', entries: plan.map(s => ({ content: s.step, status: s.status === 'inProgress' ? 'in_progress' : s.status })) });
+				return this.o.handler.update({ type: 'plan', entries: plan.map(s => ({ content: s.step, status: s.status === 'inProgress' ? 'in_progress' : s.status })) });
 			}
 			case 'thread/tokenUsage/updated': {
 				const u = p.tokenUsage as { total: Tokens; last: Tokens; modelContextWindow: number | null };
 				// The total before the first turn this session sees is the total less that turn's first request.
 				this.before ??= minus(u.total, u.last);
 				this.total = u.total;
-				if (u.modelContextWindow) this.update({ type: 'context', used: u.last.totalTokens, size: u.modelContextWindow });
+				if (u.modelContextWindow) this.o.handler.update({ type: 'context', used: u.last.totalTokens, size: u.modelContextWindow });
 				return;
 			}
 			case 'model/rerouted':
 				this.model = String(p.toModel);
-				return this.update({ type: 'model', model: this.model });
+				return this.o.handler.update({ type: 'model', model: this.model });
 			case 'turn/completed': return this.completed(p.turn as Turn);
 		}
 	}
 
-	/** ask is the owner's, or Mob's, answer to what the agent asks before a call. */
-	private ask(r: Parameters<Options['handler']['permission']>[0]): Promise<Choice> {
-		return Promise.race([this.o.handler.permission(r), this.end.promise.then(() => 'cancel' as const)]);
-	}
-
 	private async requested(method: string, params: unknown): Promise<unknown> {
 		const p = params as { itemId: string; [k: string]: unknown };
+		const ask = (r: Parameters<Options['handler']['permission']>[0]): Promise<Choice> => Promise.race([this.o.handler.permission(r), this.end.promise.then(() => 'cancel' as const)]);
 		switch (method) {
 			case 'item/commandExecution/requestApproval': {
 				const command = typeof p.command === 'string' ? p.command : '';
-				const choice = await this.ask({ id: p.itemId, title: command || (p.reason as string | undefined), kind: 'execute', input: { command: p.command, cwd: p.cwd, reason: p.reason, network: p.networkApprovalContext ?? undefined } });
+				const choice = await ask({ id: p.itemId, title: command || (p.reason as string | undefined), kind: 'execute', input: { command: p.command, cwd: p.cwd, reason: p.reason, network: p.networkApprovalContext ?? undefined } });
 				return { decision: ({ allow: 'accept', always: 'acceptForSession', reject: 'decline', cancel: 'cancel' } as const)[choice] };
 			}
 			case 'item/fileChange/requestApproval': {
@@ -317,14 +311,14 @@ class Session implements AgentSession {
 				const files = changes.flatMap(c => c.kind.move_path ? [c.path, c.kind.move_path] : [c.path]);
 				// Writing under another root asks for that root, which is what an approval of it covers.
 				const root = typeof p.grantRoot === 'string' ? p.grantRoot : '';
-				const choice = await this.ask({ id: p.itemId, title: root ? 'Write in ' + root : 'Edit ' + files.join(', '), kind: changeKind(changes), locations: root ? [...files, root] : files, input: { reason: p.reason, root: root || undefined } });
+				const choice = await ask({ id: p.itemId, title: root ? 'Write in ' + root : 'Edit ' + files.join(', '), kind: changeKind(changes), locations: root ? [...files, root] : files, input: { reason: p.reason, root: root || undefined } });
 				return { decision: ({ allow: 'accept', always: 'acceptForSession', reject: 'decline', cancel: 'cancel' } as const)[choice] };
 			}
 			case 'item/permissions/requestApproval': {
 				// A reader is never granted writing, whatever the owner answers; it is asked only about the rest.
 				const permissions = this.o.task.readOnly ? readable(p.permissions as Profile) : p.permissions as Profile;
 				if (this.o.task.readOnly && !permissions.network?.enabled && !permissions.fileSystem) return { permissions: {}, scope: 'turn' };
-				const choice = await this.ask({ id: p.itemId, title: 'Grant ' + JSON.stringify(permissions), kind: 'other', input: { permissions, reason: p.reason } });
+				const choice = await ask({ id: p.itemId, title: 'Grant ' + JSON.stringify(permissions), kind: 'other', input: { permissions, reason: p.reason } });
 				const granted = choice === 'allow' || choice === 'always';
 				return { permissions: granted ? permissions : {}, scope: choice === 'always' ? 'session' : 'turn' };
 			}
