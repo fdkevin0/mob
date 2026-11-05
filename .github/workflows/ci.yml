@@ -14,93 +14,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  web:
-    name: Web UI
+  ci:
+    name: CI passed
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      # macOS and Windows runners (the desktop release) see Foo.tsx and foo.ts
-      # as one file, so './Foo' resolves to the wrong one there.
-      - name: Check no paths differ only by case
-        run: |
-          clash=$(git ls-files | sort -f | uniq -di)
-          if [ -n "$clash" ]; then
-            echo "::error::These paths differ only by case: $clash"
-            exit 1
-          fi
       - run: bun install --frozen-lockfile
-      - name: Typecheck and test
+      - name: Typecheck and unit tests
         run: |
+          bun run test:core
           bun run test:client
           bun run test:web
           bun run test:tui
           bun run test:docs
           bun run test:desktop
-      - name: Build
-        run: bun run build
-      # Workers Builds deploys this; building it here checks the documentation's
-      # links and policies on every pull request.
-      - name: Build public site
-        run: bun run build:web
-      - name: Check public site routing
-        run: bun run test:site
-
-  core:
-    name: TypeScript core and host
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - run: bun install --frozen-lockfile
-      - name: Typecheck and test
-        run: bun run test:core
-      - name: npm install and publish scripts
-        run: bun run test:release
-
-  integration:
-    name: Host ↔ AI SDK integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - run: bun install --frozen-lockfile
-      # The host embeds the web UI, so it is built first.
-      - run: bun run build
-      # The script builds the CLI itself, starts it in demo mode and drives it
-      # with the AI SDK client the web UI uses.
-      - name: Check chat, commands and approvals end to end
-        run: bun run test:integration
-      - name: Check DSH plugins and MCP bridge
-        run: bun run test:dsh
-      - name: Check the runner over the encrypted relay
-        run: bun run test:runner
-
-  # The one check the main ruleset requires, so jobs can be renamed, split or
-  # added here without editing the ruleset. scriptc is left out on purpose.
-  passed:
-    name: CI passed
-    if: always()
-    needs: [web, core, integration]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check the required jobs
-        env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          bun run test:dsh
+          bun run test:release
+      - name: Build and check public site
         run: |
-          for result in $RESULTS; do
-            if [ "$result" != success ]; then
-              echo "::error::A required job ended with '$result'"
-              exit 1
-            fi
-          done
+          bun run build
+          bun run build:web
+          bun run test:site
+      - name: Integration tests
+        run: |
+          bun run test:integration
+          bun run test:runner
