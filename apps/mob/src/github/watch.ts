@@ -168,12 +168,12 @@ export class Watcher {
 		if (e.event !== 'issues' || e.action !== 'labeled' || !e.number || !e.label) return;
 		const m = label.exec(e.label);
 		if (!m) return;
+		const { permission } = await this.github.api<{ permission: string }>(e.repo, { metadata: 'read' }, `/repos/${e.repo}/collaborators/${encodeURIComponent(e.sender.login)}/permission`);
+		// Only people who may push to the repository hand Mob work; anyone else's label is ignored.
+		if (!writers.has(permission)) return;
 		const plan = (m[1] ?? '').toLowerCase();
 		const conversation = this.conversation(e.repo, e.number);
 		const fail = (why: string) => { this.tell(e, why); return undefined; };
-		const { permission } = await this.github.api<{ permission: string }>(e.repo, { metadata: 'read' }, `/repos/${e.repo}/collaborators/${encodeURIComponent(e.sender.login)}/permission`);
-		// Only people who may push to the repository hand Mob work; anyone else's label is ignored.
-		if (!writers.has(permission)) return fail(`@${e.sender.login} labeled the issue \`${e.label}\` but has only ${permission} access, so Mob did nothing.`);
 		if (plan) {
 			try { blueprint(plan); } catch (err) { return fail((err as Error).message); }
 		}

@@ -80,9 +80,11 @@ test('others, bots and other labels hand Mob nothing', async () => {
 	expect(gh.calls).toEqual([]);
 	gh.permission = 'triage';
 	expect(await w.act(event())).toBeUndefined();
-	const conversation = store.setting<string>('github-conversation:fdkevin0/mob#12')!;
-	expect(JSON.stringify(store.history(conversation))).toContain('has only triage access, so Mob did nothing');
-	expect(gh.calls.length).toBe(1);
+	gh.permission = 'read';
+	expect(await w.act(event())).toBeUndefined();
+	expect(store.setting<string>('github-conversation:fdkevin0/mob#12')).toBeUndefined();
+	expect(store.list(true)).toHaveLength(0);
+	expect(gh.calls.length).toBe(2);
 });
 
 test('unknown blueprints, missing projects and pull requests are reported, not run', async () => {
