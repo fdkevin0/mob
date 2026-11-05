@@ -81,7 +81,7 @@ export function sharedRunner({ tab, post, channel, locks, start, leaderWait = 15
 	channel?: Channel;
 	locks?: LockManager;
 	start: (token: string, takeover?: Takeover) => Promise<{ server: Serving; persistent: boolean }>;
-	/** A follower that hears no leader in this long is likely beside a tab of an older Mob, which does not share. */
+	/** A follower that hears no leader in this long gives up and says the other tab has not answered. */
 	leaderWait?: number;
 }) {
 	const share = (m: Shared) => channel?.postMessage(m);

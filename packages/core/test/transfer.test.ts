@@ -33,7 +33,7 @@ test('a moved tool result keeps its output but not the workspace file it was sav
 	const output = 'x'.repeat(30_000);
 	const parts = [{ type: 'tool-read', toolCallId: 't1', state: 'output-available', input: {}, output, outputFile: '/workspace/.mob/outputs/source.txt' }];
 	const moved = s.importConversation({ v: 1, title: 'read', model: '', summary: '', summaryThrough: '', facts: [], usage: [],
-		messages: [{ id: newID(), role: 'assistant', parts: JSON.stringify(parts), status: 'complete', error: '', model: 'demo/echo', usage: '', kind: '' }] });
+		messages: [{ id: newID(), role: 'assistant', parts: JSON.stringify(parts), status: 'complete', error: '', model: 'demo/echo', usage: '', kind: '', stats: '' }] });
 	const [part] = s.history(moved.id)[0].parts as Record<string, unknown>[];
 	expect(part.output).toBe(output);
 	expect('outputFile' in part).toBe(false);

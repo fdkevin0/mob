@@ -36,6 +36,6 @@ This reference covers runtime configuration. Provider keys and plugin settings
 use their own stores; command actions such as open --print are not settings.
 XDG_* directory conventions and CI/build variables belong to their respective tools.
 
-See [Configuration](features/configuration.md) for file safety, reload behavior
-and migration; [Sandbox](features/sandbox.md) and [MCP](features/mcp.md) describe
+See [Configuration](features/configuration.md) for file safety and reload
+behavior; [Sandbox](features/sandbox.md) and [MCP](features/mcp.md) describe
 their execution and environment boundaries.

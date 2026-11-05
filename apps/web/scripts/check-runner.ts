@@ -210,7 +210,7 @@ try {
 			path: '/api/conversations/import',
 			headers: {},
 			body: JSON.stringify({ v: 1, title: 'Replayed', model: '', summary: '', summaryThrough: '', facts: [], usage: [],
-				messages: [{ id: 'replayed', role: 'user', parts: JSON.stringify([{ type: 'text', text: 'once' }]), status: 'complete', error: '', model: '', usage: '', kind: '' }] }),
+				messages: [{ id: 'replayed', role: 'user', parts: JSON.stringify([{ type: 'text', text: 'once' }]), status: 'complete', error: '', model: '', usage: '', kind: '', stats: '' }] }),
 			expires: Date.now() + 30000,
 		},
 	);
@@ -288,7 +288,7 @@ try {
 	});
 	assert.equal(revoked.status, 401);
 	console.log(
-		'Runner integration passed: account isolation, passkey binding, one-time pairing, Go/browser encrypted chat, local-only boundaries, replay/reconnect and revocation.',
+		'Runner integration passed: account isolation, passkey binding, one-time pairing, runner/browser encrypted chat, local-only boundaries, replay/reconnect and revocation.',
 	);
 } finally {
 	globalThis.fetch = originalFetch;
