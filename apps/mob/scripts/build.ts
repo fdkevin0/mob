@@ -23,7 +23,7 @@ const result = await Bun.build({
 	define: {
 		'process.env.MOB_BUILD_VERSION': JSON.stringify(values.version ?? process.env.MOB_BUILD_VERSION ?? 'dev'),
 		// OpenTUI picks its glibc native library unless told otherwise.
-		...(values.target?.endsWith('-musl') ? { 'process.env.OPENTUI_LIBC': JSON.stringify('musl') } : {}),
+		'process.env.OPENTUI_LIBC': JSON.stringify(values.target?.endsWith('-musl') ? 'musl' : ''),
 	},
 	minify: true,
 	sourcemap: 'linked',
