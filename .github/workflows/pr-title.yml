@@ -1,5 +1,8 @@
 name: PR title
 
+# Pull requests are squash-merged with their title as the commit message, and
+# release-please builds the changelog and next version from those messages
+# (CONTRIBUTING.md), so the title must be a conventional commit header.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]

@@ -14,6 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The one check the main ruleset requires, so jobs can be renamed, split or
+  # added here without editing the ruleset. scriptc is left out on purpose.
   ci:
     name: CI passed
     runs-on: ubuntu-latest
@@ -43,11 +45,15 @@ jobs:
           bun run test:desktop
           bun run test:dsh
           bun run test:release
+      # Workers Builds deploys this; building it here checks the documentation's
+      # links and policies on every pull request.
       - name: Build and check public site
         run: |
           bun run build
           bun run build:web
           bun run test:site
+      # The script builds the CLI itself, starts it in demo mode and drives it
+      # with the AI SDK client the web UI uses.
       - name: Integration tests
         run: |
           bun run test:integration

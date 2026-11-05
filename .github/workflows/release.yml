@@ -1,5 +1,13 @@
 name: Release
 
+# Every change to main arrives by pull request. Once CI passes on a commit pushed
+# to main (docs/features/releases.md):
+# - stable: when a release PR is merged, release-please tags the release and the
+#   pipeline publishes the stable release;
+# - nightly: otherwise the commit is published as a prerelease tagged {date}.{sha}.
+# Both channels also publish the usemob npm package (nightly under the nightly tag,
+# stable under latest) and attach desktop installers.
+# Older releases stay downloadable for database upgrades (docs/features/releases.md).
 on:
   workflow_run:
     workflows: [CI]
@@ -24,6 +32,8 @@ jobs:
     outputs:
       tag: ${{ steps.release.outputs.tag_name }}
     steps:
+      # A release PR opened with the default token does not start CI; set
+      # RELEASE_PLEASE_TOKEN to a token that can open pull requests so it does.
       - uses: googleapis/release-please-action@v5
         id: release
         with:
@@ -53,7 +63,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - run: bun install --frozen-lockfile --os='*' --cpu='*'
+      # Every platform's and libc's native packages, so one runner compiles every target.
+      - run: bun install --frozen-lockfile --os='*' --cpu='*' --libc='*'
       - name: Build archives and npm packages
         id: version
         env:
@@ -80,9 +91,12 @@ jobs:
               --prerelease --latest=false \
               --generate-notes
           fi
+      # Trusted publishing needs npm 11.5.1 or newer. The runner's own Node.js
+      # lives in a root-owned prefix, so npm is upgraded in setup-node's.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      # NPM_TOKEN covers packages without a trusted publisher yet.
       - name: Publish to npm
         run: |
           npm install -g npm@^11.5.1
@@ -90,6 +104,8 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  # Packages the Electron app around this release's mob for each platform and
+  # attaches the installers to the release the release job created.
   desktop:
     name: Desktop app (${{ matrix.os }})
     needs: release

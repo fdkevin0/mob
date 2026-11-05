@@ -48,6 +48,7 @@ try {
 	const main = packages.at(-1)!;
 	if (tag === 'nightly') {
 		const latest = (await $`npm view ${main} dist-tags.latest`.env(env).quiet().nothrow()).stdout.toString().trim();
+		// Trusted publishing covers only publish, so this needs NPM_TOKEN.
 		if (latest.includes('-nightly.') && Bun.semver.order(version, latest) === 1) {
 			const moved = await $`npm dist-tag add ${main}@${version} latest`.env(env).nothrow();
 			if (moved.exitCode !== 0) console.warn(`Could not move ${main}'s latest tag to ${version}`);
