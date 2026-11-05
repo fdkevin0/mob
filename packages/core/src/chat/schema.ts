@@ -1,7 +1,6 @@
 // The database schema. PRAGMA user_version records it; the meta table records
-// the release that last opened the database. Version 12 is the schema the Go
-// service left, so its databases open as they are; upgrades lists how each
-// older schema becomes the next.
+// the release that last opened the database. Version 10 is the oldest schema
+// upgraded in place; upgrades lists how each older schema becomes the next.
 export const schemaVersion = 14;
 
 /** upgrades are the statements that bring schema N-1 to N, by N. */

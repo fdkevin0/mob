@@ -5,7 +5,6 @@ import { Catalog, type CatalogData, type ProvidersFile, type ProvidersStorage } 
 import { join } from 'node:path';
 import { windows, withLock, writeAtomic } from './files';
 import { cacheHome } from './paths';
-import { homedir } from 'node:os';
 
 const maxFile = 1 << 20;
 
@@ -36,18 +35,15 @@ export function fileProviders(path: string): ProvidersStorage {
 	};
 }
 
-/** catalogPath is Mob's copy of the models.dev catalog; OpenCode's is read when it is missing. */
+/** catalogPath is Mob's copy of the models.dev catalog. */
 export const catalogPath = () => join(cacheHome(), 'mob', 'models.json');
-const fallbacks = () => [join(homedir(), '.cache', 'opencode', 'models.json')];
 
 export function fileCatalog() {
 	return new Catalog(() => {
-		for (const path of [catalogPath(), ...fallbacks()]) {
-			try {
-				const data = JSON.parse(readFileSync(path, 'utf8')) as CatalogData;
-				if (data && typeof data === 'object' && Object.keys(data).length) return data;
-			} catch { /* try the next */ }
-		}
+		try {
+			const data = JSON.parse(readFileSync(catalogPath(), 'utf8')) as CatalogData;
+			if (data && typeof data === 'object' && Object.keys(data).length) return data;
+		} catch { /* missing or unreadable */ }
 		return undefined;
 	});
 }

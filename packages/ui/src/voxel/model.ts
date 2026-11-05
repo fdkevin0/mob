@@ -28,10 +28,6 @@ export const colors = {
 	brow: hex('#3b2214'),
 	eye: hex('#f6efe4'),
 	ear: hex('#f6b39a'),
-	desk: hex('#5b4a3d'),
-	deskTop: hex('#7a6553'),
-	floorA: hex('#1a1d21'),
-	floorB: hex('#16191c'),
 };
 
 export type CalfStyle = {
@@ -43,14 +39,6 @@ export type CalfStyle = {
 	shades?: boolean; // the boss wears sunglasses
 	muzzle?: RGB;
 };
-
-export const calves = {
-	boss: { body: hex('#f1f0ea'), spots: hex('#17181b'), seed: 3, shades: true },
-	brown: { body: hex('#a8683d'), spots: hex('#7d4a2a'), blaze: hex('#f1e6d6'), seed: 5 },
-	lime: { body: colors.lime, spots: hex('#5d7f22'), seed: 8 },
-	blue: { body: hex('#5ab4f0'), belly: hex('#e4f3ff'), seed: 11 },
-	lilac: { body: hex('#b9a8ff'), spots: hex('#f4f0ff'), seed: 2 },
-} satisfies Record<string, CalfStyle>;
 
 export type Pose = 'idle' | 'catch' | 'hold' | 'throw' | 'type' | 'whip-up' | 'whip-crack' | 'startle' | 'lie' | 'stretch' | 'walk' | 'carry' | 'drink' | 'high-five';
 
@@ -209,15 +197,6 @@ export function lying(voxels: Voxel[]): Voxel[] {
 
 export function move(voxels: Voxel[], dx: number, dy: number, dz: number): Voxel[] {
 	return voxels.map(v => [v[0] + dx, v[1] + dy, v[2] + dz, v[3], v[4], v[5], v[6], v[7]]);
-}
-
-export function desk(): Voxel[] {
-	const voxels: Voxel[] = [];
-	for (let x = -2; x <= 2; x++) for (let z = 0; z <= 1; z++) {
-		voxels.push([x, 4, z, ...colors.deskTop, 0, 1]);
-		if (Math.abs(x) === 2) for (let y = 0; y < 4; y++) voxels.push([x, y, z, ...colors.desk, 0, 1]);
-	}
-	return voxels;
 }
 
 // A "Z" floating above a sleeper.

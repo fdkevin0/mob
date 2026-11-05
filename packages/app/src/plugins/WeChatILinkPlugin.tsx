@@ -2,7 +2,8 @@ import { Button } from '@mob/ui/button';
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, type Connection } from '../api';
-import { Field, Toggle, Feedback, Result, Actions, errorText, usePlugin } from './shared';
+import { ClearSecrets, SchemaFields, schemas } from './SchemaFields';
+import { Field, Feedback, Result, Actions, errorText, usePlugin } from './shared';
 import type { WeChatILinkConfig } from './types';
 
 export function WeChatILinkPlugin({ connection, initial, active }: { connection: Connection; initial?: WeChatILinkConfig; active: boolean }) {
@@ -68,8 +69,8 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
           // ignore transient poll error
         }
       }, 3000);
-    } catch (e) {
-      setError(errorText(e));
+    } catch (e: unknown) {
+      setQrStatus(`Failed to fetch QR Code: ${errorText(e)}`);
     } finally {
       setFetchingQR(false);
     }
@@ -80,9 +81,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
       <Feedback error={error} notice={notice} />
       <form onSubmit={save}>
         <fieldset disabled={busy}>
-          <Toggle value={config.enabled} onChange={enabled => setConfig({ ...config, enabled })}>
-            Enable WeChat (iLink Bot)
-          </Toggle>
+          <SchemaFields schema={schemas.wechat_ilink} value={config} onChange={v => setConfig(v as WeChatILinkConfig)} keys={['enabled']} />
           <p>
             Connect to WeChat via the official WeChat iLink Bot API (<code>ilinkai.weixin.qq.com</code>).
             Supports personal WeChat QR code scan authorization, HTTP long-polling message receipt, and in-band tool approvals.
@@ -102,12 +101,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
             )}
           </div>
 
-          <Field
-            label="iLink Base URL"
-            value={config.baseUrl || ''}
-            hint="Leave blank to use default (https://ilinkai.weixin.qq.com)."
-            onChange={v => setConfig({ ...config, baseUrl: v })}
-          />
+          <SchemaFields schema={schemas.wechat_ilink} value={config} onChange={v => setConfig(v as WeChatILinkConfig)} keys={['baseUrl', 'botToken']} />
           <Field
             label="Bot ID"
             value={config.botId || ''}
@@ -115,29 +109,12 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
             onChange={v => setConfig({ ...config, botId: v })}
           />
           <Field
-            label="Bot Token"
-            secret
-            value={config.botToken || ''}
-            hint={config.hasToken ? 'Saved. Leave blank to keep existing Bot Token.' : 'Acquired automatically after scanning QR Code.'}
-            onChange={v => setConfig({ ...config, botToken: v })}
-          />
-          <Field
             label="Allowed WeChat User IDs (comma-separated)"
             value={(config.allowedUsers || []).join(', ')}
             hint="Leave blank to accept messages from any paired user, or restrict to specific WeChat user IDs."
             onChange={v => setConfig({ ...config, allowedUsers: v.split(',').map(s => s.trim()).filter(Boolean) })}
           />
-          <div>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={config.enabled || !secrets['botToken']}
-              onClick={() => clearSecret('botToken')}
-            >
-              {secrets['botToken'] ? 'Will clear token on save' : 'Clear saved Bot Token'}
-            </Button>
-            <small>Disable the plugin before clearing saved credentials, then save.</small>
-          </div>
+          <ClearSecrets schema={schemas.wechat_ilink} enabled={config.enabled} secrets={secrets} clear={clearSecret} />
           <Actions busy={busy} unavailable={unavailable} test={test} />
         </fieldset>
       </form>

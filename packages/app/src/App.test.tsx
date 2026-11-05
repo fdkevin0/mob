@@ -320,19 +320,6 @@ it.each([200, 503])('ignores a dismissed connection returning %i while a newer a
   } finally { vi.unstubAllEnvs(); }
 });
 
-it('opens the current workspace even with the retired browser-off preference', async () => {
-  vi.stubEnv('MODE', 'public');
-  localStorage.setItem('mob-browser-off', '1');
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/conversations') ? [] : {})));
-  try {
-    render(<App />);
-    await screen.findByRole('button', { name: 'This browser: settings and runner' });
-    expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeTruthy();
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(localStorage.getItem('mob-browser-last')).toBe('1');
-  } finally { vi.unstubAllEnvs(); }
-});
-
 it('offers the connection screen after disconnecting and can reopen the browser workspace', async () => {
   vi.stubEnv('MODE', 'public');
   localStorage.setItem('mob-token', 'local-token');

@@ -10,7 +10,7 @@ const firstRetry = 1000;
 const maxRetry = 30_000;
 
 // Changes follows the service's change stream, GET /api/events. While it is live, clients reload only
-// what changed and need not poll; a service without the stream leaves live false, and they keep polling.
+// what changed and need not poll.
 export class Changes {
 	live = false;
 	private readonly listeners = new Set<ChangeListener>();

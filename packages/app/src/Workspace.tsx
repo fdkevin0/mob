@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { Changes, newID } from '@mob/client';
-import { api, ok, rpcOf, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
+import { ok, rpcOf, isPublicWeb, webClient, type Connection, type Conversation, type Snapshot } from './api';
 import type { ManagementTab } from './Management';
-import type { Action } from './contracts';
+import type { Action } from '@mob/client/contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog } from '@mob/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@mob/ui/sheet';

@@ -88,12 +88,6 @@ export class Runtime {
 		return this.runner(this.binary, this.runArgs(spec), io);
 	}
 
-	async exec(spec: Spec, signal?: AbortSignal) {
-		const out = text(), err = text();
-		const exitCode = await this.stream(spec, { stdout: out.out, stderr: err.out, signal });
-		return { exitCode, stdout: out.get(), stderr: err.get() };
-	}
-
 	runArgs(spec: Spec): string[] {
 		if (!spec.image || spec.image.startsWith('-')) throw new Error('image is required and must not start with -');
 		const args = ['run', '--rm'];

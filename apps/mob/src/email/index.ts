@@ -138,7 +138,7 @@ function plugin(server: Server): Plugin {
 		tools: tools(config, store),
 		routes: [
 			{ method: 'GET', path: 'inbox', handle: req => inbox(enabled(), req.signal) },
-			{ method: 'GET', path: 'messages/{uid}', handle: req => {
+			{ method: 'GET', path: 'messages/:uid', handle: req => {
 				const c = enabled();
 				const url = new URL(req.url);
 				const uid = parseIdentity(url.pathname.split('/').at(-1)), validity = parseIdentity(url.searchParams.get('validity'));

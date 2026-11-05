@@ -97,7 +97,7 @@ export function App({
 	const pending = state.messages.flatMap((m) => m.parts.filter(isToolUIPart)).filter((p) => p.state === 'approval-requested');
 	actionHandler.current = (action) => {
 		if (action.kind === 'open-conversation' && action.conversationId) void open(action.conversationId);
-		else setNotice(`The pilot does not implement ${action.kind} forms. Use Web or mob tui; no action was performed.`);
+		else setNotice(`TUI does not implement ${action.kind} forms. Use the web UI; no action was performed.`);
 	};
 
 	function makeSession(id: string, snapshot: Snapshot): ConversationClient {
@@ -250,7 +250,7 @@ export function App({
 	return (
 		<box width={width} height={height} flexDirection="column" backgroundColor="#0f172a" paddingX={1}>
 			<text fg="#67e8f9" flexShrink={0} truncate>
-				<strong>{`Mob · TS pilot · ${safe(current.title || 'Untitled')}`}</strong>
+				<strong>{`Mob · ${safe(current.title || 'Untitled')}`}</strong>
 			</text>
 			<text fg="#94a3b8" flexShrink={0} truncate>{`${safe(state.model)} · ${status} · ${pending.length} approvals`}</text>
 			{error && (

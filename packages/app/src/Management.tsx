@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, ok, rpcOf, type Connection } from './api';
 import type {
-	CommandResult,
-	CommandSpec,
 	Memory,
 	RememberedApproval,
 	ScheduledPrompt,
 	Projects,
 	ProjectConfig,
-} from './contracts';
+} from '@mob/client/contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Input } from '@mob/ui/input';
@@ -27,8 +25,6 @@ const titles = {
 };
 export type ManagementTab = keyof typeof titles;
 const paths = {
-	memories: '/memories',
-	grants: '/grants',
 	schedules: '/plugins/schedules/list',
 	projects: '/plugins/agents/projects',
 };
@@ -116,7 +112,12 @@ function Contents({
 			if (!live) return;
 			setAvailable(supported);
 			if (!supported) return;
-			const result = await api(connection, paths[tab]);
+			const result =
+				tab === 'memories'
+					? await ok(rpcOf(connection).memories.$get())
+					: tab === 'grants'
+						? await ok(rpcOf(connection).grants.$get())
+						: await api(connection, paths[tab]);
 			if (live) {
 				setData({ [tab]: result });
 				setError('');
@@ -158,19 +159,18 @@ function Contents({
 				Open conversation
 			</Button>
 		);
-	const remove = (path: string) => api(connection, path, {});
 	const bulk = {
 		memories: {
 			count: data?.memories?.length,
 			label: 'Delete all memories',
 			text: 'Delete every saved memory across all conversations? This cannot be undone.',
-			run: () => remove('/memories/all/delete'),
+			run: () => ok(rpcOf(connection).memories[':id'].delete.$post({ param: { id: 'all' } })),
 		},
 		grants: {
 			count: data?.grants?.length,
 			label: 'Revoke all approvals',
 			text: 'Revoke all remembered approvals? Matching tools will ask again.',
-			run: () => remove('/grants/all/delete'),
+			run: () => ok(rpcOf(connection).grants[':id'].delete.$post({ param: { id: 'all' } })),
 		},
 		schedules: {
 			count: data?.schedules?.length,
@@ -229,7 +229,7 @@ function Contents({
 									onClick={() =>
 										setConfirmation({
 											text: `Delete this memory? “${m.text}” cannot be restored.`,
-											run: () => remove(`/memories/${m.id}/delete`),
+											run: () => ok(rpcOf(connection).memories[':id'].delete.$post({ param: { id: m.id } })),
 										})
 									}
 								>
@@ -250,7 +250,7 @@ function Contents({
 							<small>{g.conversationId ? 'Only the conversation below' : 'Every conversation'}</small>
 							<div>
 								{conversation(g.conversationId)}
-								<Button variant="outline" disabled={busy} onClick={() => void perform(() => remove(`/grants/${g.id}/delete`))}>
+								<Button variant="outline" disabled={busy} onClick={() => void perform(() => ok(rpcOf(connection).grants[':id'].delete.$post({ param: { id: g.id } })))}>
 									Revoke approval
 								</Button>
 							</div>

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Content as DialogContent } from '@radix-ui/react-dialog';
 import { Dialog, DialogDescription, DialogTitle, DialogTrigger } from '@mob/ui/dialog';
 import { Button } from '@mob/ui/button';
-import { api, ok, rpcOf, type ChatMessage, type Connection } from './api';
-import type { ContextParts, ContextSnapshot, ConversationContext, UsageSummary } from './contracts';
+import { ok, rpcOf, type ChatMessage, type Connection } from './api';
+import type { ContextParts, ContextSnapshot, UsageSummary } from '@mob/client/contracts';
 import { AlertIcon, ArrowRightIcon, CompactIcon, InfoIcon } from './icons';
 import { money as dollars, tokens } from './format';
 

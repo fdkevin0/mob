@@ -59,32 +59,3 @@ export function paint(ctx: CanvasRenderingContext2D, voxels: Voxel[], f: Frame) 
 	}
 }
 
-// The same voxels as a static SVG, for the logo.
-export function toSVG(voxels: Voxel[]) {
-	const f: Frame = { unit: 10, x: 0, y: 0 };
-	const faces = visibleFaces(voxels);
-	const sorted = [...voxels].sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]));
-	const polys: { points: [number, number][]; fill: string }[] = [];
-	for (const v of sorted) {
-		const h = v[7] / 2;
-		const cx = v[0] + 0.5, cy = v[1] + 0.5, cz = v[2] + 0.5;
-		const x0 = cx - h, x1 = cx + h, y0 = cy - h, y1 = cy + h, z0 = cz - h, z1 = cz + h;
-		const show = faces(v);
-		const add = (pts: [number, number, number][], k: number) => {
-			const rgb = lit(v, k);
-			polys.push({ points: pts.map(([x, y, z]) => project(x, y, z, f)), fill: `#${rgb.map(c => c.toString(16).padStart(2, '0')).join('')}` });
-		};
-		if (show.right) add([[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]], shade.right);
-		if (show.left) add([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], shade.left);
-		if (show.top) add([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], shade.top);
-	}
-	const xs = polys.flatMap(p => p.points.map(q => q[0])), ys = polys.flatMap(p => p.points.map(q => q[1]));
-	const minX = Math.min(...xs), minY = Math.min(...ys);
-	const width = Math.max(...xs) - minX, height = Math.max(...ys) - minY;
-	return {
-		viewBox: `${minX.toFixed(1)} ${minY.toFixed(1)} ${width.toFixed(1)} ${height.toFixed(1)}`,
-		width, height,
-		polys: polys.map(p => ({ d: `M${p.points.map(q => `${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join('L')}Z`, fill: p.fill })),
-	};
-}
-

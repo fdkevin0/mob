@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { base64, encryptedFetch, newKey, open, seal, type Envelope } from './remote';
+import { base64, newRelayKey as newKey, open, seal, type Envelope } from '@mob/core/relay';
+import { encryptedFetch } from './remote';
 
 const runner = '11111111-1111-4111-8111-111111111111';
 const session = 'a'.repeat(64);

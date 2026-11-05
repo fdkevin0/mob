@@ -55,8 +55,7 @@ appear in the changelog; other commit types are left out.
   with Node.js. A stable `vX.Y.Z` is published as `X.Y.Z` under
   the `latest` tag. A nightly is published under the `nightly` tag as a
   prerelease of the next minor version, ordered by commit time, e.g.
-  `0.3.0-nightly.20261030220535.g5caa651`. npm gave `latest` to the first
-  nightly, so until a stable release takes it, each nightly moves `latest` too.
+  `0.3.0-nightly.20261030220535.g5caa651`.
   Installing them is described in [Install](../install.md).
 - An experimental workflow reports how much of the host
   [scriptc](https://github.com/vercel-labs/scriptc) can compile natively, after
@@ -68,8 +67,7 @@ the workflow publishes without a long-lived token. Its "Allowed actions" must
 include `npm publish`: npm allows only `npm stage publish` by default, and once
 a trusted publisher exists npm signs in with it in place of `NPM_TOKEN`, so a
 stage-only publisher fails every release with "403 OIDC permission denied for
-this action". Tick "Allow npm dist-tag" too so the workflow can move `latest`
-without the token. An `NPM_TOKEN` secret, a
+this action". An `NPM_TOKEN` secret, a
 granular token for `usemob` and the `@usemob` scope, covers packages that have
 no trusted publisher yet, such as a new platform's first release (without
 either, the packages are built but not published); a

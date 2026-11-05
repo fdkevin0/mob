@@ -150,7 +150,7 @@ export class Server extends ConversationService {
 			if (p.entries) this.tools.registerEntries(p.entries);
 			if (p.background) this.extensions.register(p.background);
 			// Plugins may join after the server answered requests, so their routes are a router of their own, built again on each.
-			for (const route of p.routes ?? []) this.pluginRoutes.push({ ...route, path: `/api/plugins/${p.name}/${route.path.replace(/\{(\w+)\}/g, ':$1')}` });
+			for (const route of p.routes ?? []) this.pluginRoutes.push({ ...route, path: `/api/plugins/${p.name}/${route.path}` });
 			this.pluginApp = undefined;
 		}
 	}

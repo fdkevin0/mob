@@ -103,6 +103,4 @@ were inspected; they are not claims about every terminal emulator.
 Validated: Linux x64, Bun 1.4.4, OpenTUI 0.7.0, 80×24 and 48×16 frames, local tmux.
 Not validated: actual Chinese IME composition/candidate windows, SSH transport,
 Windows/macOS, terminal-specific Shift+Enter encodings, screen readers, clipboard
-copy/export, or very small windows below 48×16. These remain acceptance work in
-[#49](https://github.com/fdkevin0/mob/issues/49) and the broader
-[#48](https://github.com/fdkevin0/mob/issues/48) roadmap.
+copy/export, or very small windows below 48×16.

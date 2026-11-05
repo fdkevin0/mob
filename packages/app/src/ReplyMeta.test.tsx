@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
-import { ReplyMeta, modelName, speed } from './ReplyMeta';
+import { ReplyMeta } from './ReplyMeta';
 import type { ChatMessage } from './api';
-import { seconds } from './format';
+import { modelName, seconds, speed } from './format';
 
 afterEach(cleanup);
 

@@ -1,7 +1,7 @@
 import { ConversationClient, type Changes } from '@mob/client';
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type FormEvent } from 'react';
 import { webClient, type Connection, type Snapshot } from './api';
-import type { Action } from './contracts';
+import type { Action } from '@mob/client/contracts';
 
 export function useConversation({
 	connection,

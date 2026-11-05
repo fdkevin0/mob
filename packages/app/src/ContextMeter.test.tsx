@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@t
 import { afterEach, expect, it, vi } from 'vitest';
 import { ContextMeter, liveContext, useContextUsage } from './ContextMeter';
 import type { ChatMessage } from './api';
-import type { ContextSnapshot } from './contracts';
+import type { ContextSnapshot } from '@mob/client/contracts';
 
 const connection = { url: 'http://localhost', token: 'local-token' };
 const snapshot = (used: number, extra: Partial<ContextSnapshot> = {}): ContextSnapshot => ({

@@ -71,17 +71,6 @@ export class MobClient {
 		this.api = rpc(connection, this.fetch);
 	}
 
-	async request<T>(path: string, body?: object): Promise<T> {
-		const response = await this.fetch(`${this.connection.url}/api${path}`, {
-			method: body === undefined ? 'GET' : 'POST',
-			headers: { Authorization: `Bearer ${this.connection.token}`, 'Content-Type': 'application/json' },
-			body: body === undefined ? undefined : JSON.stringify(body),
-			signal: AbortSignal.timeout(timeoutFor(path)),
-		});
-		if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
-		return response.json();
-	}
-
 	listConversations() {
 		return ok(this.api.conversations.$get());
 	}

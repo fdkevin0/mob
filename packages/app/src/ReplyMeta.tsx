@@ -5,8 +5,6 @@ import type { ChatMessage, ReplyStats, ReplyUsage } from './api';
 import { BrandIcon, modelBrand } from './brandIcons';
 import { modelName, money as dollars, rate, seconds, speed, tokens } from './format';
 
-export { modelName, speed };
-
 const total = (u: ReplyUsage) => u.inputTokens + u.outputTokens;
 
 /**

@@ -8,8 +8,6 @@ export type Config = {
 	key: string;
 	headers?: Record<string, string>;
 	fetch?: Fetch;
-	/** prepare adjusts a vendor's request after it is built (provider quirks). */
-	prepare?: (headers: Headers, body: Record<string, unknown>) => void;
 };
 
 export function messages(req: Request) {
@@ -56,7 +54,6 @@ export class OpenAIModel implements Model {
 		const headers = new Headers({ 'Content-Type': 'application/json' });
 		if (this.config.key) headers.set('Authorization', 'Bearer ' + this.config.key);
 		for (const [k, v] of Object.entries(this.config.headers ?? {})) headers.set(k, v);
-		this.config.prepare?.(headers, body);
 		let response: Response;
 		try {
 			response = await send(this.config.fetch ?? fetch, this.config.baseURL.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers, body: JSON.stringify(body) }, signal);

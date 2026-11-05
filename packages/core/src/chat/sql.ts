@@ -18,7 +18,7 @@ export const randomHex = (n: number) => [...crypto.getRandomValues(new Uint8Arra
 /** newID is a new row ID: 16 random bytes as hex. */
 export const newID = () => randomHex(16);
 
-/** NotFound is a row that does not exist, as Go's sql.ErrNoRows. */
+/** NotFound is a row that does not exist. */
 export class NotFound extends Error {
 	constructor(what = 'conversation not found') { super(what); }
 }

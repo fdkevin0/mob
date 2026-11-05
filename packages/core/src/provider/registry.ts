@@ -160,11 +160,9 @@ export class ProviderRegistry implements Models {
 		const proto = protocolFor(p, ref.model);
 		const base = endpoint(p, proto);
 		if (!base) throw new Error(`provider ${p.id} has no ${proto} base URL`);
-		const quirk = preset?.quirk;
-		const prepare = quirk && ((h: Headers, body: Record<string, unknown>) => quirk(ref.model, h, body));
-		if (this.driver === 'aisdk') return new SDKModel(ref, info, { protocol: proto, baseURL: base, key, headers: p.headers, fetch: this.fetcher, prepare });
+		if (this.driver === 'aisdk') return new SDKModel(ref, info, { protocol: proto, baseURL: base, key, headers: p.headers, fetch: this.fetcher });
 		if (proto === 'anthropic') return new AnthropicModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher });
-		return new OpenAIModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher, prepare });
+		return new OpenAIModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher });
 	}
 
 	/**

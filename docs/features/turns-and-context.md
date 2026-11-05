@@ -48,7 +48,7 @@ The sections below give the details and where each lives in the code.
 - The web workspace keeps unsent drafts separately for each conversation while
   switching between them. Drafts stay in memory until the workspace closes or
   disconnects; they are not written to browser storage. The workspace error
-  banner's **Refresh** retries initialization and the requested conversation,
+  banner's **Try again** retries initialization and the requested conversation,
   then clears the error on recovery.
 - A conversation starts with its first message. The web's New conversation
   opens a draft under an ID it chooses, in the form Mob gives conversations (32
@@ -97,7 +97,7 @@ The sections below give the details and where each lives in the code.
   (and the web UI reloads the list or the agent tree) only when they changed,
   instead of polling; a two-second tick
   only retries a reload that had to wait for a stream to end. When the stream is
-  down, or the service predates it (404), polling resumes. Hidden pages skip
+  down, polling resumes. Hidden pages skip
   polling and reload when shown again.
 - A pending approval expires when its hour passes, on a timer the store arms
   for each conversation's earliest pending approval (and again on start), so

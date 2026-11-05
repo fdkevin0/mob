@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PlanCard, planInput, type PlanInput } from './PlanCard';
-import type { AgentNode } from './contracts';
+import type { AgentNode } from '@mob/client/contracts';
 
 vi.mock('@mob/ui/voxel/VoxelCanvas', () => ({ VoxelCanvas: () => null }));
 

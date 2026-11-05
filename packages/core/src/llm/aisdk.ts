@@ -20,8 +20,6 @@ export type Config = {
 	key: string;
 	headers?: Record<string, string>;
 	fetch?: Fetch;
-	/** prepare adjusts a vendor's Chat Completions request after it is built (provider quirks). */
-	prepare?: (headers: Headers, body: Record<string, unknown>) => void;
 };
 
 type LanguageModel = ReturnType<ReturnType<typeof createAnthropic>>;
@@ -119,15 +117,9 @@ export class SDKModel implements Model {
 			const h = new Headers(init?.headers);
 			// A provider without a key sends no credential header at all.
 			if (!key) { h.delete('x-api-key'); h.delete('authorization'); }
-			let body = init?.body;
-			if (!anthropic && this.config.prepare && typeof body === 'string') {
-				const value = JSON.parse(body) as Record<string, unknown>;
-				this.config.prepare(h, value);
-				body = JSON.stringify(value);
-			}
 			let response: Response;
 			try {
-				response = await send(this.config.fetch ?? fetch, String(url), { method: 'POST', headers: h, body }, signal);
+				response = await send(this.config.fetch ?? fetch, String(url), { method: 'POST', headers: h, body: init?.body }, signal);
 			} catch (e) {
 				failure = signal?.aborted ? e : new Error(`model connection failed: ${e instanceof Error ? e.message : e}`, { cause: e });
 				throw failure;
