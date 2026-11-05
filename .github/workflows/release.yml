@@ -80,7 +80,7 @@ jobs:
               --prerelease --latest=false \
               --generate-notes
           fi
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Publish to npm
