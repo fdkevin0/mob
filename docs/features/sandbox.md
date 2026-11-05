@@ -11,7 +11,8 @@ The only host path a container sees is the conversation's workspace,
 `data_dir/sandbox/<conversation ID>`, mounted at `/workspace` and kept between
 calls. Everything else in the container is discarded when the command exits. No
 host environment variables are passed in. Files the container writes may be
-owned by its user (often root) on Linux hosts.
+owned by its user (often root) on Linux hosts. Mob refuses to write through a
+link a command planted in the workspace.
 
 ## Configuration
 
