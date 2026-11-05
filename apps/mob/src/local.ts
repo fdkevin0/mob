@@ -181,7 +181,8 @@ function watchFile(path: string, reload: () => void): () => void {
 /** refreshCatalog downloads models.dev when Mob's copy is older than a day. */
 async function refreshCatalog(catalog: { reload(): void }) {
 	const path = catalogPath();
-	try { if (Date.now() - statSync(path).mtimeMs < 24 * 3600_000) return; } catch { /* missing */ }
+	const st = statSync(path, { throwIfNoEntry: false });
+	if (st && Date.now() - st.mtimeMs < 24 * 3600_000) return;
 	try {
 		const response = await fetch(catalogURL, { headers: { 'User-Agent': 'mob' }, signal: AbortSignal.timeout(60_000) });
 		if (response.status !== 200) throw new Error('HTTP ' + response.status);
@@ -250,8 +251,7 @@ export function self(): string[] {
 }
 
 export async function stopBackground(c: Environment) {
-	const s = await status(c);
-	if (!s.background) throw new Error('Mob belongs to a foreground/UI process; close that owner to stop it');
+	if (!(await status(c)).background) throw new Error('Mob belongs to a foreground/UI process; close that owner to stop it');
 	const connection = credentials(c);
 	const response = await fetch(connection.url + '/api/runtime/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + connection.token }, signal: AbortSignal.timeout(10_000) });
 	if (response.status !== 202) throw new Error(`stop HTTP ${response.status}`);
@@ -319,6 +319,5 @@ export async function webURL(c: Environment) {
 	const [connection, code] = await pairingCode(c);
 	const host = new URL(connection.url).hostname;
 	if (host !== '127.0.0.1' && host !== 'localhost') throw new Error(`the public web UI reaches Mob only at 127.0.0.1 or localhost, not ${connection.url}`);
-	const offer = Buffer.from(JSON.stringify({ v: 1, url: connection.url, code })).toString('base64url');
-	return c.webURL.replace(/\/$/, '') + '/#offer=' + offer;
+	return c.webURL.replace(/\/$/, '') + '/#offer=' + Buffer.from(JSON.stringify({ v: 1, url: connection.url, code })).toString('base64url');
 }

@@ -19,8 +19,9 @@ quiet rounded workspace, with pixel art kept for the calves.
   (`packages/ui/src/brand/Icon.tsx`).
 - Reuse the shared pieces: `Segmented` and the other controls in `@mob/ui`
   (`packages/ui/src/ui`), `SiteHeader`/`SiteFooter` in `apps/web/src/site`,
-  `ThemePicker` in `packages/ui/src/theme`, and the `.btn`,
-  `.ui-input`, `.ui-menu` and `.dialog-panel` classes in
+  `ThemePicker` in `packages/ui/src/theme`, `.ui-menu` in
+  `packages/ui/src/ui/dropdown-menu.css`, and the `.btn`,
+  `.ui-input` and `.dialog-panel` classes in
   `packages/ui/src/styles/base.css`. Every page supports System, Light and Dark.
 
 `packages/ui/src/theme/style-rules.test.ts` (part of `bun run test:web`) checks

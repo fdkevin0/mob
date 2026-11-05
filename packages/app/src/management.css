@@ -11,12 +11,6 @@
 	grid-template-columns: 190px minmax(0, 1fr);
 	gap: 40px;
 }
-.management-nav-label {
-	color: var(--faint);
-	font-size: 12px;
-	font-weight: 500;
-	padding: 0 12px;
-}
 .management .management-nav [role='tablist'] {
 	display: flex;
 	flex-direction: column;
@@ -31,7 +25,6 @@
 	justify-content: flex-start;
 	width: 100%;
 	padding: 10px 12px;
-	font-family: var(--sans);
 	font-size: 13px;
 	white-space: normal;
 	text-align: left;

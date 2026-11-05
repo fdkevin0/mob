@@ -11,7 +11,10 @@ import type {
 } from './contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
+import { Input } from '@mob/ui/input';
+import { Notice } from '@mob/ui/notice';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@mob/ui/tabs';
+import { Textarea } from '@mob/ui/textarea';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@mob/ui/dropdown-menu';
 import { MoreIcon } from './icons';
 import './management.css';
@@ -59,7 +62,6 @@ export function Management({
 			<div className="management">
 				<Tabs className="management-layout" orientation="vertical" value={tab} onValueChange={(value) => select(value as ManagementTab)}>
 					<div className="management-nav">
-						<p className="management-nav-label">Workspace</p>
 						<TabsList aria-label="Management sections">
 							{Object.entries(titles).map(([key, title]) => (
 								<TabsTrigger key={key} value={key}>
@@ -202,8 +204,8 @@ function Contents({
 					)}
 				</div>
 			</div>
-			{error && <p role="alert">{error}</p>}
-			{notice && <p role="status">{notice}</p>}
+			{error && <Notice tone="error">{error}</Notice>}
+			{notice && <Notice tone="success">{notice}</Notice>}
 			{!available ? (
 				<div className="management-empty">
 					<h3>Connect a runner</h3>
@@ -214,7 +216,6 @@ function Contents({
 			) : null}
 			{data?.memories && (
 				<>
-					<p>Facts Mob remembers. Ask Mob to remember a new fact.</p>
 					{!data.memories.length && <p>No saved memories.</p>}
 					{data.memories.map((m) => (
 						<article className="management-card" key={m.id}>
@@ -241,7 +242,6 @@ function Contents({
 			)}
 			{data?.grants && (
 				<>
-					<p>These approvals let matching tools run without asking again. Revoking them makes future calls ask again.</p>
 					{!data.grants.length && <p>No remembered approvals.</p>}
 					{data.grants.map((g) => (
 						<article className="management-card" key={g.id}>
@@ -260,7 +260,6 @@ function Contents({
 			)}
 			{data?.schedules && (
 				<>
-					<p>Ask Mob to schedule something in a conversation; creating a schedule requires approval.</p>
 					{!data.schedules.length && <p>Nothing is scheduled.</p>}
 					{data.schedules.map((s) => (
 						<article className="management-card" key={s.id}>
@@ -319,7 +318,7 @@ function Contents({
 				<DialogContent>
 					<DialogTitle>Confirm change</DialogTitle>
 					<DialogDescription>{confirmation?.text}</DialogDescription>
-					{error && <p role="alert">{error}</p>}
+					{error && <Notice tone="error">{error}</Notice>}
 					<div className="management-actions">
 						<Button disabled={busy} onClick={() => confirmation && void perform(confirmation.run)}>
 							Confirm
@@ -366,11 +365,11 @@ function ProjectForm({
 				<>
 					<label>
 						Repository path on this Mob
-						<input className="ui-input" required value={path} onChange={(e) => setPath(e.target.value)} placeholder="/home/me/project" />
+						<Input required value={path} onChange={(e) => setPath(e.target.value)} placeholder="/home/me/project" />
 					</label>
 					<label>
 						Name (optional)
-						<input className="ui-input" value={name} onChange={(e) => setName(e.target.value)} />
+						<Input value={name} onChange={(e) => setName(e.target.value)} />
 					</label>
 				</>
 			)}
@@ -394,8 +393,7 @@ function ProjectForm({
 						<div className="management-check" key={i}>
 							<label>
 								Check {i + 1}
-								<textarea
-									className="ui-input"
+								<Textarea
 									required
 									value={check}
 									onChange={(e) => setChecks((list) => list.map((c, n) => (n === i ? e.target.value : c)))}

@@ -95,11 +95,10 @@ export class Registry {
 
 	/** complete suggests replacements for the last token of input.text. */
 	async complete(input: CommandRequest, owner: boolean): Promise<Suggestion[]> {
-		const text = input.text;
-		if (!text.startsWith('/') || /[\r\n]/.test(text)) return [];
-		let fields = fieldsOf(text);
+		if (!input.text.startsWith('/') || /[\r\n]/.test(input.text)) return [];
+		let fields = fieldsOf(input.text);
 		let prefix = '';
-		if (!text.endsWith(' ') && !text.endsWith('\t')) { prefix = fields[fields.length - 1]; fields = fields.slice(0, -1); }
+		if (!input.text.endsWith(' ') && !input.text.endsWith('\t')) { prefix = fields[fields.length - 1]; fields = fields.slice(0, -1); }
 		if (!fields.length) return filter(this.specs(input.client).map(c => ({ value: '/' + c.name, label: c.usage, detail: c.summary })), prefix, false);
 		const c = this.lookup(fields[0].replace(/^\//, ''), input.client);
 		if (!c || fields.length - 1 >= (c.args?.length ?? 0) || (c.ownerOnly && !owner)) return [];

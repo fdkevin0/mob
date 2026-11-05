@@ -1,11 +1,18 @@
 // The coding agents plugin: tasks handed to outside coding agents, the tools
 // and commands that manage them, and the tree the API shows.
+import { z } from 'zod';
 import { body, CommandError, type Plugin } from '@mob/core';
 import { blueprints, steps } from './blueprints';
 import { hostPlugins } from '../local';
 import { snapshot } from './review';
 import { Service } from './service';
 import { commands, tools } from './tools';
+
+const projectChange = z.discriminatedUnion('action', [
+	z.object({ action: z.literal('add'), name: z.string(), path: z.string() }).strict(),
+	z.object({ action: z.literal('remove'), name: z.string() }).strict(),
+	z.object({ action: z.literal('save'), name: z.string(), path: z.string().optional(), blueprint: z.string(), checks: z.array(z.string().refine((c: string) => c.trim().length > 0)) }).strict(),
+]);
 
 hostPlugins.push((e, server) => {
 	const svc = new Service(server.options.store, server, e.dir);
@@ -21,19 +28,19 @@ export function agentPlugin(svc: Service): Plugin {
 		name: 'agents', routes: [
 			{ method: 'GET', path: 'projects', handle: async () => ({ projects: svc.projects(), blueprints: blueprints.map(b => ({ name: b.name, title: b.title, description: steps(b) })) }) },
 			{ method: 'POST', path: 'projects', handle: async req => {
-				const input = await body<{ action?: unknown; name?: unknown; path?: unknown; blueprint?: unknown; checks?: unknown }>(req, 64 << 10, ['action', 'name', 'path', 'blueprint', 'checks']);
-				if (typeof input.name !== 'string') throw new CommandError(400, 'name must be text');
+				const parsed = projectChange.safeParse(await body(req, 64 << 10, ['action', 'name', 'path', 'blueprint', 'checks']));
+				if (!parsed.success) throw new CommandError(400, 'invalid project change');
+				const input = parsed.data;
 				try {
-					if (input.action === 'add' && typeof input.path === 'string') {
+					if (input.action === 'add') {
 						const existing = svc.projects();
 						const project = await svc.addProject(input.path, input.name);
 						if (existing.some(p => p.name === project.name)) throw new Error(`Project ${project.name} already exists at ${project.path}.`);
 						return project;
 					}
 					if (input.action === 'remove') { svc.removeProject(input.name); return { removed: true }; }
-					if (input.action === 'save' && typeof input.blueprint === 'string' && Array.isArray(input.checks) && input.checks.every(c => typeof c === 'string' && c.trim())) return svc.setProject(input.name, { blueprint: input.blueprint, checks: input.checks });
+					return svc.setProject(input.name, { blueprint: input.blueprint, checks: input.checks });
 				} catch (e) { throw new CommandError(400, (e as Error).message); }
-				throw new CommandError(400, 'invalid project change');
 			} },
 		], commands: commands(svc), tools: tools(svc),
 		hooks: { beforeTurn: [turn => snapshot(svc, turn)] },

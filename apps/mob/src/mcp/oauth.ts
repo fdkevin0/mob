@@ -149,8 +149,7 @@ export class SignIn implements OAuthClientProvider {
 
 /** finishSignIn completes a sign-in with the address the user's browser was sent back to, and names the server. */
 export function finishSignIn(waits: Map<string, Waiting>, address: string) {
-	let u: URL | undefined;
-	try { u = new URL(address.trim()); } catch { /* refused below */ }
+	const u = URL.parse(address.trim());
 	if (!u?.host) throw new Error('paste the whole address the browser was sent to, starting with http://127.0.0.1');
 	const w = waits.get(`${u.protocol}//${u.host}${u.pathname}`);
 	if (!w) throw new Error('no sign-in is waiting for that address; it may have finished or expired, so check /mcp');

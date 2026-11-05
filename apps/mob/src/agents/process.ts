@@ -1,6 +1,5 @@
 // Starting an agent, and git, as child processes.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,7 +50,7 @@ export function start(p: Preset, dir: string): Conn {
 	let patch = '';
 	if (p.patch) {
 		// A file of its own, which nobody else can have written.
-		patch = join(tmpdir(), `mob-agent-${randomUUID()}.patch.yml`);
+		patch = join(tmpdir(), `mob-agent-${crypto.randomUUID()}.patch.yml`);
 		writeFileSync(patch, p.patch, { flag: 'wx', mode: 0o600 });
 		args.push('--patch', patch);
 	}

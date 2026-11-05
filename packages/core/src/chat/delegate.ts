@@ -66,7 +66,7 @@ export class DelegateTurn {
 			this.message.parts.push({ type: kind, text: '' });
 			await this.send({ kind: 'segment-started', segment: kind, id: s.id });
 		}
-		this.message.parts[s.index].text += delta;
+		this.message.parts[s.index].text = (this.message.parts[s.index].text ?? '') + delta;
 		await this.send({ kind: 'segment-delta', segment: kind, id: s.id, text: delta });
 	}
 

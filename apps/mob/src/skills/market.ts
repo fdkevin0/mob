@@ -67,9 +67,9 @@ export class SkillMarket {
 
   async overview(check = false, signal?: AbortSignal): Promise<SkillsOverview> {
     const [skills, problems] = this.library.scan();
-    const warnings = problems.map(p => `${p.dir}: ${p.message}`);
+    const result: SkillsOverview = { skills: [], warnings: problems.map(p => `${p.dir}: ${p.message}`) };
     const locks = [this.lockFile, this.sharedLock].map(file => {
-      try { return readLock(file); } catch (e) { warnings.push((e as Error).message); return { version: 3, skills: {} } as Lock; }
+      try { return readLock(file); } catch (e) { result.warnings.push((e as Error).message); return { version: 3, skills: {} } as Lock; }
     });
     // Installation identity survives edits to SKILL.md, including invalid frontmatter.
     for (const name of Object.keys(locks[0]!.skills)) {
@@ -86,7 +86,6 @@ export class SkillMarket {
       }
     }
     const trees = new Map<string, Promise<Tree>>();
-    const result: SkillsOverview = { skills: [], warnings };
     for (const skill of skills) {
       const own = dirname(skill.dir) === this.library.roots[0];
       const entries = locks[own ? 0 : 1]!.skills;

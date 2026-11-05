@@ -56,4 +56,4 @@ settings above, and:
 
 - Put screenshots in the pull request, before and after, in both themes, and
   on mobile when the layout changes.
-- Commit only images the docs use, under `docs/screenshots/`.
+- Commit only images the docs use, under `docs/images/`.

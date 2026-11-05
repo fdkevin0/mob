@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useKeyboard, useTerminalDimensions } from '@opentui/react';
 import type { InputRenderable, ScrollBoxRenderable, TextareaRenderable } from '@opentui/core';
-import { ConversationClient, formatSeconds, formatSpeed, formatTokens, modelName, replySpeed, type MobClient, type Conversation, type Snapshot, type ChatMessage, type Action } from '@mob/client';
+import { Changes, ConversationClient, formatSeconds, formatSpeed, formatTokens, modelName, replySpeed, type MobClient, type Conversation, type Snapshot, type ChatMessage, type Action } from '@mob/client';
 import { getToolName, isToolUIPart } from 'ai';
 
 type ToolPart = Extract<ChatMessage['parts'][number], { toolCallId: string }>;
@@ -84,6 +84,8 @@ export function App({
 	const [details, setDetails] = useState(false);
 	const [notice, setNotice] = useState('');
 	const [opening, setOpening] = useState(false);
+	const changes = useMemo(() => new Changes(client), [client]);
+	useEffect(changes.start, [changes]);
 	const sessions = useRef(new Map<string, ConversationClient>());
 	const actionHandler = useRef<(action: Action) => void>(() => {});
 	const input = useRef<TextareaRenderable>(null);
@@ -106,6 +108,7 @@ export function App({
 			id,
 			initial: snapshot,
 			clientType: 'tui',
+			changes,
 			onAction: (action) => actionHandler.current(action),
 		});
 		sessions.current.set(id, next);
@@ -121,11 +124,12 @@ export function App({
 		setOpening(true);
 		setNotice('Opening conversation…');
 		try {
-			const snapshot = await client.openConversation(id);
+			const next = sessions.current.get(id) ?? makeSession(id, await client.openConversation(id));
 			const conversations = await client.listConversations();
 			// A conversation nothing was said in yet is not listed, but opens.
 			const selected = conversations.find((c) => c.id === id) ?? { id, title: 'New conversation', updatedAt: Date.now() };
-			setSession(makeSession(id, snapshot));
+			if (next === session) void session.reload();
+			setSession(next);
 			setCurrent(selected);
 			setPanel('chat');
 			setNotice('');

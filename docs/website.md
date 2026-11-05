@@ -71,8 +71,9 @@ fonts and the calf logo; the UI rules are in [UI style](ui-style.md). The worksp
 desktop app and `/app`: one rounded message box holds the text, the model
 picker and a round send (or stop) button; replies have no role labels; each
 tool call is one line with its status that opens to show input and output,
-and a pending approval opens as a card with Approve, Allow in this
-conversation, Always allow and Deny (which then asks for an optional reason). On narrow screens, Conversations opens a side panel; choosing
+and a pending approval opens as a card with **Allow once**, **Deny…** (which
+then asks for an optional reason), and **More permissions…** with **Allow in
+this conversation** and **Always allow across conversations**. On narrow screens, Conversations opens a side panel; choosing
 a conversation closes it. Model selection and sign-in dialogs contain keyboard
 focus and return it when closed. Plugin tabs support arrow-key navigation and
 keep unsaved configuration edits when switching tabs.

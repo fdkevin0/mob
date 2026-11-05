@@ -33,8 +33,18 @@ test('service requests', async () => {
 	const off = new Cloudflare({ ...base, enabled: false }, fetcher);
 	for (const operation of ['ai.models', 'vectorize.indexes', 'd1.databases', 'kv.namespaces', 'r2.buckets']) expect(off.do({ operation })).rejects.toThrow('disabled');
 	expect(c.do({ operation: 'r2.get', key: 'private' })).rejects.toThrow('R2 object access requires');
+	expect(c.do({ operation: 'unknown' })).rejects.toThrow('unknown');
 	expect(new Cloudflare({ ...base, index: '../bad' }, fetcher).do({ operation: 'vectorize.query', text: 'x' })).rejects.toThrow('invalid resource');
 	expect(paths).toHaveLength(11);
+	const r2 = new Cloudflare({ ...base, bucket: 'b', accessKey: 'ak', secretKey: 'sk' }, fetcher, () => ({
+		list: async input => ({ contents: [{ key: 'doc.txt', token: input?.continuationToken ?? null }], nextContinuationToken: 'next-cursor' }),
+		file: key => ({
+			slice: () => ({ text: async () => 'body of ' + key }),
+			stat: async () => ({ type: 'text/plain', size: (1 << 20) + 5 }),
+		}),
+	}));
+	expect(await r2.do({ operation: 'r2.list', cursor: 'start' })).toEqual({ objects: [{ key: 'doc.txt', token: 'start' }], cursor: 'next-cursor' });
+	expect(await r2.do({ operation: 'r2.get', key: 'doc.txt' })).toEqual({ preview: 'body of doc.txt', contentType: 'text/plain', range: `bytes 0-${(1 << 20) - 1}/${(1 << 20) + 5}` });
 });
 
 test('read-only SQL', () => {
@@ -50,7 +60,6 @@ test('the tool asks before costly or writing calls and runs what was approved', 
 	config = { ...config, enabled: true };
 	expect(tool.available!()).toBe(true);
 	const run = (input: Record<string, unknown>) => tool.run({ input, requestApproval: async () => { throw new Error('awaiting approval'); } } as unknown as ToolCall);
-	expect(run({ operation: 'test' })).rejects.toThrow('unknown');
 	await run({ operation: 'd1.databases' });
 	for (const operation of ['ai.run', 'vectorize.query', 'd1.query']) expect(run({ operation, argument: 'DELETE FROM t' })).rejects.toThrow('awaiting approval');
 	await run({ operation: 'd1.query', argument: ' select * from t; ' });

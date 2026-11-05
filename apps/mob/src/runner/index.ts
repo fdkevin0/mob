@@ -1,6 +1,5 @@
 // mob runner connects this Mob to the web with end-to-end encryption.
 import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { commands } from '../commands';
 import { writeAtomic } from '../files';
@@ -81,8 +80,8 @@ commands.push(environment => {
 				try { creds = deployed(env); } catch (e) { throw new Error('MOB_RUNNER_PAIRING: ' + (e as Error).message); }
 			} else {
 				let raw: string;
-				try { raw = readFileSync(join(c.dir, 'runner.json'), 'utf8'); } catch (e) { throw new Error('pair this browser first with mob runner pair: ' + (e as Error).message); }
-				creds = JSON.parse(raw);
+				try { raw = await Bun.file(join(c.dir, 'runner.json')).text(); } catch (e) { throw new Error('pair this browser first with mob runner pair: ' + (e as Error).message); }
+				creds = deployed(raw);
 			}
 			const abort = new AbortController();
 			process.once('SIGINT', () => abort.abort());

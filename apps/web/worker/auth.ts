@@ -30,6 +30,7 @@ export function configured(env: Env) {
 // One auth instance per request: the origin decides the base URL, so preview
 // deployments on workers.dev sign in against themselves.
 export function createAuth(env: Env, origin: string) {
+	const hostname = new URL(origin).hostname;
 	return betterAuth({
 		baseURL: origin,
 		basePath: '/api/auth',
@@ -69,7 +70,7 @@ export function createAuth(env: Env, origin: string) {
 			// Turnstile guards the start of the GitHub and Cloudflare flows.
 			endpoints: ['/sign-in/social'],
 			// Turnstile's test keys report another hostname, so local runs skip the check.
-			allowedHostnames: isLocal(origin) ? undefined : [new URL(origin).hostname],
+			allowedHostnames: isLoopbackHost(hostname) ? undefined : [hostname],
 		}), passkey({
 			rpName: 'Mob',
 			// Registration needs a fresh signed-in session, so a passkey always
@@ -85,8 +86,4 @@ export function createAuth(env: Env, origin: string) {
 			},
 		})],
 	});
-}
-
-function isLocal(origin: string) {
-	return isLoopbackHost(new URL(origin).hostname);
 }

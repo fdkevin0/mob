@@ -63,8 +63,6 @@ export function readable(ms: number, zone: string) {
 	return `${p.weekday} ${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} ${p.timeZoneName}`;
 }
 
-const clockOf = (ms: number, zone: string) => { const w = wall(ms, zone); return `${String(w.h).padStart(2, '0')}:${String(w.min).padStart(2, '0')}`; };
-
 /**
  * next is the first time after now that a schedule last due at last runs
  * again. Calendar repeats count days in zone and run at clock (15:04) there,
@@ -107,6 +105,7 @@ type Request = { prompt: string; at: string; repeat?: string; timezone?: string 
 /** Schedules runs the schedules. */
 export class Schedules {
 	private wake?: () => void;
+	private closed = false;
 
 	constructor(readonly store: Store, readonly conversations: ConversationService,
 		/** now is the clock. */
@@ -115,6 +114,7 @@ export class Schedules {
 	/** extension runs due schedules while Mob runs. */
 	extension(): Extension {
 		return { name: 'schedules', start: () => async (signal, status) => {
+			this.closed = false;
 			status('Running');
 			while (!signal.aborted) {
 				await this.runDue();
@@ -125,10 +125,9 @@ export class Schedules {
 					this.wake = done;
 				});
 			}
+			this.closed = true;
 		} };
 	}
-
-	private poke() { this.wake?.(); }
 
 	/**
 	 * runDue starts a turn for each schedule that is due. A one-off schedule is
@@ -138,9 +137,7 @@ export class Schedules {
 	 */
 	async runDue() {
 		const now = this.now();
-		let due: Schedule[];
-		try { due = this.store.schedules(now); } catch { return; }
-		for (const sc of due) {
+		for (const sc of this.store.schedules(now)) {
 			let run: Running | undefined, err: unknown;
 			try {
 				run = await this.conversations.start({ id: sc.conversationId, text: runPrompt(readable(sc.next, zone(sc.zone)), sc.prompt), requestId: newID(), owner: true });
@@ -148,24 +145,22 @@ export class Schedules {
 				if (e instanceof CommandError && e.status === 409) continue;
 				err = e;
 			}
-			try {
-				if (!sc.repeat) this.store.unschedule(sc.id);
-				else this.store.reschedule(sc.id, next(sc.next, sc.repeat, zone(sc.zone), sc.clock, now));
-			} catch { /* the next look tries again */ }
+			if (!sc.repeat) this.store.unschedule(sc.id);
+			else this.store.reschedule(sc.id, next(sc.next, sc.repeat, zone(sc.zone), sc.clock, now));
 			if (!run) {
 				this.conversations.notify({ conversationId: sc.conversationId, text: `**Scheduled prompt could not run:** ${firstLine(sc.prompt)}\n\n${(err as Error).message}` });
 				continue;
 			}
-			void this.report(sc, run);
+			void this.report(sc, run).catch(() => {});
 		}
 	}
 
 	/** report tells the owner what a scheduled turn concluded once it ends. */
 	private async report(sc: Schedule, run: Running) {
 		await run.whenDone();
+		if (this.closed) return;
 		// The reply this turn wrote, not a later turn's.
-		let said = '';
-		try { said = (this.store.reply(run.messageId) ?? '').trim(); } catch { /* reported as unfinished */ }
+		let said = (this.store.reply(run.messageId) ?? '').trim();
 		const chars = [...said];
 		if (chars.length > noticeLimit) said = chars.slice(0, noticeLimit).join('') + '…';
 		if (!said) said = 'It did not finish; open its conversation to see why.';
@@ -173,7 +168,7 @@ export class Schedules {
 	}
 
 	/** any reports whether anything is scheduled; until then only schedule is offered. */
-	private any = () => { try { return this.store.schedules(0).length > 0; } catch { return false; } };
+	private any = () => this.store.schedules(0).length > 0;
 
 	/** tools schedule prompts, list them and cancel them. */
 	tools(): Tool[] {
@@ -207,14 +202,12 @@ export class Schedules {
 	}
 
 	/** ask checks a schedule call and asks the owner to approve it. */
-	ask(input: Record<string, unknown>, request: (r: Request) => Promise<never>): Promise<never> {
-		const str = (v: unknown) => typeof v === 'string' ? v : '';
-		const r: Request = { prompt: str(input.prompt).trim(), at: str(input.at) };
-		if (input.repeat) r.repeat = str(input.repeat);
-		if (input.timezone) r.timezone = str(input.timezone);
+	ask(input: Request, request: (r: Request) => Promise<never>): Promise<never> {
+		const r: Request = { prompt: input.prompt.trim(), at: input.at };
+		if (input.repeat) r.repeat = input.repeat;
+		if (input.timezone) r.timezone = input.timezone;
 		if (!r.prompt || new TextEncoder().encode(r.prompt).length > promptLimit) throw new Error(`prompt must be 1–${promptLimit} bytes`);
 		if (!rfc3339Pattern.test(r.at) || Number.isNaN(Date.parse(r.at))) throw new Error('at must be RFC 3339 with an offset, such as 2026-10-21T09:00:00+08:00');
-		if (r.repeat && !repeats.includes(r.repeat)) throw new Error(`repeat must be one of ${repeats.join(', ')}`);
 		if (r.timezone && zone(r.timezone) !== r.timezone) throw new Error(`unknown time zone ${JSON.stringify(r.timezone)}`);
 		if (!r.repeat && Date.parse(r.at) < this.now()) throw new Error(`${r.at} has passed; it is now ${rfc3339(new Date(this.now()), localZone())}`);
 		r.at = r.at.replace(/\.\d+/, '');
@@ -226,12 +219,13 @@ export class Schedules {
 		const first = Date.parse(r.at);
 		if (Number.isNaN(first)) throw new Error('invalid time ' + r.at);
 		const tz = zone(r.timezone);
-		const sc = { conversationId, prompt: r.prompt, next: first, repeat: r.repeat, zone: r.timezone, clock: clockOf(first, tz) };
+		const w = wall(first, tz);
+		const sc = { conversationId, prompt: r.prompt, next: first, repeat: r.repeat, zone: r.timezone, clock: `${String(w.h).padStart(2, '0')}:${String(w.min).padStart(2, '0')}` };
 		// A repeat whose first time has passed starts at its next one.
 		const now = this.now();
 		if (sc.repeat && first < now) sc.next = next(first, sc.repeat, tz, sc.clock, now);
 		const saved = this.store.addSchedule(sc);
-		this.poke();
+		this.wake?.();
 		return { schedule: saved.id, next: rfc3339(new Date(saved.next), tz), repeat: saved.repeat ?? '' };
 	}
 

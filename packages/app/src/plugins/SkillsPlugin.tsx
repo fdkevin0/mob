@@ -4,6 +4,7 @@ import type { SkillPreview, SkillsOverview } from '../contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Notice } from '@mob/ui/notice';
+import { Segmented } from '@mob/ui/segmented';
 import { Field, Feedback, errorText } from './shared';
 
 const curated = [
@@ -37,10 +38,8 @@ export function SkillsPlugin({ connection }: { connection: Connection }) {
   }, [connection]);
   return <section aria-label="Skills market" className="extension-market">
     <h2>Skills</h2>
-    <p>Instructions and supporting files for your assistant. Installs go to the connected Mob service. Shared skills stay managed by their original installer.</p>
     <div className="plugin-actions">
-      <Button variant={view === 'installed' ? 'primary' : 'outline'} aria-pressed={view === 'installed'} onClick={() => setView('installed')}>Installed</Button>
-      <Button variant={view === 'discover' ? 'primary' : 'outline'} aria-pressed={view === 'discover'} onClick={() => setView('discover')}>Discover</Button>
+      <Segmented label="Skills view" options={[{ value: 'installed', label: 'Installed' }, { value: 'discover', label: 'Discover' }]} value={view} onChange={setView} />
       <Button variant="outline" disabled={busy} onClick={() => void perform(async () => { setData(await api<SkillsOverview>(connection, '/plugins/skills/check', {})); setNotice('Update check finished. Installed files are unchanged.'); })}>Check for updates</Button>
       <Button variant="ghost" disabled={busy} onClick={() => void perform(load)}>Refresh</Button>
     </div>

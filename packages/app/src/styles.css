@@ -2276,7 +2276,8 @@ button.reply-meta:hover,
 }
 .context-percent {
 	margin-left: auto;
-	font: 500 13px var(--mono);
+	font: 500 13px var(--sans);
+	font-variant-numeric: tabular-nums;
 }
 .context-sub {
 	margin: 2px 0 12px;
@@ -2337,7 +2338,7 @@ button.reply-meta:hover,
 .context-legend dd {
 	margin: 0;
 	color: var(--text-dim);
-	font: 12px var(--mono);
+	font: 12px var(--sans);
 }
 .context-quiet dt {
 	color: var(--muted-foreground);
@@ -2787,6 +2788,12 @@ button.reply-meta:hover,
 	gap: 12px;
 	flex-wrap: wrap;
 }
+.qr-section {
+	margin: 16px 0;
+	padding: 16px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-card);
+}
 .mail-row {
 	display: block;
 	width: 100%;
@@ -2909,7 +2916,6 @@ button.reply-meta:hover,
 }
 .runner-choice small {
 	margin-left: 8px;
-	font-family: var(--mono);
 	font-size: 10px;
 	border: 1px solid var(--line-strong);
 	padding: 2px 6px;
@@ -3096,7 +3102,6 @@ button.reply-meta:hover,
 	justify-content: space-between;
 	color: var(--muted-foreground);
 	font-size: 11px;
-	font-family: var(--mono);
 	margin-top: 6px;
 }
 .usage-tooltip {
@@ -3189,7 +3194,6 @@ button.reply-meta:hover,
 	margin-left: 8px;
 	color: var(--muted-foreground);
 	font-size: 11px;
-	font-family: var(--mono);
 }
 @media (max-width: 640px) {
 	.usage-tiles,
@@ -3431,7 +3435,6 @@ button.reply-meta:hover,
 	border-radius: 8px;
 	border: 1px solid var(--line-strong);
 	background: var(--surface-raised);
-	font-family: var(--mono);
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--white);

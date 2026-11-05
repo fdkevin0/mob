@@ -24,7 +24,7 @@ export function usePlugin<K extends keyof Configs>(name: K, initial: Configs[K],
  async function save(event:FormEvent) {event.preventDefault();await perform(async()=>{ const next=await api<Configs>(connection,`/plugins/${name}`,{...config,secrets});setConfig(next[name]);setSaved(next[name]);setSecrets({});setNotice('Configuration saved.'); });}
  async function test() { await perform(async()=>{setResult(await api(connection,`/plugins/${name}/test`,{}));setNotice('Connection test passed.');}); }
  const dirty=JSON.stringify(config)!==JSON.stringify(saved) || Object.keys(secrets).length>0;
- return {config,setConfig,busy,error,notice,setNotice,result,setResult,perform,save,test,unavailable:busy||dirty||!saved.enabled,clearSecret:(key:string)=>setSecrets(v=>({...v,[key]:{mode:'clear'}})),secrets};
+ return {config,setConfig,busy,error,setError,notice,setNotice,result,setResult,perform,save,test,unavailable:busy||dirty||!saved.enabled,clearSecret:(key:string)=>setSecrets(v=>({...v,[key]:{mode:'clear'}})),secrets};
 }
 export function Feedback({error,notice}:{error:string;notice:string}) { return <>{error && <Notice tone="error">{error}</Notice>}{notice && <Notice tone="success">{notice}</Notice>}</>; }
 export function Result({value}:{value:unknown}) {return value===undefined?null:<pre className="plugin-result" aria-label="Operation result">{JSON.stringify(value,null,2)}</pre>;}

@@ -171,8 +171,9 @@ clicking again unfolds them; its arrow button opens its conversation.
 
 A card that needs the owner shows up to two of its waiting decisions, each
 with everything it asks (one `field: value` line per input field, so an
-agent's command shows rather than only its title), and **Approve**, **Always
-allow** and **Deny…** (which takes an optional reason); more are left to the
+agent's command shows rather than only its title), and **Allow once**,
+**Deny…** (which takes an optional reason), and **More permissions…** (**Allow
+in this conversation** and **Always allow across conversations**); more are left to the
 conversation. A request with a field too long to show whole (`whole: false`)
 can only be denied there and is approved from its conversation. A running or
 waiting card has **Stop**, and a task's card has **Instruct**, which sends the
@@ -188,7 +189,7 @@ agent one more line while it runs. They use:
 
 Mob's own card stops with `POST /api/conversations/{id}/stop`. The
 header counts the agents, filters to what runs, needs the owner or failed,
-and adds up what they all cost. The page reads the tree again every three seconds while it is shown.
+and adds up what they all cost. The page refreshes when `/api/events` reports a change, and falls back to polling every three seconds while it is shown when the event stream is unavailable.
 Logos come from LobeHub's MIT-licensed `@lobehub/icons-static-svg`, inlined
 into the page.
 
@@ -215,8 +216,9 @@ task does, which misses the prompt cache once.
   delete or move whose files are all inside the task's worktree once links
   are followed, so a link in the repository cannot lead an edit out of it.
 - Every other permission the agent asks for is an approval in the task's
-  conversation, decided like any other: Approve, Allow in this conversation,
-  Always allow, or Deny with an optional reason, from any client. Allow and
+  conversation, decided like any other: **Allow once**, **Allow in this
+  conversation**, **Always allow across conversations**, or **Deny…** with an
+  optional reason, from any client. Allow in this conversation and
   Always allow are remembered as grants for the call's tool name and title,
   and the agent is answered with its own "always" option. DeepSeek Harness
   and CodeBuddy Code send requests that name only the call they showed

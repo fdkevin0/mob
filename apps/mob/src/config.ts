@@ -196,7 +196,7 @@ function readConfigFile(path: string): { text: string; mode: number } | undefine
 export function reference() {
 	let b = `# Environment variables and configuration
 
-Generated from apps/mob/src/config.ts; run bun run --cwd apps/mob configdocs.
+Generated from apps/mob/src/config.ts; run bun run generate:configdocs.
 
 Explicit CLI flags > nonempty MOB_ environment variables > configuration file > defaults.
 Empty environment values are ignored consistently; use a flag or file value to clear a string.

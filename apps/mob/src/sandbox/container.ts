@@ -1,6 +1,6 @@
 // The platform's container runtime CLI: nerdctl (containerd) on Linux,
 // Apple's container on macOS, WSL containers (wslc) on Windows.
-import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
 
 export const containerd = 'containerd', apple = 'apple', wslc = 'wslc';
 export const runtimeNames = [containerd, apple, wslc];
@@ -24,14 +24,19 @@ export const defaultRuntime = (platform = process.platform) => (platform === 'li
 /** run starts a command; its exit code, or -1 when it could not start. Abort kills it. */
 export type Runner = (binary: string, args: string[], io: { stdin?: NodeJS.ReadableStream; stdout?: Output; stderr?: Output; signal?: AbortSignal }) => Promise<number>;
 
-export const run: Runner = (binary, args, io) => new Promise((resolve, reject) => {
-	const child = spawn(binary, args, { stdio: [io.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], signal: io.signal, windowsHide: true });
-	if (io.stdin) io.stdin.pipe(child.stdin!);
-	child.stdout!.on('data', (c: Buffer) => io.stdout?.(c));
-	child.stderr!.on('data', (c: Buffer) => io.stderr?.(c));
-	child.once('error', e => (io.signal?.aborted ? resolve(-1) : reject(e)));
-	child.once('close', code => resolve(code ?? -1));
-});
+export const run: Runner = async (binary, args, io) => {
+	try {
+		const p = Bun.spawn([binary, ...args], { stdin: io.stdin ? Readable.toWeb(io.stdin as Readable) as unknown as ReadableStream<Uint8Array> : 'ignore', stdout: 'pipe', stderr: 'pipe', signal: io.signal, windowsHide: true });
+		const drain = async (s: ReadableStream<Uint8Array>, out?: Output) => {
+			for await (const c of s) out?.(c);
+		};
+		const [, , code] = await Promise.all([drain(p.stdout, io.stdout), drain(p.stderr, io.stderr), p.exited]);
+		return io.signal?.aborted ? -1 : code;
+	} catch (e) {
+		if (io.signal?.aborted) return -1;
+		throw e;
+	}
+};
 
 const lastLine = (s: string) => { s = s.trim(); return s ? s.slice(s.lastIndexOf('\n') + 1) : 'no output'; };
 const text = () => { let s = ''; const decoder = new TextDecoder(); return { out: ((c: Uint8Array) => { s += decoder.decode(c, { stream: true }); }) as Output, get: () => s }; };

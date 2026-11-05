@@ -23,14 +23,15 @@ test('next keeps the time of day in its zone', () => {
 });
 
 test('ask checks its input before asking', async () => {
+	const { checkInput } = await import('../src/chat/tools');
 	const now = Date.parse('2026-10-21T08:00:00Z');
 	const s = new Schedules({} as never, {} as never, () => now);
 	const asked: unknown[] = [];
 	const request = async (r: unknown): Promise<never> => { asked.push(r); throw new Error('asked'); };
-	const ask = (input: Record<string, unknown>) => s.ask(input, request);
+	const ask = (input: { prompt: string; at: string; repeat?: string; timezone?: string }) => s.ask(input, request);
 	expect(() => ask({ prompt: ' ', at: '2026-10-22T09:00:00Z' })).toThrow('prompt must be');
 	expect(() => ask({ prompt: 'x', at: '2026-10-22 09:00' })).toThrow('RFC 3339');
-	expect(() => ask({ prompt: 'x', at: '2026-10-22T09:00:00Z', repeat: 'yearly' })).toThrow('repeat must be');
+	expect('error' in checkInput(s.tools()[0], { prompt: 'x', at: '2026-10-22T09:00:00Z', repeat: 'yearly' })).toBe(true);
 	expect(() => ask({ prompt: 'x', at: '2026-10-22T09:00:00Z', timezone: 'Mars/Base' })).toThrow('unknown time zone');
 	expect(() => ask({ prompt: 'x', at: '2026-10-20T09:00:00Z' })).toThrow('has passed');
 	await expect(ask({ prompt: ' sum up ', at: '2026-10-22T09:00:00.5+08:00', repeat: 'daily', timezone: sh })).rejects.toThrow('asked');

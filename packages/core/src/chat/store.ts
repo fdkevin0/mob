@@ -5,7 +5,18 @@ import { Changes } from './changes';
 import { schema, schemaVersion, SchemaError, upgrades } from './schema';
 import { newID, NotFound, type SQL } from './sql';
 
-export type Part = Record<string, any>;
+export type Part = {
+	type: string;
+	text?: string;
+	toolCallId?: string;
+	state?: string;
+	input?: unknown;
+	output?: unknown;
+	outputFile?: string;
+	errorText?: string;
+	approval?: { id: string; approved?: boolean };
+	[key: string]: unknown;
+};
 
 export type Message = {
 	id: string;
@@ -312,8 +323,8 @@ export class Store {
 			const m: Message = { id: r.id, role: r.role, parts: JSON.parse(r.parts), metadata: { status: r.status } };
 			if (r.error) m.metadata!.error = r.error;
 			if (r.model) { m.model = r.model; m.metadata!.model = r.model; }
-			if (r.usage) { try { m.usage = JSON.parse(r.usage); m.metadata!.usage = m.usage; } catch { /* ignore */ } }
-			if (r.stats) { try { m.stats = JSON.parse(r.stats); m.metadata!.stats = m.stats; } catch { /* ignore */ } }
+			if (r.usage) m.metadata!.usage = m.usage = JSON.parse(r.usage);
+			if (r.stats) m.metadata!.stats = m.stats = JSON.parse(r.stats);
 			if (r.kind === 'command') { m.command = true; m.metadata!.command = true; }
 			return m;
 		});

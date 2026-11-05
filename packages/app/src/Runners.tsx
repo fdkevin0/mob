@@ -85,13 +85,12 @@ export function Runners({ connect, deploy }: { connect: (connection: Connection)
 		}
 	}
 	function open(id: string) {
-		try {
-			const connection = runnerConnection(id);
-			if (!connection) throw new Error('This browser has no key for this runner. Pair a new runner from this browser.');
-			connect(connection);
-		} catch (e) {
-			setError(String(e));
+		const connection = runnerConnection(id);
+		if (!connection) {
+			setError('This browser has no key for this runner. Pair a new runner from this browser.');
+			return;
 		}
+		connect(connection);
 	}
 	return (
 		<section aria-label="Remote runners">

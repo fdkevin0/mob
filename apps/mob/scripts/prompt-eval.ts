@@ -1,5 +1,4 @@
 // Capture production prompts offline; optionally replay one model decision per case. No tools execute.
-import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import { ConversationService, OpenAIModel, Store, defaultTools, emptyHooks, newID, run, sandboxTool, type llm, type Message } from '@mob/core';
@@ -74,7 +73,7 @@ export async function replay(suite: Suite, model: llm.Model) {
 		catch (e) { error = e instanceof Error ? e.message : String(e); }
 		results.push({
 			id: c.id, rubric: c.rubric,
-			requestHash: createHash('sha256').update(JSON.stringify(c.request)).digest('hex'),
+			requestHash: new Bun.CryptoHasher('sha256').update(JSON.stringify(c.request)).digest('hex'),
 			text: result.text, calls: result.calls, usage: result.usage, elapsedMs: Date.now() - started, error,
 		});
 	}

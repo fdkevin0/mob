@@ -27,9 +27,8 @@ export class Changes {
 
 	start = () => {
 		this.stop();
-		const controller = new AbortController();
-		this.controller = controller;
-		void this.follow(controller.signal);
+		this.controller = new AbortController();
+		void this.follow(this.controller.signal);
 		return this.stop;
 	};
 
@@ -75,10 +74,9 @@ export class Changes {
 		this.live = false;
 		// Polling takes over at once while the stream is down.
 		if (wasLive) this.emit('reset');
-		const wait = this.retry;
-		this.retry = Math.min(this.retry * 2, maxRetry);
 		this.timer = setTimeout(() => {
 			if (!signal.aborted) void this.follow(signal);
-		}, wait);
+		}, this.retry);
+		this.retry = Math.min(this.retry * 2, maxRetry);
 	}
 }

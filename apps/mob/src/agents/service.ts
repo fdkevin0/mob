@@ -15,13 +15,8 @@ import type { Squad } from './squad';
 import { children, Hub, settle } from './subtasks';
 import { tree } from './tree';
 import { sleep } from '@mob/core/sleep';
-
-/**
- * Project is a git repository tasks work on. Projects are saved in the
- * "projects" setting. blueprint is how its tasks go from done to ready, the
- * default one when empty; checks are the commands Mob runs on their work.
- */
-export type Project = { name: string; path: string; blueprint?: string; checks?: string[] };
+import type { ProjectConfig as Project } from '@mob/client/contracts';
+export type { Project };
 
 /** startWait is how long a message waits for an agent that is starting. */
 const startWait = 30_000;

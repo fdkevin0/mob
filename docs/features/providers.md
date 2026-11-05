@@ -32,8 +32,8 @@ LM Studio, or a custom base URL. The dialog lists the connected providers
 first, with the default's marked, then every provider as a tile with its logo;
 choosing one shows its sign-in or key field, with a link to where its keys are
 made, and the default model under **Default model**. Choosing a connected
-provider replaces its key. Connecting uses `POST /api/providers` with
-`{preset, url?, protocol?, key, model?}` lists the provider's models and saves
+provider replaces its key. Connecting calls `POST /api/providers` with
+`{preset, url?, protocol?, key, model?}`, lists the provider's models and saves
 it as the default model, replacing a provider with the same ID. Without a
 named model, OpenRouter starts on one of its free models that takes tools. The browser
 runner saves through its own plugin route instead, which only offers vendors a

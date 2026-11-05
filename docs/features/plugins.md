@@ -1,8 +1,7 @@
 # Plugins: email and Cloudflare
 
 Plugins are optional connections configured in **Plugins & cloud services** in
-the GUI (also available before model setup), or with **Ctrl+P** / `/plugins` in
-the TUI. Telegram, WeChat iLink and answering mail are covered in
+the web UI (also opened by `/plugins`). Telegram, WeChat iLink and answering mail are covered in
 [Messaging channels](channels.md); the MCP and Skills market tabs in
 [MCP servers](mcp.md#web-management) and [Skills](skills.md#web-management-and-installation). How a
 plugin is built is in [Extensions](extensions.md).
@@ -17,8 +16,9 @@ plugin is built is in [Extensions](extensions.md).
 - API clients update secrets explicitly with
   `secrets: {"token": {"mode": "keep|replace|clear", "value": "..."}}`. Mail uses
   `imap.password`/`smtp.password`; Cloudflare also accepts `secretKey`. Keeping a
-  secret after changing its owner is rejected. The TUI has
-  `/clear-secret PLUGIN FIELD`.
+  secret after changing its owner is rejected. `/clear-secret PLUGIN FIELD`
+  clears a saved credential from the web UI or TUI, and the web UI also has
+  **Clear saved …** buttons on each plugin form.
 - Clients only ever see masked presence flags. The database is unencrypted, with
   0600 permissions and credentials inside; protect its backups accordingly.
 - `/test PLUGIN` tests a saved connection.
@@ -44,9 +44,9 @@ Typical ports: IMAP 993 (TLS) or 143 (STARTTLS); SMTP 465 (TLS) or 587
   folder.
 - The model can use the mailbox through the `email_inbox`, `email_read` and
   `email_send` tools; sending waits for [approval](tools-and-approvals.md).
-- TUI: `/email` lists messages, `/email UID VALIDITY` reads one,
-  `/email analyze UID VALIDITY` analyzes it, and `/mail` opens the send wizard
-  (one paragraph; use the GUI for multi-line mail).
+- Commands: `/email` lists messages, `/email UID VALIDITY` reads one,
+  `/email analyze UID VALIDITY` summarizes it with the model, and `/mail` opens
+  the compose view in the web UI.
 
 ## Cloudflare
 
