@@ -1,11 +1,10 @@
 // The sandbox runs the model's commands in a container whose only host
 // directory is the conversation's workspace.
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { closeSync, constants, lstatSync, mkdirSync, openSync, writeSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { randomHex, sandboxDefaultTimeout, sandboxMaxTimeout, type Sandbox as CoreSandbox, type SandboxResult, type Saver } from '@mob/core';
 import type { SandboxSettings } from '../config';
 import { Runtime, gvisor, containerd, noNetwork, parseMemory, runtimeNames, Unavailable, type Limits } from './container';
-import { safeDir, writeNew } from './workspace';
 
 export const workdir = '/workspace';
 const outputCap = 1 << 20, minMemoryMiB = 64;
@@ -85,8 +84,16 @@ export class Sandbox implements CoreSandbox, Saver {
 	/** save keeps a large tool output in the workspace and returns its path inside the container. */
 	async save(conversationID: string, name: string, text: string) {
 		if (!name || name.includes('/') || name.includes('\\') || name.startsWith('.')) throw new Error('invalid file name');
-		// Commands control the workspace and may plant links in it.
-		writeNew(safeDir(this.workspace(conversationID), '.mob/outputs'), name, text);
+		const root = this.workspace(conversationID);
+		let dir = root;
+		for (const part of ['.mob', 'outputs']) {
+			dir = join(dir, part);
+			const stat = lstatSync(dir, { throwIfNoEntry: false });
+			if (!stat) mkdirSync(dir, { mode: 0o700 });
+			else if (!stat.isDirectory()) throw new Error(`${relative(root, dir)} in the workspace is not a directory`);
+		}
+		const fd = openSync(join(dir, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+		try { writeSync(fd, text); } finally { closeSync(fd); }
 		return [workdir, '.mob', 'outputs', name].join('/');
 	}
 

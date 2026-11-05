@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SandboxSettings } from '../src/config';
@@ -96,16 +96,24 @@ test('save writes into the workspace and never through a link', async () => {
 	expect(readFileSync(join(outputs, 'out.txt'), 'utf8')).toBe('whole output');
 	for (const name of ['', '../x', 'a/b', '.hidden']) expect(box.save(conversation, name, 'x')).rejects.toThrow('invalid file name');
 
-	// Commands may replace the outputs directory, or a file in it, with a link.
+	// Commands may replace a file in outputs with a link; the host file must not be created.
 	const outside = temp(), host = join(outside, 'host.txt');
-	writeFileSync(host, 'host file');
 	symlinkSync(host, join(outputs, 'link.txt'));
 	expect(box.save(conversation, 'link.txt', 'overwritten')).rejects.toThrow();
+	expect(existsSync(host)).toBe(false);
 
+	// Commands may replace .mob/outputs with a link.
 	const other = '0123456789abcdef0123456789abcde0';
 	mkdirSync(join(box.root, other, '.mob'), { recursive: true });
 	symlinkSync(outside, join(box.root, other, '.mob', 'outputs'));
 	expect(box.save(other, 'new.txt', 'x')).rejects.toThrow('not a directory');
-	expect(readFileSync(host, 'utf8')).toBe('host file');
 	expect(existsSync(join(outside, 'new.txt'))).toBe(false);
+
+	// Commands may replace .mob itself with a link.
+	const third = '0123456789abcdef0123456789abcde1';
+	mkdirSync(join(box.root, third), { recursive: true });
+	symlinkSync(outside, join(box.root, third, '.mob'));
+	expect(box.save(third, 'new.txt', 'x')).rejects.toThrow('not a directory');
+	expect(existsSync(join(outside, 'new.txt'))).toBe(false);
+	expect(existsSync(join(outside, 'outputs'))).toBe(false);
 });
