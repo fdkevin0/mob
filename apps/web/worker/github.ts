@@ -6,12 +6,11 @@
 // one repository and to the permissions it needs.
 import type { Env } from './auth';
 import { deliveryID, repoName, type GitHubEvent } from '@mob/core/github';
-import { appJWT, int, metadata, narrow, str, verify, type Payload } from './github-app';
+import { appJWT, githubReady, int, metadata, narrow, str, verify, type Payload } from './github-app';
 import { hash, limitedText } from './runners';
 
 export type { GitHubEvent };
-
-export const githubReady = (env: Env) => Boolean(env.GITHUB_APP_ID && env.GITHUB_APP_SLUG && env.GITHUB_APP_PRIVATE_KEY && env.GITHUB_WEBHOOK_SECRET);
+export { githubReady };
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 /** webhook answers GitHub: it checks the signature, records installations, and passes other events to the bound runner. */
@@ -26,7 +25,11 @@ export async function webhook(request: Request, env: Env): Promise<Response> {
 	const delivery = request.headers.get('X-GitHub-Delivery') ?? '';
 	if (!deliveryID.test(delivery)) return json({ error: 'Bad delivery' }, 400);
 	let p: Payload;
-	try { p = JSON.parse(body); } catch { return json({ error: 'Bad payload' }, 400); }
+	try {
+		const parsed: unknown = JSON.parse(body);
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return json({ error: 'Bad payload' }, 400);
+		p = parsed as Payload;
+	} catch { return json({ error: 'Bad payload' }, 400); }
 	const now = Date.now();
 	const fresh = await env.DB.prepare('INSERT OR IGNORE INTO github_delivery (id, received_at) VALUES (?, ?)').bind(delivery, now).run();
 	if (!fresh.meta.changes) return json({ duplicate: true });
@@ -63,13 +66,15 @@ async function installation(env: Env, p: Payload, now: number) {
 		return { [action]: true };
 	}
 	if (action !== 'created' && action !== 'new_permissions_accepted') return { ignored: true };
-	const account = i.account ?? {};
-	if (!int(account.id) || !int(p.sender?.id)) return { ignored: true };
+	const account = i?.account ?? {};
+	const accountId = int(account.id);
+	const senderId = int(p.sender?.id);
+	if (!accountId || !senderId) return { ignored: true };
 	await env.DB.prepare(
 		'INSERT INTO github_installation (id, account_id, account_login, account_type, sender_id, created_at) VALUES (?, ?, ?, ?, ?, ?) ' +
 			'ON CONFLICT(id) DO UPDATE SET account_login = excluded.account_login, account_type = excluded.account_type',
 	)
-		.bind(id, account.id, str(account.login), str(account.type) || 'User', p.sender.id, now)
+		.bind(id, accountId, str(account.login), str(account.type) || 'User', senderId, now)
 		.run();
 	return { recorded: true };
 }
@@ -138,6 +143,7 @@ export async function installations(request: Request, env: Env, userID: string):
 	}
 	const match = /^\/api\/github\/installations\/(\d+)$/.exec(url.pathname);
 	if (!match || request.method !== 'POST') return json({ error: 'Not found' }, 404);
+	if (!githubReady(env)) return json({ error: 'GitHub App not configured' }, 503);
 	if (request.headers.get('Origin') !== url.origin) return json({ error: 'Origin required' }, 403);
 	const raw = await limitedText(request, 256);
 	let runner: unknown;

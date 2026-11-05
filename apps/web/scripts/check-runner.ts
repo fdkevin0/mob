@@ -308,6 +308,7 @@ try {
 	assert.equal((await askToken({ repo: 'someone/else', permissions: { issues: 'read' } })).status, 403);
 	assert.equal((await hook('installation', { ...installed, action: 'deleted' })).status, 200);
 	assert.deepEqual(((await (await github('/installations')).json()) as { installations: unknown[] }).installations, []);
+	assert.equal((await originalFetch(origin + '/api/github/setup', { redirect: 'manual' })).status, 302);
 
 	// A runner deployed to Render gets its credential at once, so a restart without its disk still connects.
 	const deployed = await account('', 'alice', { method: 'POST', body: JSON.stringify({ for: 'deploy' }) });

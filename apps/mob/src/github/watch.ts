@@ -101,40 +101,38 @@ export class Watcher {
 	}
 
 	private async pass(now: () => number) {
-		{
-			do {
-				this.again = false;
-				for (const key of this.store.setting<string[]>(queueKey) ?? []) {
-					const d = this.store.delivery(key);
-					let w: Work | undefined;
-					try { w = d?.state === pending ? JSON.parse(d.reply) as Work : undefined; } catch { /* dropped below */ }
-					if (!w) { this.dequeue(key); continue; }
-					if (w.next > now()) continue;
-					try {
-						await this.act(w.event);
-						this.store.updateDelivery(key, 'done', '');
-						this.dequeue(key);
-					} catch (err) {
-						// A rate limit says when to come back, and waiting it out is not a failed try, for up to the week the relay would have kept the event.
-						const retryAt = err instanceof GitHubError ? err.retryAt : undefined;
-						if (retryAt !== undefined && now() - w.event.at < 7 * 86_400_000) {
-							w.next = Math.max(retryAt, now() + 1000);
-							this.store.updateDelivery(key, pending, JSON.stringify(w), err as Error);
-							continue;
-						}
-						w.attempts++;
-						if (transient(err) && w.attempts <= backoff.length) {
-							w.next = now() + backoff[w.attempts - 1]!;
-							this.store.updateDelivery(key, pending, JSON.stringify(w), err as Error);
-							continue;
-						}
-						this.store.updateDelivery(key, 'failed', '', err as Error);
-						this.dequeue(key);
-						this.tell(w.event, `Mob could not act on the label${w.attempts > 1 ? ` after ${w.attempts} tries` : ''}: ${(err as Error).message}. Label the issue again to retry.`);
+		do {
+			this.again = false;
+			for (const key of this.store.setting<string[]>(queueKey) ?? []) {
+				const d = this.store.delivery(key);
+				let w: Work | undefined;
+				try { w = d?.state === pending ? JSON.parse(d.reply) as Work : undefined; } catch { /* dropped below */ }
+				if (!w) { this.dequeue(key); continue; }
+				if (w.next > now()) continue;
+				try {
+					await this.act(w.event);
+					this.store.updateDelivery(key, 'done', '');
+					this.dequeue(key);
+				} catch (err) {
+					// A rate limit says when to come back, and waiting it out is not a failed try, for up to the week the relay would have kept the event.
+					const retryAt = err instanceof GitHubError ? err.retryAt : undefined;
+					if (retryAt !== undefined && now() - w.event.at < 7 * 86_400_000) {
+						w.next = Math.max(retryAt, now() + 1000);
+						this.store.updateDelivery(key, pending, JSON.stringify(w), err as Error);
+						continue;
 					}
+					w.attempts++;
+					if (transient(err) && w.attempts <= backoff.length) {
+						w.next = now() + backoff[w.attempts - 1]!;
+						this.store.updateDelivery(key, pending, JSON.stringify(w), err as Error);
+						continue;
+					}
+					this.store.updateDelivery(key, 'failed', '', err as Error);
+					this.dequeue(key);
+					this.tell(w.event, `Mob could not act on the label${w.attempts > 1 ? ` after ${w.attempts} tries` : ''}: ${(err as Error).message}. Label the issue again to retry.`);
 				}
-			} while (this.again);
-		}
+			}
+		} while (this.again);
 	}
 
 	/** due is when the next pending event should be tried, if any is waiting. */
@@ -168,9 +166,14 @@ export class Watcher {
 		if (e.event !== 'issues' || e.action !== 'labeled' || !e.number || !e.label) return;
 		const m = label.exec(e.label);
 		if (!m) return;
-		const { permission } = await this.github.api<{ permission: string }>(e.repo, { metadata: 'read' }, `/repos/${e.repo}/collaborators/${encodeURIComponent(e.sender.login)}/permission`);
+		const permission = await this.github.api<{ permission: string }>(e.repo, { metadata: 'read' }, `/repos/${e.repo}/collaborators/${encodeURIComponent(e.sender.login)}/permission`)
+			.then(r => r.permission)
+			.catch(err => {
+				if (err instanceof GitHubError && err.status === 404) return undefined;
+				throw err;
+			});
 		// Only people who may push to the repository hand Mob work; anyone else's label is ignored.
-		if (!writers.has(permission)) return;
+		if (!permission || !writers.has(permission)) return;
 		const plan = (m[1] ?? '').toLowerCase();
 		const conversation = this.conversation(e.repo, e.number);
 		const fail = (why: string) => { this.tell(e, why); return undefined; };

@@ -1,7 +1,7 @@
 import { cloudflareReady, configured, createAuth, type Env } from './auth';
 import { cloudflareAI, cloudflareBase } from './ai';
 import { accountRunners, runnerTransport } from './runners';
-import { installations, token, webhook } from './github';
+import { githubReady, installations, token, webhook } from './github';
 export { RunnerRelay } from './relay';
 
 // Every page runs one inline script, which applies the colour scheme before
@@ -96,7 +96,10 @@ export default {
 			if (!session) return new Response('Sign in again', { status: 401 });
 			return installations(request, env, session.user.id);
 		}
-		if (pathname === '/api/github/setup') return Response.redirect(`${url.origin}/account#github`, 302);
+		if (pathname === '/api/github/setup') {
+			if (!githubReady(env)) return new Response('Not found', { status: 404 });
+			return Response.redirect(`${url.origin}/account#github`, 302);
+		}
 		if (pathname === '/api/site') {
 			return Response.json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', ready: configured(env), cloudflare: cloudflareReady(env) }, { headers: { 'Cache-Control': 'no-store' } });
 		}

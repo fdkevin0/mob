@@ -22,3 +22,4 @@ CREATE TABLE github_delivery (
   id TEXT PRIMARY KEY,
   received_at INTEGER NOT NULL
 );
+CREATE INDEX github_delivery_received_at ON github_delivery(received_at);

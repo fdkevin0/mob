@@ -24,6 +24,10 @@ export const grantable: Record<string, 'read' | 'write'> = {
 	metadata: 'read',
 };
 
+/** githubReady tells whether all four settings are set for the Mob GitHub App. */
+export const githubReady = (env: { GITHUB_APP_ID?: string; GITHUB_APP_SLUG?: string; GITHUB_APP_PRIVATE_KEY?: string; GITHUB_WEBHOOK_SECRET?: string }) =>
+	Boolean(env.GITHUB_APP_ID && env.GITHUB_APP_SLUG && env.GITHUB_APP_PRIVATE_KEY && env.GITHUB_WEBHOOK_SECRET);
+
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 
 /** verify checks GitHub's X-Hub-Signature-256 for body, in constant time. */
@@ -37,7 +41,19 @@ export async function verify(secret: string, body: string, signature: string | n
 	return diff === 0;
 }
 
-export type Payload = Record<string, any>;
+export type Payload = {
+	action?: unknown;
+	installation?: { id?: unknown; account?: { id?: unknown; login?: unknown; type?: unknown } };
+	repository?: { full_name?: unknown };
+	sender?: { login?: unknown; id?: unknown; type?: unknown };
+	pull_request?: { number?: unknown; author_association?: unknown; url?: unknown };
+	issue?: { number?: unknown; author_association?: unknown; pull_request?: unknown; title?: unknown; body?: unknown };
+	label?: { name?: unknown };
+	comment?: { id?: unknown; author_association?: unknown; body?: unknown };
+	review?: { id?: unknown; author_association?: unknown; body?: unknown };
+	check_suite?: { conclusion?: unknown; pull_requests?: { number?: unknown }[] };
+	[key: string]: unknown;
+};
 export const str = (v: unknown) => (typeof v === 'string' ? v : '');
 export const int = (v: unknown) => (Number.isSafeInteger(v) ? (v as number) : undefined);
 
@@ -59,10 +75,11 @@ export function metadata(event: string, delivery: string, p: Payload, slug: stri
 	const installation = int(p.installation?.id);
 	const repo = str(p.repository?.full_name);
 	const sender = p.sender;
-	if (!installation || !repoName.test(repo) || !sender || !int(sender.id)) return;
+	const senderId = int(sender?.id);
+	if (!installation || !repoName.test(repo) || !sender || !senderId) return;
 	const out: GitHubEvent = {
 		delivery, event, action, installation, repo,
-		sender: { login: str(sender.login), id: sender.id, bot: sender.type === 'Bot' || str(sender.login).endsWith('[bot]') },
+		sender: { login: str(sender.login), id: senderId, bot: sender.type === 'Bot' || str(sender.login).endsWith('[bot]') },
 		at: now,
 	};
 	const item = p.pull_request ?? p.issue;
@@ -81,7 +98,10 @@ export function metadata(event: string, delivery: string, p: Payload, slug: stri
 	}
 	if (event === 'check_suite') {
 		out.conclusion = str(p.check_suite?.conclusion) || undefined;
-		out.pulls = (Array.isArray(p.check_suite?.pull_requests) ? p.check_suite.pull_requests : []).map((r: Payload) => int(r.number)).filter((n: unknown): n is number => !!n).slice(0, 20);
+		out.pulls = (Array.isArray(p.check_suite?.pull_requests) ? p.check_suite.pull_requests : [])
+			.map(r => int(r?.number))
+			.filter((n): n is number => n !== undefined)
+			.slice(0, 20);
 	}
 	return out;
 }

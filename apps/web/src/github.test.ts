@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHmac, createPublicKey, generateKeyPairSync, verify as verifySignature } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { appJWT, mentions, metadata, narrow, pkcs8, verify } from '../worker/github-app';
+import { appJWT, githubReady, mentions, metadata, narrow, pkcs8, verify } from '../worker/github-app';
 
 it('checks webhook signatures', async () => {
 	const body = '{"zen":"Keep it logically awesome."}';
@@ -78,4 +78,13 @@ it('signs the app JWT with the PKCS#1 key GitHub hands out', async () => {
 	expect(JSON.parse(Buffer.from(header!, 'base64url').toString())).toEqual({ alg: 'RS256', typ: 'JWT' });
 	expect(JSON.parse(Buffer.from(payload!, 'base64url').toString())).toEqual({ iat: 1_699_999_940, exp: 1_700_000_540, iss: '123' });
 	expect(verifySignature('sha256', Buffer.from(`${header}.${payload}`), createPublicKey(privateKey), Buffer.from(signature!, 'base64url'))).toBe(true);
+});
+
+it('reports unconfigured when any GitHub App setting is missing', () => {
+	const base = {};
+	expect(githubReady(base)).toBe(false);
+	expect(githubReady({ GITHUB_APP_ID: '1' })).toBe(false);
+	expect(githubReady({ GITHUB_APP_ID: '1', GITHUB_APP_SLUG: 'slug' })).toBe(false);
+	expect(githubReady({ GITHUB_APP_ID: '1', GITHUB_APP_SLUG: 'slug', GITHUB_APP_PRIVATE_KEY: 'key' })).toBe(false);
+	expect(githubReady({ GITHUB_APP_ID: '1', GITHUB_APP_SLUG: 'slug', GITHUB_APP_PRIVATE_KEY: 'key', GITHUB_WEBHOOK_SECRET: 'wh' })).toBe(true);
 });
