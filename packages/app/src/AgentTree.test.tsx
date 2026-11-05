@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { AgentTree, duration, link, tree } from './AgentTree';
-import type { AgentNode, Task } from './contracts';
+import { AgentTree, link, tree } from './AgentTree';
+import { duration } from './format';
+import type { AgentNode, Task } from '@mob/client/contracts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -130,7 +131,7 @@ it('decides, stops and instructs from the cards', async () => {
 		'fetch',
 		vi.fn(async (url: string, init?: RequestInit) => {
 			if (init?.method === 'POST') {
-				calls.push([new URL(url).pathname, JSON.parse(String(init.body))]);
+				calls.push([new URL(url).pathname, init.body ? JSON.parse(String(init.body)) : {}]);
 				return Response.json({ ok: true }, { status: 202 });
 			}
 			return Response.json(nodes);

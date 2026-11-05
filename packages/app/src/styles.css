@@ -3439,12 +3439,6 @@ button.reply-meta:hover,
 	font-weight: 600;
 	color: var(--white);
 }
-.agent-avatar.codex {
-	color: var(--cyan);
-}
-.agent-avatar.claude {
-	color: var(--amber);
-}
 .agent-name {
 	display: flex;
 	flex-direction: column;
@@ -3867,9 +3861,6 @@ button.reply-meta:hover,
 	background: var(--primary);
 	color: var(--primary-foreground);
 	font-weight: 550;
-}
-.agent-button.deny {
-	color: var(--destructive);
 }
 .agent-button:disabled {
 	opacity: 0.5;

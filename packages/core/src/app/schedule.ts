@@ -45,11 +45,11 @@ const offset = (ms: number, zone: string) => {
 	return Date.UTC(w.y, w.m - 1, w.d, w.h, w.min, w.s) - Math.floor(ms / 1000) * 1000;
 };
 
-/** at is the instant of a wall time in zone; days and hours past their range carry over, as Go's time.Date does. */
+/** at is the instant of a wall time in zone; days and hours past their range carry over. */
 export function at(y: number, m: number, d: number, h: number, min: number, zone: string) {
 	const utc = Date.UTC(y, m - 1, d, h, min);
 	// The offsets a day either side cover any transition; the earlier instant
-	// wins a repeated hour, and a skipped one uses the offset before it, as Go does.
+	// wins a repeated hour, and a skipped one uses the offset before it.
 	const before = utc - offset(utc - 86400_000, zone), after = utc - offset(utc + 86400_000, zone);
 	const want = wall(utc, 'UTC');
 	const fits = (ms: number) => { const w = wall(ms, zone); return w.h === want.h && w.min === want.min && w.d === want.d; };

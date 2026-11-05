@@ -102,7 +102,7 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		if (!open || !signIn || pendingOpenRouterSignIn() !== signIn) return;
 		finishOpenRouterSignIn();
 		choose(services.find((s) => s.id === 'openrouter')!);
-		void submit('/plugins/browser/openrouter', signIn);
+		void submit(api(connection, '/plugins/browser/openrouter', signIn));
 	}, [open, signIn]);
 	function choose(service: Service | undefined, row?: SavedProvider) {
 		setChosen(service);
@@ -119,8 +119,8 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 	async function save(event: FormEvent) {
 		event.preventDefault();
 		if (chrome) await useChrome();
-		else if (cloudflare) await submit('/plugins/browser/cloudflare', { model: form.model });
-		else await submit(browser ? '/plugins/browser/provider' : '/providers', form);
+		else if (cloudflare) await submit(api(connection, '/plugins/browser/cloudflare', { model: form.model }));
+		else await submit(browser ? api(connection, '/plugins/browser/provider', form) : ok(rpcOf(connection).providers.$post({ json: form })));
 	}
 	// Chrome downloads its model only after a click, so the download starts here, before the save.
 	async function useChrome() {
@@ -135,13 +135,13 @@ export function ModelProvider({ connection, open, onOpenChange, onSaved, signIn 
 		} finally {
 			setProgress(undefined);
 		}
-		await submit('/plugins/browser/chrome', {});
+		await submit(api(connection, '/plugins/browser/chrome', {}));
 	}
-	async function submit(path: string, body: object) {
+	async function submit(call: Promise<{ default: string; models: number }>) {
 		setBusy(true);
 		setError('');
 		try {
-			const result = await api<{ default: string; models: number }>(connection, path, body);
+			const result = await call;
 			setForm((f) => ({ ...f, key: '' }));
 			setDone({ model: result.default, models: result.models });
 			setSaved(await ok(rpcOf(connection).providers.$get()).catch(() => saved));

@@ -3,6 +3,7 @@
 // one, which credentials it holds, and how its connection is tested.
 // Bundled plugins' schemas are in plugin-config.ts.
 import { z } from 'zod';
+import type { Configs } from './plugin-config';
 import type { Store } from '../chat/store';
 
 /** Secret is a credential at a dotted path, shown to clients only as the boolean at flag. A blank submission keeps the saved value while owner is unchanged; no owner never changes. */
@@ -80,12 +81,12 @@ export class PluginSettings {
 	}
 
 	/** publicConfig is every plugin's configuration with its credentials withheld, each replaced by whether it is set. */
-	publicConfig(c = this.config()): Record<string, Record<string, unknown>> {
+	publicConfig(c = this.config()): Configs & Record<string, Record<string, unknown>> {
 		return Object.fromEntries(this.sections.map(s => {
 			const p = structuredClone(c[s.name]) as Record<string, unknown>;
 			for (const v of s.secrets) { setValue(p, v.flag, !!get(p, v.name)); unset(p, v.name); }
 			return [s.name, p];
-		}));
+		})) as Configs & Record<string, Record<string, unknown>>;
 	}
 
 	/** update saves one plugin's submitted configuration and returns every plugin's. */

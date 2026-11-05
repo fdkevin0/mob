@@ -170,19 +170,6 @@ describe.each(['mob', 'aisdk'] as const)('%s driver', driver => {
 			expect(e).toBeInstanceOf(StalledError);
 			expect(e.result?.text).toBe('Hel');
 		});
-
-		test('the provider quirk adapts the request', async () => {
-			const { sent, fetcher } = vendor(sse([chunk({ content: 'ok' }), finish('stop')], { done: true }));
-			const models = registry(driver, fetcher, { preset: 'openai' });
-			const { findPreset } = await import('../src/provider/presets');
-			const preset = findPreset('openai')!;
-			preset.quirk = (model, headers, body) => { headers.set('x-quirk', model); body.extra = true; };
-			try {
-				await collect(models.resolve('o/gpt-x'), conversation);
-			} finally { delete preset.quirk; }
-			expect(sent[0].headers.get('x-quirk')).toBe('gpt-x');
-			expect(sent[0].body.extra).toBe(true);
-		});
 	});
 
 	describe('Anthropic Messages', () => {

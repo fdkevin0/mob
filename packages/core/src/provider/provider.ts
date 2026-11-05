@@ -40,14 +40,13 @@ export function initialProviders(): ProvidersFile {
 
 /**
  * adoptDefault makes a provider just added the default when the default is
- * still the demo model (or unset): its picked model, its preset's default, or
- * the first it lists. With none of those, the default is cleared, so the
- * provider's first available model is used.
+ * still the demo model (or unset): its picked model, or the first it lists.
+ * With neither, the default is cleared, so the provider's first available
+ * model is used.
  */
 export function adoptDefault(f: ProvidersFile, p: Provider, listed: string[]) {
 	if (f.default && !f.default.startsWith('demo/')) return;
-	const preset = findPreset(p.preset)?.default;
-	const model = p.models?.[0] ?? (preset && listed.includes(preset) ? preset : listed[0]);
+	const model = p.models?.[0] ?? listed[0];
 	if (model) f.default = p.id + '/' + model; else delete f.default;
 }
 

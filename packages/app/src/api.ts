@@ -1,13 +1,11 @@
-import { MobClient, type Connection as LocalConnection } from '@mob/client';
+import { MobClient, timeoutFor, type Connection as LocalConnection } from '@mob/client';
 import { unbase64url } from '@mob/core/relay';
 import { encryptedFetch } from './remote';
 import { isLoopbackHost } from '@mob/core/url';
 // A connection reaches Mob on a computer, a paired runner through the relay, or the runner in this browser.
 export type Connection = LocalConnection & { runner?: { id: string; key: string }; browser?: boolean };
-
-export { timeoutFor } from '@mob/client';
 export type { Conversation, ChatMessage, ReplyStats, ReplyUsage, Snapshot } from '@mob/client';
-export type { Config } from './contracts';
+export type { Config } from '@mob/client/contracts';
 
 declare global {
 	interface Window {
@@ -96,6 +94,16 @@ export const rpcOf = (connection: Connection) => webClient(connection).api;
 export { ok } from '@mob/client';
 
 /** api calls a route by path, for plugins' routes, which the typed client does not know. */
-export function api<T>(connection: Connection, path: string, body?: object): Promise<T> {
-	return webClient(connection).request<T>(path, body);
+export async function api<T>(connection: Connection, path: string, body?: object): Promise<T> {
+	const response = await webClient(connection).fetch(`${connection.url}/api${path}`, {
+		method: body !== undefined ? 'POST' : 'GET',
+		headers: {
+			Authorization: `Bearer ${connection.token}`,
+			...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+		},
+		body: body !== undefined ? JSON.stringify(body) : undefined,
+		signal: AbortSignal.timeout(timeoutFor(path)),
+	});
+	if (!response.ok) throw new Error((await response.text()).trim() || `HTTP ${response.status}`);
+	return response.json() as Promise<T>;
 }

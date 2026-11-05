@@ -14,7 +14,7 @@ export interface Saver {
 	save(conversationID: string, name: string, text: string): Promise<string>;
 }
 
-/** utf8Length is the UTF-8 byte length of s, which Go's len counts. */
+/** utf8Length is the UTF-8 byte length of s. */
 export function utf8Length(s: string) {
 	let n = 0;
 	for (let i = 0; i < s.length; i++) {

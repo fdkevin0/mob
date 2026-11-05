@@ -7,7 +7,8 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { encryptedFetch, newKey, seal } from '@mob/app/remote';
+import { newRelayKey as newKey, seal } from '@mob/core/relay';
+import { encryptedFetch } from '@mob/app/remote';
 
 // Reuse the Workers runtime already bundled with the pinned Wrangler dependency.
 const require = createRequire(import.meta.url);
@@ -115,7 +116,6 @@ try {
 		MOB_STATE_DIR: dir,
 		MOB_DEMO: '1',
 		MOB_TOKEN: '',
-		MOB_GATEWAY_URL: '',
 	};
 	const pairing = spawnSync(binary, ['runner', 'pair'], {
 		env,

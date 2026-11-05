@@ -643,13 +643,6 @@ export function activity(a: Agent): Activity {
 	}
 }
 
-// How many calves are doing what right now.
-export function census(): Partial<Record<Activity, number>> {
-	const counts: Partial<Record<Activity, number>> = {};
-	for (const a of office.agents) counts[activity(a)] = (counts[activity(a)] ?? 0) + 1;
-	return counts;
-}
-
 // Plays a step of the story (0 to 3), or stops it with undefined.
 export function setStory(step: number | undefined) {
 	if (step === undefined) { story = undefined; return; }

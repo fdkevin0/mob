@@ -90,7 +90,7 @@ magpie's usage and routing rules see them as Mob's.
 
 | Concept | Answers | Lives in |
 | --- | --- | --- |
-| Catalog | what a model can do: context, output limit, reasoning levels, tools, images, price | `packages/core/src/provider/catalog.ts`, the models.dev catalog cached in XDG cache `mob/models.json` (OpenCode's cache as fallback), refreshed daily |
+| Catalog | what a model can do: context, output limit, reasoning levels, tools, images, price | `packages/core/src/provider/catalog.ts`, the models.dev catalog cached in XDG cache `mob/models.json`, refreshed daily |
 | Provider | how to reach a vendor: base URL per protocol, key, picked models, overrides | `packages/core/src/provider`, `providers.json` beside `config.yaml` |
 | Driver | one wire protocol | `packages/core/src/llm/openai.ts` (Chat Completions), `anthropic.ts` (Messages), `demo.ts`; or `aisdk.ts`, both protocols through the AI SDK's provider packages |
 | Model | a callable `provider/model[:effort]` | `Model`, from `ProviderRegistry.resolve` |
@@ -111,8 +111,8 @@ magpie's usage and routing rules see them as Mob's.
 
 - **Presets** are curated because models.dev has no key pages, regional or
   multi-protocol endpoints.
-- **Vendor quirks** belong to presets, never to URL sniffing. Mob does not
-  present itself as another vendor's client.
+- Mob never sniffs URLs to pick vendor behavior and does not present itself as
+  another vendor's client.
 - **Model lists** come from the vendor's `/models` (or `modelsURL`), else the
   preset's models.dev entry. Picks that held every listed model take in models
   listed since (`pickedFrom`). Unknown models are assumed to take tools.

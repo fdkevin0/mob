@@ -61,7 +61,7 @@ host's MCP tests run the bridge when its dependencies are installed. See
 `bun run test:runner` checks remote access end to end: the Worker, pairing,
 and the encrypted relay against the built binary.
 Also run `bun run test:client` (headless Node tests/typecheck) and
-`bun run test:tui` (pilot typecheck/tests) when changing the shared client or TUI.
+`bun run test:tui` (TUI typecheck/tests) when changing the shared client or TUI.
 The integration script exercises both client types, concurrent readers,
 reconnection, detachment, scoped approvals, stale decisions and Stop. The
 `scriptc` workflow reports how much of the host scriptc can compile; it runs

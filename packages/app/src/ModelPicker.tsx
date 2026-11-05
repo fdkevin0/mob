@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { api, ok, rpcOf, type Connection } from './api';
+import { ok, rpcOf, type Connection } from './api';
 import { Content as DialogContent } from '@radix-ui/react-dialog';
 import { DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Button } from '@mob/ui/button';

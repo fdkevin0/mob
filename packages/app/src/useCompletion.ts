@@ -1,9 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { lastToken } from '@mob/client';
 import { webClient, type Connection } from './api';
-import type { Suggestion } from './contracts';
-
-export { lastToken };
+import type { Suggestion } from '@mob/client/contracts';
 
 // Commands the workspace already offers as buttons stay out of the list a bare / shows; typing their names still completes them.
 const buttons = new Set(['/new', '/list', '/open', '/model', '/models', '/approve', '/deny', '/compact', '/usage', '/tasks', '/plugins', '/test', '/clear-secret', '/deliveries', '/mail', '/email', '/cloud', '/memories', '/forget', '/grants', '/revoke', '/schedules', '/unschedule', '/projects', '/blueprints', '/mcp', '/signin', '/skills']);

@@ -1,5 +1,5 @@
 # Render Blueprint for "Deploy to Render" in the web app's Connect a runner dialog.
-# docs/features/remote-access.md describes the deployment, and how to upgrade it
+# docs/features/cloud-runners.md describes the deployment, and how to upgrade it
 # to a paid instance with a disk so conversations survive restarts.
 services:
   - type: web

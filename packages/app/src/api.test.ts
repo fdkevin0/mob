@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { isLocalMob, readOffer, timeoutFor } from './api';
+import { timeoutFor } from '@mob/client';
+import { isLocalMob, readOffer } from './api';
 
 it('gives command execution the plugin timeout and keeps completion short', () => {
   expect(timeoutFor('/commands/run')).toBe(60_000);

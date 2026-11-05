@@ -1,7 +1,8 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useState, type KeyboardEvent } from 'react';
-import { lastToken, useCompletion } from './useCompletion';
+import { lastToken } from '@mob/client';
+import { useCompletion } from './useCompletion';
 
 const connection = { url: 'http://localhost', token: 'test' };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

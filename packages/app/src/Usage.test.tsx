@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { Usage, fillDays, tokens } from './Usage';
-import type { UsageReport } from './contracts';
+import { Usage, fillDays } from './Usage';
+import { tokens } from './format';
+import type { UsageReport } from '@mob/client/contracts';
 
 const connection = { url: 'http://localhost', token: 'local-token' };
 const counts = { reasoningTokens: 0, cacheWriteTokens: 0, cost: 0, durationMs: 0, requests: 1 };

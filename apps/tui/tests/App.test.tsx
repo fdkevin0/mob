@@ -213,11 +213,11 @@ test('native terminal preserves a complete multiline paste and per-session draft
 		await step(ui, () => ui.mockInput.pressKey('F2'));
 		await step(ui, () => ui.mockInput.typeText('Other'));
 		await step(ui, () => ui.mockInput.pressEnter());
-		expect(ui.captureCharFrame()).toContain('Mob · TS pilot · Other session');
+		expect(ui.captureCharFrame()).toContain('Mob · Other session');
 		await step(ui, () => ui.mockInput.pressKey('F2'));
 		await step(ui, () => ui.mockInput.typeText('Offline'));
 		await step(ui, () => ui.mockInput.pressEnter());
-		expect(ui.captureCharFrame()).toContain('Mob · TS pilot · Offline test');
+		expect(ui.captureCharFrame()).toContain('Mob · Offline test');
 		await step(ui, () => ui.mockInput.pressEnter());
 		expect(ui.captureCharFrame()).toContain('Received complete input');
 		expect(f.submitted()).toBe(text);

@@ -141,5 +141,4 @@ export async function readSSE(body: ReadableStream<Uint8Array>, handle: (event: 
 	}
 }
 
-/** byteLength is the UTF-8 size Go's len reports. */
-export const byteLength = (s: string) => new TextEncoder().encode(s).length;
+export { utf8Length as byteLength } from '../chat/output';

@@ -55,15 +55,14 @@ unix('the launcher runs the platform binary and passes its exit code', () => {
 	expect(run.exitCode).toBe(3);
 });
 
-// A fake npm: `view` finds @usemob/linux-x64@1.2.3 published and reports
-// `latest`; publish and dist-tag are logged with their directory.
-function fakeNpm(root: string, latest: string) {
+// A fake npm: `view` finds @usemob/linux-x64@1.2.3 published; publish is
+// logged with its directory.
+function fakeNpm(root: string) {
 	const fake = join(root, 'bin');
 	mkdirSync(fake);
 	writeFileSync(join(fake, 'npm'), `#!/bin/sh
 if [ "$1" = view ]; then
 	[ "$2" = @usemob/linux-x64@1.2.3 ] && echo 1.2.3
-	[ "$3" = dist-tags.latest ] && echo ${latest}
 	exit 0
 fi
 echo "\${PWD#${root}/npm/} $*" >> ${JSON.stringify(join(root, 'log'))}
@@ -72,38 +71,26 @@ echo "\${PWD#${root}/npm/} $*" >> ${JSON.stringify(join(root, 'log'))}
 	return fake;
 }
 
-function publish(version: string, tag: string, latest: string) {
+function publish(version: string, tag: string) {
 	const root = mkdtempSync(join(tmpdir(), 'usemob-publish-'));
 	const out = join(root, 'npm');
 	const packages = ['@usemob/linux-x64', '@usemob/darwin-arm64', 'usemob'];
 	for (const name of packages) mkdirSync(join(out, name), { recursive: true });
 	writeFileSync(join(out, 'publish.json'), JSON.stringify({ version, tag, packages }));
 	const run = Bun.spawnSync(['bun', join(here, 'publish.ts'), '--dir', out], {
-		env: { ...process.env, NPM_TOKEN: 'test', PATH: fakeNpm(root, latest) + delimiter + process.env.PATH },
+		env: { ...process.env, NPM_TOKEN: 'test', PATH: fakeNpm(root) + delimiter + process.env.PATH },
 	});
 	expect(run.exitCode).toBe(0);
 	return { log: readFileSync(join(root, 'log'), 'utf8').trimEnd().split('\n'), stdout: run.stdout.toString() };
 }
 
 unix('publish follows publish.json, platform packages first, and skips published versions', () => {
-	const { log, stdout } = publish('1.2.3', 'latest', '1.2.2');
+	const { log, stdout } = publish('1.2.3', 'latest');
 	expect(log).toEqual([
 		'@usemob/darwin-arm64 publish --access public --provenance --tag latest',
 		'usemob publish --access public --provenance --tag latest',
 	]);
 	expect(stdout).toContain('@usemob/linux-x64@1.2.3 is already published');
-});
-
-unix('a nightly moves latest only while latest is a nightly', () => {
-	const moved = publish('0.3.0-nightly.1.g1', 'nightly', '0.0.0-nightly.20261030-896099c').log;
-	expect(moved.at(-1)).toEndWith('dist-tag add usemob@0.3.0-nightly.1.g1 latest');
-	const kept = publish('0.3.0-nightly.1.g1', 'nightly', '0.2.0').log;
-	expect(kept.at(-1)).toBe('usemob publish --access public --provenance --tag nightly');
-});
-
-unix('a rerun of an older nightly does not move latest back', () => {
-	const log = publish('0.3.0-nightly.20261030160000.g896099c', 'nightly', '0.3.0-nightly.20261030220535.g5caa651').log;
-	expect(log.at(-1)).toBe('usemob publish --access public --provenance --tag nightly');
 });
 
 test('the runtime libc decides before a musl loader in /lib', () => {

@@ -55,7 +55,7 @@ export function decode(raw: Record<string, Record<string, unknown>>): Servers {
 	return servers;
 }
 
-/** glob matches name as Go's path.Match does; an invalid pattern throws. */
+/** glob matches a tool name against a shell pattern (*, ?, [...]); an invalid pattern throws. */
 export function glob(pattern: string, name: string) {
 	let re = '';
 	for (let i = 0; i < pattern.length; i++) {
@@ -129,7 +129,7 @@ export const target = (s: Server) => s.url ? s.url : [s.command!, ...s.args ?? [
  */
 export function fingerprint(s: Server) {
 	const sorted = (m?: Record<string, string>) => m && Object.keys(m).length ? Object.fromEntries(Object.entries(m).sort(([a], [b]) => a < b ? -1 : 1)) : null;
-	// Go's encoding/json field order, so approvals given before the TypeScript host still hold.
+	// Fixed key order so saved grant fingerprints keep matching.
 	const canonical: Record<string, unknown> = { Command: s.command ?? '', Dir: s.dir ?? '', URL: s.url ?? '', Args: s.args?.length ? s.args : null, Env: s.env?.length ? s.env : null, Headers: sorted(s.headers) };
 	if (s.oauth) canonical.OAuth = true;
 	return new Bun.CryptoHasher('sha256').update(JSON.stringify(canonical)).digest('hex').slice(0, 24);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type Connection } from './api';
+import { ok, rpcOf, type Connection } from './api';
 import type { Configs } from './plugins/types';
 import { EmailPlugin } from './plugins/EmailPlugin';
 import { TelegramPlugin } from './plugins/TelegramPlugin';
@@ -24,7 +24,7 @@ export function Plugins({ connection }: { connection: Connection }) {
 
   async function load() {
     try {
-      const data = await api<{ config: Configs; telegramStatus: string; emailStatus: string }>(connection, '/plugins');
+      const data = await ok(rpcOf(connection).plugins.$get());
       setConfig(data.config);
       setStatus(data.telegramStatus);
       setMailStatus(data.emailStatus);
@@ -40,7 +40,7 @@ export function Plugins({ connection }: { connection: Connection }) {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      void api<{ telegramStatus: string; emailStatus: string }>(connection, '/plugins')
+      void ok(rpcOf(connection).plugins.$get())
         .then(d => {
           setStatus(d.telegramStatus);
           setMailStatus(d.emailStatus);

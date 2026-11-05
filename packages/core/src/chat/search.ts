@@ -78,7 +78,7 @@ export function search(query: string, limit: number, waiting: Tool[], loaded: To
 	return result;
 }
 
-// found keeps Go's field order and leaves out empty fields.
+// found leaves out empty fields.
 const found = (f: Found): Found => ({ name: f.name, kind: f.kind, ...(f.description ? { description: f.description } : {}), ...(f.namespace ? { namespace: f.namespace } : {}), use: f.use });
 
 function brief(s: string) {

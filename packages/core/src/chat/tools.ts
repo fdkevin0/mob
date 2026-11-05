@@ -166,7 +166,7 @@ export class ToolRegistry {
 	entries(): Entry[] { return this.entrySources.flatMap(s => s()); }
 }
 
-/** rfc3339 is d in zone as Go's time.RFC3339 writes it. */
+/** rfc3339 formats d in zone as RFC 3339. */
 export function rfc3339(d: Date, zone: string) {
 	const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(d).map(p => [p.type, p.value]));
 	const local = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Connection } from '../api';
-import type { SkillPreview, SkillsOverview } from '../contracts';
+import type { SkillPreview, SkillsOverview } from '@mob/client/contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Notice } from '@mob/ui/notice';

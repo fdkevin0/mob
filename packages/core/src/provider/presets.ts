@@ -1,8 +1,5 @@
 // Vendors Mob knows how to reach: adding one needs only a key.
 
-/** Quirk adapts one vendor's requests after the driver builds them. */
-export type Quirk = (model: string, headers: Headers, body: Record<string, unknown>) => void;
-
 export type Preset = {
 	id: string;
 	name: string;
@@ -15,9 +12,6 @@ export type Preset = {
 	noKey?: boolean;
 	/** appKey is sent when the user saved none, to a local gateway that tells apps apart by it (magpie). */
 	appKey?: string;
-	/** default is the model a new installation starts on. */
-	default?: string;
-	quirk?: Quirk;
 };
 
 /** magpieKey names Mob to the magpie gateway, which counts the calls as Mob's. */
@@ -46,6 +40,3 @@ export const presets: Preset[] = [
 ];
 
 export const findPreset = (id?: string) => (id ? presets.find(p => p.id === id) : undefined);
-
-/** publicPreset is a preset as the API lists it. */
-export const publicPreset = ({ quirk: _q, appKey: _a, default: _d, ...rest }: Preset) => rest;

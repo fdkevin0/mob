@@ -1,13 +1,11 @@
 import { ApprovalPrompt } from './ApprovalPrompt';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import type { Changes } from '@mob/client';
-import { api, ok, rpcOf, type Connection } from './api';
-import type { AgentApproval, AgentNode } from './contracts';
+import { ok, rpcOf, type Connection } from './api';
+import type { AgentApproval, AgentNode } from '@mob/client/contracts';
 import { Calf } from '@mob/ui/brand/Logo';
 import { BrandIcon, modelBrand, runtimeBrand } from './brandIcons';
 import { duration, money as cost, tokens } from './format';
-
-export { duration };
 import { Loading } from './Splash';
 import { Button } from '@mob/ui/button';
 import {
@@ -662,8 +660,13 @@ export function AgentTree({
 	const rpc = rpcOf(connection);
 	const act: Act = {
 		decide: (id, approval, approved, extra) => after(ok(rpc.conversations[':id'].decide.$post({ param: { id }, json: { id: approval, approved, ...extra } }))),
-		stop: (node) => after(node.task ? api(connection, `/tasks/${node.task.id}/stop`, {}) : ok(rpc.conversations[':id'].stop.$post({ param: { id: node.conversationId } }))),
-		message: (task, text) => after(api(connection, `/tasks/${task}/message`, { text })),
+		stop: (node) =>
+			after(
+				node.task
+					? ok(rpc.tasks[':id'].stop.$post({ param: { id: node.task.id } }))
+					: ok(rpc.conversations[':id'].stop.$post({ param: { id: node.conversationId } })),
+			),
+		message: (task, text) => after(ok(rpc.tasks[':id'].message.$post({ param: { id: task }, json: { text } }))),
 	};
 
 	const all = nodes ?? [];

@@ -1,8 +1,5 @@
 // The relay receives only envelopes. Pairing keys never enter a request URL, header or body.
-import { base64, newRelayKey, open, seal, unbase64, type Envelope, type RelayReply as Reply } from '@mob/core/relay';
-
-export { base64, open, seal, unbase64, type Envelope };
-export const newKey = newRelayKey;
+import { open, seal, unbase64, type Envelope, type RelayReply as Reply } from '@mob/core/relay';
 
 export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(`/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });

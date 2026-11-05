@@ -3,7 +3,8 @@ import type { Connection } from './api';
 import { Button } from '@mob/ui/button';
 import { Label } from '@mob/ui/label';
 import { Textarea } from '@mob/ui/textarea';
-import { cloud, newKey } from './remote';
+import { newRelayKey as newKey } from '@mob/core/relay';
+import { cloud } from './remote';
 import { hostGuideURL, hosts } from './hosts';
 import { Notice } from '@mob/ui/notice';
 

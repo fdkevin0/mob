@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, ok, rpcOf, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent, type Connection } from './api';
+import { ok, rpcOf, defaultURL, isLocalMob, isPublicWeb, readOffer, unauthorizedEvent, type Connection } from './api';
 import { Logo } from '@mob/ui/brand/Logo';
 import { Button } from '@mob/ui/button';
 import { Input } from '@mob/ui/input';
@@ -94,7 +94,7 @@ export function App() {
     const next = { url: isPublicWeb() ? address.trim().replace(/\/+$/, '') : defaultURL(), token: token.trim() };
     if (!isLocalMob(next.url) && isPublicWeb()) { setError('Enter the address of Mob on this computer, such as http://127.0.0.1:8787.'); setLoading(false); return; }
     try {
-      await api(next, '/config');
+      await ok(rpcOf(next).config.$get());
       if (attempt !== connectionAttempt.current) return;
       saveConnection(next); chooseBrowser(false); setConnection(next); closeConnection();
     } catch (e) {
@@ -138,15 +138,15 @@ export function App() {
 // Storage can be unavailable, such as in a private window; the token form still works then.
 const tokenKey = 'mob-token';
 function savedToken() {
-  try { return localStorage.getItem(tokenKey) ?? sessionStorage.getItem(tokenKey); } catch { return null; }
+  try { return localStorage.getItem(tokenKey); } catch { return null; }
 }
 function saveToken(token: string) {
-  try { localStorage.setItem(tokenKey, token); sessionStorage.removeItem(tokenKey); } catch { /* sign in again next time */ }
+  try { localStorage.setItem(tokenKey, token); } catch { /* sign in again next time */ }
 }
 // clearToken forgets the saved token; given one, it keeps a different token another tab saved since.
 function clearToken(only?: string) {
   try {
-    for (const storage of [localStorage, sessionStorage]) if (only === undefined || storage.getItem(tokenKey) === only) storage.removeItem(tokenKey);
+    if (only === undefined || localStorage.getItem(tokenKey) === only) localStorage.removeItem(tokenKey);
   } catch { /* nothing stored */ }
 }
 

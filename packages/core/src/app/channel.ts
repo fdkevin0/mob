@@ -6,10 +6,9 @@ import { decide, openConversation } from '../chat/commands';
 import { CommandError, type ChatRequest, type ConversationService, type PendingApproval } from '../chat/conversation';
 import type { Answer } from '../chat/delegate';
 import { isAbort, type Running } from '../chat/running';
+import { utf8Length as bytes } from '../chat/output';
 import { newID, NotFound } from '../chat/sql';
 import { isStaleApproval, type Store } from '../chat/store';
-
-const bytes = (s: string) => new TextEncoder().encode(s).length;
 
 /** Texts are what a channel says in its own words. */
 export type Texts = {

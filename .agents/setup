@@ -33,9 +33,8 @@ esac
 
 bun_version="$(sed -n 's/.*"packageManager": "bun@\([^"]*\)".*/\1/p' package.json)"
 just_version=1.58.0
-tool_root="$HOME/.local/share/mob-orb"
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
-mkdir -p "$tool_root" "$HOME/.local/bin"
+mkdir -p "$HOME/.local/bin"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -63,5 +62,5 @@ fi
 
 bun --version
 just --version
-step 'Install locked frontend dependencies' bun install --frozen-lockfile
+step 'Install locked dependencies' bun install --frozen-lockfile
 step 'Build frontend and CLI' bun run build:cli

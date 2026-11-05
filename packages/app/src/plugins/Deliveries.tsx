@@ -1,8 +1,8 @@
 import { Button } from '@mob/ui/button';
 import { useEffect, useState } from 'react';
-import { api, ok, rpcOf, type Connection } from '../api';
+import { ok, rpcOf, type Connection } from '../api';
 import { errorText } from './shared';
-import type { Delivery } from '../contracts';
+import type { Delivery } from '@mob/client/contracts';
 import { Notice } from '@mob/ui/notice';
 export function Deliveries({connection}:{connection:Connection}) {
  const [rows,setRows]=useState<Delivery[]>([]);const [error,setError]=useState('');
