@@ -92,7 +92,7 @@ magpie's usage and routing rules see them as Mob's.
 | --- | --- | --- |
 | Catalog | what a model can do: context, output limit, reasoning levels, tools, images, price | `packages/core/src/provider/catalog.ts`, the models.dev catalog cached in XDG cache `mob/models.json` (OpenCode's cache as fallback), refreshed daily |
 | Provider | how to reach a vendor: base URL per protocol, key, picked models, overrides | `packages/core/src/provider`, `providers.json` beside `config.yaml` |
-| Driver | one wire protocol | `packages/core/src/llm/openai.ts` (Chat Completions), `anthropic.ts` (Messages), `demo.ts` |
+| Driver | one wire protocol | `packages/core/src/llm/openai.ts` (Chat Completions), `anthropic.ts` (Messages), `demo.ts`; or `aisdk.ts`, both protocols through the AI SDK's provider packages |
 | Model | a callable `provider/model[:effort]` | `Model`, from `ProviderRegistry.resolve` |
 
 ## providers.json
@@ -118,6 +118,28 @@ magpie's usage and routing rules see them as Mob's.
   listed since (`pickedFrom`). Unknown models are assumed to take tools.
 - **Protocol per model**: the user's `modelPrefs.api`, else the only endpoint,
   else Anthropic Messages for Claude models, else Chat Completions.
+
+## Drivers
+
+Mob speaks to providers with its own protocol code unless `driver: aisdk`
+(`MOB_DRIVER=aisdk`) chooses the AI SDK's provider packages
+(`@ai-sdk/openai-compatible`, `@ai-sdk/anthropic`) while they are tried.
+Either way the engine keeps its own loop: the AI SDK driver calls the model's
+`doStream` directly, not `streamText`, so tool calls come back unexecuted and
+unvalidated. What stays Mob's on both drivers:
+
+- requests go through `send`: a request whose response stops arriving fails as
+  stalled, and one that failed before its response began is sent again,
+  honouring `Retry-After`, never once text is streaming;
+- a refusal is worded by `statusError`, with every credential masked and a
+  prompt too long for the window told apart, so Mob summarizes and retries;
+- model output is held to the same limits (response size, tool calls, their
+  IDs, names and arguments), and a failure keeps what arrived before it;
+- Anthropic caching marks the tools, system prompt and latest message, and
+  thinking shares the requested tokens, leaving at least half for the answer.
+
+`packages/core/test/drivers.test.ts` runs one set of recorded streams against
+both drivers.
 
 ## Per-conversation models
 

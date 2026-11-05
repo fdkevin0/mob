@@ -11,6 +11,9 @@
 		"test": "bun test"
 	},
 	"dependencies": {
+		"@ai-sdk/anthropic": "4.0.91",
+		"@ai-sdk/openai-compatible": "3.0.80",
+		"ai": "7.0.155",
 		"hono": "4.13.13",
 		"zod": "4.6.7"
 	},

@@ -18,6 +18,7 @@ The file is YAML (config.yaml) or JSON (config.json).
 | `state_dir` | `--state-dir` | `MOB_STATE_DIR` | `XDG state home/mob` | Background logs; restart required |
 | `addr` | `--addr` | `MOB_ADDR` | `127.0.0.1:8787` | Local service loopback IP and port; restart required |
 | `demo` | `--demo` | `MOB_DEMO` | `false` | Use offline model simulation; restart required |
+| `driver` | `--driver` | `MOB_DRIVER` | `mob` | Model driver: mob (Mob's own) or aisdk (the AI SDK's provider packages, being tried); restart required |
 | `max_tool_steps` | `--max-tool-steps` | `MOB_MAX_TOOL_STEPS` | `20` | Model calls per turn (1-100) |
 | `web_url` | `--web-url` | `MOB_WEB_URL` | `https://usemob.app` | Public web UI URL; an empty flag or file value disables it |
 | `token` | `--token` | `MOB_TOKEN` | `""` | Local access token (at least 32 bytes); empty uses the managed token file; restart required; sensitive: prefer a protected file or environment over argv |

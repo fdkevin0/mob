@@ -1,5 +1,6 @@
 // The provider registry resolves model references against providers.json,
 // which stays the only source of truth; the host supplies its storage.
+import { SDKModel } from '../llm/aisdk';
 import { AnthropicModel } from '../llm/anthropic';
 import { DemoModel, demoID, demoInfo, demoRef } from '../llm/demo';
 import { efforts, parseRef, refKey, refString, type Group, type Info, type Model, type Ref } from '../llm/llm';
@@ -49,7 +50,16 @@ const hidden = (p: Provider, ids: string[]) => findPreset(p.preset)?.id === 'ope
 /** nonChat are fragments of model IDs that do not converse. */
 const nonChat = ['embed', 'whisper', 'tts', 'dall-e', 'image', 'moderation', 'transcribe', 'rerank', 'audio', 'realtime', 'sora'];
 
+/**
+ * Driver is what speaks to providers: Mob's own protocol code, or the AI SDK's
+ * provider packages. MOB_DRIVER=aisdk chooses the AI SDK while both are tried.
+ */
+export type Driver = 'mob' | 'aisdk';
+export const defaultDriver = (): Driver => (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.MOB_DRIVER === 'aisdk' ? 'aisdk' : 'mob';
+
 export class ProviderRegistry implements Models {
+	/** driver is what the models this registry builds speak to their providers with. */
+	driver: Driver = defaultDriver();
 	private file: ProvidersFile;
 	private lists = new Map<string, List>();
 	/** noTools holds, per provider, the models whose vendor list says they take no tools (OpenRouter's supported_parameters). */
@@ -150,9 +160,11 @@ export class ProviderRegistry implements Models {
 		const proto = protocolFor(p, ref.model);
 		const base = endpoint(p, proto);
 		if (!base) throw new Error(`provider ${p.id} has no ${proto} base URL`);
-		if (proto === 'anthropic') return new AnthropicModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher });
 		const quirk = preset?.quirk;
-		return new OpenAIModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher, prepare: quirk && ((h, body) => quirk(ref.model, h, body)) });
+		const prepare = quirk && ((h: Headers, body: Record<string, unknown>) => quirk(ref.model, h, body));
+		if (this.driver === 'aisdk') return new SDKModel(ref, info, { protocol: proto, baseURL: base, key, headers: p.headers, fetch: this.fetcher, prepare });
+		if (proto === 'anthropic') return new AnthropicModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher });
+		return new OpenAIModel(ref, info, { baseURL: base, key, headers: p.headers, fetch: this.fetcher, prepare });
 	}
 
 	/**
