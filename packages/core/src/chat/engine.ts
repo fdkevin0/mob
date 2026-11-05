@@ -283,7 +283,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 					message.parts.push({ type: kind, text: '' });
 					await send({ kind: 'segment-started', segment: kind, id: ids.get(kind) });
 				}
-				message.parts[index].text += delta;
+				message.parts[index].text = (message.parts[index].text ?? '') + delta;
 				await send({ kind: 'segment-delta', segment: kind, id: ids.get(kind), text: delta });
 			};
 			let [result, err] = await stream(model, req, emitDelta, signal);
@@ -341,7 +341,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				if (!call.id || !call.name) throw new Error('model returned an incomplete tool call');
 				if (seenCalls.has(call.id)) throw new Error('model repeated a tool call ID');
 				seenCalls.add(call.id);
-				let input: Record<string, any> = {};
+				let input: Record<string, unknown> = {};
 				let parseErr = false;
 				try {
 					const v = JSON.parse(call.arguments);
@@ -356,7 +356,16 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				else {
 					const ran = Date.now();
 					try {
-						output = await runTool(agent, offered, new ToolCall(call, conversationID, checked.input, part, message, store, send, signal, agent.owner ? offered.get(call.name) : undefined));
+						const tool = offered.get(call.name);
+						if (!tool) throw new Error('unsupported tool: ' + call.name);
+						const tc = new ToolCall(call, conversationID, checked.input, part, message, store, send, signal, agent.owner ? tool : undefined);
+						for (const before of agent.hooks.beforeTool) await before(tc);
+						try {
+							output = await tool.run(tc);
+						} catch (e) {
+							if (!(e instanceof Granted)) throw e;
+							output = await tool.approved!({ conversationId: conversationID, approvalId: newID(), input: e.input, store, owner: agent.owner, signal });
+						}
 					} catch (e) {
 						if (e instanceof AwaitingApproval) { pending = true; continue; }
 						if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Aborted();
@@ -378,7 +387,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 					if (file) part.outputFile = file;
 					await send({ kind: 'tool-output', toolCallId: call.id, output: output ?? null });
 				}
-				const file = typeof part.outputFile === 'string' ? part.outputFile : '';
+				const file = part.outputFile ?? '';
 				const out: LLMMessage = { role: 'tool', text: modelOutput(output ?? null, file), toolCallId: call.id, toolName: call.name };
 				added.list.push({ index: req.messages.length, file });
 				added.tokens += promptTokens([out]);
@@ -527,19 +536,6 @@ export async function finished(message: Message, emit: (e: Event) => void | Prom
 /** recordRequests adds each request to the reply's usage. */
 export function recordRequests(store: Store, requests: Requests, conversationID: string, messageID: string) {
 	for (const q of requests) store.recordUsage(conversationID, messageID, q.model, q.usage, q.tookMs, '', q.firstTokenMs ?? 0);
-}
-
-/** runTool runs an offered tool after the beforeTool hooks allow it, and carries out a call a remembered approval covers. */
-async function runTool(agent: Agent, offered: Map<string, Tool>, call: ToolCall): Promise<unknown> {
-	const tool = offered.get(call.name);
-	if (!tool) throw new Error('unsupported tool: ' + call.name);
-	for (const before of agent.hooks.beforeTool) await before(call);
-	try {
-		return await tool.run(call);
-	} catch (e) {
-		if (e instanceof Granted) return tool.approved!({ conversationId: call.conversationId, approvalId: newID(), input: e.input, store: call.store, owner: agent.owner, signal: call.signal });
-		throw e;
-	}
 }
 
 /** usedTools are the tools the conversation has called, and those tool_search loaded in it, which stay declared in its later turns. */

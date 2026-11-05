@@ -1,20 +1,17 @@
 // The local HTTP API: the AI SDK UI chat stream, conversations, commands,
 // plugins and the change feed, behind the access token. Written against the
 // Fetch API, so Bun serves it on a computer and a service worker in a browser.
-import type { Command, CommandCall, CommandRequest, Suggestion } from '../chat/commands';
+import type { Command, CommandCall, Suggestion } from '../chat/commands';
 import { cell, choices, interactive, openPlugins, replyJSON } from '../chat/commands';
 import { ConversationService, CommandError, type ChatRequest } from '../chat/conversation';
-import type { Answer } from '../chat/delegate';
 import type { Hooks } from '../chat/engine';
 import { encode, type Event } from '../chat/events';
 import type { Running } from '../chat/running';
 import type { Entry } from '../chat/search';
-import { NotFound, newID } from '../chat/sql';
-import { isConversationID, TransferError, type Store, type Task, type Transfer, type UsageSummary } from '../chat/store';
-import { jsonSchema, type Tool } from '../chat/tools';
+import { newID } from '../chat/sql';
+import type { Store, Task, UsageSummary } from '../chat/store';
+import type { Tool } from '../chat/tools';
 import { isLoopbackHost, secureURL } from '../url';
-import { publicProvider } from '../provider/provider';
-import { providerFromForm, saveProvider, type ProviderForm } from '../provider/save';
 import type { ProviderRegistry } from '../provider/registry';
 import { PluginSettings, type Section } from './configuration';
 import { Extensions, ExtensionsClosed, type Extension } from './extension';

@@ -6,7 +6,7 @@ import { createMiddleware } from 'hono/factory';
 import type { CommandRequest } from '../chat/commands';
 import type { Answer } from '../chat/delegate';
 import { NotFound, newID } from '../chat/sql';
-import { isConversationID, TransferError, type Transfer } from '../chat/store';
+import { isConversationID, TransferError, wire, type Transfer } from '../chat/store';
 import { jsonSchema } from '../chat/tools';
 import { publicProvider } from '../provider/provider';
 import { providerFromForm, saveProvider, type ProviderForm } from '../provider/save';
@@ -37,8 +37,10 @@ export const bearer = (header: string | null | undefined, token: string) => {
 const input = <T extends object>(limit = 256 << 10, keys?: (keyof T & string)[], fallback?: T) =>
 	createMiddleware<{}, string, { in: { json: T }; out: { json: T } }>(async (c, next) => {
 		let value: T;
-		try { value = await body<T>(c.req.raw, limit, keys); } catch (e) {
-			if (!fallback) throw e;
+		try {
+			value = await body<T>(c.req.raw, limit, keys);
+		} catch (e) {
+			if (!fallback || (e instanceof HTTPError && e.status === 413)) throw e;
 			value = fallback;
 		}
 		c.req.addValidatedData('json', value);
@@ -88,7 +90,8 @@ export function api(s: Server) {
 		// The web's Model provider dialog saves a provider here, as `mob provider add` does on the command line.
 		.post('/api/providers', input<ProviderForm>(16 << 10, ['preset', 'url', 'protocol', 'key', 'model']), async c => {
 			const form = c.req.valid('json');
-			return c.json(await saveProvider(s.providers, providerFromForm(form), typeof form.model === 'string' ? form.model : undefined));
+			if (Object.values(form).some(v => v !== undefined && typeof v !== 'string')) throw new HTTPError(400, 'invalid request');
+			return c.json(await saveProvider(s.providers, providerFromForm(form), form.model));
 		})
 		.get('/api/conversations', c => {
 			// The list says which conversations are replying or waiting for a decision, so a client can mark them.
@@ -105,7 +108,7 @@ export function api(s: Server) {
 			if (!s.store.exists(id) && isConversationID(id)) return c.json({ messages: [], active: false, model: s.providers.default() });
 			// A client showing the snapshot must not offer a decision on an approval that has expired.
 			s.store.expireApprovals(id);
-			return c.json({ messages: s.store.history(id).map(m => ({ id: m.id, role: m.role, parts: m.parts, metadata: m.metadata })), active: s.isActive(id), model: s.model(id) });
+			return c.json({ messages: s.store.history(id).map(wire), active: s.isActive(id), model: s.model(id) });
 		})
 		.get('/api/conversations/:id/context', c => {
 			const id = c.req.param('id');
@@ -114,8 +117,8 @@ export function api(s: Server) {
 			return c.json({ context: s.context(id, true) ?? null, usage: s.store.conversationUsage(id).get(id) });
 		})
 		.post('/api/conversations/:id/rename', input<{ title: string }>(4 << 10, ['title']), c => {
-			const raw = c.req.valid('json').title as unknown;
-			const title = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
+			const { title: raw } = c.req.valid('json');
+			const title = (typeof raw === 'string' ? raw : '').replace(/\s+/g, ' ').trim();
 			if (!title || [...title].length > titleLimit) throw new HTTPError(400, `A title has 1 to ${titleLimit} characters.`);
 			const id = c.req.param('id');
 			s.store.rename(id, title);
@@ -123,7 +126,7 @@ export function api(s: Server) {
 		})
 		// Choosing a model is a setting of the conversation, for its later replies; it adds nothing to the transcript.
 		.post('/api/conversations/:id/model', input<{ model: string }>(4 << 10, ['model']), c => {
-			const model = c.req.valid('json').model as unknown;
+			const { model } = c.req.valid('json');
 			if (typeof model !== 'string') throw new HTTPError(400, 'model must be a provider/model reference, or empty for the default.');
 			return c.json({ model: s.setModel(c.req.param('id'), model.trim()) });
 		})
@@ -146,22 +149,28 @@ export function api(s: Server) {
 			try { s.tasks?.stopTask(c.req.param('id')); } catch (e) { return c.text((e as Error).message, 404); }
 			return c.json({ stopped: true });
 		})
-		.post('/api/tasks/:id/message', input<{ text: string }>(chatBody, undefined, { text: '' }), async c => {
-			const t = c.req.valid('json').text as unknown;
-			if (typeof t !== 'string' || !t.trim()) return c.text('invalid message', 400);
-			try { await s.tasks?.message(c.req.param('id'), t, s.revoked.signal); } catch (e) { return c.text((e as Error).message, 409); }
+		.post('/api/tasks/:id/message', input<{ text: string }>(chatBody, ['text'], { text: '' }), async c => {
+			const { text } = c.req.valid('json');
+			if (typeof text !== 'string' || !text.trim()) return c.text('invalid message', 400);
+			try { await s.tasks?.message(c.req.param('id'), text, s.revoked.signal); } catch (e) { return c.text((e as Error).message, 409); }
 			return c.json({ sent: true }, 202);
 		})
-		.post('/api/conversations/:id/decide', input<Answer>(64 << 10, undefined, { id: '', approved: false }), async c => {
+		.post('/api/conversations/:id/decide', input<Answer>(64 << 10, ['id', 'approved', 'remember', 'reason', 'input'], { id: '', approved: false }), async c => {
 			const answer = c.req.valid('json');
-			if (!answer?.id) return c.text('invalid decision', 400);
+			if (typeof answer?.id !== 'string' || !answer.id || typeof answer.approved !== 'boolean') return c.text('invalid decision', 400);
 			await s.start({ id: c.req.param('id'), text: '', requestId: newID(), approval: answer, owner: true }, s.revoked.signal);
 			return c.json({ started: true }, 202);
 		})
 		.get('/api/commands', c => c.json(s.commands.specs(c.req.query('client') ?? '')))
-		.post('/api/commands/complete', input<CommandRequest>(256 << 10, ['client', 'conversationId', 'text']), async c => c.json(await s.commands.complete(c.req.valid('json'), true)))
+		.post('/api/commands/complete', input<CommandRequest>(256 << 10, ['client', 'conversationId', 'text']), async c => {
+			const req = c.req.valid('json');
+			if (typeof req.client !== 'string' || !req.client || typeof req.text !== 'string' || (req.conversationId !== undefined && typeof req.conversationId !== 'string')) throw new HTTPError(400, 'invalid request');
+			return c.json(await s.commands.complete(req, true));
+		})
 		.post('/api/commands/run', input<CommandRequest>(256 << 10, ['client', 'conversationId', 'text']), async c => {
-			return c.json(await s.commands.run(c.req.valid('json'), true, c.req.raw.signal).catch(orFail(502)));
+			const req = c.req.valid('json');
+			if (typeof req.client !== 'string' || !req.client || typeof req.text !== 'string' || (req.conversationId !== undefined && typeof req.conversationId !== 'string')) throw new HTTPError(400, 'invalid request');
+			return c.json(await s.commands.run(req, true, c.req.raw.signal).catch(orFail(502)));
 		})
 		.post('/api/chat', c => s.chat(c.req.raw))
 		.get('/api/chat/:id/stream', c => s.stream(c.req.raw, c.req.param('id')))
@@ -175,8 +184,8 @@ export function api(s: Server) {
 			s.codes.set(code, now + pairingLifetime);
 			return c.json({ code, expiresAt: now + pairingLifetime });
 		})
-		.post('/api/pairing/claim', input<{ code: string }>(1 << 10, undefined, { code: '' }), c => {
-			const code = c.req.valid('json').code as unknown;
+		.post('/api/pairing/claim', input<{ code: string }>(1 << 10, ['code'], { code: '' }), c => {
+			const { code } = c.req.valid('json');
 			if (typeof code !== 'string' || !code) return c.text('invalid pairing request', 400);
 			const expires = s.codes.get(code);
 			s.codes.delete(code);
@@ -184,8 +193,7 @@ export function api(s: Server) {
 			return c.json({ token: s.currentToken() });
 		})
 		.post('/api/token/rotate', async c => {
-			const header = c.req.header('Authorization');
-			await s.rotateToken(current => bearer(header, current));
+			await s.rotateToken(current => bearer(c.req.header('Authorization'), current));
 			return c.body(null, 204);
 		});
 }

@@ -7,7 +7,7 @@ export const chunkLimit = 4000;
 /** Chunk is one message: HTML in the subset Telegram accepts, and the same text plain, to send if Telegram rejects the HTML. */
 export type Chunk = { html: string; plain: string };
 
-export const escape = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&#34;').replaceAll("'", '&#39;');
+export const escape = Bun.escapeHTML;
 
 const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', copy: '©', reg: '®', hellip: '…', mdash: '—', ndash: '–', laquo: '«', raquo: '»', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', times: '×', middot: '·', bull: '•', deg: '°', euro: '€' };
 
@@ -21,9 +21,6 @@ export function unescape(s: string) {
 		return named[e] ?? all;
 	});
 }
-
-/** units is the length of s in UTF-16 code units, as Telegram counts. */
-export const units = (s: string) => s.length;
 
 /** plain is the text of Telegram HTML. */
 export const plain = (s: string) => unescape(s.replace(/<[^>]*>/g, ''));
@@ -45,7 +42,7 @@ export function chunks(markdown: string, limit = chunkLimit): Chunk[] {
 		const block = renderBlock(token).trim();
 		if (!block) continue;
 		for (const part of split(token, block, limit)) {
-			if (current && units(current) + 2 + units(part) > limit) flush();
+			if (current && current.length + 2 + part.length > limit) flush();
 			if (current) current += '\n\n';
 			current += part;
 		}
@@ -56,7 +53,7 @@ export function chunks(markdown: string, limit = chunkLimit): Chunk[] {
 
 /** split is block in pieces that fit the limit: a code block becomes several code blocks, anything else plain text. */
 function split(token: Token, block: string, limit: number): string[] {
-	if (units(block) <= limit) return [block];
+	if (block.length <= limit) return [block];
 	let open = '', end = '', text: string;
 	if (token.type === 'code') {
 		const lang = (token as Tokens.Code).lang;
@@ -64,22 +61,22 @@ function split(token: Token, block: string, limit: number): string[] {
 		text = escape((token as Tokens.Code).text);
 	} else text = escape(plain(block));
 	const lines = text.split(/(?<=\n)/);
-	let room = limit - units(open) - units(end);
+	let room = limit - open.length - end.length;
 	if (room < limit / 2) {
 		// A language tag that long is not worth the room.
 		[open, end] = ['<pre>', '</pre>'];
-		room = limit - units(open) - units(end);
+		room = limit - open.length - end.length;
 	}
 	const parts: string[] = [];
 	let b = '';
 	for (let line of lines) {
-		while (units(line) > room) {
+		while (line.length > room) {
 			const cut = fit(line, room);
 			if (b) { parts.push(open + b + end); b = ''; }
 			parts.push(open + line.slice(0, cut) + end);
 			line = line.slice(cut);
 		}
-		if (units(b) + units(line) > room) { parts.push(open + b + end); b = ''; }
+		if (b.length + line.length > room) { parts.push(open + b + end); b = ''; }
 		b += line;
 	}
 	if (b) parts.push(open + b + end);

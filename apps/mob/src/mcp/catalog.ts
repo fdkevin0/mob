@@ -22,8 +22,7 @@ export type Registry = {
 /** validateRegistry refuses a registry that is not an https URL, or a namespace that is not a glob of names. */
 export function validateRegistry(r: Registry) {
 	if (!r.namespaces.length) return;
-	let u: URL | undefined;
-	try { u = new URL(r.url); } catch { /* refused below */ }
+	const u = URL.parse(r.url);
 	if (!u || u.protocol !== 'https:' || !u.host) throw new Error('mcp_registry.url must be an https URL');
 	for (const g of r.namespaces) {
 		let ok = g.includes('/');
@@ -96,12 +95,9 @@ export async function fetchRegistry(r: Registry, signal: AbortSignal, fetcher: t
 			for (const entry of data.servers ?? []) {
 				const s = entry.server ?? {};
 				const status = entry._meta?.['io.modelcontextprotocol.registry/official']?.status || s.status || '';
-				let match = false;
-				try { match = glob(g, s.name ?? ''); } catch { /* validated */ }
-				if (!match || (status && status !== 'active')) continue;
+				if (!glob(g, s.name ?? '') || (status && status !== 'active')) continue;
 				for (const remote of s.remotes ?? []) {
-					let u: URL | undefined;
-					try { u = new URL(remote.url ?? ''); } catch { /* skipped */ }
+					const u = URL.parse(remote.url ?? '');
 					if (remote.type !== 'streamable-http' || !u || u.protocol !== 'https:' || !u.host || seen.has(remote.url!)) continue;
 					seen.add(remote.url!);
 					const l: Listing = { name: s.name!, title: s.title || undefined, description: s.description ?? '', version: s.version || undefined, repository: s.repository?.url || undefined, url: remote.url!, source: r.url };
@@ -115,8 +111,4 @@ export async function fetchRegistry(r: Registry, signal: AbortSignal, fetcher: t
 		}
 	}
 	return list;
-}
-
-export function hostOf(raw: string) {
-	try { return new URL(raw).host; } catch { return raw; }
 }

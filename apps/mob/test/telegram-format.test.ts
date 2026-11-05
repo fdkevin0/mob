@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { chunkLimit, chunks, fit, units } from '../src/telegram/format';
+import { chunkLimit, chunks, fit } from '../src/telegram/format';
 
 test('chunks format Markdown as Telegram HTML', () => {
 	const got = chunks('# Title\n\nSome **bold**, *it*, ~~gone~~ and `a<b>` & [link](https://x.y/?a=1&b=2), [local](file:///etc).\nNext line.\n\n' +
@@ -14,7 +14,7 @@ test('chunks format Markdown as Telegram HTML', () => {
 test('chunks split long replies', () => {
 	const code = '```\n' + 'line <x>\n'.repeat(1000) + '```';
 	const got = chunks('intro\n\n' + code + '\n\n' + '😀'.repeat(3000), 4000);
-	for (const c of got) expect(units(c.html)).toBeLessThanOrEqual(4000);
+	for (const c of got) expect(c.html.length).toBeLessThanOrEqual(4000);
 	expect(got[0]!.html).toStartWith('intro\n\n<pre>line &lt;x&gt;');
 	expect(got[0]!.html).toEndWith('</pre>');
 	let text = '';
@@ -29,7 +29,7 @@ test('fit keeps entities and characters whole', () => {
 	expect(fit('abc', 0)).toBe(1);
 	const got = chunks('```' + 'x'.repeat(4000) + '\n' + 'code\n'.repeat(2000) + '```', 4000);
 	expect(got.length).toBeGreaterThanOrEqual(3);
-	for (const c of got) { expect(units(c.html)).toBeLessThanOrEqual(4000); expect(c.html).toStartWith('<pre>code'); }
+	for (const c of got) { expect(c.html.length).toBeLessThanOrEqual(4000); expect(c.html).toStartWith('<pre>code'); }
 });
 
 test('escapes, entities, links and code spans', () => {

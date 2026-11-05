@@ -30,8 +30,8 @@ export const output = {
 // stagesOf is what a task runs: the stages the owner set in the approval, or its blueprint's.
 export function stagesOf(index: number, changed?: unknown): Stage[] {
 	const own = (changed as { tasks?: { stages?: Stage[] }[] } | undefined)?.tasks?.[index]?.stages;
-	const b = plan.blueprints?.[plan.tasks![index].blueprint ?? ''];
-	return own ?? (typeof b === 'object' ? (b.stages ?? []) : []);
+	const b = plan.blueprints?.[plan.tasks![index].blueprint ?? ''] as { stages?: Stage[] } | undefined;
+	return own ?? b?.stages ?? [];
 }
 
 type Phase = { status: string; stage: string; round?: number; tries?: number; passed?: boolean };

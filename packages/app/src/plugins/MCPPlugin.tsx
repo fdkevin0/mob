@@ -4,6 +4,7 @@ import type { MCPOverview } from '../contracts';
 import { Button } from '@mob/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Notice } from '@mob/ui/notice';
+import { Segmented } from '@mob/ui/segmented';
 import { Field, Feedback, errorText } from './shared';
 
 export function MCPPlugin({ connection }: { connection: Connection }) {
@@ -28,8 +29,7 @@ export function MCPPlugin({ connection }: { connection: Connection }) {
     return () => { active = false; clearInterval(timer); };
   }, [connection]);
   return <section aria-label="MCP market" className="extension-market"><h2>MCP servers</h2>
-    <p>Connect external tools to the current Mob service. Installing a server does not approve its tool calls.</p>
-    <div className="plugin-actions"><Button variant={view === 'installed' ? 'primary' : 'outline'} aria-pressed={view === 'installed'} onClick={() => setView('installed')}>Installed</Button><Button variant={view === 'discover' ? 'primary' : 'outline'} aria-pressed={view === 'discover'} onClick={() => setView('discover')}>Discover</Button><Button variant="ghost" disabled={busy} onClick={() => void perform(load)}>Refresh</Button></div>
+    <div className="plugin-actions"><Segmented label="MCP servers view" options={[{ value: 'installed', label: 'Installed' }, { value: 'discover', label: 'Discover' }]} value={view} onChange={setView} /><Button variant="ghost" disabled={busy} onClick={() => void perform(load)}>Refresh</Button></div>
     <Feedback error={selected || removing ? '' : error} notice={notice} /><Field label="Search MCP servers" value={query} onChange={setQuery} />
     {!data && !error && <p role="status">Loading servers…</p>}
     {view === 'installed' ? <>
@@ -42,7 +42,6 @@ export function MCPPlugin({ connection }: { connection: Connection }) {
       </article>)}
       {data?.servers.some(s => s.signInUrl) && <form onSubmit={e => { e.preventDefault(); void perform(async () => { await api(connection, '/plugins/mcp/signin', { address }); setAddress(''); await load(); setNotice('Sign-in received. Connecting…'); }); }}><Field label="Finish sign-in from another device" hint="If the final localhost page cannot open, paste its full address here." value={address} onChange={setAddress} /><Button disabled={busy || !address}>Finish sign-in</Button></form>}
     </> : <>
-      <p>Remote HTTP servers from Mob’s selections and your configured registry namespaces.</p>
       {data?.catalog.filter(s => `${s.title ?? s.name} ${s.description}`.toLowerCase().includes(query.toLowerCase())).map(s => <article className="extension-row" key={s.url}><h3>{s.title ?? s.name}</h3><p>{s.description}</p><p>{s.source}</p><Button variant="outline" disabled={busy} onClick={() => setSelected(s)}>View details</Button></article>)}
       {data?.catalog.length === 0 && <p>No additional servers available in the configured catalog.</p>}
     </>}

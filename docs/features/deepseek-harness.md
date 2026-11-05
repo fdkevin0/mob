@@ -85,7 +85,7 @@ Plugin files and this JSON file are not watched.
 
 ## Compatibility boundary
 
-The pinned baseline is DSH `0.2.1-rc.2` and Cordis `4.0.5`. Tests use the actual
+The pinned baseline is DSH `0.2.1-rc.4` and Cordis `4.0.5`. Tests use the actual
 published runtimes and a plugin built with DSH's `defineTool`, including a real
 connection through Mob's MCP plugin. This is tool compatibility, not a claim that every community
 plugin works.

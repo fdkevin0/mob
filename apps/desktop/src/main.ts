@@ -20,11 +20,6 @@ function external(url: string) {
 	if (/^https?:\/\//.test(url)) void shell.openExternal(url);
 }
 
-function errorPage(message: string) {
-	const escaped = message.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
-	return 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><title>Mob</title><body style="font:15px system-ui;background:#f9f9f7;color:#222;padding:48px"><h1>Mob could not start.</h1><pre style="white-space:pre-wrap">${escaped}</pre><p>Check <code>mob status</code> and the background log, then reopen Mob.</p>`);
-}
-
 async function open() {
 	if (window) { window.show(); window.focus(); return; }
 	window = new BrowserWindow({
@@ -42,7 +37,8 @@ async function open() {
 		connection = await connect(binary);
 		await window.loadURL(connection.url + '/');
 	} catch (e) {
-		await window.loadURL(errorPage(e instanceof Error ? e.message : String(e)));
+		const message = (e instanceof Error ? e.message : String(e)).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+		await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><title>Mob</title><body style="font:15px system-ui;background:#f9f9f7;color:#222;padding:48px"><h1>Mob could not start.</h1><pre style="white-space:pre-wrap">${message}</pre><p>Check <code>mob status</code> and the background log, then reopen Mob.</p>`));
 	}
 }
 

@@ -35,8 +35,7 @@ export const planLimit = 6;
 
 /** tools let Mob's model start, follow, instruct and stop tasks. */
 export function tools(svc: Service): Tool[] {
-	const agents = presets.map(p => p.name);
-	const agent = z.enum(agents as [string, ...string[]]);
+	const agent = z.enum(presets.map(p => p.name) as [string, ...string[]]);
 	const blueprintName = z.enum(blueprints.map(b => b.name) as [string, ...string[]]);
 	return [defineTool({
 		name: 'task_start',
@@ -45,7 +44,7 @@ export function tools(svc: Service): Tool[] {
 			project: text("A project's name, or the absolute path of a git repository on this computer").optional(),
 			prompt: text('Self-contained task brief: goal, scope and user constraints, known evidence and decisions, acceptance checks, and a reminder to read applicable project instructions. The agent does not receive the parent conversation.'),
 			title: text('A short title for the task').optional(),
-			agent: agent.optional().describe('The coding agent; default ' + agents[0]),
+			agent: agent.optional().describe('The coding agent; default ' + presets[0]!.name),
 			share: text(`A task's ID: work read-only in that task's worktree and branch instead of a new one, seeing its uncommitted changes, such as to review it; project is then that task's. Only ${readers().join(' and ')} can`).optional(),
 			blueprint: blueprintName.optional().describe("How the work goes from done to ready to review; default the project's blueprint. " + blueprints.map(b => `${b.name}: ${steps(b)}.`).join(' ')),
 		}),
@@ -77,7 +76,7 @@ export function tools(svc: Service): Tool[] {
 			tasks: z.array(z.object({
 				title: text('A short title for the task'),
 				prompt: text('What the agent should do, with everything it needs to know'),
-				agent: agent.optional().describe('The coding agent; default ' + agents[0]),
+				agent: agent.optional().describe('The coding agent; default ' + presets[0]!.name),
 				blueprint: blueprintName.optional().describe("How the work goes from done to ready to review; default the project's blueprint"),
 			})).min(1).max(planLimit).describe('The tasks, in the order to start them'),
 		}),
@@ -118,9 +117,8 @@ export function tools(svc: Service): Tool[] {
 		ownerOnly: true,
 		available: svc.busy,
 		run: async call => {
-			const message = call.input.text;
-			if (!message.trim()) throw new Error('text is empty');
-			await svc.message(call.input.task, message);
+			if (!call.input.text.trim()) throw new Error('text is empty');
+			await svc.message(call.input.task, call.input.text);
 			return { sent: true };
 		},
 	}), defineTool({
@@ -180,6 +178,17 @@ export async function askPlan(svc: Service, input: { project?: string; summary?:
 	})) };
 }
 
+const stageRevision = z.discriminatedUnion('type', [
+	z.object({ type: z.literal('verify'), retries: z.coerce.number() }),
+	z.object({ type: z.literal('review'), aspects: z.preprocess(v => Array.isArray(v) ? v.map(String) : [], z.array(z.string())), rounds: z.coerce.number() }),
+]);
+const planRevision = z.object({
+	tasks: z.array(z.object({
+		prompt: z.unknown().optional(),
+		stages: z.unknown().optional(),
+	}).nullable()),
+});
+
 /**
  * revisePlan applies what the owner changed in plan as they approved it: each
  * task's instructions, and the stages it runs in place of its blueprint's
@@ -187,11 +196,11 @@ export async function askPlan(svc: Service, input: { project?: string; summary?:
  * agents stay as Mob asked.
  */
 export function revisePlan(plan: Plan, changed: unknown): Plan {
-	const list = (changed as { tasks?: unknown })?.tasks;
-	if (!Array.isArray(list) || list.length !== plan.tasks.length) throw new Error(`a changed plan lists its ${plan.tasks.length} tasks in order`);
+	const parsed = planRevision.safeParse(changed);
+	if (!parsed.success || parsed.data.tasks.length !== plan.tasks.length) throw new Error(`a changed plan lists its ${plan.tasks.length} tasks in order`);
 	const tasks = plan.tasks.map((t, i) => {
-		const c = list[i] as { prompt?: unknown; stages?: unknown } | null;
-		if (!c || typeof c !== 'object') return t;
+		const c = parsed.data.tasks[i];
+		if (!c) return t;
 		const next: PlanTask = { ...t };
 		if (c.prompt !== undefined) {
 			if (typeof c.prompt !== 'string' || !c.prompt.trim()) throw new Error(`task ${i + 1}'s instructions are empty`);
@@ -202,7 +211,11 @@ export function revisePlan(plan: Plan, changed: unknown): Plan {
 			const b = blueprint(t.blueprint);
 			if (b.manual) throw new Error(`task ${i + 1} follows the manual blueprint, whose checking is Mob's model's`);
 			if (!Array.isArray(c.stages)) throw new Error(`task ${i + 1}'s stages are a list`);
-			const stages = c.stages.map(s => stageOf(s, i));
+			const stages = c.stages.map(s => {
+				const stage = stageRevision.safeParse(s);
+				if (!stage.success) throw new Error(`task ${i + 1} has a stage that is neither verify nor review`);
+				return stage.data;
+			});
 			const wrong = problems({ ...b, stages });
 			if (wrong.length) throw new Error(`task ${i + 1}: ${wrong.join('; ')}`);
 			// Stages the same as the blueprint's are the blueprint.
@@ -212,14 +225,6 @@ export function revisePlan(plan: Plan, changed: unknown): Plan {
 		return next;
 	});
 	return { ...plan, tasks };
-}
-
-// stageOf reads one stage the owner set for task i, keeping only what a stage has.
-function stageOf(s: unknown, i: number): Stage {
-	const v = s as { type?: unknown; retries?: unknown; aspects?: unknown; rounds?: unknown } | null;
-	if (v?.type === 'verify') return { type: 'verify', retries: Number(v.retries) };
-	if (v?.type === 'review') return { type: 'review', aspects: Array.isArray(v.aspects) ? v.aspects.map(String) : [], rounds: Number(v.rounds) };
-	throw new Error(`task ${i + 1} has a stage that is neither verify nor review`);
 }
 
 /** overview is what tasks returns. */

@@ -36,8 +36,6 @@ function limits(s: SandboxSettings): Limits {
 	return l;
 }
 
-const random = () => randomHex(8);
-
 /** capture keeps at most outputCap bytes of a stream. */
 function capture() {
 	const chunks: Uint8Array[] = [];
@@ -98,7 +96,7 @@ export class Sandbox implements CoreSandbox, Saver {
 		if (timeoutMs <= 0 || timeoutMs > sandboxMaxTimeout) timeoutMs = sandboxDefaultTimeout;
 		const workspace = this.workspace(conversationID);
 		await this.pull(signal);
-		const name = 'mob-' + random();
+		const name = 'mob-' + randomHex(8);
 		const timeout = AbortSignal.timeout(timeoutMs);
 		const run = signal ? AbortSignal.any([signal, timeout]) : timeout;
 		const stdout = capture(), stderr = capture();

@@ -658,7 +658,6 @@ function Inspector({
 				{label && <p className="plan-inspector-kind">{label}</p>}
 				<h3>{title}</h3>
 				<section>
-					<h4>What happens</h4>
 					<p>{does}</p>
 				</section>
 				{selected === 'ship' && (
@@ -692,7 +691,6 @@ function Inspector({
 				</p>
 			)}
 			<section>
-				<h4>What happens</h4>
 				<p>{step.does}</p>
 			</section>
 			{step.kind === 'build' && change && (

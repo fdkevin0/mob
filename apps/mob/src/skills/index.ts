@@ -10,8 +10,6 @@ import { SkillMarket, installInput, nameInput, repositoryInput, sourceInput } fr
 /** listed is how many skills the system prompt names; beyond it, the model finds them with tool_search. */
 const listed = 20;
 
-const escape = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&#34;').replaceAll("'", '&#39;');
-
 /** entries are the skills found now, for tool_search to find; none while the system prompt names them all. */
 function entries(l: Library): Entry[] {
 	const [list] = l.scan();
@@ -27,7 +25,7 @@ function tools(l: Library): Tool[] {
 	let catalog = "Skills are task instructions the owner installed. When a task matches a skill's description, call the skill tool with its name before starting and follow what it returns.";
 	// Many skills are found with tool_search instead of filling the prompt.
 	if (many) catalog += ` ${list.length} skills are installed; find the ones a task needs with tool_search.`;
-	else catalog += ' <available_skills>' + list.map(s => `<skill><name>${s.name}</name><description>${escape(s.description)}</description></skill>`).join('') + '</available_skills>';
+	else catalog += ' <available_skills>' + list.map(s => `<skill><name>${s.name}</name><description>${Bun.escapeHTML(s.description)}</description></skill>`).join('') + '</available_skills>';
 	const names = list.map(s => s.name);
 	return [defineTool({
 		name: 'skill',

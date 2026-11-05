@@ -75,7 +75,7 @@ commands, approvals, delivery records and replies behave the same everywhere.
   same text is sent plain.
 - Captions are read as the message's text. Photos, files, voice and other media
   are not read; a message with only media is answered with a note saying so.
-- Approvals show Approve, Allow in conversation, Always allow and Deny buttons; a tap is handled as the
+- Approvals show Approve, Deny, Allow in conversation and Always allow buttons; a tap is handled as the
   `/approve` or `/deny` message it stands for, and its row is removed once that
   approval is decided or found stale. A tap while that conversation's turn runs
   leaves the row in place. Approval buttons use the conversation saved with the

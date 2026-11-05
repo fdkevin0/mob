@@ -124,7 +124,7 @@ export class Bridge {
 		const [reply, err] = await this.turn(input, m.started, signal);
 		if (input.approval && (isStaleApproval(err) || err instanceof NotFound)) return { text: this.texts.stale(input.approval.id), settled: input.approval.id };
 		const refused = err instanceof CommandError ? err : undefined;
-		if (input.approval && refused?.status !== 409 && !this.waits(id, input.approval.id)) reply.settled = input.approval.id;
+		if (input.approval && refused?.status !== 409 && !this.conversation.pending(id).some(p => p.id === input.approval!.id)) reply.settled = input.approval.id;
 		let failure: unknown = err;
 		if (refused?.status === 409 && this.texts.busy && !reply.text.trim()) {
 			// The previous turn is still running; this message was not taken.
@@ -141,9 +141,6 @@ export class Bridge {
 		if (failure) throw new ReplyError(reply, failure);
 		return reply;
 	}
-
-	/** waits reports whether approval is still pending in the conversation. */
-	private waits(conversation: string, approval: string) { return this.conversation.pending(conversation).some(p => p.id === approval); }
 
 	/** conversationOf is the conversation m's sender writes to, created for a first message. */
 	private conversationOf(m: Message): Promise<string> {
@@ -181,7 +178,11 @@ export class Bridge {
 					case 'approval-requested': approvals.push({ id: e.approvalId!, tool: e.toolName!, input: e.input }); break;
 					case 'turn-failed': failures += '\nError: ' + e.error; break;
 				}
-				if (this.over(Math.max(bytes(step), bytes(last)) + bytes(failures), approvals)) throw this.overLimit();
+				if (this.limit > 0) {
+					// The prompt is measured as if one or several requests were pending, since the count is known only after the turn.
+					const prompt = approvals.length ? Math.max(bytes(this.texts.approvals(approvals, 1)), bytes(this.texts.approvals(approvals, 2))) : 0;
+					if (Math.max(bytes(step), bytes(last)) + bytes(failures) + prompt > this.limit) throw this.overLimit();
+				}
 			}, { signal, admitted: (r: Running) => started?.(() => r.stop()) });
 		} catch (e) { err = e; }
 		let text = (step.trim() ? step : last).trim();
@@ -190,17 +191,6 @@ export class Bridge {
 		if (approvals.length) text += this.texts.approvals(approvals, this.conversation.pending(input.id).length);
 		if (!err && this.limit > 0 && bytes(text) > this.limit) err = this.overLimit();
 		return [{ text, approvals }, err];
-	}
-
-	/**
-	 * over reports whether a reply of n bytes followed by the prompt for
-	 * approvals passes the limit. The prompt is measured as if one or several
-	 * requests were pending, since the count is known only after the turn.
-	 */
-	private over(n: number, approvals: PendingApproval[]) {
-		if (this.limit <= 0) return false;
-		if (approvals.length) n += Math.max(bytes(this.texts.approvals(approvals, 1)), bytes(this.texts.approvals(approvals, 2)));
-		return n > this.limit;
 	}
 
 	private overLimit() { return new Error(`reply exceeds the ${this.name} bridge limit`); }

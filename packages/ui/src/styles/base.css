@@ -216,7 +216,7 @@ a {
 	border-bottom: 2px solid transparent;
 	background: transparent;
 	color: var(--muted-foreground);
-	font-family: var(--mono);
+	font-family: var(--sans);
 	font-size: 12px;
 }
 .ui-tabs-trigger[data-state='active'] {

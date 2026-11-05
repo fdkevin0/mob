@@ -4,7 +4,7 @@ import type { ComponentProps, HTMLAttributes } from "react";
 import { memo } from "react";
 import { CodeBlockCopyButton, Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
-import { cn } from "./utils";
+import { cn } from "@mob/ui/utils";
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
 };

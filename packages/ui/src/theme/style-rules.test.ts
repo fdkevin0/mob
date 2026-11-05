@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// The site-wide UI rules from CONTRIBUTING.md ("UI style"), checked over every
+// The site-wide UI rules from docs/ui-style.md, checked over every
 // stylesheet of the design system, the workspace, the site and the docs.
 const root = path.resolve(__dirname, '../../../..');
 const tokenFiles = new Set(['packages/ui/src/styles/tokens.css', 'packages/ui/src/styles/theme.css', 'apps/docs/src/theme.css']);

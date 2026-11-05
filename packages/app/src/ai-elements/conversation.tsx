@@ -1,7 +1,7 @@
 // Adapted from Vercel AI Elements (Apache-2.0). See LICENSE and SOURCE.md.
 "use client";
 
-import { cn } from "./utils";
+import { cn } from "@mob/ui/utils";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";

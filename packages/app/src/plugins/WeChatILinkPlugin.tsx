@@ -2,11 +2,11 @@ import { Button } from '@mob/ui/button';
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, type Connection } from '../api';
-import { Field, Toggle, Feedback, Result, Actions, usePlugin } from './shared';
+import { Field, Toggle, Feedback, Result, Actions, errorText, usePlugin } from './shared';
 import type { WeChatILinkConfig } from './types';
 
 export function WeChatILinkPlugin({ connection, initial, active }: { connection: Connection; initial?: WeChatILinkConfig; active: boolean }) {
-  const { config, setConfig, busy, error, notice, setNotice, result, save, test, unavailable, clearSecret, secrets } = usePlugin(
+  const { config, setConfig, busy, error, setError, notice, setNotice, result, save, test, unavailable, clearSecret, secrets } = usePlugin(
     'wechat_ilink',
     initial || { enabled: false },
     connection
@@ -33,10 +33,9 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
         clearInterval(timerRef.current);
       }
       setFetchingQR(true);
+      setError('');
       setQrStatus('Fetching QR Code from WeChat iLink API...');
-      const res = await api<{ qrcode: string; qrcode_img_content: string }>(connection, '/plugins/wechat_ilink/qrcode', {
-        method: 'POST',
-      });
+      const res = await api<{ qrcode: string; qrcode_img_content: string }>(connection, '/plugins/wechat_ilink/qrcode', {});
       setQrCode({ qrcode: res.qrcode, content: res.qrcode_img_content });
       setQrStatus('Please scan the QR code using WeChat on your mobile device...');
 
@@ -69,8 +68,8 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
           // ignore transient poll error
         }
       }, 3000);
-    } catch (e: any) {
-      setQrStatus(`Failed to fetch QR Code: ${e.message || String(e)}`);
+    } catch (e) {
+      setError(errorText(e));
     } finally {
       setFetchingQR(false);
     }
@@ -89,15 +88,15 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
             Supports personal WeChat QR code scan authorization, HTTP long-polling message receipt, and in-band tool approvals.
           </p>
 
-          <div className="qr-section" style={{ margin: '1rem 0', padding: '1rem', border: '1px solid var(--border, #ccc)', borderRadius: '6px' }}>
+          <div className="qr-section">
             <h4>WeChat Scan Authorization</h4>
             <p className="muted">Generate a temporary authorization QR code for your WeChat account.</p>
             <Button type="button" disabled={fetchingQR} onClick={() => void requestQRCode()}>
               {fetchingQR ? 'Generating QR Code...' : 'Get Login QR Code'}
             </Button>
-            {qrStatus && <p role="status" style={{ marginTop: '0.5rem', fontWeight: 500 }}>{qrStatus}</p>}
+            {qrStatus && <p role="status">{qrStatus}</p>}
             {qrCode && qrCode.content && (
-              <div style={{ marginTop: '0.5rem' }}>
+              <div>
                 <QRCodeSVG value={qrCode.content} size={200} marginSize={4} role="img" title="WeChat Login QR Code" />
               </div>
             )}
@@ -131,7 +130,7 @@ export function WeChatILinkPlugin({ connection, initial, active }: { connection:
           <div>
             <Button
               type="button"
-              className="plain"
+              variant="ghost"
               disabled={config.enabled || !secrets['botToken']}
               onClick={() => clearSecret('botToken')}
             >

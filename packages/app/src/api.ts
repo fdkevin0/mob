@@ -59,11 +59,36 @@ export async function browserState(connection: Connection) {
 	if (import.meta.env.MODE !== 'public') throw new Error('This Mob has no browser runner.');
 	return (await import('./browser/browser')).startBrowser(connection);
 }
+const clients = new WeakMap<
+	Connection,
+	{ url: string; token: string; browser?: boolean; runnerId?: string; runnerKey?: string; client: MobClient }
+>();
+
 export function webClient(connection: Connection) {
-	return new MobClient(connection, {
+	const cached = clients.get(connection);
+	if (
+		cached &&
+		cached.url === connection.url &&
+		cached.token === connection.token &&
+		cached.browser === connection.browser &&
+		cached.runnerId === connection.runner?.id &&
+		cached.runnerKey === connection.runner?.key
+	) {
+		return cached.client;
+	}
+	const client = new MobClient(connection, {
 		fetch: connection.browser ? browserFetch(connection) : connection.runner ? encryptedFetch(connection.runner.id, connection.runner.key) : undefined,
 		onUnauthorized: (token) => window.dispatchEvent(new CustomEvent<string>(unauthorizedEvent, { detail: token })),
 	});
+	clients.set(connection, {
+		url: connection.url,
+		token: connection.token,
+		browser: connection.browser,
+		runnerId: connection.runner?.id,
+		runnerKey: connection.runner?.key,
+		client,
+	});
+	return client;
 }
 
 /** rpcOf is a typed client of connection's API; call it with ok(rpcOf(c).conversations.$get()). */

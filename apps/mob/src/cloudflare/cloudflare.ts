@@ -13,12 +13,21 @@ export function validate(c: Config) {
 
 export type Action = { operation: string; text?: string; key?: string; cursor?: string; sql?: string; params?: unknown[] };
 
+export type S3Store = {
+	list(input?: { maxKeys?: number; continuationToken?: string }): Promise<{ contents?: unknown[]; nextContinuationToken?: string }>;
+	file(key: string): { slice(begin?: number, end?: number): { text(): Promise<string> }; stat(): Promise<{ type: string; size: number }> };
+};
+
 const lists: Record<string, string> = { 'ai.models': '/ai/models/search', 'vectorize.indexes': '/vectorize/v2/indexes', 'd1.databases': '/d1/database', 'kv.namespaces': '/storage/kv/namespaces', 'r2.buckets': '/r2/buckets' };
 
 const validModel = (m: string) => m.startsWith('@') && !m.includes('..') && !/[?#%\\ \r\n]/.test(m);
 
 export class Cloudflare {
-	constructor(readonly c: Config, readonly fetcher: typeof fetch = fetch) {}
+	constructor(
+		readonly c: Config,
+		readonly fetcher: typeof fetch = fetch,
+		private readonly s3: (c: Config) => S3Store = c => new Bun.S3Client({ accessKeyId: c.accessKey, secretAccessKey: c.secretKey, bucket: c.bucket, region: 'auto', endpoint: `https://${c.accountId}.r2.cloudflarestorage.com` }),
+	) {}
 
 	private base() { return 'https://api.cloudflare.com/client/v4/accounts/' + this.c.accountId; }
 
@@ -106,6 +115,6 @@ export class Cloudflare {
 		this.ready();
 		const c = this.c;
 		if (!c.bucket || !c.accessKey || !c.secretKey) throw new Error('R2 object access requires bucket, S3 Access Key ID and Secret Access Key');
-		return new Bun.S3Client({ accessKeyId: c.accessKey, secretAccessKey: c.secretKey, bucket: c.bucket, region: 'auto', endpoint: `https://${c.accountId}.r2.cloudflarestorage.com` });
+		return this.s3(c);
 	}
 }

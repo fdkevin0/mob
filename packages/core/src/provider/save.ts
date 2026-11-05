@@ -25,15 +25,15 @@ function freeModel(registry: ProviderRegistry, p: Provider, listed: string[]) {
  * a custom API by its base URL.
  */
 export function providerFromForm(form: ProviderForm): Provider {
-	const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-	const preset = text(form.preset) ? findPreset(text(form.preset)) : undefined;
-	if (text(form.preset) && !preset) throw new HTTPError(400, 'Mob does not know this provider.');
-	const key = text(form.key);
+	const presetName = form.preset?.trim();
+	const preset = presetName ? findPreset(presetName) : undefined;
+	if (presetName && !preset) throw new HTTPError(400, 'Mob does not know this provider.');
+	const key = form.key?.trim();
 	if (!key && !preset?.noKey) throw new HTTPError(400, 'Enter an API key.');
 	const p: Provider = preset ? { id: preset.id, preset: preset.id } : { id: 'custom', name: 'Custom' };
 	if (key) p.key = key;
 	if (!preset) {
-		const url = text(form.url).replace(/\/+$/, '');
+		const url = (form.url?.trim() ?? '').replace(/\/+$/, '');
 		if (!url) throw new HTTPError(400, 'Enter the API base URL.');
 		if (form.protocol === 'anthropic') p.anthropic = url;
 		else p.chat = url;
@@ -57,8 +57,8 @@ export async function saveProvider(registry: ProviderRegistry, p: Provider, name
 		listError = (e as Error).message;
 	}
 	// Workers AI lists many models that cannot call tools, so one that can comes first.
-	const tools = p.id === 'cloudflare' ? listed.find(id => registry.info(p, id).tools) : '';
-	const fallback = [p.id === 'openrouter' ? freeModel(registry, p, listed) : tools, preferred[p.id], preset?.default].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
+	const tools = listed.find(id => registry.info(p, id).tools) ?? '';
+	const fallback = [p.id === 'openrouter' ? freeModel(registry, p, listed) : p.id === 'cloudflare' ? tools : '', preferred[p.id], preset?.default, tools].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
 	// A vendor's own ID wins, as OpenRouter's openrouter/auto does; otherwise a Mob reference loses its provider prefix.
 	const typed = named?.trim() ?? '';
 	const model = (listed.includes(typed) ? typed : typed.startsWith(p.id + '/') ? typed.slice(p.id.length + 1) : typed) || fallback;

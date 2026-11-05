@@ -103,8 +103,8 @@ export class MobClient {
 		return ok(this.api.conversations[':id'].delete.$post({ param: { id } }));
 	}
 	/** exportConversation and importConversation copy a conversation from one Mob to another. */
-	async exportConversation(id: string) {
-		return ok(this.api.conversations[':id'].export.$get({ param: { id } })) as Promise<Transfer>;
+	exportConversation(id: string) {
+		return ok(this.api.conversations[':id'].export.$get({ param: { id } }));
 	}
 	importConversation(t: Transfer) {
 		return ok(this.api.conversations.import.$post({ json: t }));

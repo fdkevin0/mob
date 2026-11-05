@@ -164,8 +164,6 @@ export class Session {
 
 	private status(status: string) { this.svc.store.setTaskStatus(this.task.id, status); }
 
-	busy() { return this.prompting; }
-
 	/** enqueue queues text for the agent while a prompt runs, reporting whether one did. */
 	enqueue(text: string) {
 		if (this.prompting) this.queue.push(text);

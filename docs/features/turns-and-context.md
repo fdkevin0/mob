@@ -77,7 +77,7 @@ The sections below give the details and where each lives in the code.
   coding agent's conversation, whose agent keeps its own session. In the web, **Edit** on the owner's message
   sends its new text this way, and **Retry** on the last reply sends the
   message it answered again.
-- The web UI and experimental TypeScript TUI use the same `@mob/client`
+- The web UI and TUI use the same `@mob/client`
   conversation state and follow a running turn whenever a snapshot says one is
   active. The client reads the replay itself (`reconnectToStream` and
   `readUIMessageStream`) rather than through `resumeStream`, so every attempt
@@ -93,9 +93,9 @@ The sections below give the details and where each lives in the code.
 - `GET /api/events` streams what each store write changed as SSE `data:` lines
   (`{"seq","conversation","list","tasks"}`), with a heartbeat comment every 25
   seconds. It keeps no history: a client reloads what it shows each time the
-  stream connects, and a subscriber more than 256 changes behind is dropped and
-  reconnects. While it is live, the web UI reloads a conversation, the list or
-  the agent tree only when they changed, instead of polling; a two-second tick
+  stream connects. While it is live, the web UI and TUI reload a conversation
+  (and the web UI reloads the list or the agent tree) only when they changed,
+  instead of polling; a two-second tick
   only retries a reload that had to wait for a stream to end. When the stream is
   down, or the service predates it (404), polling resumes. Hidden pages skip
   polling and reload when shown again.
@@ -232,7 +232,8 @@ The shared rendering configuration is in
   window cannot hold shows as more than 100%. It also returns the
   conversation's `UsageSummary`.
 - A coding agent's conversation shows what the agent reports over ACP
-  (`usage_update` `used` and `size`), without parts or Compact now.
+  (`usage_update` `used` and `size`) or Codex's app server
+  (`thread/tokenUsage/updated`), without parts or Compact now.
 
 ## Clearing old tool outputs
 

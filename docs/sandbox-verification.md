@@ -50,7 +50,6 @@ Requirements: Apple silicon, macOS 26, Bun, Git.
 
    ```bash
    git clone https://github.com/fdkevin0/mob && cd mob
-   git checkout claude/gallant-rubin-v1m99y
    scripts/verify-sandbox.sh
    ```
 
@@ -77,7 +76,6 @@ includes WSL containers, Bun, Git.
 
    ```powershell
    git clone https://github.com/fdkevin0/mob; cd mob
-   git checkout claude/gallant-rubin-v1m99y
    powershell -ExecutionPolicy Bypass -File scripts\verify-sandbox.ps1
    ```
 

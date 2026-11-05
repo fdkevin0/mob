@@ -12,22 +12,23 @@ export type Node = { type?: string; title?: string; description?: string; secret
 /** schemas are the bundled plugins' configuration schemas, as JSON Schema. */
 export const schemas = Object.fromEntries(Object.entries(pluginConfigs).map(([k, s]) => [k, jsonSchema(s) as Node])) as Record<keyof typeof pluginConfigs, Node>;
 
-type Value = Record<string, any>;
+type Value = Record<string, unknown>;
 
 const choice = (v: string) => v ? v.toUpperCase() : 'Choose…';
 
 /** SchemaFields edits value as schema describes it; keys, when given, limits it to those values. */
-export function SchemaFields({ schema, value, onChange, keys }: { schema: Node; value: Value; onChange: (v: Value) => void; keys?: string[] }) {
+export function SchemaFields<T extends Value = Value>({ schema, value, onChange, keys }: { schema: Node; value: T; onChange: (v: T) => void; keys?: string[] }) {
 	const set = (k: string, v: unknown) => onChange({ ...value, [k]: v });
 	return <>{Object.entries(schema.properties ?? {}).filter(([k, n]) => n.title && (!keys || keys.includes(k))).map(([k, n]) => {
 		const title = n.title!;
-		if (n.type === 'object') return <section key={k}><h2>{title}</h2><SchemaFields schema={n} value={value[k] ?? {}} onChange={v => set(k, v)} /></section>;
-		if (n.type === 'boolean') return <Toggle key={k} value={!!value[k]} onChange={v => set(k, v)}>{title}</Toggle>;
+		const field = value[k];
+		if (n.type === 'object') return <section key={k}><h2>{title}</h2><SchemaFields schema={n} value={(field && typeof field === 'object' ? field : {}) as Value} onChange={v => set(k, v)} /></section>;
+		if (n.type === 'boolean') return <Toggle key={k} value={!!field} onChange={v => set(k, v)}>{title}</Toggle>;
 		const options = n.enum ?? n.options;
-		if (options) return <Label key={k} className="plugin-field">{title}<select value={value[k] ?? ''} onChange={e => set(k, e.target.value)}>{options.map(o => <option key={o} value={o}>{choice(o)}</option>)}</select></Label>;
-		if (n.type === 'integer' || n.type === 'number') return <Field key={k} label={title} type="number" value={value[k] || ''} hint={n.description} onChange={v => set(k, Number(v))} />;
+		if (options) return <Label key={k} className="plugin-field">{title}<select value={typeof field === 'string' ? field : ''} onChange={e => set(k, e.target.value)}>{options.map(o => <option key={o} value={o}>{choice(o)}</option>)}</select></Label>;
+		if (n.type === 'integer' || n.type === 'number') return <Field key={k} label={title} type="number" value={typeof field === 'number' && field ? field : ''} hint={n.description} onChange={v => set(k, Number(v))} />;
 		const saved = n.secret && n.flag && value[n.flag];
-		return <Field key={k} label={title} secret={n.secret} value={value[k]} hint={saved ? 'Saved. Leave blank to keep it.' : n.description} onChange={v => set(k, v)} />;
+		return <Field key={k} label={title} secret={n.secret} value={typeof field === 'string' || typeof field === 'number' ? field : undefined} hint={saved ? 'Saved. Leave blank to keep it.' : n.description} onChange={v => set(k, v)} />;
 	})}</>;
 }
 
