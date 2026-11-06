@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { body, CommandError, type Plugin } from '@mob/core';
 import { blueprints, steps } from './blueprints';
-import { hostPlugins } from '../local';
+import type { HostPlugin } from '../local';
 import { snapshot } from './review';
 import { Service } from './service';
 import { commands, tools } from './tools';
@@ -14,14 +14,16 @@ const projectChange = z.discriminatedUnion('action', [
 	z.object({ action: z.literal('save'), name: z.string(), path: z.string().optional(), blueprint: z.string(), checks: z.array(z.string().refine((c: string) => c.trim().length > 0)) }).strict(),
 ]);
 
-hostPlugins.push((e, server) => {
-	const svc = new Service(server.options.store, server, e.dir);
-	// The agents of the tasks that were running ended with Mob.
-	svc.recover();
-	server.setDelegate(svc);
-	server.tasks = svc;
-	return [agentPlugin(svc)];
-});
+export const agentsPlugin: HostPlugin = {
+	attach(e, server) {
+		const svc = new Service(server.options.store, server, e.dir);
+		// The agents of the tasks that were running ended with Mob.
+		svc.recover();
+		server.setDelegate(svc);
+		server.tasks = svc;
+		return [agentPlugin(svc)];
+	},
+};
 
 export function agentPlugin(svc: Service): Plugin {
 	return {

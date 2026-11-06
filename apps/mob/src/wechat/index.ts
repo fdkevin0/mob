@@ -1,6 +1,6 @@
 // The WeChat iLink plugin; it signs in by QR code in the web UI, so the web UI's form for it is its own.
 import { body, CommandError, wechatConfig, type Plugin, type Section, type Server } from '@mob/core';
-import { hostPlugins } from '../local';
+import type { HostPlugin } from '../local';
 import { Client, test, validate, type Config } from './client';
 import { Service } from './service';
 
@@ -27,7 +27,7 @@ function plugin(server: Server): Plugin {
 			{ method: 'POST', path: 'message', handle: async req => {
 				const c = config();
 				if (!c.enabled) throw new CommandError(409, 'wechat_ilink plugin disabled');
-				const p = await body<{ senderId?: string; contextToken?: string; text?: string }>(req);
+				const p = await body<{ senderId?: string; contextToken?: string; text?: string }>(req, undefined, ['senderId', 'contextToken', 'text']);
 				return { reply: await service().process(c, p.senderId ?? '', p.text ?? '', req.signal) };
 			} },
 		],
@@ -40,4 +40,4 @@ function plugin(server: Server): Plugin {
 	};
 }
 
-hostPlugins.push((_, server) => [plugin(server)]);
+export const wechatPlugin: HostPlugin = { attach: (_, server) => [plugin(server)] };

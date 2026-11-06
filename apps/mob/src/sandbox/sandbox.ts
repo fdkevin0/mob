@@ -46,7 +46,12 @@ function capture() {
 			if (c.length > room) { over = true; c = c.subarray(0, Math.max(room, 0)); }
 			chunks.push(c); size += c.length;
 		},
-		text: () => new TextDecoder().decode(Buffer.concat(chunks)),
+		text: () => {
+			const out = new Uint8Array(size);
+			let at = 0;
+			for (const c of chunks) { out.set(c, at); at += c.length; }
+			return new TextDecoder().decode(out);
+		},
 		get over() { return over; },
 	};
 }

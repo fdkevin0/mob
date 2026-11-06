@@ -20,8 +20,9 @@ and messaging channels.
   `apps/web` (`@mob/web`, usemob.app and its Worker). Each declares its own
   dependencies; import across packages by name (`@mob/ui/button`), never by a
   relative path into another package.
-- `packages/client/src/contracts.ts` is the wire contract the service and its
-  clients share; change both sides in the same pull request.
+- `packages/core/src/contracts.ts` and `packages/client/src/contracts.ts` are
+  the wire contract the service and its clients share; change both sides in the
+  same pull request.
 - Tests fail when `docs/environment-variables.md` is stale; regenerate it with
   `bun run generate:configdocs`.
 - Show a UI change with screenshots taken by `bun scripts/screenshot.ts <url>`

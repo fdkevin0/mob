@@ -2,13 +2,10 @@
 // registry or a turn, answers in the app's own words, and is recorded so a
 // restart never answers or sends it twice. A channel plugin brings only its
 // transport (receiving and sending) and who is writing.
-import { decide, openConversation } from '../chat/commands';
-import { CommandError, type ChatRequest, type ConversationService, type PendingApproval } from '../chat/conversation';
-import type { Answer } from '../chat/delegate';
-import { isAbort, type Running } from '../chat/running';
-import { utf8Length as bytes } from '../chat/output';
-import { newID, NotFound } from '../chat/sql';
-import { isStaleApproval, type Store } from '../chat/store';
+import {
+	CommandError, decide, isAbort, isStaleApproval, newID, NotFound, openConversation, utf8Length as bytes,
+	type Answer, type ChatRequest, type ConversationService, type PendingApproval, type Running, type Store,
+} from '@mob/core';
 
 /** Texts are what a channel says in its own words. */
 export type Texts = {
@@ -145,7 +142,10 @@ export class Bridge {
 	private conversationOf(m: Message): Promise<string> {
 		const next = this.queue.then(() => {
 			let id: string | undefined;
-			try { id = this.store.setting<string>(m.key); } catch (err) { throw new ReplyError({ text: `Cannot load the ${this.name} conversation.` }, err); }
+			try {
+				id = this.store.setting<string>(m.key);
+				if (id && (!this.store.exists(id) || (!this.store.history(id).length && !this.store.list(true).some(c => c.id === id && c.title !== '')))) id = undefined;
+			} catch (err) { throw new ReplyError({ text: `Cannot load the ${this.name} conversation.` }, err); }
 			if (!id && m.text !== '/new' && m.text !== '/help' && m.text !== '/stop') {
 				try { id = this.store.create().id; } catch (err) { throw new ReplyError({ text: 'Cannot create a conversation.' }, err); }
 				try { this.store.saveSetting(m.key, id); } catch (err) { throw new ReplyError({ text: `Cannot save the ${this.name} conversation.` }, err); }

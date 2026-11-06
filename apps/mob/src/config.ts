@@ -2,8 +2,7 @@
 // variables > the configuration file (YAML or JSON) > defaults.
 import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
-import { webOrigin } from '@mob/core/app/server';
-import type { Driver } from '@mob/core';
+import { webOrigin, type Driver } from '@mob/core';
 import { windows } from './files';
 import { configHome, dataHome, stateHome } from './paths';
 

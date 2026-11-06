@@ -3,7 +3,9 @@
 import { closeSync, chmodSync, existsSync, mkdirSync, openSync, readFileSync, statSync, watch, writeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import type { Command } from 'commander';
 import { Server, Store, newID, ProviderRegistry, catalogURL, type Plugin } from '@mob/core';
+import { base64url } from '@mob/core/relay';
 import { openBun } from '@mob/core/sqlite/bun';
 import { assets } from './assets';
 import type { Environment } from './config';
@@ -14,12 +16,13 @@ import { sleep } from '@mob/core/sleep';
 
 export type Connection = { url: string; token: string };
 
-/** plugins are what the host adds to every service it starts. */
-export const hostPlugins: ((e: Environment, server: Server) => Plugin[])[] = [];
-/** setups run once a service exists, before it serves: sandbox, agents, MCP. */
-export const setups: ((e: Environment, server: Server) => void | Promise<void>)[] = [];
-/** reloads apply a changed configuration to a running service. */
-export const reloads: ((e: Environment, server: Server) => void | Promise<void>)[] = [];
+/** HostPlugin is a plugin of the host: its configuration checks, CLI command, and service plugins and reload handler. */
+export type HostPlugin = {
+	validate?: (e: Environment) => void;
+	command?: (environment: () => Environment) => Command;
+	attach?: (e: Environment, server: Server) => Plugin[] | { plugins?: Plugin[]; reload?: (e: Environment) => void | Promise<void> };
+};
+export const hostPlugins: HostPlugin[] = [];
 
 export function credentials(c: Environment): Connection {
 	let token = c.token;
@@ -94,10 +97,16 @@ export async function start(c: Environment, background = false): Promise<App> {
 		configurationError: () => [configError, providersError].filter(Boolean).join('\n'),
 		assets: assets(),
 	});
-	for (const plugins of hostPlugins) server.register(...plugins(c, server));
 	server.setToolSteps(c.maxToolSteps);
 	server.setWebURL(c.webURL);
-	for (const setup of setups) await setup(c, server);
+	const reloads: ((e: Environment) => void | Promise<void>)[] = [];
+	for (const p of hostPlugins) {
+		const attached = p.attach?.(c, server);
+		if (!attached) continue;
+		const list = Array.isArray(attached) ? attached : attached.plugins;
+		if (list) server.register(...list);
+		if (!Array.isArray(attached) && attached.reload) reloads.push(attached.reload);
+	}
 	const [hostname, port] = [c.addr.slice(0, c.addr.lastIndexOf(':')).replace(/^\[|\]$/g, ''), Number(c.addr.slice(c.addr.lastIndexOf(':') + 1))];
 	let http;
 	try {
@@ -129,7 +138,7 @@ export async function start(c: Environment, background = false): Promise<App> {
 			if (next.demo !== c.demo || next.driver !== c.driver) throw new Error('demo and driver changes require a restart; current configuration retained');
 			server.setToolSteps(next.maxToolSteps);
 			server.setWebURL(next.webURL);
-			for (const reload of reloads) void reload(next, server);
+			for (const reload of reloads) void reload(next);
 			configError = '';
 		} catch (e) {
 			configError = (e as Error).message;
@@ -319,5 +328,5 @@ export async function webURL(c: Environment) {
 	const [connection, code] = await pairingCode(c);
 	const host = new URL(connection.url).hostname;
 	if (host !== '127.0.0.1' && host !== 'localhost') throw new Error(`the public web UI reaches Mob only at 127.0.0.1 or localhost, not ${connection.url}`);
-	return c.webURL.replace(/\/$/, '') + '/#offer=' + Buffer.from(JSON.stringify({ v: 1, url: connection.url, code })).toString('base64url');
+	return c.webURL.replace(/\/$/, '') + '/#offer=' + base64url(new TextEncoder().encode(JSON.stringify({ v: 1, url: connection.url, code })));
 }

@@ -9,11 +9,9 @@ export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
+	let cachedSession = '';
 	return async (input, init) => {
 		const request = new Request(input, init);
-		const { session } = await cloud<{ session: string | null }>(`/${runner}`, { signal: request.signal });
-		if (!session || !/^[a-f0-9]{64}$/.test(session)) throw new Error('Runner is offline.');
-		const id = crypto.randomUUID();
 		const headers: Record<string, string[]> = {};
 		for (const name of ['Content-Type', 'Accept', 'Last-Event-ID']) {
 			const value = request.headers.get(name);
@@ -22,28 +20,43 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 		const url = new URL(request.url);
 		const prefix = `/api/runners/${runner}`;
 		if (url.origin !== location.origin || !url.pathname.startsWith(prefix + '/api/')) throw new Error('Invalid runner API path');
-		const envelope = await seal(
-			rawKey,
-			runner,
-			'request',
-			{ v: 1, session, id, seq: 0, final: true },
-			{
-				method: request.method,
-				path: url.pathname.slice(prefix.length) + url.search,
-				headers,
-				body: await request.text(),
-				expires: Date.now() + 45_000,
-			},
-		);
-		const response = await fetch(`/api/runners/${runner}/relay`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(envelope),
-			credentials: 'same-origin',
-			signal: request.signal,
-		});
-		if (!response.ok || !response.body)
-			throw new Error(`Encrypted relay unavailable (HTTP ${response.status}). Check saved history before repeating an action.`);
+		const payload = await request.text();
+		let id = '',
+			session = '',
+			response: Response | undefined;
+		for (let attempt = 0; attempt < 2; attempt++) {
+			if (!cachedSession) {
+				const current = (await cloud<{ session: string | null }>(`/${runner}`, { signal: request.signal })).session;
+				if (!current || !/^[a-f0-9]{64}$/.test(current)) throw new Error('Runner is offline.');
+				cachedSession = current;
+			}
+			session = cachedSession;
+			id = crypto.randomUUID();
+			const envelope = await seal(
+				rawKey,
+				runner,
+				'request',
+				{ v: 1, session, id, seq: 0, final: true },
+				{
+					method: request.method,
+					path: url.pathname.slice(prefix.length) + url.search,
+					headers,
+					body: payload,
+					expires: Date.now() + 45_000,
+				},
+			);
+			response = await fetch(`/api/runners/${runner}/relay`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(envelope),
+				credentials: 'same-origin',
+				signal: request.signal,
+			});
+			if (response.status !== 409) break;
+			cachedSession = '';
+		}
+		if (!response?.ok || !response.body)
+			throw new Error(`Encrypted relay unavailable (HTTP ${response?.status}). Check saved history before repeating an action.`);
 		const reader = response.body.getReader();
 		let buffer = '',
 			sequence = 0,

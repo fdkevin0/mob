@@ -1,8 +1,7 @@
-import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
 import { loadPlugins } from '../src/config';
 
 test('configuration rejects invalid entries before importing any plugin', async () => {
@@ -17,15 +16,15 @@ test('configuration rejects invalid entries before importing any plugin', async 
 			[{ module: 'missing', enabled: false }],
 			[{ module: 'missing' }, null],
 		]) {
-			await writeFile(file, JSON.stringify(input));
-			await assert.rejects(loadPlugins(file), /configuration must be|Each DSH plugin/);
+			await Bun.write(file, JSON.stringify(input));
+			await expect(loadPlugins(file)).rejects.toThrow(/configuration must be|Each DSH plugin/);
 		}
-		await writeFile(file, 'not json');
-		await assert.rejects(loadPlugins(file), SyntaxError);
-		await writeFile(file, '[{"module":"./not-installed.ts"}]');
-		await assert.rejects(loadPlugins(file), /not-installed/);
-		await writeFile(file, '[]');
-		assert.deepEqual(await loadPlugins(file), []);
+		await Bun.write(file, 'not json');
+		await expect(loadPlugins(file)).rejects.toThrow(SyntaxError);
+		await Bun.write(file, '[{"module":"./not-installed.ts"}]');
+		await expect(loadPlugins(file)).rejects.toThrow(/not-installed/);
+		await Bun.write(file, '[]');
+		expect(await loadPlugins(file)).toEqual([]);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

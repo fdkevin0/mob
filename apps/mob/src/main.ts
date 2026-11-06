@@ -3,12 +3,11 @@
 import { Command, Option } from 'commander';
 import { join } from 'node:path';
 import { Loader, envOf, flagOf, options, type Environment } from './config';
-import { credentials, pairingURL, reachable, rotateToken, start, startBackground, status, stopBackground, webURL } from './local';
+import { credentials, hostPlugins, pairingURL, reachable, rotateToken, start, startBackground, status, stopBackground, webURL } from './local';
 import { providerCommand } from './provider-command';
 import { readProviders } from './providers';
 import { version } from './version';
 import { validateProviders } from '@mob/core';
-import { commands } from './commands';
 import './plugins';
 
 const program = new Command('mob').description('Local assistant with desktop, terminal and background service').version(version).showHelpAfterError();
@@ -105,7 +104,7 @@ program.command('config').description('Inspect configuration without exposing se
 	out(`Configuration valid: ${c.loader.path}\nProviders: ${c.loader.providersPath}\nData directory: ${c.dir}\nState directory: ${c.stateDir}`);
 });
 program.addCommand(providerCommand(() => environment().loader.providersPath));
-for (const add of commands) program.addCommand(add(environment));
+for (const p of hostPlugins) if (p.command) program.addCommand(p.command(environment));
 
 function openBrowser(url: string) {
 	try { Bun.spawn(process.platform === 'darwin' ? ['open', url] : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : ['xdg-open', url], { stdio: ['ignore', 'ignore', 'ignore'] }).unref(); } catch { /* print only */ }

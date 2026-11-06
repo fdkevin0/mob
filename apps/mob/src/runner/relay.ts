@@ -3,6 +3,7 @@
 // opened here and answered by the local service, and the answers are sealed
 // with the pairing key, which never leaves this machine and the browser.
 
+import { randomHex } from '@mob/core';
 import { open, relayKey, seal, base64, type Envelope, type RelayReply as Reply, type RelayRequest } from '@mob/core/relay';
 import { sleep } from '@mob/core/sleep';
 import { secureURL } from '@mob/core/url';
@@ -157,7 +158,7 @@ export async function connect(base: string, credentials: Credentials, k: CryptoK
 		if (ws.readyState !== WebSocket.OPEN) throw new Error('connection closed');
 		ws.send(JSON.stringify(v));
 	};
-	const session = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex');
+	const session = randomHex(32);
 	send({ type: 'hello', session });
 	status('Runner connected; end-to-end encryption enabled');
 	const ping = setInterval(() => { try { send({ type: 'ping' }); } catch { close(new Error('ping failed')); } }, pingEvery);
@@ -183,7 +184,7 @@ export async function connect(base: string, credentials: Credentials, k: CryptoK
 	ws.addEventListener('message', async ev => {
 		clearTimeout(quiet);
 		quiet = setTimeout(() => close(new Error('relay went quiet')), readWait);
-		const text = typeof ev.data === 'string' ? ev.data : Buffer.from(ev.data as ArrayBuffer).toString();
+		const text = typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer);
 		if (text.length > maxPayload) return close(new Error('frame too large'));
 		let raw: Record<string, unknown>;
 		try { raw = JSON.parse(text); } catch { return close(new Error('invalid frame')); }

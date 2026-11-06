@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { at, next, Schedules } from '../src/app/schedule';
+import { at, next, Schedules } from '../src/schedules';
 
 const sh = 'Asia/Shanghai', ny = 'America/New_York';
 const day = 86400_000;
@@ -23,7 +23,7 @@ test('next keeps the time of day in its zone', () => {
 });
 
 test('ask checks its input before asking', async () => {
-	const { checkInput } = await import('../src/chat/tools');
+	const { checkInput } = await import('@mob/core');
 	const now = Date.parse('2026-10-21T08:00:00Z');
 	const s = new Schedules({} as never, {} as never, () => now);
 	const asked: unknown[] = [];
@@ -42,8 +42,8 @@ test('due schedules run, repeat and report their own turn', async () => {
 	const { mkdtempSync } = await import('node:fs');
 	const { tmpdir } = await import('node:os');
 	const { join } = await import('node:path');
-	const { ConversationService, DemoModel, Store } = await import('../src');
-	const { openBun } = await import('../src/sqlite/bun');
+	const { ConversationService, DemoModel, Store } = await import('@mob/core');
+	const { openBun } = await import('@mob/core/sqlite/bun');
 	const store = new Store(openBun(join(mkdtempSync(join(tmpdir(), 'mob-sched-')), 'chat.sqlite'))).open();
 	const service = new ConversationService(store, { default: () => 'demo/echo', resolve: () => new DemoModel(), setDefault: () => new DemoModel().ref, list: async () => [] });
 	let now = Date.parse('2026-10-21T08:00:00Z');

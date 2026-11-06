@@ -2,7 +2,7 @@
 // send mail, and the channel that answers the owner's mail.
 import { z } from 'zod';
 import { body, cell, emailConfig, choices, CommandError, composeMail, defineTool, demoID, fence, interactive, type Plugin, type Section, type Server, type Store, type Tool } from '@mob/core';
-import { hostPlugins } from '../local';
+import type { HostPlugin } from '../local';
 import { Mailer } from './channel';
 import { active, inbox, read, send, test, validate, validateDraft, type Config, type Draft } from './mail';
 
@@ -147,13 +147,13 @@ function plugin(server: Server): Plugin {
 			} },
 			{ method: 'POST', path: 'send', handle: async req => {
 				const c = enabled();
-				const input = await body<Draft & { requestId?: string }>(req);
+				const input = await body<Draft & { requestId?: string }>(req, undefined, ['to', 'subject', 'text', 'requestId']);
 				await deliver(c, store, input.requestId ?? '', { to: input.to, subject: input.subject, text: input.text }, req.signal);
 				return { sent: true };
 			} },
 			{ method: 'POST', path: 'analyze', handle: async req => {
 				const c = enabled();
-				const parsed = messageIdentity.safeParse(await body(req));
+				const parsed = messageIdentity.safeParse(await body(req, undefined, ['uid', 'validity']));
 				if (!parsed.success) throw new CommandError(400, 'invalid message identity');
 				return analyze(server, c, parsed.data.uid, parsed.data.validity, timeout(analyzeTimeout, req.signal));
 			} },
@@ -168,4 +168,4 @@ function plugin(server: Server): Plugin {
 	};
 }
 
-hostPlugins.push((_, server) => [plugin(server)]);
+export const emailPlugin: HostPlugin = { attach: (_, server) => [plugin(server)] };

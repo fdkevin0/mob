@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ServerWebSocket } from 'bun';
 import { deployed, pair } from '../src/runner';
-import { relayKey as key, open, seal, type Envelope } from '@mob/core/relay';
+import { base64, unbase64, relayKey as key, open, seal, type Envelope } from '@mob/core/relay';
 import { connect, localHandler, serve, type Credentials, type Handler } from '../src/runner/relay';
 
-const rawKey = Buffer.alloc(32, 7).toString('base64');
+const rawKey = base64(new Uint8Array(32).fill(7));
 const id = '00000000-0000-4000-8000-000000000001';
 const token = 'r'.repeat(72);
 const credentials = (url: string): Credentials => ({ url, id, token, key: rawKey });
@@ -57,7 +57,7 @@ class Relay {
 			await new Promise<void>(r => { this.waiters.push(r); setTimeout(r, 50); });
 		}
 		const replies = await Promise.all(this.frames.get(rid)!.map(f => open<Reply>(k, id, 'response', f)));
-		return { status: replies[0]!.status, headers: replies[0]!.headers, body: replies.map(r => Buffer.from(r.body, 'base64').toString()).join(''), error: replies.at(-1)!.error };
+		return { status: replies[0]!.status, headers: replies[0]!.headers, body: replies.map(r => new TextDecoder().decode(unbase64(r.body))).join(''), error: replies.at(-1)!.error };
 	}
 	stop() { this.server.stop(true); }
 }
@@ -82,12 +82,12 @@ describe('runner', () => {
 		const k = await key(rawKey);
 		const e = await seal(k, id, 'request', { v: 1, session: 's', id: rid(1), seq: 0, final: true }, { hello: 'world' });
 		expect(await open<{ hello: string }>(k, id, 'request', e)).toEqual({ hello: 'world' });
-		for (const tampered of [{ ...e, id: rid(2) }, { ...e, seq: 1 }, { ...e, final: false }, { ...e, session: 't' }, { ...e, data: Buffer.from('x' + Buffer.from(e.data, 'base64').toString('latin1'), 'latin1').toString('base64') }]) {
+		for (const tampered of [{ ...e, id: rid(2) }, { ...e, seq: 1 }, { ...e, final: false }, { ...e, session: 't' }, { ...e, data: base64(new Uint8Array([120, ...unbase64(e.data)])) }]) {
 			await expect(open(k, id, 'request', tampered)).rejects.toThrow('authentication failed');
 		}
 		await expect(open(k, 'other', 'request', e)).rejects.toThrow();
 		await expect(open(k, id, 'response', e)).rejects.toThrow();
-		await expect(key(Buffer.alloc(16).toString('base64'))).rejects.toThrow();
+		await expect(key(base64(new Uint8Array(16)))).rejects.toThrow();
 	});
 
 	test('streams an encrypted answer and never answers a replay or an expired request', async () => {

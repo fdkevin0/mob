@@ -1,6 +1,6 @@
 import { MobClient, timeoutFor, type Connection as LocalConnection } from '@mob/client';
 import { unbase64url } from '@mob/core/relay';
-import { encryptedFetch } from './remote';
+import { encryptedFetch } from '@mob/client/remote';
 import { isLoopbackHost } from '@mob/core/url';
 // A connection reaches Mob on a computer, a paired runner through the relay, or the runner in this browser.
 export type Connection = LocalConnection & { runner?: { id: string; key: string }; browser?: boolean };

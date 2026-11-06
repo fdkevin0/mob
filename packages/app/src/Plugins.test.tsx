@@ -15,7 +15,7 @@ it('opens MCP and Skills management through the existing plugin navigation', asy
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/plugins/mcp/overview')) return Response.json({ servers: [], catalog: [] });
     if (url.endsWith('/plugins/skills/installed')) return Response.json({ skills: [], warnings: [] });
-    return Response.json({ config: initial(), telegramStatus: 'Disabled' });
+    return Response.json({ config: initial(), statuses: { telegram: 'Disabled' } });
   }));
   render(<Plugins connection={connection} />);
   fireEvent.mouseDown(screen.getByRole('tab', { name: 'MCP' }), { button: 0, ctrlKey: false });
@@ -29,7 +29,7 @@ it('keeps saved passwords hidden, saves configuration and requires review before
   vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
     if (url.endsWith('/plugins/email/send')) { send(JSON.parse(options!.body as string)); return Response.json({ sent: true }); }
     if (url.endsWith('/plugins/email')) { config = { ...config, email: JSON.parse(options!.body as string) }; return Response.json(config); }
-    return Response.json({ config, telegramStatus: 'Disabled' });
+    return Response.json({ config, statuses: { telegram: 'Disabled' } });
   }));
   render(<Plugins connection={connection} />);
   const secret = await screen.findByLabelText(/IMAP password/);
@@ -54,7 +54,7 @@ it('saves who Mob answers mail from and shows the channel status', async () => {
   let config = initial();
   vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
     if (url.endsWith('/plugins/email')) { config = { ...config, email: JSON.parse(options!.body as string) }; return Response.json(config); }
-    return Response.json({ config, telegramStatus: 'Disabled', emailStatus: 'Connected · answering mail from me@example.org' });
+    return Response.json({ config, statuses: { telegram: 'Disabled', email: 'Connected · answering mail from me@example.org' } });
   }));
   render(<Plugins connection={connection} />);
   fireEvent.click(await screen.findByLabelText("Answer the owner's mail"));
@@ -73,7 +73,7 @@ it('tests Telegram and runs a Cloudflare operation using only saved configuratio
     calls.push(url);
     if (url.endsWith('/test')) return Response.json({ username: 'fixture' });
     if (url.endsWith('/action')) { expect(JSON.parse(options!.body as string).operation).toBe('ai.models'); return Response.json([{ name: '@cf/model' }]); }
-    return Response.json({ config, telegramStatus: 'Connected' });
+    return Response.json({ config, statuses: { telegram: 'Connected' } });
   }));
   render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
@@ -91,7 +91,7 @@ it('tests WeChat iLink plugin tab and configuration rendering', async () => {
   const config = initial(); config.wechat_ilink = { enabled: true, baseUrl: 'https://ilinkai.weixin.qq.com' };
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/test')) return Response.json({ status: 'ready', channel: 'wechat-ilink' });
-    return Response.json({ config, telegramStatus: 'Disabled' });
+    return Response.json({ config, statuses: { telegram: 'Disabled' } });
   }));
   render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
@@ -108,7 +108,7 @@ it('encodes the WeChat login link as a local QR image', async () => {
       qrcode: 'qr_test_abc',
       qrcode_img_content: 'https://liteapp.weixin.qq.com/q/?k=fixture',
     });
-    return Response.json({ config: initial(), telegramStatus: 'Disabled' });
+    return Response.json({ config: initial(), statuses: { telegram: 'Disabled' } });
   }));
   render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
@@ -132,7 +132,7 @@ it('asks the user to save confirmed WeChat credentials before claiming they are 
       saved(JSON.parse(options!.body as string));
       return Response.json({ ...config, wechat_ilink: { enabled: true, botId: 'fixture-bot', hasToken: true } });
     }
-    return Response.json({ config, telegramStatus: 'Disabled' });
+    return Response.json({ config, statuses: { telegram: 'Disabled' } });
   }));
   render(<Plugins connection={connection} />);
   await screen.findByLabelText('From address');
@@ -151,7 +151,7 @@ it('asks the user to save confirmed WeChat credentials before claiming they are 
 it('preserves email edits across plugin navigation and displays durable delivery state', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/deliveries')) return Response.json([{ id: 'email:fixture', state: 'failed-or-unknown', error: 'connection interrupted', reply: '', updatedAt: 1 }]);
-    return Response.json({ config: initial(), telegramStatus: 'Disabled' });
+    return Response.json({ config: initial(), statuses: { telegram: 'Disabled' } });
   }));
   render(<Plugins connection={connection} />);
   fireEvent.change(await screen.findByLabelText('From address'), { target: { value: 'unsaved@example.org' } });

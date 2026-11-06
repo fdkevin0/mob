@@ -42,8 +42,8 @@ help, completion and execution from the same definition.
 - In Web, Tab accepts, ↑/↓ choose, Esc dismisses, and Enter accepts only when
   the suggestion changes a partly typed token, so a complete command still
   sends. Stale answers are dropped.
-- The contract types live in `packages/client/src/contracts.ts`, which the
-  service and every client import.
+- The contract types live in `packages/core/src/contracts.ts` (re-exported by
+  `packages/client/src/contracts.ts`), which the service and every client share.
 
 ## Terminal
 

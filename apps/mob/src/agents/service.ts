@@ -15,7 +15,7 @@ import type { Squad } from './squad';
 import { children, Hub, settle } from './subtasks';
 import { tree } from './tree';
 import { sleep } from '@mob/core/sleep';
-import type { ProjectConfig as Project } from '@mob/client/contracts';
+import type { ProjectConfig as Project } from '@mob/core/contracts';
 export type { Project };
 
 /** startWait is how long a message waits for an agent that is starting. */

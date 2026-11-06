@@ -18,16 +18,14 @@ const tabs = ['mcp', 'skills', 'email', 'telegram', 'wechat_ilink', 'cloudflare'
 export function Plugins({ connection }: { connection: Connection }) {
   const [config, setConfig] = useState<Configs>();
   const [tab, setTab] = useState<typeof tabs[number]>('email');
-  const [status, setStatus] = useState('');
-  const [mailStatus, setMailStatus] = useState('');
+  const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
 
   async function load() {
     try {
       const data = await ok(rpcOf(connection).plugins.$get());
       setConfig(data.config);
-      setStatus(data.telegramStatus);
-      setMailStatus(data.emailStatus);
+      setStatuses(data.statuses);
       setError('');
     } catch (e) {
       setError(errorText(e));
@@ -41,10 +39,7 @@ export function Plugins({ connection }: { connection: Connection }) {
   useEffect(() => {
     const timer = setInterval(() => {
       void ok(rpcOf(connection).plugins.$get())
-        .then(d => {
-          setStatus(d.telegramStatus);
-          setMailStatus(d.emailStatus);
-        })
+        .then(d => setStatuses(d.statuses))
         .catch(() => {});
     }, 5000);
     return () => clearInterval(timer);
@@ -82,8 +77,8 @@ export function Plugins({ connection }: { connection: Connection }) {
         ) : (
           <>
             {/* Keep plugin state mounted so tab switches retain unsaved edits. */}
-            <TabsContent value="email" forceMount hidden={tab !== 'email'}><EmailPlugin connection={connection} initial={config.email} active={tab === 'email'} status={mailStatus} /></TabsContent>
-            <TabsContent value="telegram" forceMount hidden={tab !== 'telegram'}><TelegramPlugin connection={connection} initial={config.telegram} active={tab === 'telegram'} status={status} /></TabsContent>
+            <TabsContent value="email" forceMount hidden={tab !== 'email'}><EmailPlugin connection={connection} initial={config.email} active={tab === 'email'} status={statuses.email ?? ''} /></TabsContent>
+            <TabsContent value="telegram" forceMount hidden={tab !== 'telegram'}><TelegramPlugin connection={connection} initial={config.telegram} active={tab === 'telegram'} status={statuses.telegram ?? ''} /></TabsContent>
             <TabsContent value="wechat_ilink" forceMount hidden={tab !== 'wechat_ilink'}><WeChatILinkPlugin connection={connection} initial={config.wechat_ilink} active={tab === 'wechat_ilink'} /></TabsContent>
             <TabsContent value="cloudflare" forceMount hidden={tab !== 'cloudflare'}><CloudflarePlugin connection={connection} initial={config.cloudflare} active={tab === 'cloudflare'} /></TabsContent>
           </>

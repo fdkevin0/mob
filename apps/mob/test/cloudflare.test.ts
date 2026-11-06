@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import type { ApprovedCall, ToolCall } from '@mob/core';
+import type { ApprovedCall, Plugin, Server, ToolCall } from '@mob/core';
+import type { Environment } from '../src/config';
 import { Cloudflare, type Config } from '../src/cloudflare/cloudflare';
-import { readOnly, target, tools } from '../src/cloudflare';
+import { cloudflarePlugin, readOnly, target, tools } from '../src/cloudflare';
 
 const base: Config = { enabled: true, accountId: 'a'.repeat(32), token: 'secret-token', model: '@cf/chat', embeddingModel: '@cf/embed', index: 'test', databaseId: 'db', namespaceId: 'ns', bucket: '', accessKey: '', secretKey: '' };
 
@@ -70,4 +71,17 @@ test('the tool asks before costly or writing calls and runs what was approved', 
 	config = { ...config, databaseId: 'db' };
 	await tool.approved!(approved);
 	expect(paths.at(-1)).toBe(`/client/v4/accounts/${base.accountId}/d1/database/db/query`);
+});
+
+test('the action route accepts the web UI payload with params and cursor and rejects unknown fields', async () => {
+	const attached = cloudflarePlugin.attach!({} as Environment, { settings: { config: () => ({ cloudflare: { ...base, enabled: false } }) } } as unknown as Server) as Plugin[];
+	const route = attached[0]!.routes![0]!;
+	await expect(route.handle(new Request('http://mob/action', {
+		method: 'POST',
+		body: JSON.stringify({ operation: 'ai.models', text: '', key: '', sql: '', params: [], cursor: '' }),
+	}))).rejects.toThrow('disabled');
+	await expect(route.handle(new Request('http://mob/action', {
+		method: 'POST',
+		body: JSON.stringify({ operation: 'ai.models', extra: true }),
+	}))).rejects.toThrow('invalid request');
 });

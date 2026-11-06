@@ -8,7 +8,7 @@ import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ToolListChangedNotificationSchema, type CallToolResult, type Tool as MCPTool } from '@modelcontextprotocol/sdk/types.js';
-import type { MCPOverview } from '@mob/client/contracts';
+import type { MCPOverview } from '@mob/core/contracts';
 import { version } from '../version';
 import { catalogKey, curated, fetchRegistry, needs, refreshAfter, sameRegistry, type Catalog, type Listing, type Registry } from './catalog';
 import { exposure, fingerprint, names, same, serverName, target, type Server, type Servers } from './config';

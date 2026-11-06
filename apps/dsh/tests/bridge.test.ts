@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { expect, test } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { Context, Service } from '@deepseek-ai/cordis';
 import { defineTool } from '@deepseek-ai/dsh-tools';
@@ -29,13 +28,13 @@ test('the DSH defineTool example works over MCP, with DSH argument validation', 
 	const { client, close } = await connect(plugins);
 	try {
 		const { tools } = await client.listTools();
-		assert.equal(tools[0].name, 'greet');
-		assert.deepEqual(tools[0].inputSchema.required, ['name']);
+		expect(tools[0].name).toBe('greet');
+		expect(tools[0].inputSchema.required).toEqual(['name']);
 		const result = await client.callTool({ name: 'greet', arguments: { name: 'Ada' } });
-		assert.deepEqual(result.content, [{ type: 'text', text: 'Hello, Ada!' }]);
-		assert.deepEqual(result.structuredContent, { value: 'Hello, Ada!' });
-		assert.equal((await client.callTool({ name: 'greet', arguments: { name: 7 } })).isError, true);
-		assert.equal((await client.callTool({ name: 'missing' })).isError, true);
+		expect(result.content).toEqual([{ type: 'text', text: 'Hello, Ada!' }]);
+		expect(result.structuredContent).toEqual({ value: 'Hello, Ada!' });
+		expect((await client.callTool({ name: 'greet', arguments: { name: 7 } })).isError).toBe(true);
+		expect((await client.callTool({ name: 'missing' })).isError).toBe(true);
 	} finally {
 		await close();
 	}
@@ -83,17 +82,17 @@ test('Cordis resolves services out of order and cleans up tool registrations and
 	]);
 	try {
 		const result = await client.callTool({ name: 'dependency' });
-		assert.deepEqual(result.structuredContent, { value: 'from provider' });
+		expect(result.structuredContent).toEqual({ value: 'from provider' });
 		const changed = Promise.withResolvers<void>();
 		client.setNotificationHandler(ToolListChangedNotificationSchema, () => changed.resolve());
 		remove();
 		await changed.promise;
-		assert.deepEqual((await client.listTools()).tools, []);
-		assert.equal((await client.callTool({ name: 'dependency' })).isError, true);
+		expect((await client.listTools()).tools).toEqual([]);
+		expect((await client.callTool({ name: 'dependency' })).isError).toBe(true);
 	} finally {
 		await close();
 	}
-	assert.equal(disposed, true);
+	expect(disposed).toBe(true);
 });
 
 test('unavailable services and failing plugin setup fail startup and dispose earlier effects', async () => {
@@ -106,12 +105,11 @@ test('unavailable services and failing plugin setup fail startup and dispose ear
 			});
 		},
 	};
-	await assert.rejects(
+	await expect(
 		createBridge([resource, { name: 'missing', plugin: { inject: ['unavailableMobService'], apply() {} } }]),
-		/missing.*required services/,
-	);
-	assert.equal(disposed, 1);
-	await assert.rejects(
+	).rejects.toThrow(/missing.*required services/);
+	expect(disposed).toBe(1);
+	await expect(
 		createBridge([
 			resource,
 			{
@@ -121,9 +119,8 @@ test('unavailable services and failing plugin setup fail startup and dispose ear
 				},
 			},
 		]),
-		/broken setup/,
-	);
-	assert.equal(disposed, 2);
+	).rejects.toThrow(/broken setup/);
+	expect(disposed).toBe(2);
 });
 
 test('DSH execution hooks can deny a call without running its body', async () => {
@@ -153,9 +150,9 @@ test('DSH execution hooks can deny a call without running its body', async () =>
 	]);
 	try {
 		const result = await client.callTool({ name: 'guarded' });
-		assert.equal(result.isError, true);
-		assert.match(JSON.stringify(result.content), /blocked by plugin/);
-		assert.equal(executed, false);
+		expect(result.isError).toBe(true);
+		expect(JSON.stringify(result.content)).toMatch(/blocked by plugin/);
+		expect(executed).toBe(false);
 	} finally {
 		await close();
 	}
@@ -183,7 +180,7 @@ test('MCP cancellation reaches the DSH tool before its plugin is disposed', asyn
 							async execute(_, exec) {
 								started.resolve();
 								await new Promise<void>((resolve) => exec.signal.addEventListener('abort', () => resolve(), { once: true }));
-								assert.equal(cleaned, false);
+								expect(cleaned).toBe(false);
 								cancelled.resolve();
 								return 'cancelled';
 							},
@@ -196,15 +193,14 @@ test('MCP cancellation reaches the DSH tool before its plugin is disposed', asyn
 	try {
 		const controller = new AbortController();
 		const result = client.callTool({ name: 'wait' }, undefined, { signal: controller.signal });
-		const rejected = assert.rejects(result);
 		await started.promise;
 		controller.abort();
-		await rejected;
+		await expect(result).rejects.toThrow();
 		await cancelled.promise;
 	} finally {
 		await close();
 	}
-	assert.equal(cleaned, true);
+	expect(cleaned).toBe(true);
 });
 
 test('agent-loop directives are reported as unsupported rather than silently ignored', async () => {
@@ -232,8 +228,8 @@ test('agent-loop directives are reported as unsupported rather than silently ign
 	]);
 	try {
 		const result = await client.callTool({ name: 'finish' });
-		assert.equal(result.isError, true);
-		assert.match(JSON.stringify(result.content), /agent-loop directives/);
+		expect(result.isError).toBe(true);
+		expect(JSON.stringify(result.content)).toMatch(/agent-loop directives/);
 	} finally {
 		await close();
 	}

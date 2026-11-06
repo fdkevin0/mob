@@ -72,7 +72,7 @@ export function api(s: Server) {
 		.get('/api/plugins', c => c.json({
 			config: s.settings.publicConfig(),
 			sections: s.settings.sections.map(({ name, title, schema, secrets }) => ({ name, title, schema: jsonSchema(schema), secrets: secrets.map(x => x.name) })),
-			telegramStatus: s.extensions.status('telegram'), emailStatus: s.extensions.status('email'), wechatStatus: s.extensions.status('wechat_ilink'),
+			statuses: s.extensions.statuses(),
 		}))
 		.post('/api/plugins/:plugin', async c => {
 			const saved = await s.updatePlugin(c.req.param('plugin'), await body(c.req.raw)).catch(orFail(400));

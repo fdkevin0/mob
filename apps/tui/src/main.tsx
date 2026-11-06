@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { run } from './run';
 
@@ -17,7 +16,7 @@ if (values.help) {
 		const parsed = new URL(url);
 		if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password)
 			throw new Error('Use an HTTP(S) service URL without embedded credentials.');
-		const token = (values['token-file'] ? await readFile(values['token-file'], 'utf8') : (process.env.MOB_TOKEN ?? '')).trim();
+		const token = (values['token-file'] ? await Bun.file(values['token-file']).text() : (process.env.MOB_TOKEN ?? '')).trim();
 		if (!token) throw new Error('Provide --token-file PATH or MOB_TOKEN.');
 		await run({ url, token });
 	} catch (error) {

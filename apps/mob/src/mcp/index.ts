@@ -1,16 +1,12 @@
 // The MCP plugin: tools of the configured and installed MCP servers, the
 // catalog tool_install draws on, /mcp and /signin.
-import { body, clientEmail, clientTelegram, clientTUI, clientWeb, clientWeChat, CommandError, interactive, type Plugin, type Server } from '@mob/core';
+import { body, clientEmail, clientTelegram, clientTUI, clientWeb, clientWeChat, CommandError, HTTPError, interactive, type Plugin } from '@mob/core';
 import { z } from 'zod';
-import { validators, type Environment } from '../config';
-import { hostPlugins, reloads } from '../local';
+import type { Environment } from '../config';
+import type { HostPlugin } from '../local';
 import { validateRegistry } from './catalog';
 import { decode, validate } from './config';
 import { Hub } from './hub';
-
-validators.push(e => { validate(decode(e.mcpServers)); validateRegistry(e.mcpRegistry); });
-
-const hubs = new WeakMap<Server, Hub>();
 
 function configure(hub: Hub, e: Environment) {
 	hub.configureRegistry(e.mcpRegistry);
@@ -18,16 +14,21 @@ function configure(hub: Hub, e: Environment) {
 }
 
 function plugin(hub: Hub): Plugin {
+	const parse = <T>(schema: z.ZodType<T>, data: unknown) => {
+		const r = schema.safeParse(data);
+		if (!r.success) throw new HTTPError(400, r.error.issues[0]?.message ?? 'invalid request');
+		return r.data;
+	};
 	return {
 		name: 'mcp',
 		routes: [
 			{ method: 'GET', path: 'overview', handle: async () => hub.overview() },
-			{ method: 'POST', path: 'install', handle: async req => hub.installFromWeb(z.object({ url: z.string().url() }).parse(await body(req)).url) },
+			{ method: 'POST', path: 'install', handle: async req => hub.installFromWeb(parse(z.object({ url: z.string().url() }), await body(req, undefined, ['url'])).url) },
 			{ method: 'POST', path: 'remove', handle: async req => {
-				await hub.remove(z.object({ name: z.string().min(1) }).parse(await body(req)).name);
+				await hub.remove(parse(z.object({ name: z.string().min(1) }), await body(req, undefined, ['name'])).name);
 				return { removed: true };
 			} },
-			{ method: 'POST', path: 'signin', handle: async req => ({ name: hub.finishSignIn(z.object({ address: z.string().min(1) }).parse(await body(req)).address) }) },
+			{ method: 'POST', path: 'signin', handle: async req => ({ name: hub.finishSignIn(parse(z.object({ address: z.string().min(1) }), await body(req, undefined, ['address'])).address) }) },
 		],
 		commands: [{
 			name: 'mcp', usage: '/mcp [remove NAME]', summary: 'Show MCP servers and their tools, or remove an installed one', clients: interactive, ownerOnly: true,
@@ -60,15 +61,15 @@ function plugin(hub: Hub): Plugin {
 	};
 }
 
-hostPlugins.push((e, server) => {
-	const hub = new Hub(server.options.store);
-	hub.changed = () => server.extensions.reload('mcp');
-	configure(hub, e);
-	hubs.set(server, hub);
-	return [plugin(hub)];
-});
-
-reloads.push((e, server) => {
-	const hub = hubs.get(server);
-	if (hub && configure(hub, e)) return server.extensions.reload('mcp');
-});
+export const mcpPlugin: HostPlugin = {
+	validate: e => { validate(decode(e.mcpServers)); validateRegistry(e.mcpRegistry); },
+	attach(e, server) {
+		const hub = new Hub(server.options.store);
+		hub.changed = () => server.extensions.reload('mcp');
+		configure(hub, e);
+		return {
+			plugins: [plugin(hub)],
+			reload: next => { if (configure(hub, next)) return server.extensions.reload('mcp'); },
+		};
+	},
+};

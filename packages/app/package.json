@@ -6,7 +6,6 @@
 	"exports": {
 		"./app.css": "./src/app.css",
 		"./styles.css": "./src/styles.css",
-		"./remote": "./src/remote.ts",
 		"./vite": "./vite.ts",
 		"./package.json": "./package.json",
 		"./ai-elements/*": "./src/ai-elements/*.tsx",
