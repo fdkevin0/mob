@@ -446,3 +446,42 @@ test('searchHistory ranks excerpts of text and tool calls, leaving out commands'
 	expect(r).toHaveLength(1);
 	expect(r[0].text.endsWith('needle')).toBe(true);
 });
+
+test('a call covered by a remembered approval is recorded before it runs, and recovered if interrupted', async () => {
+	const path = temp();
+	let s = open(path);
+	const c = s.create();
+	s.addGrant(c.id, 'remember', '');
+	const tools = defaultTools();
+	const remember = tools.find(t => t.name === 'remember')!;
+	remember.approved = async () => {
+		s.close();
+		throw new Error('service crashed during approved call');
+	};
+	const m = s.begin(c.id, 'req-grant-1', '/remember coffee', 'demo/echo');
+	await expect(run(new AbortController().signal, s, new DemoModel(), { tools, hooks: emptyHooks(), owner: true }, c.id, m, '', () => {})).rejects.toThrow();
+	s = open(path);
+	const part = s.history(c.id)[1].parts[0];
+	expect(part.state).toBe('output-error');
+	expect(part.errorText).toContain('stopped before this approved call');
+	s.close();
+});
+
+test('reusing a deleted conversation that kept an owner memory sets its title from the new first message', async () => {
+	const s = open();
+	const service = new ConversationService(s, demoModels);
+	const c = s.create();
+	s.saveFact(newID(), c.id, 'likes tea', true);
+	s.remove(c.id);
+	expect(s.exists(c.id)).toBe(true);
+	expect(s.list(true).find(x => x.id === c.id)?.title).toBe('');
+	await service.execute({ id: c.id, text: 'brand new topic', requestId: newID(), owner: true }, () => {});
+	expect(s.list().find(x => x.id === c.id)?.title).toBe('brand new topic');
+	s.close();
+});
+
+test('datetime defaults to UTC when no timezone is given', async () => {
+	const datetime = defaultTools().find(t => t.name === 'datetime')!;
+	const out = await datetime.run({ input: {} } as never) as { timezone: string };
+	expect(out.timezone).toBe('UTC');
+});

@@ -228,6 +228,7 @@ export class ProviderRegistry implements Models {
 			try {
 				this.lists.set(p.id, { ids: await this.fetch(p, signal), at: Date.now(), of });
 			} catch (e) {
+				if (signal?.aborted) return;
 				// Keep the last good list for the same endpoint.
 				this.lists.set(p.id, { ids: this.listOf(p).ids ?? [], at: Date.now(), error: (e as Error).message, of });
 			}

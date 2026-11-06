@@ -170,7 +170,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 		// summary short enough to leave room for the latest message.
 		const length = Math.min(summaryTokens, room - tokens(summaryNotice));
 		const half = Math.floor((budget - length - tokens(summaryNotice)) / 2);
-		if (through && context > 0 && length >= summaryTokens / 4 && half > 0) {
+		if (through && context > 0 && promptTokens(last) <= budget && length >= summaryTokens / 4 && half > 0) {
 			const [, , older] = prompt(history, message.id, half);
 			const [text, requests, err, attempts] = await summarize(signal, model, summary.text, until(history, older), length);
 			// The summary's requests are part of the reply: they count, and the
@@ -190,11 +190,15 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 			}
 			check(signal);
 			if (!err && summaryCost(text) <= room) {
-				// Without a summary that fits, the older messages are omitted instead.
-				summary = { text, through: older };
-				store.summarize(conversationID, summary);
-				history = since(history, older);
-				[req.messages, saved, through] = prompt(history, message.id, budget - summaryCost(summary.text));
+				const nextHistory = since(history, older);
+				const [nextMessages, nextSaved, nextThrough] = prompt(nextHistory, message.id, budget - summaryCost(text));
+				if (promptTokens(nextMessages) <= budget - summaryCost(text)) {
+					// Without a summary that fits, the older messages are omitted instead.
+					summary = { text, through: older };
+					store.summarize(conversationID, summary);
+					history = nextHistory;
+					[req.messages, saved, through] = [nextMessages, nextSaved, nextThrough];
+				}
 			}
 		}
 		{
@@ -350,7 +354,7 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 				const part: Part = { type: 'tool-' + call.name, toolCallId: call.id, state: 'input-available', input };
 				message.parts.push(part);
 				await send({ kind: 'tool-input', toolCallId: call.id, toolName: call.name, input });
-				let output: unknown, toolErr: Error | undefined;
+				let output: unknown, toolErr: Error | undefined, granted = false;
 				const checked = parseErr ? { error: new Error('tool arguments must be a JSON object') } : checkInput(offered.get(call.name), input);
 				if ('error' in checked) toolErr = checked.error;
 				else {
@@ -364,12 +368,22 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 							output = await tool.run(tc);
 						} catch (e) {
 							if (!(e instanceof Granted)) throw e;
-							output = await tool.approved!({ conversationId: conversationID, approvalId: newID(), input: e.input, store, owner: agent.owner, signal });
+							granted = true;
+							const d = store.grantApproval(conversationID, message, call.id, e.input);
+							output = await tool.approved!({ conversationId: conversationID, approvalId: d.approvalId, input: d.input, store, owner: agent.owner, signal });
 						}
 					} catch (e) {
 						if (e instanceof AwaitingApproval) { pending = true; continue; }
-						if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Aborted();
-						if (e instanceof AbortTool) throw e.cause instanceof Error ? e.cause : new Error(String(e.cause));
+						if (signal.aborted) {
+							const err = signal.reason instanceof Error ? signal.reason : new Aborted();
+							if (granted) { part.state = 'output-error'; part.errorText = err.message; }
+							throw err;
+						}
+						if (e instanceof AbortTool) {
+							const err = e.cause instanceof Error ? e.cause : new Error(String(e.cause));
+							if (granted) { part.state = 'output-error'; part.errorText = err.message; }
+							throw err;
+						}
 						toolErr = e instanceof Error ? e : new Error(String(e));
 					} finally {
 						stats.toolMs! += Date.now() - ran;
@@ -379,12 +393,14 @@ export async function run(signal: AbortSignal, store: Store, model: Model, agent
 					part.state = 'output-error';
 					part.errorText = toolErr.message;
 					output = { error: toolErr.message };
+					if (granted) store.save(message, 'streaming', '');
 					await send({ kind: 'tool-failed', toolCallId: call.id, error: toolErr.message });
 				} else {
 					part.state = 'output-available';
 					part.output = output ?? null;
 					const file = await save(agent.saver, conversationID, output);
 					if (file) part.outputFile = file;
+					if (granted) store.save(message, 'streaming', '');
 					await send({ kind: 'tool-output', toolCallId: call.id, output: output ?? null });
 				}
 				const file = part.outputFile ?? '';
