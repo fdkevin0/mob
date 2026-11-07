@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/fdkevin0/mob/compare/v0.3.0...v0.4.0) (2026-11-07)
+
+
+### Features
+
+* **agents:** run Claude Agent on the Claude Agent SDK and let confined agents work without asking ([#187](https://github.com/fdkevin0/mob/issues/187)) ([a874f1b](https://github.com/fdkevin0/mob/commit/a874f1b96b6195bbcc7fe37da78a87a1b63e240a))
+
+
+### Bug Fixes
+
+* **core:** settle remembered approvals, restore deleted conversation titles and default datetime to UTC ([#185](https://github.com/fdkevin0/mob/issues/185)) ([67783bf](https://github.com/fdkevin0/mob/commit/67783bf0ba86eee22322c2ca33b06913fbc26492))
+
 ## [0.3.0](https://github.com/fdkevin0/mob/compare/v0.2.0...v0.3.0) (2026-11-05)
 
 
