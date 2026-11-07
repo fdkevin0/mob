@@ -38,6 +38,7 @@ export const options: Option[] = [
 	{ key: 'sandbox.cpus', value: 0, help: 'Nonnegative CPU limit; zero uses runtime default' },
 	{ key: 'sandbox.memory', value: '', help: 'Memory limit with unit, at least 64m; empty uses runtime default' },
 	{ key: 'sandbox.isolation', value: '', help: 'gvisor requires containerd; empty uses runtime default' },
+	{ key: 'agents.confinement', value: 'host', help: 'Where coding agents run: host asks the owner before what leaves their worktree; cloud, only inside a disposable Claude Code cloud environment, lets them do anything there without asking; restart required' },
 	{ key: 'mcp_servers', value: '{}', help: 'MCP server map; JSON object in flags/environment, native map in files', secret: true },
 	{ key: 'mcp_registry.url', value: defaultRegistry, help: 'MCP registry the model searches for remote servers to install' },
 	{ key: 'mcp_registry.namespaces', value: '', help: "Comma-separated registry name globs, such as com.cloudflare.mcp/*, the model may install from; empty offers only Mob's own list" },
@@ -48,6 +49,7 @@ export const envOf = (o: Option) => 'MOB_' + o.key.replaceAll('.', '_').toUpperC
 const defaultOf = (o: Option) => (typeof o.value === 'function' ? o.value() : o.value);
 
 export type SandboxSettings = { enabled: boolean; runtime: string; image: string; network: string; cpus: number; memory: string; isolation: string };
+export type Confinement = 'host' | 'cloud';
 export type MCPServers = Record<string, Record<string, unknown>>;
 
 export type Environment = {
@@ -59,6 +61,7 @@ export type Environment = {
 	driver: Driver;
 	sandbox: SandboxSettings;
 	maxToolSteps: number;
+	agents: { confinement: Confinement };
 	mcpServers: MCPServers;
 	mcpRegistry: { url: string; namespaces: string[] };
 	webURL: string;
@@ -165,10 +168,14 @@ export class Loader {
 		if (token && token.length < 32) fail('token must contain at least 32 bytes');
 		if (mode && !windows && mode & 0o077 && 'token' in values) fail('configuration with tokens must be owner-only (chmod 600)');
 		webOrigin(String(get.web_url));
+		const confinement = get['agents.confinement'];
+		if (confinement !== 'host' && confinement !== 'cloud') fail('agents.confinement must be host or cloud');
+		// Nothing else tells a disposable environment apart from the owner's own computer.
+		if (confinement === 'cloud' && process.env.CLAUDE_CODE_REMOTE !== 'true') fail('agents.confinement cloud needs a Claude Code cloud environment');
 		const e: Environment = {
 			dir: resolve(String(get.data_dir)), stateDir: resolve(String(get.state_dir)), addr, token, demo: get.demo as boolean, driver: get.driver as Driver,
 			sandbox: { enabled: get['sandbox.enabled'] as boolean, runtime: get['sandbox.runtime'] as string, image: get['sandbox.image'] as string, network: get['sandbox.network'] as string, cpus: get['sandbox.cpus'] as number, memory: get['sandbox.memory'] as string, isolation: get['sandbox.isolation'] as string },
-			maxToolSteps: steps, mcpServers: get.mcp_servers as MCPServers,
+			maxToolSteps: steps, agents: { confinement: confinement as Confinement }, mcpServers: get.mcp_servers as MCPServers,
 			mcpRegistry: { url: get['mcp_registry.url'] as string, namespaces: String(get['mcp_registry.namespaces']).split(',').map(s => s.trim()).filter(Boolean) },
 			webURL: String(get.web_url), loader: this,
 		};

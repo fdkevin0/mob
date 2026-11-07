@@ -75,11 +75,11 @@ export class Session {
 	private constructor(private svc: Service, readonly preset: Preset, readonly task: Task) {}
 
 	/** open starts a session with the agent on conn: the task's own, loaded again, or a new one in its worktree. */
-	static async open(svc: Service, p: Preset, t: Task, conn: Conn, signal: AbortSignal): Promise<Session> {
+	static async open(svc: Service, p: Preset, t: Task, conn: Conn | undefined, signal: AbortSignal): Promise<Session> {
 		const s = new Session(svc, p, t);
 		try {
 			s.agent = await runtime(p).open({
-				preset: p, task: t, conn,
+				preset: p, task: t, conn, confined: svc.confined,
 				servers: http => {
 					const { servers, token } = svc.mcpServers(t, http);
 					s.token = token;
@@ -305,7 +305,7 @@ export class Session {
 			p.choose('reject');
 			return false;
 		}
-		if (this.inWorktree(kind, locations) || this.granted(p)) {
+		if (this.svc.confined || this.inWorktree(kind, locations) || this.granted(p)) {
 			p.choose('allow');
 			return false;
 		}
@@ -404,10 +404,10 @@ export class Session {
 		}
 	}
 
-	/** permission takes a request of the agent's: allowed at once when it only changes the worktree, otherwise the turn that follows the agent asks the owner. */
+	/** permission takes a request of the agent's: allowed at once when it only changes the worktree, or the agent is confined, otherwise the turn that follows the agent asks the owner. */
 	private permission(r: PermissionRequest): Promise<Choice> {
 		const p = new Permission(r);
-		if (this.inWorktree(r.kind, r.locations)) p.choose('allow');
+		if (this.inWorktree(r.kind, r.locations) || (this.svc.confined && !(this.task.readOnly && changes(r.kind)))) p.choose('allow');
 		else if (!this.deliver({ permission: p })) p.cancel();
 		return p.answer;
 	}

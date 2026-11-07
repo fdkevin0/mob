@@ -4,7 +4,7 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
-import { command, type Preset } from './presets';
+import type { Preset } from './presets';
 
 /** Conn is a started agent's standard input and output. */
 export type Conn = {
@@ -41,6 +41,9 @@ export const grouped = (cmd: string, args: string[], dir: string, env: Record<st
 	spawn(cmd, args, { cwd: dir, env, detached: !windows, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 
 const tailSize = 4 << 10;
+
+/** command is the first of p's commands whose program is installed. */
+export const command = (p: Preset) => p.commands.find(c => Bun.which(c[0]!));
 
 /** start runs the first installed command of p in dir. */
 export function start(p: Preset, dir: string): Conn {

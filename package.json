@@ -27,6 +27,7 @@
     "test:core": "bun run --cwd packages/core typecheck && bun run --cwd packages/core test && bun run --cwd apps/mob typecheck && bun run --cwd apps/mob test",
     "test:release": "bun test scripts/npm",
     "test:integration": "bun apps/mob/scripts/check-chat.ts",
+    "test:agent": "bun apps/mob/scripts/check-agent.ts",
     "test:runner": "bun run --cwd apps/web check:runner",
     "test:site": "bun run --cwd apps/web check:site",
     "generate:configdocs": "bun run --cwd apps/mob configdocs"

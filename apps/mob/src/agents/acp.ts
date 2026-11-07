@@ -8,6 +8,7 @@ import {
 import type { llm } from '@mob/core';
 import { version } from '../version';
 import { failed, signIn, type AgentSession, type Choice, type Ending, type McpServer, type ModelUsage, type Options, type Runtime, type ToolContent, type Update } from './runtime';
+import type { Conn } from './process';
 
 /** openWait bounds starting a session. */
 const openWait = 2 * 60_000;
@@ -123,19 +124,23 @@ class Session implements AgentSession {
 	private ended = false;
 	private end = Promise.withResolvers<void>();
 
+	/** io is the agent Mob started, which this runtime talks to. */
+	private io: Conn;
+
 	constructor(private o: Options) {
-		this.conn = new ClientSideConnection(() => this.client(), ndJsonStream(o.conn.input, o.conn.output));
+		this.io = o.conn!;
+		this.conn = new ClientSideConnection(() => this.client(), ndJsonStream(this.io.input, this.io.output));
 		this.closed = this.conn.closed.then(() => {}, () => {});
 		void this.closed.then(() => this.close());
 	}
 
-	stderr() { return this.o.conn.stderr?.() ?? ''; }
+	stderr() { return this.io.stderr?.() ?? ''; }
 
 	close() {
 		if (this.ended) return;
 		this.ended = true;
 		this.end.resolve();
-		this.o.conn.stop();
+		this.io.stop();
 	}
 
 	failed(what: string, err: unknown) { return failed(this.o.preset.title, what, err, this.stderr()); }

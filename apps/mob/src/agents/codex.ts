@@ -5,6 +5,7 @@
 import type { llm } from '@mob/core';
 import { version } from '../version';
 import { failed, message, signIn, type AgentSession, type Choice, type Ending, type Options, type Runtime, type ToolContent, type ToolKind, type ToolStatus, type Update } from './runtime';
+import type { Conn } from './process';
 
 /** openWait bounds starting a session. */
 const openWait = 2 * 60_000;
@@ -170,8 +171,12 @@ class Session implements AgentSession {
 	private before?: Tokens;
 	private total?: Tokens;
 
+	/** io is the agent Mob started, which this runtime talks to. */
+	private io: Conn;
+
 	constructor(private o: Options) {
-		this.rpc = new RPC(o.conn.input, o.conn.output, (m, p) => this.notified(m, p), (m, p) => this.requested(m, p));
+		this.io = o.conn!;
+		this.rpc = new RPC(this.io.input, this.io.output, (m, p) => this.notified(m, p), (m, p) => this.requested(m, p));
 		this.closed = this.rpc.closed;
 		void this.closed.then(() => {
 			this.ending?.resolve({ err: new Error('it exited'), usage: [] });
@@ -179,13 +184,13 @@ class Session implements AgentSession {
 		});
 	}
 
-	stderr() { return this.o.conn.stderr?.() ?? ''; }
+	stderr() { return this.io.stderr?.() ?? ''; }
 
 	close() {
 		if (this.ended) return;
 		this.ended = true;
 		this.end.resolve();
-		this.o.conn.stop();
+		this.io.stop();
 	}
 
 	private failed(what: string, err: unknown) { return failed(this.o.preset.title, what, err, this.stderr()); }
