@@ -143,6 +143,7 @@ export class ConversationService {
 			}
 		}
 		if (this.active.has(input.id) || this.closing) throw new CommandError(409, 'conversation is busy; wait or stop the active turn');
+		if (!a && this.store.hasRequest(input.requestId)) throw new CommandError(409, 'request already accepted; refresh history');
 		// The replaced messages are deleted only with the new one recorded, so a refused or stopped turn deletes nothing.
 		if (input.replace) {
 			// A coding agent keeps its own session, which a rewritten history here would no longer match.
@@ -167,33 +168,43 @@ export class ConversationService {
 				options.admitted?.(running);
 				if (signal.aborted) throw signal.reason;
 				const send = async (e: Event) => {
-					if (e.kind === 'context') this.contexts.set(input.id, { context: e.context as ContextSnapshot, messageId: running.messageId, summary: this.store.summary(input.id) });
+					if (e.kind === 'context') {
+						this.contexts.delete(input.id);
+						if (this.contexts.size >= 200) this.contexts.delete(this.contexts.keys().next().value!);
+						this.contexts.set(input.id, { context: e.context as ContextSnapshot, messageId: running.messageId, summary: this.store.summary(input.id) });
+					}
 					running.record(e);
 					await emit(e);
 				};
-				await this.turn(input, signal, send, delegate, model, isCommand);
+				await this.turn(input, signal, send, () => running.begin(), delegate, model, isCommand);
 			} catch (e) {
 				err = e instanceof Error ? e : new Error(String(e));
 			}
 			options.signal?.removeEventListener('abort', stop);
-			running.finish(err);
 			this.active.delete(input.id);
+			running.finish(err);
 			this.store.changes.conversation(input.id, true);
 			if (err) throw err;
 		})();
 		return [running, proceed];
 	}
 
-	private async turn(input: ChatRequest, signal: AbortSignal, emit: (e: Event) => Promise<void>, delegate: Delegate | undefined, model: Model | undefined, isCommand: boolean) {
-		if (isCommand) return command(this, input, signal, emit);
+	private async turn(input: ChatRequest, signal: AbortSignal, emit: (e: Event) => Promise<void>, begin: () => void, delegate: Delegate | undefined, model: Model | undefined, isCommand: boolean) {
+		if (isCommand) return command(this, input, signal, emit, begin);
 		let note = '';
 		const a = input.approval;
 		if (a) {
 			a.reason = (a.reason ?? '').trim();
 			const decision = this.store.decide(input.id, a.id, a.approved, a.reason, a.approved && a.input !== undefined ? await this.revise(input, a) : undefined);
+			begin();
 			if (delegate) {
 				// The agent goes on either way; this turn follows it.
-				await delegate.decide(input.id, decision, a);
+				try {
+					await delegate.decide(input.id, decision, a);
+				} catch (e) {
+					if (a.approved) this.store.complete(decision, undefined, '', e instanceof Error ? e : new Error(String(e)));
+					throw e;
+				}
 			} else if (a.approved) {
 				this.remember(input.id, decision, a.remember ?? '');
 				note = await this.carryOut(signal, input.id, decision, !!input.owner);
@@ -241,6 +252,7 @@ export class ConversationService {
 		const summary = exists ? this.store.summary(id) : undefined;
 		if (known && last?.id === known.messageId && known.context.model === refString(model.ref) &&
 			summary?.through === known.summary.through && summary.text === known.summary.text) return known.context;
+		this.contexts.delete(id);
 		const turn: Turn = { conversationId: id, owner, model: model.info, request: { system: '', messages: [] } };
 		this.recall(turn);
 		return estimate(this.store, model, this.agent(owner), id, turn.request.system);

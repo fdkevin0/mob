@@ -18,6 +18,7 @@ export const isAbort = (e: unknown) => e instanceof Aborted || (e instanceof Err
 export class Running {
 	private events: Event[] = [];
 	private waiters: (() => void)[] = [];
+	private started = false;
 	private ended = false;
 	error?: Error;
 	readonly controller = new AbortController();
@@ -27,6 +28,11 @@ export class Running {
 	constructor() { this.finished = new Promise(r => { this.resolveFinished = r; }); }
 
 	get signal() { return this.controller.signal; }
+
+	begin() {
+		this.started = true;
+		this.wake();
+	}
 
 	record(e: Event) {
 		this.events.push(e);
@@ -45,7 +51,7 @@ export class Running {
 	// they can continue it, unless saving that reply failed too.
 	finish(err?: Error) {
 		if (err instanceof StepLimit && this.events.length) this.events.push({ kind: 'turn-finished', reason: 'tool-calls' });
-		else if (err && this.events.length) {
+		else if (err && (this.started || this.events.length)) {
 			this.events.push(isAbort(err) || this.signal.aborted ? { kind: 'turn-aborted' } : { kind: 'turn-failed', error: err.message }, { kind: 'turn-finished', reason: 'error' });
 		}
 		this.error = err;
@@ -87,7 +93,7 @@ export class Running {
 	/** begun waits for the turn's first event, or for it to end without one. */
 	async begun(): Promise<boolean> {
 		for (;;) {
-			if (this.events.length) return true;
+			if (this.started || this.events.length) return true;
 			if (this.ended) { if (this.error) throw this.error; return false; }
 			await new Promise<void>(resolve => this.waiters.push(resolve));
 		}

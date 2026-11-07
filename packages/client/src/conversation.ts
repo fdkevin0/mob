@@ -434,8 +434,9 @@ export class ConversationClient {
 		this.approvalController = controller;
 		this.deciding = true;
 		this.update({});
+		let stream: ReadableStream<unknown> | undefined;
 		try {
-			const stream = await this.transport.sendMessages({
+			const opened = await this.transport.sendMessages({
 				chatId: this.options.id,
 				messages: [],
 				trigger: 'submit-message',
@@ -443,18 +444,21 @@ export class ConversationClient {
 				abortSignal: controller.signal,
 				body: { approval: { id: approvalId, approved, reason: reason?.trim() || undefined, remember: remember || undefined, input } },
 			});
+			stream = opened;
 			this.deciding = false;
 			this.update({});
 			const baseline = (await this.options.client.openConversation(this.options.id)).messages.filter(
 				(m) => m.metadata?.status !== 'streaming',
 			);
-			for await (const message of readUIMessageStream<ChatMessage>({ stream, terminateOnError: true })) {
+			stream = undefined;
+			for await (const message of readUIMessageStream<ChatMessage>({ stream: opened, terminateOnError: true })) {
 				if (!controller.signal.aborted && (approved || reason?.trim()))
 					this.chat.messages = [...baseline.filter((m) => m.id !== message.id), message];
 			}
 		} catch (e) {
 			if (!controller.signal.aborted) this.update({ failure: errorText(e) });
 		} finally {
+			void stream?.cancel().catch(() => {});
 			this.approvalController = undefined;
 			this.deciding = false;
 			this.update({ approvalBusy: false });

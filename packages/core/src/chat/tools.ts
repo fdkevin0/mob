@@ -31,7 +31,7 @@ export type Tool = LLMTool & {
 	available?: () => boolean;
 	/** input, when set, checks the model's arguments before run sees them; tools defined with defineTool set it. */
 	input?: z.ZodType<Record<string, unknown>>;
-	/** run's output goes back to the model; so does its error, unless it is AwaitingApproval or an Abort. */
+	/** run's output goes back to the model; so does its error, unless it is AwaitingApproval or an AbortTool. */
 	run: (call: ToolCall) => Promise<unknown>;
 	/** approved carries out a call the user approved after run asked with requestApproval. */
 	approved?: (call: ApprovedCall) => Promise<unknown>;
@@ -186,7 +186,7 @@ export function defaultTools(): Tool[] {
 			name: 'datetime', description: 'Get current date and time in an optional IANA timezone.',
 			input: z.object({ timezone: z.string().optional() }),
 			run: async call => {
-				let zone = call.input.timezone || 'Asia/Shanghai';
+				let zone = call.input.timezone || 'UTC';
 				if (!validZone(zone)) zone = 'UTC';
 				const now = new Date();
 				return { iso: rfc3339(now, 'UTC'), readable: rfc3339(now, zone), timezone: zone };

@@ -255,7 +255,10 @@ export class Store {
 	 * starts a conversation by sending its first message under an ID it chose, so none is left empty.
 	 */
 	ensure(id: string) {
-		if (this.exists(id)) return;
+		if (this.exists(id)) {
+			this.db.run("UPDATE conversations SET title='New conversation',updated_at=? WHERE id=? AND title=''", Date.now(), id);
+			return;
+		}
 		if (!isConversationID(id)) throw new NotFound();
 		this.db.run("INSERT OR IGNORE INTO conversations(id,title,updated_at) VALUES(?,'New conversation',?)", id, Date.now());
 	}
@@ -449,6 +452,23 @@ export class Store {
 		this.changes.conversation(conversationID, true);
 		this.scheduleExpiry(conversationID);
 		return id;
+	}
+
+	/** grantApproval records a call covered by a remembered approval as approved before it runs, so a crash settles it. */
+	grantApproval(conversationID: string, m: Message, callID: string, input: unknown): Decision {
+		const id = newID();
+		const raw = typeof input === 'string' ? input : JSON.stringify(input ?? null);
+		let tool = '';
+		for (const part of m.parts) if (part.toolCallId === callID) {
+			tool = String(part.type).replace(/^tool-/, '');
+			part.state = 'approval-responded';
+			part.approval = { id, approved: true };
+		}
+		this.db.transaction(() => {
+			this.db.run("INSERT INTO approvals(id,conversation_id,message_id,tool_call_id,input,status,expires_at) VALUES(?,?,?,?,?,'approved',?)", id, conversationID, m.id, callID, raw, Date.now() + 3600_000);
+			this.db.run('UPDATE messages SET parts=? WHERE id=?', JSON.stringify(m.parts), m.id);
+		});
+		return { approvalId: id, messageId: m.id, toolCallId: callID, tool, input: raw };
 	}
 
 	/** approvalConversation locates the conversation a saved approval belongs to. */

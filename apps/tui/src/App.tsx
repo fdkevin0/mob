@@ -103,6 +103,14 @@ export function App({
 	function makeSession(id: string, snapshot: Snapshot): ConversationClient {
 		const existing = sessions.current.get(id);
 		if (existing) return existing;
+		if (sessions.current.size >= 20) {
+			for (const key of sessions.current.keys()) {
+				if (key !== current.id) {
+					sessions.current.delete(key);
+					break;
+				}
+			}
+		}
 		const next = new ConversationClient({
 			client,
 			id,

@@ -158,9 +158,10 @@ const modelHelp = '/model shows this conversation\'s model · /model NAME switch
 const perProvider = 25;
 
 /** command answers /compact, the transcript command, and records it with its reply; it is never sent to a model. */
-export async function command(s: ConversationService, input: ChatRequest, signal: AbortSignal, emit: (e: Event) => Promise<void>) {
+export async function command(s: ConversationService, input: ChatRequest, signal: AbortSignal, emit: (e: Event) => Promise<void>, begin?: () => void) {
 	// A retried request must not summarize again.
 	if (s.store.hasRequest(input.requestId)) throw new CommandError(409, 'request already accepted; refresh history');
+	begin?.();
 	let reply = '', used: Requests = [], err: Error | undefined;
 	try {
 		[reply, used] = await compact(s, input.id, signal);
