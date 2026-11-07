@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { findPreset } from '@mob/core/provider/presets';
+import { findPreset } from '@mob/core';
 import lmstudio from '@lobehub/icons-static-svg/icons/lmstudio.svg?raw';
 import ollama from '@lobehub/icons-static-svg/icons/ollama.svg?raw';
 import openrouter from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';

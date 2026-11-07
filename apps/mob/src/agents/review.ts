@@ -155,16 +155,22 @@ async function newFile(dir: string, path: string) {
 
 /** Limited keeps the last max bytes written to it, noting how much it dropped. */
 export class Limited {
-	private chunks: Buffer[] = [];
+	private chunks: Uint8Array[] = [];
 	private size = 0;
 	private dropped = 0;
 	constructor(private max: number) {}
-	write(b: Buffer | string) {
-		const buf = typeof b === 'string' ? Buffer.from(b) : b;
+	private join() {
+		const out = new Uint8Array(this.size);
+		let at = 0;
+		for (const c of this.chunks) { out.set(c, at); at += c.length; }
+		return out;
+	}
+	write(b: Uint8Array | string) {
+		const buf = typeof b === 'string' ? new TextEncoder().encode(b) : b;
 		this.chunks.push(buf);
 		this.size += buf.length;
 		if (this.size > this.max) {
-			const all = Buffer.concat(this.chunks);
+			const all = this.join();
 			const over = all.length - this.max;
 			this.dropped += over;
 			this.chunks = [all.subarray(over)];
@@ -172,7 +178,7 @@ export class Limited {
 		}
 	}
 	toString() {
-		const text = Buffer.concat(this.chunks).toString();
+		const text = new TextDecoder().decode(this.join());
 		return this.dropped ? `… ${this.dropped} bytes cut\n` + text : text;
 	}
 }
@@ -183,8 +189,8 @@ export function check(worktree: string, command: string, signal?: AbortSignal): 
 	const child = grouped(shell[0]!, shell.slice(1), worktree, environment());
 	child.stdin!.end();
 	const out = new Limited(checkOutput);
-	child.stdout!.on('data', (b: Buffer) => out.write(b));
-	child.stderr!.on('data', (b: Buffer) => out.write(b));
+	child.stdout!.on('data', (b: Uint8Array) => out.write(b));
+	child.stderr!.on('data', (b: Uint8Array) => out.write(b));
 	const began = Date.now();
 	return new Promise((resolve, reject) => {
 		let timedOut = false;

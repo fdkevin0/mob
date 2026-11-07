@@ -1,8 +1,7 @@
 // Capture production prompts offline; optionally replay one model decision per case. No tools execute.
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { ConversationService, OpenAIModel, Store, defaultTools, emptyHooks, newID, run, sandboxTool, type llm, type Message } from '@mob/core';
-import { summarize } from '@mob/core/chat/compact';
+import { ConversationService, OpenAIModel, Store, defaultTools, emptyHooks, newID, run, sandboxTool, summarize, type llm, type Message } from '@mob/core';
 import { openBun } from '@mob/core/sqlite/bun';
 import { Service } from '../src/agents/service';
 import { tools } from '../src/agents/tools';

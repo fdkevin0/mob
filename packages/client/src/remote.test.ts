@@ -4,6 +4,7 @@ import { encryptedFetch } from './remote';
 
 const runner = '11111111-1111-4111-8111-111111111111';
 const session = 'a'.repeat(64);
+Object.defineProperty(globalThis, 'location', { configurable: true, value: { origin: 'https://usemob.app' } });
 afterEach(() => vi.unstubAllGlobals());
 
 it('authenticates content, routing, direction and completion', async () => {
@@ -98,4 +99,35 @@ it('fails a stream the runner marks as incomplete', async () => {
 	);
 	const response = await encryptedFetch(runner, key)(`${location.origin}/api/runners/${runner}/api/chat`);
 	await expect(response.text()).rejects.toThrow('unexpected EOF');
+});
+
+it('caches the runner session across requests and refreshes on 409', async () => {
+	const key = newKey();
+	const nextSession = 'b'.repeat(64);
+	let currentSession = session,
+		lookups = 0,
+		relays = 0;
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url: string, init?: RequestInit) => {
+			if (!url.endsWith('/relay')) {
+				lookups++;
+				return Response.json({ session: currentSession });
+			}
+			relays++;
+			const e: Envelope = JSON.parse(String(init?.body));
+			if (e.session !== currentSession) return new Response('stale', { status: 409 });
+			const frame = await seal(key, runner, 'response', { ...e, seq: 0, final: true }, { status: 200, body: base64(new TextEncoder().encode('ok')) });
+			return new Response(JSON.stringify(frame) + '\n');
+		}),
+	);
+	const fetcher = encryptedFetch(runner, key);
+	expect(await (await fetcher(`${location.origin}/api/runners/${runner}/api/config`)).text()).toBe('ok');
+	expect(await (await fetcher(`${location.origin}/api/runners/${runner}/api/config`)).text()).toBe('ok');
+	expect(lookups).toBe(1);
+	expect(relays).toBe(2);
+	currentSession = nextSession;
+	expect(await (await fetcher(`${location.origin}/api/runners/${runner}/api/config`)).text()).toBe('ok');
+	expect(lookups).toBe(2);
+	expect(relays).toBe(4);
 });

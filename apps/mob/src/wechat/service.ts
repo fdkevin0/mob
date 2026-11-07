@@ -1,6 +1,7 @@
 // WeChat iLink: Mob answers the allowed users' messages to a WeChat bot.
 import { sleep } from '@mob/core/sleep';
-import { Bridge, clientWeChat, CommandError, describeApproval, isAbort, rememberAlways, rememberConversation, ReplyError, useText, type Answer, type ChannelMessage, type ConversationService, type PendingApproval, type Reply, type Store, type Texts } from '@mob/core';
+import { clientWeChat, CommandError, describeApproval, isAbort, rememberAlways, rememberConversation, type Answer, type ConversationService, type PendingApproval, type Store } from '@mob/core';
+import { Bridge, ReplyError, useText, type Message as ChannelMessage, type Reply, type Texts } from '../channel';
 import { allowed, Client, isOwner, type Config, type Inbound } from './client';
 
 /** approvalPrompt shows what each requested call would do and how to answer, given how many requests are pending. */

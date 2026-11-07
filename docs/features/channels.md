@@ -1,18 +1,18 @@
 # Messaging channels
 
 Mob can be reached from Telegram, WeChat iLink and email. A channel is a plugin
-that receives messages and answers them through one shared `Bridge` (`packages/core/src/app/channel.ts`), so
+that receives messages and answers them through one shared `Bridge` (`apps/mob/src/channel.ts`), so
 commands, approvals, delivery records and replies behave the same everywhere.
 
 ## The bridge
 
-- `Answer` runs a message as a command in the channel's client or as a turn in
+- `answer` runs a message as a command in the channel's client or as a turn in
   the sender's conversation, carries out the actions commands return (open a
   conversation, decide an approval), and keeps only what the sender should read.
-- `Deliver` records each message under its ID in the deliveries table, so a
+- `deliver` records each message under its ID in the deliveries table, so a
   message is answered and sent at most once and an interrupted send is reported,
   not repeated. `/deliveries` lists them. A channel that answers while it
-  keeps receiving calls `Accept` as each message arrives and `Finish` once it
+  keeps receiving calls `accept` as each message arrives and `finish` once it
   answers; `started` hands it the turn's stop as soon as the turn is
   admitted, so it can keep later messages in order.
 - A message for a conversation whose turn is still running is answered with
@@ -138,7 +138,7 @@ commands, approvals, delivery records and replies behave the same everywhere.
 
 ## Email
 
-**Answer mail** in the email plugin's settings (`email.Config.Channel`) turns on
+**Answer the owner's mail** in the email plugin's settings (`email.channel.enabled`) turns on
 answering mail. It names the owner's address and the authserv-id the provider
 writes first in the `Authentication-Results` header of mail it receives
 (`mx.google.com` for Gmail; a received message's original source shows yours). A background extension named `email` holds one IMAP

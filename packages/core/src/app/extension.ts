@@ -73,6 +73,7 @@ export class Extensions {
 	}
 
 	status(name: string) { return this.units.find(u => u.name === name)?.status ?? ''; }
+	statuses(): Record<string, string> { return Object.fromEntries(this.units.map(u => [u.name, u.status])); }
 	isClosed() { return this.closed; }
 
 	close() {

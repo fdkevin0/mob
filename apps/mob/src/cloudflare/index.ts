@@ -1,7 +1,7 @@
 // The Cloudflare plugin: /cloud, the cloudflare tool and the web UI's panel.
 import { z } from 'zod';
 import { body, cell, choices, cloudflareConfig, defineTool, interactive, replyJSON, type Plugin, type Section, type Server, type Tool } from '@mob/core';
-import { hostPlugins } from '../local';
+import type { HostPlugin } from '../local';
 import { Cloudflare, validate, type Action, type Config } from './cloudflare';
 
 /** requestTimeout bounds one Cloudflare operation. */
@@ -92,8 +92,8 @@ function plugin(server: Server): Plugin {
 			},
 		}],
 		tools: tools(config),
-		routes: [{ method: 'POST', path: 'action', handle: async req => new Cloudflare(config()).do(await body<Action>(req), withTimeout(req.signal)) }],
+		routes: [{ method: 'POST', path: 'action', handle: async req => new Cloudflare(config()).do(await body<Action>(req, undefined, ['operation', 'text', 'key', 'sql', 'params', 'cursor']), withTimeout(req.signal)) }],
 	};
 }
 
-hostPlugins.push((_, server) => [plugin(server)]);
+export const cloudflarePlugin: HostPlugin = { attach: (_, server) => [plugin(server)] };

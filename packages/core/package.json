@@ -4,10 +4,17 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./*": "./src/*.ts"
+		"./contracts": "./src/contracts.ts",
+		"./relay": "./src/relay.ts",
+		"./github": "./src/github.ts",
+		"./url": "./src/url.ts",
+		"./format": "./src/format.ts",
+		"./sleep": "./src/sleep.ts",
+		"./sqlite/bun": "./src/sqlite/bun.ts",
+		"./sqlite/wasm": "./src/sqlite/wasm.ts"
 	},
 	"scripts": {
-		"typecheck": "tsc -p tsconfig.json",
+		"typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.bun.json",
 		"test": "bun test"
 	},
 	"dependencies": {

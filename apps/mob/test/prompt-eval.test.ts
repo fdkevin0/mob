@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import { emptyResult, type Model } from '@mob/core/llm/llm';
-import { systemPrompt } from '@mob/core/chat/engine';
+import { llm, systemPrompt } from '@mob/core';
 import { capture, replay } from '../scripts/prompt-eval';
 import { cases } from '../scripts/prompts/cases';
 
@@ -51,12 +50,12 @@ test.each([
 	['uncertain-send', 'email_send', { to: 'test@example.invalid', subject: 'Fixture', text: 'Must never send' }],
 ])('replay records %s actions and usage without dispatching tools', async (id, name, input) => {
 	let calls = 0;
-	const model: Model = {
+	const model: llm.Model = {
 		ref: { provider: 'test', model: 'fake', effort: '' },
 		info: { id: 'fake', tools: true, known: true },
 		stream: async () => {
 			calls++;
-			return { ...emptyResult(), calls: [{ id: '1', name, arguments: JSON.stringify(input) }], usage: { inputTokens: 100, outputTokens: 20 } };
+			return { ...llm.emptyResult(), calls: [{ id: '1', name, arguments: JSON.stringify(input) }], usage: { inputTokens: 100, outputTokens: 20 } };
 		},
 	};
 	const c = cases.find(c => c.id === id)!;
@@ -79,7 +78,7 @@ test('a failed model request is recorded without losing the other cases', async 
 		info: { id: 'fake', tools: true, known: true },
 		stream: async () => {
 			if (++calls === 1) throw new Error('fixture unavailable');
-			return { ...emptyResult(), text: 'ok' };
+			return { ...llm.emptyResult(), text: 'ok' };
 		},
 	});
 	expect(result.results[0].error).toBe('fixture unavailable');

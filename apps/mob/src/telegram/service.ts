@@ -1,7 +1,8 @@
 // The Telegram channel: Mob answers its owner's private messages to a bot,
 // polling the Bot API, with buttons standing in for typed commands.
 import { sleep as wait } from '@mob/core/sleep';
-import { Bridge, clientTelegram, ReplyError, describeApproval, NotFound, type ChannelMessage, type CommandSpec, type ConversationService, type Notice, type PendingApproval, type Reply, type Store, type Texts, useText } from '@mob/core';
+import { clientTelegram, describeApproval, NotFound, type CommandSpec, type ConversationService, type Notice, type PendingApproval, type Store } from '@mob/core';
+import { Bridge, ReplyError, useText, type Message as ChannelMessage, type Reply, type Texts } from '../channel';
 import { Bot, buttons, decided, type Button, type Config, type Keyboard, type Shown, type Update } from './api';
 
 /** placeholderDelay is how long a reply may take before Mob shows that it is being written. */

@@ -1,13 +1,9 @@
 // The sandbox plugin: configuration checks, the sandbox later turns use, and mob container.
-import { commands } from '../commands';
-import { validators, type Environment } from '../config';
-import { reloads, setups } from '../local';
+import type { Environment } from '../config';
+import type { HostPlugin } from '../local';
 import type { Server } from '@mob/core';
 import { containerCommand } from './command';
 import { Sandbox, validateSandbox } from './sandbox';
-
-validators.push(e => validateSandbox(e.sandbox));
-commands.push(containerCommand);
 
 const applied = new WeakMap<Server, { settings: string; box?: Sandbox }>();
 
@@ -25,5 +21,12 @@ function apply(e: Environment, server: Server) {
 	box?.runtime.check(AbortSignal.timeout(30_000)).catch(err => console.error('Sandbox enabled but not ready: ' + (err as Error).message));
 }
 
-setups.push(apply);
-reloads.push(apply);
+export const sandboxPlugin: HostPlugin = {
+	validate: e => validateSandbox(e.sandbox),
+	command: containerCommand,
+	attach(e, server) {
+		const run = (next: Environment) => apply(next, server);
+		run(e);
+		return { reload: run };
+	},
+};

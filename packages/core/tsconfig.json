@@ -8,8 +8,8 @@
 		"skipLibCheck": true,
 		"noEmit": true,
 		"allowImportingTsExtensions": true,
-		"types": ["bun"]
+		"types": []
 	},
-	// tools.test.ts holds a type assertion on defineTool, so it is typechecked too.
-	"include": ["src", "test/tools.test.ts"]
+	"include": ["src"],
+	"exclude": ["src/sqlite/bun.ts"]
 }

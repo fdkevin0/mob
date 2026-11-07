@@ -18,7 +18,7 @@
 		"./run": "./src/run.tsx"
 	},
 	"devDependencies": {
-		"@types/node": "^26.5.1",
+		"@types/bun": "1.4.4",
 		"@types/react": "^19.3.0"
 	}
 }

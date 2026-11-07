@@ -85,7 +85,7 @@ replying or waits for an approval is refused until it is done.
 
 The service side is `GET /api/conversations/{id}/export` and
 `POST /api/conversations/import` (`Transfer` in
-`packages/client/src/contracts.ts`); an import gets a new conversation ID,
+`packages/core/src/contracts.ts`); an import gets a new conversation ID,
 replaces message IDs the target already has, marks a reply that was still
 streaming as interrupted and does not save an owner's fact twice. Through the
 relay a conversation must fit the relay's frame limit of about 2 MB.

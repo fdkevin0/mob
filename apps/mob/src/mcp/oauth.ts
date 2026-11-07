@@ -3,7 +3,7 @@
 // link, and keeps the tokens it gets so a restart need not sign in again.
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { randomBytes } from 'node:crypto';
+import { base64url } from '@mob/core/relay';
 import type { Server } from './config';
 
 /** signInTimeout bounds how long Mob waits for the user to sign in. */
@@ -131,7 +131,7 @@ export class SignIn implements OAuthClientProvider {
 	get clientMetadata(): OAuthClientMetadata {
 		return { client_name: 'Mob', redirect_uris: [this.redirect], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' };
 	}
-	state() { return this.expected = randomBytes(16).toString('base64url'); }
+	state() { return this.expected = base64url(crypto.getRandomValues(new Uint8Array(16))); }
 	/** clientInformation is the client registered for this redirect address; another address registers again. */
 	clientInformation() { const g = this.grant(); return g?.redirect === this.redirect ? g.client : undefined; }
 	saveClientInformation(client: OAuthClientInformationMixed) { this.update(g => { g.client = client; g.redirect = this.redirect; }); }

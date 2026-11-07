@@ -2,12 +2,10 @@
 // over from usemob.app (see watch.ts).
 import { body, CommandError, type Plugin } from '@mob/core';
 import { sleep } from '@mob/core/sleep';
-import { hostPlugins } from '../local';
+import type { HostPlugin } from '../local';
 import { runnerCredentials } from '../runner';
 import { GitHub } from './client';
 import { Watcher } from './watch';
-
-hostPlugins.push((e, server) => [githubPlugin(new Watcher(server.options.store, server, new GitHub(() => runnerCredentials(e.dir))))]);
 
 export function githubPlugin(w: Watcher): Plugin {
 	return {
@@ -30,3 +28,7 @@ export function githubPlugin(w: Watcher): Plugin {
 		} },
 	};
 }
+
+export const githubHostPlugin: HostPlugin = {
+	attach: (e, server) => [githubPlugin(new Watcher(server.options.store, server, new GitHub(() => runnerCredentials(e.dir))))],
+};

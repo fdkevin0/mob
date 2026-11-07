@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { webClient, type Connection, type Conversation } from './api';
 import { browserConnection } from './browser/connection';
-import { cloud } from './remote';
+import { cloud } from '@mob/client/remote';
 import { runnerConnection } from './Runners';
 import { Button } from '@mob/ui/button';
 import { Label } from '@mob/ui/label';

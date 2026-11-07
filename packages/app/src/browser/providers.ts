@@ -3,7 +3,7 @@
 // POST /api/plugins/browser/provider. Only vendors that accept cross-origin
 // requests work here, which is why the free OpenCode Zen tier is not offered.
 import { chromeProvider } from './chrome';
-import { HTTPError, findPreset, providerFromForm, saveProvider, type Plugin, type Provider, type ProviderForm, type ProviderRegistry, type ProvidersFile } from '@mob/core';
+import { body, HTTPError, findPreset, providerFromForm, saveProvider, type Plugin, type Provider, type ProviderForm, type ProviderRegistry, type ProvidersFile } from '@mob/core';
 
 /** browserProviders is where the browser runner starts: the offline demo model, until a provider is saved. */
 export const browserProviders = (): ProvidersFile => ({ default: 'demo/echo', providers: [] });
@@ -30,7 +30,7 @@ export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch
 		routes: [{
 			method: 'POST', path: 'provider',
 			handle: async req => {
-				const form = await req.json() as ProviderForm;
+				const form = await body<ProviderForm>(req, 16 << 10, ['preset', 'url', 'protocol', 'key', 'model']);
 				const preset = form.preset ? findPreset(form.preset) : undefined;
 				if (form.preset && (!preset || preset.noKey || preset.id === 'opencode')) throw new HTTPError(400, 'This provider cannot be used from a browser.');
 				// A browser calls the vendor itself, with the key it keeps.
@@ -43,22 +43,22 @@ export function providerPlugin(registry: ProviderRegistry, fetcher: typeof fetch
 			// OpenRouter trades the code its sign-in returned, with the verifier only this browser knows, for a key of the user's account.
 			method: 'POST', path: 'openrouter',
 			handle: async req => {
-				const { code, verifier } = await req.json() as OpenRouterSignIn;
+				const { code, verifier } = await body<OpenRouterSignIn>(req, 16 << 10, ['code', 'verifier']);
 				if (!code || !verifier) throw new HTTPError(400, 'The OpenRouter sign-in did not finish. Sign in again.');
 				const response = await fetcher('https://openrouter.ai/api/v1/auth/keys', {
 					method: 'POST', headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }),
 					signal: AbortSignal.timeout(20_000),
 				});
-				const body = await response.json().catch(() => ({})) as { key?: string };
-				if (!response.ok || !body.key) throw new HTTPError(502, `OpenRouter did not give a key (HTTP ${response.status}). Sign in again.`);
-				return save({ id: 'openrouter', preset: 'openrouter', key: body.key });
+				const reply = await response.json().catch(() => ({})) as { key?: string };
+				if (!response.ok || !reply.key) throw new HTTPError(502, `OpenRouter did not give a key (HTTP ${response.status}). Sign in again.`);
+				return save({ id: 'openrouter', preset: 'openrouter', key: reply.key });
 			},
 		}, {
 			// Workers AI of the Cloudflare account the visitor signed in with or connected.
 			method: 'POST', path: 'cloudflare',
 			handle: async req => {
-				const { model } = await req.json().catch(() => ({})) as { model?: string };
+				const { model } = await body<{ model?: string }>(req, 16 << 10, ['model']).catch(() => ({} as { model?: string }));
 				if (!origin) throw new HTTPError(400, 'Cloudflare models need Mob on usemob.app.');
 				return save({ id: 'cloudflare', name: 'Cloudflare Workers AI', chat: origin + cloudflarePath }, model);
 			},

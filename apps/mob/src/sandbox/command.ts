@@ -30,7 +30,7 @@ export function containerCommand(environment: () => Environment): Command {
 				if (i <= 0) throw new Error(`volume "${v}" must be SOURCE:TARGET`);
 				spec.mounts!.push({ source: v.slice(0, i), target: v.slice(i + 1) });
 			}
-			const code = await open().stream(spec, { stdin: o.interactive ? process.stdin : undefined, stdout: c => process.stdout.write(c), stderr: c => process.stderr.write(c) });
+			const code = await open().stream(spec, { stdin: o.interactive ? Bun.stdin.stream() : undefined, stdout: c => process.stdout.write(c), stderr: c => process.stderr.write(c) });
 			if (code !== 0) throw new Error(`container exited with status ${code}`);
 		});
 	return root;

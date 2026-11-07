@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Bridge, clientWeChat, ConversationService, DemoModel, ReplyError, Store, newID, type llm, type Models, type Reply } from '../src';
-import { openBun } from '../src/sqlite/bun';
+import { clientWeChat, ConversationService, DemoModel, newID, Store, type llm, type Models } from '@mob/core';
+import { openBun } from '@mob/core/sqlite/bun';
+import { Bridge, ReplyError, type Reply } from '../src/channel';
 
 /** thinker reasons before it answers. */
 const thinker: llm.Model = {

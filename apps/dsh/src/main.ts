@@ -1,7 +1,7 @@
 import { Console } from 'node:console';
 
 // Plugin console output must not become MCP messages on stdout.
-globalThis.console = new Console(process.stderr, process.stderr);
+globalThis.console = new Console(process.stderr, process.stderr) as typeof globalThis.console;
 
 async function main() {
 	if (process.argv.length !== 3) throw new Error('Usage: bun apps/dsh/src/main.ts /absolute/path/plugins.json');

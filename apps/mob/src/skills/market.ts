@@ -3,15 +3,15 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { z } from 'zod';
-import type { SkillPreview, SkillsOverview, SkillUpdate } from '@mob/client/contracts';
+import type { SkillPreview, SkillsOverview, SkillUpdate } from '@mob/core/contracts';
 import { writeAtomic } from '../files';
 import { Library, maxText, split } from './skills';
 
 const path = z.string().max(1024).refine(s => s === 'SKILL.md' || (!s.includes('\\') && s.split('/').every(p => p && p !== '.' && p !== '..' && !p.includes(':')) && s.endsWith('/SKILL.md')), 'Expected a repository path ending in SKILL.md');
-export const repositoryInput = z.object({ source: z.string().regex(/^[\w][\w.-]*\/[\w][\w.-]*$/), ref: z.string().min(1).max(255).optional() });
-export const sourceInput = repositoryInput.extend({ skillPath: path });
-export const installInput = sourceInput.extend({ commit: z.string().regex(/^[a-f0-9]{40}$/) });
-export const nameInput = z.object({ name: z.string().max(64).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/) });
+export const repositoryInput = z.object({ source: z.string().regex(/^[\w][\w.-]*\/[\w][\w.-]*$/), ref: z.string().min(1).max(255).optional() }).strict();
+export const sourceInput = repositoryInput.extend({ skillPath: path }).strict();
+export const installInput = sourceInput.extend({ commit: z.string().regex(/^[a-f0-9]{40}$/) }).strict();
+export const nameInput = z.object({ name: z.string().max(64).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/) }).strict();
 const entrySchema = z.object({ source: z.string(), sourceType: z.string(), sourceUrl: z.string(), ref: z.string().optional(), skillPath: z.string().optional(), skillFolderHash: z.string(), installedAt: z.string(), updatedAt: z.string() }).passthrough();
 const lockSchema = z.object({ version: z.literal(3), skills: z.record(z.string(), entrySchema) }).passthrough();
 type Lock = z.infer<typeof lockSchema>;

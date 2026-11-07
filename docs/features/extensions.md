@@ -9,9 +9,9 @@ time would keep it from being compiled ahead of time.
 [DeepSeek Harness tools](deepseek-harness.md) use an optional Bun process with
 the official Cordis runtime, connected over that same MCP boundary.
 
-Adding a plugin is a directory under `apps/mob/src`, one import in
-`apps/mob/src/plugins.ts`, and a `Plugin` (`packages/core/src/app/server.ts`)
-that the directory pushes onto `hostPlugins`; configuration is one `Section`
+Adding a plugin is a directory under `apps/mob/src`, a `HostPlugin` (`apps/mob/src/local.ts`)
+registered in `apps/mob/src/plugins.ts`, and a `Plugin` (`packages/core/src/app/server.ts`)
+returned by `attach`; configuration is one `Section`
 (`packages/core/src/app/configuration.ts`).
 
 ## Tools
@@ -21,7 +21,7 @@ that the directory pushes onto `hostPlugins`; configuration is one `Section`
   `run`. `run` gets a `ToolCall` with the parsed input, the stored part, the
   message, the store and the event sender. Its output and errors go back to the
   model, except `AwaitingApproval`, which ends the turn after an approval
-  request, and an `Abort`, which ends the turn as a failure. A tool error after
+  request, and an `AbortTool`, which ends the turn as a failure. A tool error after
   cancellation ends the turn as cancelled.
 - `available` says when a tool is offered (plugin tools: while their plugin is
   enabled). `ownerOnly` limits it to the owner's turns. `exposure` makes it
@@ -70,9 +70,9 @@ tools and hooks of one turn.
   returns a value for the JSON response or throws: a `CommandError` or an
   `HTTPError` sets the status, any other error is the plugin's service
   failing (502). `body` (`packages/core/src/app/http.ts`) reads a bounded JSON
-  object, refusing a malformed body or fields it does not name with 400 and
-  one over its size limit with 413. A path may name a parameter as
-  `messages/{uid}`; a path a plugin serves only by another method answers 405.
+  object, refusing a malformed body or fields not in its optional `keys` list
+  with 400 and one over its size limit with 413. A path may name a parameter as
+  `messages/:uid`; a path a plugin serves only by another method answers 405.
 - The server's own routes are one Hono app (`packages/core/src/app/api.ts`).
   Its type, `AppType`, is what `@mob/client`'s typed client (`MobClient.api`,
   built with Hono's `hc`) calls: paths, request bodies and answers are checked

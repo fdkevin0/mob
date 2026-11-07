@@ -1,6 +1,5 @@
 // The platform's container runtime CLI: nerdctl (containerd) on Linux,
 // Apple's container on macOS, WSL containers (wslc) on Windows.
-import { Readable } from 'node:stream';
 
 export const containerd = 'containerd', apple = 'apple', wslc = 'wslc';
 export const runtimeNames = [containerd, apple, wslc];
@@ -22,11 +21,11 @@ export type Output = (chunk: Uint8Array) => void;
 export const defaultRuntime = (platform = process.platform) => (platform === 'linux' ? containerd : platform === 'darwin' ? apple : platform === 'win32' ? wslc : '');
 
 /** run starts a command; its exit code, or -1 when it could not start. Abort kills it. */
-export type Runner = (binary: string, args: string[], io: { stdin?: NodeJS.ReadableStream; stdout?: Output; stderr?: Output; signal?: AbortSignal }) => Promise<number>;
+export type Runner = (binary: string, args: string[], io: { stdin?: ReadableStream<Uint8Array>; stdout?: Output; stderr?: Output; signal?: AbortSignal }) => Promise<number>;
 
 export const run: Runner = async (binary, args, io) => {
 	try {
-		const p = Bun.spawn([binary, ...args], { stdin: io.stdin ? Readable.toWeb(io.stdin as Readable) as unknown as ReadableStream<Uint8Array> : 'ignore', stdout: 'pipe', stderr: 'pipe', signal: io.signal, windowsHide: true });
+		const p = Bun.spawn([binary, ...args], { stdin: io.stdin ?? 'ignore', stdout: 'pipe', stderr: 'pipe', signal: io.signal, windowsHide: true });
 		const drain = async (s: ReadableStream<Uint8Array>, out?: Output) => {
 			for await (const c of s) out?.(c);
 		};
@@ -84,7 +83,7 @@ export class Runtime {
 		if (code !== 0) throw new Error(`remove ${name}: ${lastLine(err.get())}`);
 	}
 
-	stream(spec: Spec, io: { stdin?: NodeJS.ReadableStream; stdout?: Output; stderr?: Output; signal?: AbortSignal }) {
+	stream(spec: Spec, io: { stdin?: ReadableStream<Uint8Array>; stdout?: Output; stderr?: Output; signal?: AbortSignal }) {
 		return this.runner(this.binary, this.runArgs(spec), io);
 	}
 

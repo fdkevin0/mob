@@ -1,7 +1,8 @@
 // The email channel: Mob answers the owner's mail in INBOX, each mail thread
 // in its own conversation, and replies in the thread.
 import { sleep } from '@mob/core/sleep';
-import { Bridge, clientEmail, describeApproval, useText, type ConversationService, type Reply, type Store, type Texts } from '@mob/core';
+import { clientEmail, describeApproval, type ConversationService, type Store } from '@mob/core';
+import { Bridge, useText, type Reply, type Texts } from '../channel';
 import type { ImapFlow } from 'imapflow';
 import type { ParsedMail } from 'mailparser';
 import { imap, maxMail, parse, send as sendMail, type Channel, type Config, type Draft, type Thread } from './mail';

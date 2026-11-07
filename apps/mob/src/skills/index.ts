@@ -1,8 +1,8 @@
 // The skills plugin: the skill tool, /skills, and tool_search entries beyond the prompt's list.
 import { z } from 'zod';
-import { body, defineTool, interactive, type Entry, type Plugin, type Server, type Tool } from '@mob/core';
+import { body, defineTool, HTTPError, interactive, type Entry, type Plugin, type Tool } from '@mob/core';
 import { join } from 'node:path';
-import { hostPlugins } from '../local';
+import type { HostPlugin } from '../local';
 import { sandboxOf } from '../sandbox';
 import { Library, roots } from './skills';
 import { SkillMarket, installInput, nameInput, repositoryInput, sourceInput } from './market';
@@ -48,18 +48,23 @@ function tools(l: Library): Tool[] {
 function plugin(l: Library, market: SkillMarket): Plugin {
 	// Finish before the client's 60-second timeout, and cancel when its request ends.
 	const signal = (req: Request) => AbortSignal.any([req.signal, AbortSignal.timeout(45_000)]);
+	const parse = async <T>(req: Request, schema: z.ZodType<T>, keys: string[]) => {
+		const r = schema.safeParse(await body(req, undefined, keys));
+		if (!r.success) throw new HTTPError(400, r.error.issues[0]?.message ?? 'invalid request');
+		return r.data;
+	};
 	return {
 		name: 'skills',
 		routes: [
 			{ method: 'GET', path: 'installed', handle: async () => market.overview() },
 			{ method: 'POST', path: 'check', handle: async req => market.overview(true, signal(req)) },
-			{ method: 'POST', path: 'discover', handle: async req => market.discover(repositoryInput.parse(await body(req)), signal(req)) },
-			{ method: 'POST', path: 'preview', handle: async req => market.preview(sourceInput.parse(await body(req)), undefined, signal(req)) },
-			{ method: 'POST', path: 'install', handle: async req => market.install(installInput.parse(await body(req)), signal(req)) },
-			{ method: 'POST', path: 'remove', handle: async req => market.remove(nameInput.parse(await body(req)).name) },
+			{ method: 'POST', path: 'discover', handle: async req => market.discover(await parse(req, repositoryInput, ['source', 'ref']), signal(req)) },
+			{ method: 'POST', path: 'preview', handle: async req => market.preview(await parse(req, sourceInput, ['source', 'ref', 'skillPath']), undefined, signal(req)) },
+			{ method: 'POST', path: 'install', handle: async req => market.install(await parse(req, installInput, ['source', 'ref', 'skillPath', 'commit']), signal(req)) },
+			{ method: 'POST', path: 'remove', handle: async req => market.remove((await parse(req, nameInput, ['name'])).name) },
 			{ method: 'POST', path: 'read', handle: async req => {
-				const skill = l.find(nameInput.parse(await body(req)).name);
-				if (!skill) throw new Error('Skill not found');
+				const skill = l.find((await parse(req, nameInput, ['name'])).name);
+				if (!skill) throw new HTTPError(404, 'Skill not found');
 				return { content: l.readFile(skill, 'SKILL.md') };
 			} },
 		],
@@ -69,7 +74,9 @@ function plugin(l: Library, market: SkillMarket): Plugin {
 	};
 }
 
-hostPlugins.push((e, server: Server) => {
-	const library = new Library(roots(e.dir), id => sandboxOf(server)?.workspace(id) ?? '');
-	return [plugin(library, new SkillMarket(library, join(e.dir, '.skill-lock.json')))];
-});
+export const skillsPlugin: HostPlugin = {
+	attach(e, server) {
+		const library = new Library(roots(e.dir), id => sandboxOf(server)?.workspace(id) ?? '');
+		return [plugin(library, new SkillMarket(library, join(e.dir, '.skill-lock.json')))];
+	},
+};

@@ -7,9 +7,9 @@ import type { Configs } from './plugin-config';
 import type { Store } from '../chat/store';
 
 /** Secret is a credential at a dotted path, shown to clients only as the boolean at flag. A blank submission keeps the saved value while owner is unchanged; no owner never changes. */
-export type Secret<C> = { name: string; flag: string; owner?: (c: C) => string };
+export type Secret<C = unknown> = { name: string; flag: string; owner?(c: C): string };
 
-export type Section<C = any> = {
+export type Section<C = unknown> = {
 	name: string;
 	/** title names the plugin in menus; label in messages, e.g. "Telegram is disabled". */
 	title: string;
@@ -17,10 +17,10 @@ export type Section<C = any> = {
 	/** schema is the configuration's shape and defaults; an empty object parses to the configuration of a plugin never saved. */
 	schema: z.ZodType<C>;
 	secrets: Secret<C>[];
-	enabled: (c: C) => boolean;
+	enabled(c: C): boolean;
 	/** validate checks what the schema cannot, such as the values an enabled plugin needs. */
-	validate: (c: C) => void;
-	test: (c: C, signal: AbortSignal) => Promise<unknown>;
+	validate(c: C): void;
+	test(c: C, signal: AbortSignal): Promise<unknown>;
 };
 
 /** SecretUpdate distinguishes an omitted or kept credential from an explicit clear. */

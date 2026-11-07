@@ -9,7 +9,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { newRelayKey as newKey, seal } from '@mob/core/relay';
-import { encryptedFetch } from '@mob/app/remote';
+import { encryptedFetch } from '@mob/client/remote';
 
 // Reuse the Workers runtime already bundled with the pinned Wrangler dependency.
 const require = createRequire(import.meta.url);

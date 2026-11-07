@@ -3,7 +3,7 @@
 // the public view reports at its flag; a nested object is its own section.
 import { Button } from '@mob/ui/button';
 import { Label } from '@mob/ui/label';
-import { jsonSchema, pluginConfigs } from '@mob/core';
+import { jsonSchema, pluginConfigs } from '@mob/core/contracts';
 import { Field, Toggle } from './shared';
 
 /** Node is the part of a JSON Schema the form reads. */
