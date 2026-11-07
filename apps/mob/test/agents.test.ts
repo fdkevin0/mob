@@ -346,6 +346,15 @@ test('a confined agent is asked nothing', async () => {
 	expect([task.status, h.reply(task), h.conv.pending(task.conversationId)]).toEqual(['review', 'done allow', []]);
 });
 
+test('a confined reader is still asked before its commands', async () => {
+	const h = harness();
+	h.svc.confined = true;
+	const root = h.store.create();
+	const lead = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Lead', 'hello', 'manual'));
+	const reader = await h.wait(await h.svc.startReader(root.id, lead, '', '', 'run'));
+	expect([reader.readOnly, reader.status, h.conv.pending(reader.conversationId).map(p => p.tool)]).toEqual([true, 'waiting', ['codex_execute']]);
+});
+
 test('edits in the worktree need no approval, and writing instead of deciding denies', async () => {
 	const h = harness();
 	let task = await h.start('edit');

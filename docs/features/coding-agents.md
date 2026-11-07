@@ -249,7 +249,8 @@ work it was made for; Mob accepts it only where `CLAUDE_CODE_REMOTE` is
 `true`. There an agent may do anything without asking: Claude Agent runs in
 its `bypassPermissions` mode (with `IS_SANDBOX=1` when it runs as root, as
 cloud environments do), and Mob allows every other agent's requests at
-once. A reader still has every edit refused. The network is as open as the
+once. A reader is not: it still has every edit refused, and its commands
+stay approvals, since a command can change the worktree it shares. The network is as open as the
 environment's own, and anything the environment holds, such as a GitHub
 token, the agent can use too. A microVM backend for the owner's own computer
 (Docker Sandboxes) is planned.

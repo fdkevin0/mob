@@ -305,7 +305,8 @@ export class Session {
 			p.choose('reject');
 			return false;
 		}
-		if (this.svc.confined || this.inWorktree(kind, locations) || this.granted(p)) {
+		// A confined reader is still asked: it shares a worktree it must not change, and a command can change it.
+		if ((this.svc.confined && !this.task.readOnly) || this.inWorktree(kind, locations) || this.granted(p)) {
 			p.choose('allow');
 			return false;
 		}
@@ -404,10 +405,10 @@ export class Session {
 		}
 	}
 
-	/** permission takes a request of the agent's: allowed at once when it only changes the worktree, or the agent is confined, otherwise the turn that follows the agent asks the owner. */
+	/** permission takes a request of the agent's: allowed at once when it only changes the worktree, or the agent is confined and no reader, otherwise the turn that follows the agent asks the owner. */
 	private permission(r: PermissionRequest): Promise<Choice> {
 		const p = new Permission(r);
-		if (this.inWorktree(r.kind, r.locations) || (this.svc.confined && !(this.task.readOnly && changes(r.kind)))) p.choose('allow');
+		if (this.inWorktree(r.kind, r.locations) || (this.svc.confined && !this.task.readOnly)) p.choose('allow');
 		else if (!this.deliver({ permission: p })) p.cancel();
 		return p.answer;
 	}
