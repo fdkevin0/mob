@@ -87,8 +87,10 @@ export type Handler = {
 export type Options = {
 	preset: Preset;
 	task: Task;
-	/** conn is the started agent's standard input and output. */
-	conn: Conn;
+	/** conn is the started agent's standard input and output; unset for a runtime that starts its agent itself. */
+	conn?: Conn;
+	/** confined is set when the agent runs where it can reach nothing of the owner's beyond its task, so it may do anything there without asking. */
+	confined: boolean;
 	/** servers are the MCP servers the session gets, given whether the agent takes them over HTTP. */
 	servers(http: boolean): McpServer[];
 	handler: Handler;
@@ -115,6 +117,8 @@ export interface AgentSession {
 
 /** Runtime opens sessions with agents that speak one protocol. */
 export interface Runtime {
+	/** spawns is set when the runtime starts its agent itself, with the preset's command, rather than talking to one Mob started. */
+	spawns?: boolean;
 	/** reads reports whether an agent of preset p can be kept from editing, to work read-only. */
 	reads(p: Preset): boolean;
 	/** open starts a session: the task's own, again, or a new one in its worktree. It throws, with the agent's preset title, why it could not. */

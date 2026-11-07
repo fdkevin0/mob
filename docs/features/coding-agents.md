@@ -11,11 +11,14 @@ context use and how each prompt ended with what it used, and asks permission
 before calls. Its shapes follow ACP v2's. Each agent's preset names the runtime
 behind the port. The default runtime is the
 [Agent Client Protocol](https://agentclientprotocol.com) (ACP, `acp.ts`, on the
-official TypeScript SDK `@agentclientprotocol/sdk`), which Claude Agent,
-DeepSeek Harness and CodeBuddy Code speak. Codex has a runtime of its own,
-`codex.ts`, on Codex's app server (`codex app-server`, the protocol every
-Codex surface is built on), since that reports what each turn used and its
-ACP adapter does not. An agent whose own protocol does more than its ACP
+official TypeScript SDK `@agentclientprotocol/sdk`), which DeepSeek Harness
+and CodeBuddy Code speak. Codex has a runtime of its own, `codex.ts`, on
+Codex's app server (`codex app-server`, the protocol every Codex surface is
+built on), since that reports what each turn used and its ACP adapter does
+not. Claude Agent has one too, `claude.ts`, on the Claude Agent SDK
+(`@anthropic-ai/claude-agent-sdk`), which runs Claude Code and lets Mob answer
+its permission checks (`canUseTool`), set its permission mode and read what
+each model used, without an adapter in between. An agent whose own protocol does more than its ACP
 adapter gets a runtime of its own the same way, without changing tasks,
 approvals, the agent tree or usage.
 
@@ -40,7 +43,7 @@ How a task is checked, reviewed and split into sub-tasks is in
 | Agent | Started with | Signing in |
 | --- | --- | --- |
 | `codex` (default) | `codex app-server` when `codex` is installed, otherwise `npx -y @openai/codex@0.166.0 app-server` | the ChatGPT subscription `codex login` saved on that computer (`codex login --device-auth` where it has no browser), or `OPENAI_API_KEY` / `CODEX_API_KEY` in the service's environment |
-| `claude` (Claude Agent) | `claude-agent-acp` when installed, otherwise `npx -y @agentclientprotocol/claude-agent-acp@0.94.0` | the Claude subscription `claude` saved on that computer (run `claude` and `/login`), or `ANTHROPIC_API_KEY` in the service's environment |
+| `claude` (Claude Agent) | Claude Code (`claude`) when installed, otherwise `npx -y @anthropic-ai/claude-code@2.1.303`, through the Claude Agent SDK | the Claude subscription `claude` saved on that computer (run `claude` and `/login`), or `ANTHROPIC_API_KEY` in the service's environment |
 | `dsh` (DeepSeek Harness) | `npx -y @deepseek-ai/dsh@0.2.1-rc.4 --profile acp` (only through `npx`, since other programs are also called `dsh`) | the DeepSeek API key saved in DeepSeek Harness (`npx @deepseek-ai/dsh web`, Models page), or `DEEPSEEK_API_KEY` in the service's environment |
 | `codebuddy` (CodeBuddy Code) | `codebuddy --acp` when installed, otherwise `npx -y @tencent-ai/codebuddy-code@2.171.0 --acp` | the Tencent account `codebuddy` logged in with on that computer (WeChat for the China edition, Google or GitHub for the international one; the same account as WorkBuddy), or `CODEBUDDY_API_KEY` in the service's environment, with `CODEBUDDY_INTERNET_ENVIRONMENT=internal` for the China edition |
 
@@ -209,7 +212,9 @@ task does, which misses the prompt cache once.
   it declines the forms an MCP server asks Codex to fill in, and answers
   Codex's questions to the user with none. Claude Agent starts in its `acceptEdits` mode: it
   edits files without asking and asks before running commands, so its
-  commands are approvals in the task. CodeBuddy Code starts in its
+  commands are approvals in the task. Its calls of Mob's own tools
+  (`task_result` and the sub-task tools, which ask the owner themselves where
+  they need to) are allowed without asking. CodeBuddy Code starts in its
   `acceptEdits` mode too. DeepSeek Harness has no modes: its own
   `workspace-write` sandbox lets it write in the worktree and asks before going
   further, offering only one-time answers. Mob also answers yes, without asking, to any edit,
@@ -234,6 +239,28 @@ task does, which misses the prompt cache once.
   message after the agent has dealt with the denial.
 - An approval left for an hour expires, and the agent is told it was
   cancelled.
+
+## Confinement
+
+`agents.confinement` says where agents run. `host`, the default, is the
+owner's own computer, with the approvals above. `cloud` is a disposable
+Claude Code cloud environment, which holds nothing of the owner's beyond the
+work it was made for; Mob accepts it only where `CLAUDE_CODE_REMOTE` is
+`true`. There an agent may do anything without asking: Claude Agent runs in
+its `bypassPermissions` mode (with `IS_SANDBOX=1` when it runs as root, as
+cloud environments do), and Mob allows every other agent's requests at
+once. A reader is not: it still has every edit refused, and its commands
+stay approvals, since a command can change the worktree it shares. The network is as open as the
+environment's own, and anything the environment holds, such as a GitHub
+token, the agent can use too. A microVM backend for the owner's own computer
+(Docker Sandboxes) is planned.
+
+`bun run test:agent` runs one real task through Claude Agent in a scratch
+repository, approving what it asks as the owner would, and checks that it
+finished, reported with `task_result` and asked nothing of Mob's own tools;
+`-- --confined` checks that it asks nothing at all, and runs only in a Claude
+Code cloud environment. It needs Claude Code signed in and is skipped
+without `claude`; the other tests need no agent.
 
 ## Notices
 
@@ -262,14 +289,19 @@ so `/usage` in the task's conversation, the `Used` column of `/tasks`, the
   writes, and its `_meta.quota.model_usage` splits it by model. Input is
   counted with the cache, as for Mob's own models; an agent whose total adds
   the cache to its input, as Claude Agent's does, is counted that way.
-- Claude Agent also reports what its run has cost so far (`usage_update`);
-  what it added since the last prompt is recorded as that prompt's cost.
+- Claude Agent's usage is what each of its requests used, by model,
+  subagents included; its cost is what its session's running cost by model
+  (`modelUsage`) grew by during the prompt, so a model that only did Claude
+  Code's own work, such as titles, gets a row with its cost alone. A resumed
+  session reports what it cost before too, so its first prompt records no
+  cost.
 - Codex reports its thread's running total (`thread/tokenUsage/updated`);
   a turn's usage is the total at its end less the total before its first
   request, under the thread's model. Its context meter is the last
   request's tokens against the model's context window. Codex reports no cost.
 - An agent that reports neither shows no usage, and a prompt stopped from
-  Mob may record none. Each runtime reads its own: `acp.ts` and `codex.ts`.
+  Mob may record none. Each runtime reads its own: `acp.ts`, `codex.ts` and
+  `claude.ts`.
 
 ## Project forms
 

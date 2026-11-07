@@ -1,6 +1,7 @@
 // The coding agents Mob knows how to start. Each speaks the Agent Client
 // Protocol unless its preset names another runtime.
 import { acp } from './acp';
+import { claude } from './claude';
 import { codex } from './codex';
 import type { Runtime } from './runtime';
 
@@ -37,8 +38,9 @@ export const presets: Preset[] = [{
 }, {
 	name: 'claude',
 	title: 'Claude Agent',
-	commands: [['claude-agent-acp'], ['npx', '-y', '@agentclientprotocol/claude-agent-acp@0.94.0']],
-	acp: { mode: 'acceptEdits', readOnly: 'default' },
+	// Claude Code driven through the Claude Agent SDK, rather than its ACP adapter.
+	runtime: claude,
+	commands: [['claude'], ['npx', '-y', '@anthropic-ai/claude-code@2.1.303']],
 	signIn: 'run `claude` and sign in with your Claude subscription (/login) on the computer Mob runs on, or set ANTHROPIC_API_KEY for the Mob service',
 }, {
 	name: 'dsh',
@@ -74,6 +76,3 @@ export const reads = (p: Preset) => runtime(p).reads(p);
 
 /** readers names the agents that can work read-only. */
 export const readers = () => presets.filter(reads).map(p => p.name);
-
-/** command is the first of p's commands whose program is installed. */
-export const command = (p: Preset) => p.commands.find(c => Bun.which(c[0]!));

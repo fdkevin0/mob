@@ -3,7 +3,9 @@
 With the sandbox enabled, the model gets a `sandbox` tool that runs any shell
 command (`sh -c`) in a fresh container, without approval. The container is the
 security boundary: inside it anything goes, including package installs and,
-unless limited, network access.
+unless limited, network access. Coding agents are not run in it; where they
+may work without asking is their
+[confinement](coding-agents.md#confinement).
 
 ## Workspace
 

@@ -160,9 +160,9 @@ worktree to no one, is never reviewed by Mob's model (it changed nothing),
 and its card on the Agents page says Read-only. Codex starts with its
 `read-only` sandbox, which cannot write at all; when it asks for more
 permissions, Mob drops any write access from the request, asks only about
-the rest, and refuses outright when nothing else is left. An ACP agent starts in its
-preset's read-only mode, Claude Agent's and CodeBuddy Code's `default`, in
-which they ask before editing; a session that does not offer that mode fails
+the rest, and refuses outright when nothing else is left. Claude Agent starts in its `default`
+mode and an ACP agent in its preset's read-only mode, CodeBuddy Code's
+`default`, in which they ask before editing; a session that does not offer that mode fails
 to start. Mob refuses every edit, delete or move it asks
 for without asking the owner, even inside the worktree; its commands are
 approvals as usual. DeepSeek Harness has no such mode and cannot be a reader.

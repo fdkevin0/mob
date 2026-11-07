@@ -89,7 +89,7 @@ async function open(server: Server, t: Partial<Task> = {}, choice: Choice = 'all
 	const updates: Update[] = [], asked: PermissionRequest[] = [], created: string[] = [];
 	const task = { id: 'task', worktree: '/work', session: '', readOnly: false, ...t } as Task;
 	const session: AgentSession = await codex.open({
-		preset: preset('codex'), task,
+		preset: preset('codex'), task, confined: false,
 		conn: { input: server.toAgent.writable, output: server.toClient.readable, stop: () => { void server.toClient.writable.abort().catch(() => {}); } },
 		servers: http => http ? [{ name: 'mob', url: 'http://127.0.0.1:1/mcp', headers: { Authorization: 'Bearer x' } }] : [],
 		handler: { update: u => { updates.push(u); }, permission: async r => { asked.push(r); return choice; } },

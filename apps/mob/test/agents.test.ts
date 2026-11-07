@@ -21,9 +21,12 @@ import { blueprints, problems, recover } from '../src/agents/blueprints';
 import { commands, overview, tools } from '../src/agents/tools';
 import { mob, idle, outline, type AgentNode } from '../src/agents/tree';
 
-// These tests drive every agent through a fake ACP agent, Codex too, as it was driven before it had a runtime of its own; codex.test.ts tests that runtime.
+// These tests drive every agent through a fake ACP agent, Codex and Claude Agent too, as they were driven before they had runtimes of their own; codex.test.ts and claude.test.ts test those.
 const codexAt = presets.findIndex(p => p.name === 'codex');
 presets[codexAt] = { ...presets[codexAt]!, runtime: acp, acp: { mode: 'auto', readOnly: 'read-only' } };
+// Claude Agent too, as it was driven through its ACP adapter; claude.test.ts tests its own runtime.
+const claudeAt = presets.findIndex(p => p.name === 'claude');
+presets[claudeAt] = { ...presets[claudeAt]!, runtime: acp, acp: { mode: 'acceptEdits', readOnly: 'default' } };
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const temp = () => mkdtempSync(join(tmpdir(), 'mob-agents-'));
@@ -334,6 +337,22 @@ test('approvals reach the agent', async () => {
 	expect(h.reply(task)).toBe('done always');
 	task = await h.say(task, 'run');
 	expect([task.status, h.reply(task)]).toEqual(['review', 'done allow']);
+});
+
+test('a confined agent is asked nothing', async () => {
+	const h = harness();
+	h.svc.confined = true;
+	const task = await h.start('run');
+	expect([task.status, h.reply(task), h.conv.pending(task.conversationId)]).toEqual(['review', 'done allow', []]);
+});
+
+test('a confined reader is still asked before its commands', async () => {
+	const h = harness();
+	h.svc.confined = true;
+	const root = h.store.create();
+	const lead = await h.wait(await h.svc.startTask(root.id, h.repo, '', 'Lead', 'hello', 'manual'));
+	const reader = await h.wait(await h.svc.startReader(root.id, lead, '', '', 'run'));
+	expect([reader.readOnly, reader.status, h.conv.pending(reader.conversationId).map(p => p.tool)]).toEqual([true, 'waiting', ['codex_execute']]);
 });
 
 test('edits in the worktree need no approval, and writing instead of deciding denies', async () => {

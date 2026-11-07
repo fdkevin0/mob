@@ -29,6 +29,7 @@ The file is YAML (config.yaml) or JSON (config.json).
 | `sandbox.cpus` | `--sandbox-cpus` | `MOB_SANDBOX_CPUS` | `0` | Nonnegative CPU limit; zero uses runtime default |
 | `sandbox.memory` | `--sandbox-memory` | `MOB_SANDBOX_MEMORY` | `""` | Memory limit with unit, at least 64m; empty uses runtime default |
 | `sandbox.isolation` | `--sandbox-isolation` | `MOB_SANDBOX_ISOLATION` | `""` | gvisor requires containerd; empty uses runtime default |
+| `agents.confinement` | `--agents-confinement` | `MOB_AGENTS_CONFINEMENT` | `host` | Where coding agents run: host asks the owner before what leaves their worktree; cloud, only inside a disposable Claude Code cloud environment, lets them do anything there without asking; restart required |
 | `mcp_servers` | `--mcp-servers` | `MOB_MCP_SERVERS` | `{}` | MCP server map; JSON object in flags/environment, native map in files; sensitive: prefer a protected file or environment over argv |
 | `mcp_registry.url` | `--mcp-registry-url` | `MOB_MCP_REGISTRY_URL` | `https://registry.modelcontextprotocol.io` | MCP registry the model searches for remote servers to install |
 | `mcp_registry.namespaces` | `--mcp-registry-namespaces` | `MOB_MCP_REGISTRY_NAMESPACES` | `""` | Comma-separated registry name globs, such as com.cloudflare.mcp/*, the model may install from; empty offers only Mob's own list |

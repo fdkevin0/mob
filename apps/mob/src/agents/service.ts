@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { advance, begin, blueprint, drop, recover, type Stage } from './blueprints';
 import { firstLine, git, slug, start, type Conn } from './process';
-import { preset, presets, readers, reads, type Preset } from './presets';
+import { preset, presets, readers, reads, runtime, type Preset } from './presets';
 import { Session } from './session';
 import { review } from './review';
 import type { Squad } from './squad';
@@ -40,6 +40,8 @@ export class Service implements Delegate, Tasks {
 	readonly squads = new Map<string, Squad>();
 	/** reviewers are the tasks started as squads' reviewers, which report to their squad rather than to the task they review. */
 	readonly reviewers = new Set<string>();
+	/** confined is set when Mob, and so its agents, run where they reach nothing of the owner's beyond their tasks: agents then do anything there without asking. */
+	confined = false;
 	/** launched, when set by a test, runs once a task's agent was handed its first prompt. */
 	launched?: (t: Task) => Promise<void> | void;
 
@@ -133,8 +135,9 @@ export class Service implements Delegate, Tasks {
 		const running = this.sessions.get(t.id);
 		if (running) return running;
 		const p = preset(t.agent);
-		const conn = await (this.connect ? this.connect(p, t.worktree, signal) : Promise.resolve(start(p, t.worktree)));
-		if (signal.aborted) { conn.stop(); throw signal.reason instanceof Error ? signal.reason : new Aborted(); }
+		// A runtime that starts its agent itself gets none.
+		const conn = runtime(p).spawns ? undefined : await (this.connect ? this.connect(p, t.worktree, signal) : Promise.resolve(start(p, t.worktree)));
+		if (signal.aborted) { conn?.stop(); throw signal.reason instanceof Error ? signal.reason : new Aborted(); }
 		const s = await Session.open(this, p, t, conn, signal);
 		if (this.closed) { s.close(); throw stopping(); }
 		this.sessions.set(t.id, s);

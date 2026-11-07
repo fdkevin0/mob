@@ -73,6 +73,8 @@ export class Hub {
 		if (this.svc.closed) throw new Error('Mob is stopping');
 		this.server ??= Bun.serve({
 			hostname: '127.0.0.1', port: 0,
+			// An agent's MCP client may hold a request open longer than Bun's ten seconds.
+			idleTimeout: 0,
 			fetch: req => {
 				if (new URL(req.url).pathname !== '/mcp') return new Response('not found', { status: 404 });
 				const id = this.bearer(req);

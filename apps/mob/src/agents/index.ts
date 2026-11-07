@@ -17,6 +17,7 @@ const projectChange = z.discriminatedUnion('action', [
 export const agentsPlugin: HostPlugin = {
 	attach(e, server) {
 		const svc = new Service(server.options.store, server, e.dir);
+		svc.confined = e.agents.confinement === 'cloud';
 		// The agents of the tasks that were running ended with Mob.
 		svc.recover();
 		server.setDelegate(svc);
