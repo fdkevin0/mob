@@ -37,7 +37,7 @@ const api = 'https://api.github.com';
 
 export class GitHub implements Client {
 	private tokens = new Map<string, { token: string; expires: number }>();
-	constructor(private credentials: () => Credentials, private fetcher: typeof fetch = fetch) {}
+	constructor(private credentials: () => Credentials | Promise<Credentials>, private fetcher: typeof fetch = fetch) {}
 
 	/** token is an installation token for repo with grant, from usemob.app, reused until five minutes before it expires. */
 	async token(repo: string, grant: Grant): Promise<string> {
@@ -45,7 +45,7 @@ export class GitHub implements Client {
 		const now = Date.now();
 		const cached = this.tokens.get(key);
 		if (cached && cached.expires - 5 * 60_000 > now) return cached.token;
-		const c = this.credentials();
+		const c = await this.credentials();
 		const res = await this.fetcher(c.url + '/api/github/token', {
 			method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(20_000),
 			headers: { Authorization: 'Bearer ' + c.token, 'Content-Type': 'application/json' },
