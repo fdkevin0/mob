@@ -309,6 +309,12 @@ export class Server extends ConversationService {
 				const done = () => { c.res = withHeaders(c.res, headers); };
 				const origin = c.req.header('Origin') ?? '';
 				const host = c.req.header('Host') ?? url.host;
+				// Reject arbitrary Host headers first, preventing DNS rebinding before CORS or auth checks.
+				const end = host.indexOf(']');
+				const bareHost = host.startsWith('[')
+					? (end > 0 && (end === host.length - 1 || /^:\d+$/.test(host.slice(end + 1))) ? host.slice(1, end) : '')
+					: host.replace(/:\d+$/, '');
+				if (!isLoopbackHost(bareHost)) { c.res = text(403, 'host denied'); return done(); }
 				if (!allowedOrigin(origin, host) && (!origin || origin !== this.web)) { c.res = text(403, 'origin denied'); return done(); }
 				if (origin) { headers.set('Access-Control-Allow-Origin', origin); headers.set('Vary', 'Origin'); }
 				if (c.req.method === 'OPTIONS') {
@@ -323,12 +329,6 @@ export class Server extends ConversationService {
 					headers.set('Cache-Control', 'no-store');
 					if (url.pathname !== '/api/pairing/claim' && !bearer(c.req.header('Authorization'), this.token)) { c.res = text(401, 'unauthorized'); return done(); }
 				}
-				// Reject arbitrary Host headers too, preventing DNS rebinding against a local service.
-				const end = host.indexOf(']');
-				const bareHost = host.startsWith('[')
-					? (end > 0 && (end === host.length - 1 || /^:\d+$/.test(host.slice(end + 1))) ? host.slice(1, end) : '')
-					: host.replace(/:\d+$/, '');
-				if (!isLoopbackHost(bareHost)) { c.res = text(403, 'host denied'); return done(); }
 				await next();
 				done();
 			})
