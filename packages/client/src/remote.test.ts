@@ -131,3 +131,21 @@ it('caches the runner session across requests and refreshes on 409', async () =>
 	expect(lookups).toBe(2);
 	expect(relays).toBe(4);
 });
+
+it('works in headless environments without global location', async () => {
+	const key = newKey();
+	vi.stubGlobal('location', undefined);
+	const fetchMock = vi.fn<typeof fetch>()
+		.mockResolvedValueOnce(Response.json({ session }))
+		.mockImplementationOnce(async (_url, init) => {
+			const e: Envelope = JSON.parse(String(init?.body));
+			const frame = await seal(key, runner, 'response', { ...e, seq: 0, final: true }, { status: 200, body: base64(new TextEncoder().encode('headless-ok')) });
+			return new Response(JSON.stringify(frame) + '\n');
+		});
+	vi.stubGlobal('fetch', fetchMock);
+	const fetcher = encryptedFetch(runner, key, 'http://127.0.0.1:8787');
+	const response = await fetcher(`http://127.0.0.1:8787/api/runners/${runner}/api/config`);
+	expect(await response.text()).toBe('headless-ok');
+	expect(fetchMock).toHaveBeenNthCalledWith(1, `http://127.0.0.1:8787/api/runners/${runner}`, expect.anything());
+	expect(fetchMock).toHaveBeenNthCalledWith(2, `http://127.0.0.1:8787/api/runners/${runner}/relay`, expect.anything());
+});
