@@ -127,9 +127,8 @@ export async function statusError(response: Response, secrets: string[]): Promis
 	const raw = (await response.text().catch(() => '')).slice(0, 8192);
 	let message = '';
 	try {
-		const body = JSON.parse(raw) as { error?: unknown };
-		if (typeof body.error === 'string') message = body.error;
-		else if (body.error && typeof body.error === 'object' && typeof (body.error as { message?: unknown }).message === 'string') message = (body.error as { message: string }).message;
+		const body = JSON.parse(raw) as { error?: string | { message?: string } };
+		message = typeof body.error === 'string' ? body.error : (typeof body.error?.message === 'string' ? body.error.message : '');
 	} catch { /* not JSON */ }
 	for (const secret of secrets) {
 		if (!secret) continue;
@@ -141,8 +140,7 @@ export async function statusError(response: Response, secrets: string[]): Promis
 	message = message.trim().replace(/[\x00-\x1f\x7f]/g, ' ');
 	const chars = [...message];
 	if (chars.length > 200) message = chars.slice(0, 200).join('') + '…';
-	const text = message ? `model returned HTTP ${response.status}: ${message}` : `model returned HTTP ${response.status}`;
-	return overflow(response.status, raw) ? new OverflowError(text) : new Error(text);
+	return new (overflow(response.status, raw) ? OverflowError : Error)(message ? `model returned HTTP ${response.status}: ${message}` : `model returned HTTP ${response.status}`);
 }
 
 /** secrets are the credentials a request carries: its key and header values. */

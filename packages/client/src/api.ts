@@ -2,7 +2,7 @@ import type { UIMessage } from 'ai';
 import { hc, type ClientResponse } from 'hono/client';
 import type { SuccessStatusCode } from 'hono/utils/http-status';
 import type { AppType, llm, Stats } from '@mob/core';
-import type { Transfer } from './contracts';
+import type { Transfer } from '@mob/core/contracts';
 
 export type Connection = { url: string; token: string };
 export type Conversation = {

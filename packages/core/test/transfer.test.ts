@@ -60,3 +60,25 @@ test('a conversation waiting on an approval or a reply does not move', async () 
 	await server.close();
 	s.close();
 });
+
+test('importing a conversation with non-array or invalid JSON message parts is refused', () => {
+	const s = open();
+	const base = {
+		v: 1 as const, title: 'test', model: '', summary: '', summaryThrough: '', facts: [], usage: [],
+	};
+	expect(() => s.importConversation({
+		...base,
+		messages: [{ id: newID(), role: 'user', parts: '{"not":"array"}', status: 'complete', error: '', model: '', usage: '', kind: '', stats: '' }],
+	})).toThrow('not a conversation');
+
+	expect(() => s.importConversation({
+		...base,
+		messages: [{ id: newID(), role: 'user', parts: 'invalid json', status: 'complete', error: '', model: '', usage: '', kind: '', stats: '' }],
+	})).toThrow('not a conversation');
+
+	expect(() => s.importConversation({
+		...base,
+		messages: [{ id: newID(), role: 'user', parts: '42', status: 'complete', error: '', model: '', usage: '', kind: '', stats: '' }],
+	})).toThrow('not a conversation');
+	s.close();
+});

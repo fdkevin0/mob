@@ -4,15 +4,13 @@ import type { Changes } from '@mob/client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@mob/ui/dialog';
 import { Segmented } from '@mob/ui/segmented';
 import { ok, rpcOf, type Connection } from './api';
-import type { AgentNode } from '@mob/client/contracts';
+import type { AgentNode, Stage } from '@mob/client/contracts';
 import { nodeStatus } from './AgentTree';
 import { ApprovalPrompt } from './ApprovalPrompt';
 import { PlanStudio, type StudioTask } from './PlanStudio';
 import type { Place } from './studioScene';
 import { CheckIcon, EyeIcon, HandIcon, OpenIcon, SpinnerIcon, TerminalIcon, UserIcon } from './icons';
 
-/** Stage is a step a blueprint runs after the agent's work: the project's checks, or another agent's review. */
-type Stage = { type: 'verify'; retries: number } | { type: 'review'; aspects: string[]; rounds: number };
 /** PlanBlueprint is what a blueprint does. */
 type PlanBlueprint = { does: string; stages: Stage[]; manual?: boolean };
 

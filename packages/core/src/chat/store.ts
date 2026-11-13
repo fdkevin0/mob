@@ -150,7 +150,7 @@ export type DayUsage = { date: string } & Usage;
 export type TopConversation = { id: string; title: string; agent?: string; deleted?: boolean } & Usage & { turns: number };
 export type UsageReport = UsageSummary & { since: number; firstDay: string; lastDay: string; conversations: number; days: DayUsage[]; top: TopConversation[] };
 
-export const zeroUsage = (): Usage => ({ totalTokens: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, durationMs: 0, requests: 0 });
+const zeroUsage = (): Usage => ({ totalTokens: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, durationMs: 0, requests: 0 });
 export function addUsage(u: Usage, v: Usage): Usage {
 	return {
 		totalTokens: u.totalTokens + v.totalTokens, inputTokens: u.inputTokens + v.inputTokens, outputTokens: u.outputTokens + v.outputTokens,
@@ -198,7 +198,7 @@ function scheduleOf(r: ScheduleRow): Schedule {
 const title60 = (text: string) => [...text].slice(0, 60).join('');
 
 /** localDate is a local calendar day as YYYY-MM-DD. */
-export function localDate(d: Date) {
+function localDate(d: Date) {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -393,7 +393,11 @@ export class Store {
 			t.facts.every(f => str(f.fact) && typeof f.owner === 'boolean') &&
 			t.usage.every(u => str(u.messageId) && str(u.session) && str(u.model) && [u.input, u.output, u.reasoning, u.cacheRead, u.cacheWrite, u.cost, u.durationMs, u.createdAt, u.firstTokenMs].every(num));
 		if (!valid) throw new TransferError('This is not a conversation Mob can import.');
-		for (const m of t.messages) { try { if (!Array.isArray(JSON.parse(m.parts))) throw 0; } catch { throw new TransferError('This is not a conversation Mob can import.'); } }
+		for (const m of t.messages) {
+			let parts: unknown;
+			try { parts = JSON.parse(m.parts); } catch { throw new TransferError('This is not a conversation Mob can import.'); }
+			if (!Array.isArray(parts)) throw new TransferError('This is not a conversation Mob can import.');
+		}
 		const c = { id: newID(), title: t.title || 'New conversation', updatedAt: Date.now() };
 		const ids = new Map<string, string>();
 		this.db.transaction(() => {
