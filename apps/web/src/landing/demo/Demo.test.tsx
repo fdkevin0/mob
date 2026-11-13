@@ -1,10 +1,15 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DemoPage } from './DemoPage';
 
 vi.mock('../auth', () => ({ authClient: { useSession: () => ({ isPending: false, data: null }) } }));
 
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => {
+	cleanup();
+	vi.clearAllTimers();
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+});
 
 // Each act flushes one round of renders, so time passes in small steps.
 const wait = async (ms: number) => { for (let t = 0; t < ms; t += 100) await act(async () => { await vi.advanceTimersByTimeAsync(100); }); };
