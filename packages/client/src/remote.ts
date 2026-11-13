@@ -1,14 +1,14 @@
 // The relay receives only envelopes. Pairing keys never enter a request URL, header or body.
 import { open, seal, unbase64, type Envelope, type RelayReply as Reply } from '@mob/core/relay';
 
-export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
-	const response = await fetch(`/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
+export async function cloud<T>(path: string, init?: RequestInit, origin = globalThis.location?.origin ?? ''): Promise<T> {
+	const response = await fetch(`${origin}/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
 	if (!response.ok)
 		throw new Error(response.status === 401 ? 'Sign in to the website again.' : `Runner request failed (HTTP ${response.status}).`);
 	return response.json();
 }
 
-export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
+export function encryptedFetch(runner: string, rawKey: string, origin = globalThis.location?.origin): typeof fetch {
 	let cachedSession = '';
 	return async (input, init) => {
 		const request = new Request(input, init);
@@ -19,14 +19,14 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 		}
 		const url = new URL(request.url);
 		const prefix = `/api/runners/${runner}`;
-		if (url.origin !== location.origin || !url.pathname.startsWith(prefix + '/api/')) throw new Error('Invalid runner API path');
+		if ((origin && url.origin !== origin) || !url.pathname.startsWith(prefix + '/api/')) throw new Error('Invalid runner API path');
 		const payload = await request.text();
 		let id = '',
 			session = '',
 			response: Response | undefined;
 		for (let attempt = 0; attempt < 2; attempt++) {
 			if (!cachedSession) {
-				const current = (await cloud<{ session: string | null }>(`/${runner}`, { signal: request.signal })).session;
+				const current = (await cloud<{ session: string | null }>(`/${runner}`, { signal: request.signal }, origin ?? '')).session;
 				if (!current || !/^[a-f0-9]{64}$/.test(current)) throw new Error('Runner is offline.');
 				cachedSession = current;
 			}
@@ -45,7 +45,7 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 					expires: Date.now() + 45_000,
 				},
 			);
-			response = await fetch(`/api/runners/${runner}/relay`, {
+			response = await fetch(`${origin ?? ''}/api/runners/${runner}/relay`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(envelope),
