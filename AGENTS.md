@@ -15,11 +15,12 @@ and messaging channels.
   asking.
 - `./build/mob serve --demo` runs the app on an offline model when you want to
   see a change working.
-- Web code lives in three packages: `packages/ui` (`@mob/ui`, the design
-  system), `packages/app` (`@mob/app`, the workspace UI that `mob` embeds) and
-  `apps/web` (`@mob/web`, usemob.app and its Worker). Each declares its own
-  dependencies; import across packages by name (`@mob/ui/button`), never by a
-  relative path into another package.
+- Web code lives in four packages: `packages/ui` (`@mob/ui`, the design
+  system), `packages/app` (`@mob/app`, the workspace UI that `mob` embeds),
+  `apps/web` (`@mob/web`, usemob.app and its Worker) and `apps/docs`
+  (`@mob/docs`, usemob.app/docs). Each declares its own dependencies; import
+  across packages by name (`@mob/ui/button`), never by a relative path into
+  another package.
 - `packages/core/src/contracts.ts` and `packages/client/src/contracts.ts` are
   the wire contract the service and its clients share; change both sides in the
   same pull request.

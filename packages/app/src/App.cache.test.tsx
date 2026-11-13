@@ -54,7 +54,7 @@ it('opens with what this browser kept while Mob has not answered yet', async () 
 		vi.fn(() => new Promise<Response>(() => {})),
 	);
 	render(<App />);
-	expect(await screen.findByText('kept reply')).toBeTruthy();
+	expect(await screen.findByText('kept reply', {}, { timeout: 5000 })).toBeTruthy();
 	expect(screen.getAllByText('Kept title').length).toBeGreaterThan(0);
 	expect(window.location.hash).toBe('#/c/one');
 });

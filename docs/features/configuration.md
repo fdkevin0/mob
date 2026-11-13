@@ -22,8 +22,9 @@ Model providers and keys live in `providers.json` beside it (see
   before applying it. Syntax errors, unsafe permissions, deletion and invalid
   values keep the last valid configuration; diagnostics omit file contents and
   appear in stderr, the background log and `/api/runtime`.
-- Changing `addr`, `data_dir`, `state_dir`, `demo`, `driver` or `token` requires a
-  restart, as do environment changes and removing the watched directory.
+- Changing `addr`, `data_dir`, `state_dir`, `demo`, `driver`, `token` or
+  `agents.confinement` requires a restart, as do environment changes and removing
+  the watched directory.
 - Files must be regular (not symlinks), at most 64 KiB, and not group- or
   world-writable on Unix. `providers.json` must be owner-only (`chmod 600`); on
   Windows protect it with the user directory's ACLs. A missing default file is

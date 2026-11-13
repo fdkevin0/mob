@@ -60,8 +60,9 @@ host's MCP tests run the bridge when its dependencies are installed. See
 [DSH plugin setup](docs/features/deepseek-harness.md).
 `bun run test:runner` checks remote access end to end: the Worker, pairing,
 and the encrypted relay against the built binary.
-Also run `bun run test:client` (headless Node tests/typecheck) and
-`bun run test:tui` (TUI typecheck/tests) when changing the shared client or TUI.
+Also run `bun run test:client` (headless Node tests/typecheck),
+`bun run test:tui` (TUI typecheck/tests) and `bun run test:desktop` (desktop
+typecheck/tests) when changing those clients.
 The integration script exercises both client types, concurrent readers,
 reconnection, detachment, scoped approvals, stale decisions and Stop. The
 `scriptc` workflow reports how much of the host scriptc can compile; it runs
