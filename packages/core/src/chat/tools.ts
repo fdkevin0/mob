@@ -132,7 +132,7 @@ export class ToolCall {
 }
 
 /** sandboxName is reserved for the sandbox tool, which turns add while a sandbox is set. */
-export const sandboxName = 'sandbox';
+const sandboxName = 'sandbox';
 const reserved = (name: string) => name === sandboxName || name === searchName || name === historyName;
 
 /** ToolRegistry holds the tools every turn offers. */

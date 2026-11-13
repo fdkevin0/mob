@@ -1,7 +1,7 @@
 // One set of expectations for both drivers: Mob's own protocol code and the AI
 // SDK's, each speaking to a fake vendor that answers with recorded streams.
 import { afterEach, describe, expect, test } from 'bun:test';
-import { limits, OverflowError, StalledError } from '../src/llm/send';
+import { limits, OverflowError, StalledError, statusError } from '../src/llm/send';
 import { memoryProviders, ProviderRegistry, type Driver } from '../src/provider/registry';
 import type { Request, Result } from '../src/llm/llm';
 
@@ -251,5 +251,21 @@ describe.each(['mob', 'aisdk'] as const)('%s driver', driver => {
 			expect(e).toBeInstanceOf(OverflowError);
 			expect(e.message).toBe('model returned HTTP 400: prompt is too long: 210000 tokens > 200000 maximum');
 		});
+	});
+});
+
+describe('statusError', () => {
+	test('formats string and nested message errors while masking secrets', async () => {
+		const res1 = new Response(JSON.stringify({ error: 'invalid key: sk-secret-12345' }), { status: 401 });
+		const err1 = await statusError(res1, ['sk-secret-12345']);
+		expect(err1.message).toBe('model returned HTTP 401: invalid key: ••••');
+
+		const res2 = new Response(JSON.stringify({ error: { message: 'token limit reached' } }), { status: 429 });
+		const err2 = await statusError(res2, []);
+		expect(err2.message).toBe('model returned HTTP 429: token limit reached');
+
+		const res3 = new Response('not a json error', { status: 500 });
+		const err3 = await statusError(res3, []);
+		expect(err3.message).toBe('model returned HTTP 500');
 	});
 });

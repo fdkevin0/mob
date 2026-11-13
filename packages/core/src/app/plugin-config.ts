@@ -8,9 +8,6 @@
 // has a type, but they are recomputed on every read and never saved.
 import { z } from 'zod';
 
-/** FieldMeta is what a form needs to show one value: a credential names its flag, the field beside it saying whether one is saved. */
-export type FieldMeta = { title?: string; description?: string; secret?: boolean; flag?: string; options?: string[] };
-
 const text = (title: string, description?: string) => z.string().default('').meta({ title, description });
 const secret = (title: string, flag: string, description?: string) => z.string().optional().meta({ title, description, secret: true, flag });
 const flag = () => z.boolean().optional();
