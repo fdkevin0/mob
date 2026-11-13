@@ -242,6 +242,10 @@ test('allowed origins permit dev servers and reject untrusted origins', async ()
 	expect((await call({ Origin: 'http://localhost:5174' })).status).toBe(200);
 	expect((await call({ Origin: 'http://127.0.0.1:5174' })).status).toBe(200);
 	expect((await call({ Origin: 'http://evil.com' })).status).toBe(403);
+	expect((await call({ Host: '[::1]:8787' })).status).toBe(200);
+	expect((await call({ Host: '[::1X' })).status).toBe(403);
+	expect((await call({ Host: '[::1]evil.com' })).status).toBe(403);
+	expect((await server.fetch(new Request('http://127.0.0.1:8787/api/config', { method: 'OPTIONS', headers: { Host: 'evil.com:8787', Origin: 'http://evil.com:8787' } }))).status).toBe(403);
 	await server.close();
 	store.close();
 });

@@ -143,9 +143,10 @@ it('works in headless environments without global location', async () => {
 			return new Response(JSON.stringify(frame) + '\n');
 		});
 	vi.stubGlobal('fetch', fetchMock);
-	const fetcher = encryptedFetch(runner, key, 'http://127.0.0.1:8787');
+	const fetcher = encryptedFetch(runner, key, 'http://127.0.0.1:8787/');
 	const response = await fetcher(`http://127.0.0.1:8787/api/runners/${runner}/api/config`);
 	expect(await response.text()).toBe('headless-ok');
 	expect(fetchMock).toHaveBeenNthCalledWith(1, `http://127.0.0.1:8787/api/runners/${runner}`, expect.anything());
 	expect(fetchMock).toHaveBeenNthCalledWith(2, `http://127.0.0.1:8787/api/runners/${runner}/relay`, expect.anything());
+	expect(() => encryptedFetch(runner, key)).toThrow('Runner origin is required');
 });
