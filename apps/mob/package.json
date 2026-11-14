@@ -14,15 +14,15 @@
 	},
 	"dependencies": {
 		"@agentclientprotocol/sdk": "1.9.0",
-		"@anthropic-ai/claude-agent-sdk": "0.3.303",
+		"@anthropic-ai/claude-agent-sdk": "0.3.322",
 		"@mob/core": "workspace:*",
 		"@mob/tui": "workspace:*",
 		"@modelcontextprotocol/sdk": "1.32.2",
 		"commander": "14.0.3",
-		"imapflow": "2.10.0",
-		"mailparser": "3.14.1",
+		"imapflow": "2.11.0",
+		"mailparser": "3.14.3",
 		"marked": "16.4.2",
-		"nodemailer": "10.3.1",
+		"nodemailer": "10.5.0",
 		"zod": "4.6.7"
 	},
 	"devDependencies": {
@@ -31,6 +31,6 @@
 		"@types/bun": "1.4.4",
 		"@types/mailparser": "3.9.0",
 		"@types/nodemailer": "8.0.2",
-		"ai": "7.0.159"
+		"ai": "7.0.169"
 	}
 }
