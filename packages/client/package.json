@@ -8,11 +8,11 @@
 		"./remote": "./src/remote.ts"
 	},
 	"dependencies": {
-		"@ai-sdk/react": "4.0.163",
+		"@ai-sdk/react": "4.0.173",
 		"@mob/core": "workspace:*",
-		"ai": "7.0.159",
+		"ai": "7.0.169",
 		"eventsource-parser": "3.1.1",
-		"hono": "4.13.16"
+		"hono": "4.13.18"
 	},
 	"devDependencies": {
 		"vitest": "^5.0.0"
