@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "private": true,
+  "type": "module",
   "description": "Local assistant with Electron, AI SDK UI and OpenTUI.",
   "workspaces": ["packages/*", "apps/*"],
   "devDependencies": {
@@ -15,7 +16,7 @@
     "dev": "bun run --cwd packages/app dev",
     "dev:web": "bun run --cwd apps/web dev",
     "test:web": "bun run --cwd packages/ui typecheck && bun run --cwd packages/app typecheck && bun run --cwd apps/web typecheck && vitest run",
-    "test:client": "tsc -p packages/client && vitest run --config packages/client/vitest.config.ts",
+    "test:client": "bun run --cwd packages/client typecheck && bun run --cwd packages/client test",
     "tui:pilot": "bun run --cwd apps/tui start",
     "test:tui": "bun run --cwd apps/tui typecheck && bun run --cwd apps/tui test",
     "test:docs": "bun run --cwd apps/docs sync && bun run --cwd apps/docs test",
@@ -34,6 +35,7 @@
   },
   "packageManager": "bun@1.4.4",
   "overrides": {
+    "cookie": "^2.0.1",
     "happy-dom": "^21.0.4",
     "source-map-js": "^1.2.2",
     "vite": "^8.3.5",

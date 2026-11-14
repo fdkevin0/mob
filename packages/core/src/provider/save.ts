@@ -12,13 +12,6 @@ export type ProviderForm = { preset: string; url?: string; protocol?: 'chat' | '
 // Without a named model, OpenRouter routes each request to a model it picks.
 const preferred: Record<string, string> = { openrouter: 'openrouter/auto' };
 
-// OpenRouter is how Mob gets free models, so a free one that takes tools
-// comes first: a catalogued one, then one only its :free name marks.
-function freeModel(registry: ProviderRegistry, p: Provider, listed: string[]) {
-	const free = listed.map(id => registry.info(p, id)).filter(i => i.free && i.tools);
-	return (free.find(i => i.known) ?? free[0])?.id;
-}
-
 /**
  * providerFromForm turns a submitted form into the provider it saves. A key is
  * required unless the preset is a local server; a form without a preset names
@@ -58,7 +51,8 @@ export async function saveProvider(registry: ProviderRegistry, p: Provider, name
 	}
 	// Workers AI lists many models that cannot call tools, so one that can comes first.
 	const tools = listed.find(id => registry.info(p, id).tools) ?? '';
-	const fallback = [p.id === 'openrouter' ? freeModel(registry, p, listed) : p.id === 'cloudflare' ? tools : '', preferred[p.id], tools].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
+	const free = p.id === 'openrouter' ? listed.map(id => registry.info(p, id)).filter(i => i.free && i.tools) : [];
+	const fallback = [(free.find(i => i.known) ?? free[0])?.id || (p.id === 'cloudflare' ? tools : ''), preferred[p.id], tools].find(m => m && listed.includes(m)) ?? listed[0] ?? '';
 	// A vendor's own ID wins, as OpenRouter's openrouter/auto does; otherwise a Mob reference loses its provider prefix.
 	const typed = named?.trim() ?? '';
 	const model = (listed.includes(typed) ? typed : typed.startsWith(p.id + '/') ? typed.slice(p.id.length + 1) : typed) || fallback;

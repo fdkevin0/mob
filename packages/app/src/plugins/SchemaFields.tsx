@@ -3,7 +3,7 @@
 // the public view reports at its flag; a nested object is its own section.
 import { Button } from '@mob/ui/button';
 import { Label } from '@mob/ui/label';
-import { jsonSchema, pluginConfigs } from '@mob/core/contracts';
+import { jsonSchema, pluginConfigs } from '@mob/client/contracts';
 import { Field, Toggle } from './shared';
 
 /** Node is the part of a JSON Schema the form reads. */
@@ -33,7 +33,7 @@ export function SchemaFields<T extends Value = Value>({ schema, value, onChange,
 }
 
 /** secretPaths are the dotted paths of every credential in schema. */
-export function secretPaths(schema: Node, prefix = ''): string[] {
+function secretPaths(schema: Node, prefix = ''): string[] {
 	return Object.entries(schema.properties ?? {}).flatMap(([k, n]) => n.type === 'object' ? secretPaths(n, prefix + k + '.') : n.secret ? [prefix + k] : []);
 }
 

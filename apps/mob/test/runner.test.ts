@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ServerWebSocket } from 'bun';
-import { deployed, pair } from '../src/runner';
+import { deployed, pair, runnerCredentials } from '../src/runner';
 import { base64, unbase64, relayKey as key, open, seal, type Envelope } from '@mob/core/relay';
 import { connect, localHandler, serve, type Credentials, type Handler } from '../src/runner/relay';
 
@@ -198,5 +198,20 @@ describe('runner', () => {
 		expect(() => deployed(JSON.stringify({ url: 'https://usemob.app', id, token: 'short', key: rawKey }))).toThrow('invalid runner credentials');
 		expect(() => deployed('{')).toThrow('invalid pairing JSON');
 		expect(() => deployed(JSON.stringify({ url: 'https://usemob.app/path', id, token, key: rawKey }))).toThrow('origin');
+	});
+
+	test('runnerCredentials reads from file or environment', async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'mob-runner-'));
+		cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+		await Bun.write(join(dir, 'runner.json'), JSON.stringify({ url: 'https://usemob.app', id, token, key: rawKey }));
+		const creds = await runnerCredentials(dir);
+		expect(creds).toEqual({ url: 'https://usemob.app', id, token, key: rawKey });
+
+		process.env.MOB_RUNNER_PAIRING = JSON.stringify({ url: 'https://usemob.app', id, token, key: rawKey });
+		try {
+			expect(await runnerCredentials('/empty-dir')).toEqual({ url: 'https://usemob.app', id, token, key: rawKey });
+		} finally {
+			delete process.env.MOB_RUNNER_PAIRING;
+		}
 	});
 });

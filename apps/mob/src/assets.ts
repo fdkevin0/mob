@@ -1,5 +1,5 @@
 // The web UI's files: embedded in a compiled mob, else read from @mob/app's dist.
-import { existsSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { files } from './web';
 
@@ -12,20 +12,21 @@ const typeOf = (path: string) => types[path.slice(path.lastIndexOf('.'))] ?? 'ap
 /** directory finds the built web UI: MOB_ASSETS, beside the executable, or @mob/app's dist in the repository. */
 function directory(): string | undefined {
 	const candidates = [process.env.MOB_ASSETS, join(dirname(process.execPath), 'web'), join(dirname(Bun.resolveSync('@mob/app/package.json', import.meta.dir)), 'dist')];
-	return candidates.find(d => d && existsSync(join(d, 'index.html')));
+	return candidates.find(d => d && Bun.file(join(d, 'index.html')).size > 0);
 }
 
-export function assets(): (path: string) => Response | undefined {
+export function assets(): (path: string) => Promise<Response | undefined> | Response | undefined {
 	const embedded = new Map(Object.entries(files).map(([path, file]) => [path, Bun.file(file) as Blob]));
 	const dir = embedded.size ? undefined : directory();
-	return path => {
+	return async path => {
 		if (path.endsWith('/')) path += 'index.html';
-		path = normalize(decodeURIComponent(path)).replaceAll('\\', '/');
+		try { path = normalize(decodeURIComponent(path)).replaceAll('\\', '/'); } catch { return undefined; }
 		if (path.includes('..')) return undefined;
 		let body: Blob | undefined = embedded.get(path);
 		if (!body && dir) {
 			const file = join(dir, path);
-			if (existsSync(file) && statSync(file).isFile()) body = Bun.file(file);
+			const f = Bun.file(file);
+			if (await f.exists() && statSync(file).isFile()) body = f;
 		}
 		if (!body) return undefined;
 		return new Response(body, { headers: { 'Content-Type': typeOf(path) } });
