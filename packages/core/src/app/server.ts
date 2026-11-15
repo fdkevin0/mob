@@ -93,9 +93,9 @@ export type ServerOptions = {
 const eventsHeartbeat = 25_000;
 
 /** allowedOrigin: the desktop window and the service's own pages are same-origin; the Vite dev servers may call too. */
-const allowedOrigin = (origin: string, host: string) =>
+const allowedOrigin = (origin: string, hostOrigin: string) =>
 	!origin ||
-	origin === 'http://' + host ||
+	origin === hostOrigin ||
 	origin === 'http://localhost:5173' ||
 	origin === 'http://127.0.0.1:5173' ||
 	origin === 'http://localhost:5174' ||
@@ -304,18 +304,15 @@ export class Server extends ConversationService {
 		const core = api(this);
 		const app = new Hono()
 			.use(async (c, next) => {
-				const url = new URL(c.req.url);
 				const headers = new Headers({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
 				const done = () => { c.res = withHeaders(c.res, headers); };
+				const url = URL.parse(c.req.url);
 				const origin = c.req.header('Origin') ?? '';
-				const host = c.req.header('Host') ?? url.host;
-				// Reject arbitrary Host headers first, preventing DNS rebinding before CORS or auth checks.
-				const end = host.indexOf(']');
-				const bareHost = host.startsWith('[')
-					? (end > 0 && (end === host.length - 1 || /^:\d+$/.test(host.slice(end + 1))) ? host.slice(1, end) : '')
-					: host.replace(/:\d+$/, '');
-				if (!isLoopbackHost(bareHost)) { c.res = text(403, 'host denied'); return done(); }
-				if (!allowedOrigin(origin, host) && (!origin || origin !== this.web)) { c.res = text(403, 'origin denied'); return done(); }
+				const rawHost = c.req.header('Host') ?? url?.host ?? '';
+				// Reject arbitrary or malformed Host headers first, preventing DNS rebinding before CORS or auth checks.
+				const host = rawHost && !/[/\\?#@\s]|:$/.test(rawHost) ? URL.parse('http://' + rawHost) : null;
+				if (!url || !host || !isLoopbackHost(host.hostname)) { c.res = text(403, 'host denied'); return done(); }
+				if (!allowedOrigin(origin, host.origin) && (!origin || origin !== this.web)) { c.res = text(403, 'origin denied'); return done(); }
 				if (origin) { headers.set('Access-Control-Allow-Origin', origin); headers.set('Vary', 'Origin'); }
 				if (c.req.method === 'OPTIONS') {
 					headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');

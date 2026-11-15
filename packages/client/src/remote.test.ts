@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { base64, newRelayKey as newKey, open, seal, type Envelope } from '@mob/core/relay';
-import { encryptedFetch } from './remote';
+import { cloud, encryptedFetch } from './remote';
 
 const runner = '11111111-1111-4111-8111-111111111111';
 const session = 'a'.repeat(64);
@@ -132,7 +132,7 @@ it('caches the runner session across requests and refreshes on 409', async () =>
 	expect(relays).toBe(4);
 });
 
-it('works in headless environments without global location', async () => {
+it('works in headless environments without global location and fails closed on invalid origins', async () => {
 	const key = newKey();
 	vi.stubGlobal('location', undefined);
 	const fetchMock = vi.fn<typeof fetch>()
@@ -141,12 +141,23 @@ it('works in headless environments without global location', async () => {
 			const e: Envelope = JSON.parse(String(init?.body));
 			const frame = await seal(key, runner, 'response', { ...e, seq: 0, final: true }, { status: 200, body: base64(new TextEncoder().encode('headless-ok')) });
 			return new Response(JSON.stringify(frame) + '\n');
-		});
+		})
+		.mockResolvedValueOnce(Response.json([{ id: runner }]));
 	vi.stubGlobal('fetch', fetchMock);
 	const fetcher = encryptedFetch(runner, key, 'http://127.0.0.1:8787/');
 	const response = await fetcher(`http://127.0.0.1:8787/api/runners/${runner}/api/config`);
 	expect(await response.text()).toBe('headless-ok');
+	expect(await cloud('', undefined, 'http://127.0.0.1:8787/')).toEqual([{ id: runner }]);
 	expect(fetchMock).toHaveBeenNthCalledWith(1, `http://127.0.0.1:8787/api/runners/${runner}`, expect.anything());
 	expect(fetchMock).toHaveBeenNthCalledWith(2, `http://127.0.0.1:8787/api/runners/${runner}/relay`, expect.anything());
+	expect(fetchMock).toHaveBeenNthCalledWith(3, 'http://127.0.0.1:8787/api/runners', expect.anything());
 	expect(() => encryptedFetch(runner, key)).toThrow('Runner origin is required');
+	await expect(cloud('')).rejects.toThrow('Runner origin is required');
+	await expect(cloud('', undefined, '')).rejects.toThrow('Runner origin is required');
+	expect(() => encryptedFetch(runner, key, 'https://usemob.app/extra')).toThrow('Runner origin is required');
+	expect(() => encryptedFetch(runner, key, 'http://evil.example:8080')).toThrow('HTTPS');
+	await expect(cloud('', undefined, 'http://evil.example:8080')).rejects.toThrow('HTTPS');
+	vi.stubGlobal('location', { origin: 'null' });
+	expect(() => encryptedFetch(runner, key)).toThrow('Runner origin is required');
+	await expect(cloud('')).rejects.toThrow('Runner origin is required');
 });

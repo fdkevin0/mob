@@ -1,22 +1,27 @@
 // The relay receives only envelopes. Pairing keys never enter a request URL, header or body.
 import { open, seal, unbase64, type Envelope, type RelayReply as Reply } from '@mob/core/relay';
+import { secureURL } from '@mob/core/url';
 
-function parseOrigin(raw?: string): string {
-	if (!raw) throw new Error('Runner origin is required');
-	const parsed = new URL(raw);
-	if (parsed.origin === 'null') throw new Error('Runner origin is required');
-	return parsed.origin;
+function parseOrigin(raw = globalThis.location?.origin): string {
+	const u = raw ? URL.parse(raw) : null;
+	if (!u?.host || u.username || u.password || u.search || raw?.includes('?') || u.hash || raw?.includes('#') || u.pathname !== '/')
+		throw new Error('Runner origin is required');
+	if (!secureURL(u)) throw new Error('Runner origin requires HTTPS except on loopback');
+	return u.origin;
 }
 
-export async function cloud<T>(path: string, init?: RequestInit, origin = globalThis.location?.origin): Promise<T> {
-	const base = origin ? parseOrigin(origin) : '';
-	const response = await fetch(`${base}/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
+async function requestCloud<T>(baseOrigin: string, path: string, init?: RequestInit): Promise<T> {
+	const response = await fetch(`${baseOrigin}/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
 	if (!response.ok)
 		throw new Error(response.status === 401 ? 'Sign in to the website again.' : `Runner request failed (HTTP ${response.status}).`);
 	return response.json();
 }
 
-export function encryptedFetch(runner: string, rawKey: string, origin = globalThis.location?.origin): typeof fetch {
+export async function cloud<T>(path: string, init?: RequestInit, origin?: string): Promise<T> {
+	return requestCloud(parseOrigin(origin), path, init);
+}
+
+export function encryptedFetch(runner: string, rawKey: string, origin?: string): typeof fetch {
 	const baseOrigin = parseOrigin(origin);
 	let cachedSession = '';
 	return async (input, init) => {
@@ -35,7 +40,7 @@ export function encryptedFetch(runner: string, rawKey: string, origin = globalTh
 			response: Response | undefined;
 		for (let attempt = 0; attempt < 2; attempt++) {
 			if (!cachedSession) {
-				const current = (await cloud<{ session: string | null }>(`/${runner}`, { signal: request.signal }, baseOrigin)).session;
+				const current = (await requestCloud<{ session: string | null }>(baseOrigin, `/${runner}`, { signal: request.signal })).session;
 				if (!current || !/^[a-f0-9]{64}$/.test(current)) throw new Error('Runner is offline.');
 				cachedSession = current;
 			}
