@@ -95,7 +95,7 @@ jobs:
       # lives in a root-owned prefix, so npm is upgraded in setup-node's.
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
       # NPM_TOKEN covers packages without a trusted publisher yet.
       - name: Publish to npm
         run: |
