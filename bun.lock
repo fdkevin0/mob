@@ -53,7 +53,7 @@
         "mob": "src/main.ts",
       },
       "dependencies": {
-        "@agentclientprotocol/sdk": "1.9.0",
+        "@agentclientprotocol/sdk": "2.6.0",
         "@anthropic-ai/claude-agent-sdk": "0.3.303",
         "@mob/core": "workspace:*",
         "@mob/tui": "workspace:*",
@@ -213,7 +213,7 @@
     "zod": "^4.6.7",
   },
   "packages": {
-    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@1.9.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-saCOTPYBK1iqWqJFAYHXbg3+zCoFXyZZFoqQAwdTWkbrZZPpAETr80QOnYr2l+dzPwL0jpNhn3eDY8MoEIDbUA=="],
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@2.6.0", "", { "peerDependencies": { "@modelcontextprotocol/server": "^2.4.0", "zod": "^3.25.76 || ^4.0.0" }, "optionalPeers": ["@modelcontextprotocol/server"] }, "sha512-3FtL6MkAV5F9qxg0FQV8wmBszIm2xuVPoDWOILIFSDQ+Vq3Twdh7Cw6Hk2GOPUbevgrTUpUAqZXQy7Geaj79mw=="],
 
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@4.0.94", "", { "dependencies": { "@ai-sdk/provider": "4.0.35", "@ai-sdk/provider-utils": "5.0.72" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-gD0KmsUZTRuhiYleM2SdMrY0c7m+VeRckLX2VVPnEAlQmaKqSw8+noHiK5ED+SHy4tuDf9VQqcHxlGeObzMNyw=="],
 
