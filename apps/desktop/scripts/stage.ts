@@ -1,15 +1,35 @@
-// Puts the mob binary in bin/ and the app icon in build/ for electron-builder.
-// MOB_BINARY names a binary already built, such as a release archive's.
+// Puts the mob binary in bin/<arch>/ and the app icon in build/ for
+// electron-builder. --x64/--arm64 or MOB_BINARY name binaries already built,
+// such as a release archive's.
 import { $ } from 'bun';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 import { deflateSync } from 'node:zlib';
 import { calfBitmap } from '../src/icon';
 
-const root = `${import.meta.dir}/..`;
+const { values } = parseArgs({ options: { dir: { type: 'string' }, x64: { type: 'string' }, arm64: { type: 'string' } } });
+const root = values.dir ? resolve(values.dir) : `${import.meta.dir}/..`;
 const name = process.platform === 'win32' ? 'mob.exe' : 'mob';
-mkdirSync(`${root}/bin`, { recursive: true });
-if (process.env.MOB_BINARY) copyFileSync(process.env.MOB_BINARY, `${root}/bin/${name}`);
-else await $`bun run build && bun apps/mob/scripts/build.ts --outfile ${root}/bin/${name}`.cwd(`${root}/../..`);
+rmSync(`${root}/bin`, { recursive: true, force: true });
+
+function put(arch: string, source: string) {
+	mkdirSync(`${root}/bin/${arch}`, { recursive: true });
+	const dest = `${root}/bin/${arch}/${name}`;
+	copyFileSync(resolve(source), dest);
+	if (process.platform !== 'win32') chmodSync(dest, 0o755);
+}
+
+if (values.x64 || values.arm64) {
+	if (values.x64) put('x64', values.x64);
+	if (values.arm64) put('arm64', values.arm64);
+} else if (process.env.MOB_BINARY) {
+	put(process.arch, process.env.MOB_BINARY);
+} else {
+	mkdirSync(`${root}/bin/${process.arch}`, { recursive: true });
+	await $`bun run build && bun apps/mob/scripts/build.ts --outfile ${root}/bin/${process.arch}/${name}`.cwd(`${import.meta.dir}/../../..`);
+	rmSync(`${root}/bin/${process.arch}/${name.replace(/(\.exe)?$/, '.map')}`, { force: true });
+}
 
 mkdirSync(`${root}/build`, { recursive: true });
 await Bun.write(`${root}/build/icon.png`, png(calfBitmap(32)));
