@@ -1,5 +1,4 @@
 // The web UI's files: embedded in a compiled mob, else read from @mob/app's dist.
-import { statSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { files } from './web';
 
@@ -26,7 +25,7 @@ export function assets(): (path: string) => Promise<Response | undefined> | Resp
 		if (!body && dir) {
 			const file = join(dir, path);
 			const f = Bun.file(file);
-			if (await f.exists() && statSync(file).isFile()) body = f;
+			if (await f.exists() && (await f.stat()).isFile()) body = f;
 		}
 		if (!body) return undefined;
 		return new Response(body, { headers: { 'Content-Type': typeOf(path) } });
