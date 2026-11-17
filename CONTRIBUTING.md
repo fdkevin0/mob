@@ -52,17 +52,22 @@ amp orb service start mob --command './build/mob serve --demo' --port 8787 --por
 
 `just test` runs the core and host typecheck and tests (`bun run test:core`),
 the npm install and publish scripts' tests (`bun run test:release`),
+the shared client headless Node typecheck and tests (`bun run test:client`),
 the UI typecheck and Vitest suite (`bun run test:web`), the documentation sync,
-typecheck and link checks (`bun run test:docs`), and
-`apps/mob/scripts/check-chat.ts`, which builds the binary, starts a temporary service and
-reads its stream with the real AI SDK UI parser and shared client. It also runs
-`bun run test:dsh`, the optional DSH bridge's typecheck and runtime tests; the
-host's MCP tests run the bridge when its dependencies are installed. See
-[DSH plugin setup](docs/features/deepseek-harness.md).
-`bun run test:runner` checks remote access end to end: the Worker, pairing,
-and the encrypted relay against the built binary.
-Also run `bun run test:client` (headless Node tests/typecheck) and
-`bun run test:tui` (TUI typecheck/tests) when changing the shared client or TUI.
+typecheck and link checks (`bun run test:docs`), the TUI typecheck and tests
+(`bun run test:tui`), the desktop typecheck and tests (`bun run test:desktop`),
+`bun run test:dsh` (the optional DSH bridge's typecheck and runtime tests; the
+host's MCP tests run the bridge when its dependencies are installed—see
+[DSH plugin setup](docs/features/deepseek-harness.md)), `bun run test:site`
+(offline public site routing checks), `bun run test:integration`
+(`apps/mob/scripts/check-chat.ts`, which builds the binary, starts a temporary
+service and reads its stream with the real AI SDK UI parser and shared client),
+and `bun run test:runner` (remote access end to end: the Worker, pairing, and
+the encrypted relay against the built binary). Run `bun run build` and
+`bun run build:web` first so `test:site`, `test:integration` and `test:runner`
+have the built web UI and public site. Individual suites such as
+`bun run test:client`, `bun run test:tui` and `bun run test:desktop` can also be
+run directly when changing those clients.
 The integration script exercises both client types, concurrent readers,
 reconnection, detachment, scoped approvals, stale decisions and Stop. The
 `scriptc` workflow reports how much of the host scriptc can compile; it runs

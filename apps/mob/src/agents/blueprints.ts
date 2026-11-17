@@ -2,6 +2,7 @@
 // ready to review. Mob runs them itself, step by step, so the checks, the
 // review and the rounds of rework do not depend on a model remembering them.
 import { brief, newID, outcomePassed, taskReview, taskRunning, taskWaiting, CommandError, type Flow, type FlowCheck, type Task } from '@mob/core';
+import type { Stage } from '@mob/core/contracts';
 import { preset, readers } from './presets';
 import { git } from './process';
 import { base, check } from './review';
@@ -9,13 +10,7 @@ import type { Service } from './service';
 import { aspects, startSquad, type Squad } from './squad';
 import { report } from './subtasks';
 
-/**
- * Stage is one step after the agent's work: verify runs the project's checks
- * and sends a failure back to the same agent up to retries times; review has
- * readers of another agent review the work and sends what holds up back, for
- * up to rounds rounds.
- */
-export type Stage = { type: 'verify'; retries: number } | { type: 'review'; aspects: string[]; rounds: number };
+export type { Stage };
 
 /**
  * Blueprint is how a task's work goes from done to ready to review: the

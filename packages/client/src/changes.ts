@@ -1,8 +1,8 @@
 import { EventSourceParserStream } from 'eventsource-parser/stream';
+import type { Change } from '@mob/core/contracts';
 import type { MobClient } from './api';
 
-/** Change says what a write on the service changed: a conversation, the conversation list, or the task tree. */
-export type Change = { seq: number; conversation?: string; list?: boolean; tasks?: boolean };
+export type { Change };
 /** reset means the stream (re)connected: changes may have been missed, so listeners reload what they show. */
 export type ChangeListener = (change: Change | 'reset') => void;
 

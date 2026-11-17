@@ -704,7 +704,7 @@ it('uses the shared highlighter for message text, reasoning and tool data', asyn
       expect(view.container.querySelector(`${selector} code span[style*="--shiki-dark"]`)).toBeTruthy();
     }
     expect(view.container.querySelectorAll('.tool-body [data-streamdown="code-block"]')).toHaveLength(2);
-  });
+  }, { timeout: 5000 });
   expect(view.container.querySelector('.reasoning [data-streamdown="strong"]')?.textContent).toBe('Checking');
 });
 

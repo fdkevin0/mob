@@ -41,21 +41,36 @@ mob *args:
 screenshot *args:
     bun scripts/screenshot.ts "$@"
 
-test: test-core test-web test-integration test-dsh
+test: test-core test-client test-web test-tui test-desktop test-dsh test-site test-integration test-runner
 
 test-core:
     bun run test:core
     bun run test:release
 
+test-client:
+    bun run test:client
+
 test-web:
     bun run test:web
     bun run test:docs
 
-test-integration:
-    bun run test:integration
+test-tui:
+    bun run test:tui
+
+test-desktop:
+    bun run test:desktop
 
 test-dsh:
     bun run test:dsh
+
+test-site:
+    bun run test:site
+
+test-integration:
+    bun run test:integration
+
+test-runner:
+    bun run test:runner
 
 generate:
     bun run generate:configdocs

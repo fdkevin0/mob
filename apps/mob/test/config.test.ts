@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Loader, reference } from '../src/config';
 
@@ -21,5 +22,18 @@ test('agents run with full permission only in a cloud environment', () => {
 	} finally {
 		if (remote === undefined) delete process.env.CLAUDE_CODE_REMOTE;
 		else process.env.CLAUDE_CODE_REMOTE = remote;
+	}
+});
+
+test('nested configuration keys flatten to dotted keys', async () => {
+	const dir = mkdtempSync(join(tmpdir(), 'mob-cfg-'));
+	const cfgPath = join(dir, 'mob.yaml');
+	await Bun.write(cfgPath, 'agents:\n  confinement: host\n');
+	chmodSync(cfgPath, 0o600);
+	try {
+		const env = new Loader({ config: cfgPath, data_dir: dir, state_dir: dir }).read(true);
+		expect(env.agents.confinement).toBe('host');
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
 	}
 });

@@ -5,9 +5,9 @@ import { newID } from './sql';
  * inlineOutput is the most of a tool's output, as JSON bytes, the model reads
  * in place: about 8000 tokens, close to what other agents allow.
  */
-export const inlineOutput = 24000;
+const inlineOutput = 24000;
 /** savedPreview is how much of a saved output the model reads in place. */
-export const savedPreview = 4000;
+const savedPreview = 4000;
 
 /** Saver keeps a large tool output where the model's own tools can read it, returning the path to give the model. */
 export interface Saver {

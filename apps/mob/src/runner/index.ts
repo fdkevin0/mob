@@ -1,6 +1,5 @@
 // mob runner connects this Mob to the web with end-to-end encryption.
 import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeAtomic } from '../files';
 import { credentials as local, reachable, start, type HostPlugin } from '../local';
@@ -18,19 +17,18 @@ export function deployed(raw: string): Credentials {
 	let c: Credentials;
 	try { c = JSON.parse(raw); } catch { throw new Error('invalid pairing JSON'); }
 	if (!c || typeof c !== 'object') throw new Error('invalid pairing JSON');
-	const url = origin(String(c.url ?? ''));
 	if (!validRelayKey(c.key) || c.id?.length !== 36 || c.token?.length !== 72) throw new Error('invalid runner credentials; create a new Render pairing in the browser');
-	return { url, id: c.id, token: c.token, key: c.key };
+	return { url: origin(String(c.url ?? '')), id: c.id, token: c.token, key: c.key };
 }
 
 /** runnerCredentials reads this Mob's runner credentials: MOB_RUNNER_PAIRING for a deployed runner, else runner.json in dir, which mob runner pair writes. */
-export function runnerCredentials(dir: string): Credentials {
+export async function runnerCredentials(dir: string): Promise<Credentials> {
 	const env = process.env.MOB_RUNNER_PAIRING;
 	if (env) {
 		try { return deployed(env); } catch (e) { throw new Error('MOB_RUNNER_PAIRING: ' + (e as Error).message); }
 	}
 	let raw: string;
-	try { raw = readFileSync(join(dir, 'runner.json'), 'utf8'); } catch (e) { throw new Error('pair this browser first with mob runner pair: ' + (e as Error).message); }
+	try { raw = await Bun.file(join(dir, 'runner.json')).text(); } catch (e) { throw new Error('pair this browser first with mob runner pair: ' + (e as Error).message); }
 	return deployed(raw);
 }
 
@@ -88,7 +86,7 @@ export const runnerPlugin: HostPlugin = {
 			.option('--keep-awake <url>', 'Request this URL every 10 minutes, so a host that sleeps without inbound requests keeps the runner on')
 			.action(async (o: { serve?: boolean; healthAddr?: string; keepAwake?: string }) => {
 				const c = environment();
-				const creds = runnerCredentials(c.dir);
+				const creds = await runnerCredentials(c.dir);
 				const abort = new AbortController();
 				process.once('SIGINT', () => abort.abort());
 				process.once('SIGTERM', () => abort.abort());

@@ -12,7 +12,6 @@ import './plugins';
 
 const program = new Command('mob').description('Local assistant with desktop, terminal and background service').version(version).showHelpAfterError();
 
-const camel = (flag: string) => flag.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 for (const o of options) {
 	const value = typeof o.value === 'function' ? undefined : o.value;
 	const flag = flagOf(o);
@@ -27,7 +26,7 @@ function environment(): Environment {
 	const flags: Record<string, string | boolean | number> = {};
 	const given = program.opts();
 	for (const o of options) {
-		const key = camel(flagOf(o));
+		const key = flagOf(o).replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 		if (program.getOptionValueSource(key) === 'cli') flags[o.key] = given[key] === undefined ? true : given[key];
 	}
 	return new Loader(flags).read();

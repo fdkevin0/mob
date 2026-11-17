@@ -22,7 +22,10 @@ export type {
 	UsageSummary,
 } from './chat/store';
 export type { ContextParts, ContextSnapshot } from './chat/engine';
+export type { Change } from './chat/changes';
 
+/** Stage is one step after the agent's work: verify runs the project's checks; review has readers of another agent review the work. */
+export type Stage = { type: 'verify'; retries: number } | { type: 'review'; aspects: string[]; rounds: number };
 export type ProjectConfig = { name: string; path: string; blueprint?: string; checks?: string[] };
 export type Projects = { projects: ProjectConfig[]; blueprints: { name: string; title: string; description: string }[] };
 

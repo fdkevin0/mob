@@ -30,7 +30,7 @@ export function memoryProviders(file?: ProvidersFile): ProvidersStorage {
 }
 
 /** AmbiguousError lists the models a short name could mean. */
-export class AmbiguousError extends Error {
+class AmbiguousError extends Error {
 	constructor(readonly query: string, readonly candidates: string[]) {
 		super(`"${query}" matches several models: ${candidates.join(', ')}; use the full provider/model name`);
 	}
