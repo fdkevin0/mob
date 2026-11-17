@@ -62,5 +62,5 @@ a database, files, processes and the command line.
 - SQLite is the only persistence dependency: no generic repository and no
   external queue. Schema changes are upgrades in `packages/core/src/chat/schema.ts`
   (see [Releases and upgrades](features/releases.md)).
-- Model, Telegram, Cloudflare and S3 clients take per-instance transports;
-  tests never replace the global HTTP transport.
+- Model, Telegram, Cloudflare and S3 clients take per-instance transports, so
+  their tests do not replace the global HTTP transport.

@@ -1,5 +1,5 @@
 // HTTP helpers for handlers written against the Fetch API, so the same
-// server runs in Bun, in a service worker or behind any other host.
+// server runs in Bun, in a Web Worker or behind any other host.
 import { CommandError } from '../chat/conversation';
 import { NotFound } from '../chat/sql';
 import { Conflict, StaleApproval } from '../chat/store';

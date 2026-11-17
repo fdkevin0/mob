@@ -44,7 +44,7 @@ How a task is checked, reviewed and split into sub-tasks is in
 | --- | --- | --- |
 | `codex` (default) | `codex app-server` when `codex` is installed, otherwise `npx -y @openai/codex@0.166.0 app-server` | the ChatGPT subscription `codex login` saved on that computer (`codex login --device-auth` where it has no browser), or `OPENAI_API_KEY` / `CODEX_API_KEY` in the service's environment |
 | `claude` (Claude Agent) | Claude Code (`claude`) when installed, otherwise `npx -y @anthropic-ai/claude-code@2.1.303`, through the Claude Agent SDK | the Claude subscription `claude` saved on that computer (run `claude` and `/login`), or `ANTHROPIC_API_KEY` in the service's environment |
-| `dsh` (DeepSeek Harness) | `npx -y @deepseek-ai/dsh@0.2.1-rc.4 --profile acp` (only through `npx`, since other programs are also called `dsh`) | the DeepSeek API key saved in DeepSeek Harness (`npx @deepseek-ai/dsh web`, Models page), or `DEEPSEEK_API_KEY` in the service's environment |
+| `dsh` (DeepSeek Harness) | `npx -y @deepseek-ai/dsh@0.2.1-rc.2 --profile acp` (only through `npx`, since other programs are also called `dsh`) | the DeepSeek API key saved in DeepSeek Harness (`npx @deepseek-ai/dsh web`, Models page), or `DEEPSEEK_API_KEY` in the service's environment |
 | `codebuddy` (CodeBuddy Code) | `codebuddy --acp` when installed, otherwise `npx -y @tencent-ai/codebuddy-code@2.171.0 --acp` | the Tencent account `codebuddy` logged in with on that computer (WeChat for the China edition, Google or GitHub for the international one; the same account as WorkBuddy), or `CODEBUDDY_API_KEY` in the service's environment, with `CODEBUDDY_INTERNET_ENVIRONMENT=internal` for the China edition |
 
 The agent runs on the computer Mob runs on, as the same user, with Mob's

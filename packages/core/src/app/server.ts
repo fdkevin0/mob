@@ -1,6 +1,6 @@
 // The local HTTP API: the AI SDK UI chat stream, conversations, commands,
 // plugins and the change feed, behind the access token. Written against the
-// Fetch API, so Bun serves it on a computer and a service worker in a browser.
+// Fetch API, so Bun serves it on a computer and a Web Worker in a browser.
 import type { Command, CommandCall, Suggestion } from '../chat/commands';
 import { cell, choices, interactive, openPlugins, replyJSON } from '../chat/commands';
 import { ConversationService, CommandError, type ChatRequest } from '../chat/conversation';
@@ -101,7 +101,7 @@ const allowedOrigin = (origin: string, hostOrigin: string) =>
 	origin === 'http://localhost:5174' ||
 	origin === 'http://127.0.0.1:5174';
 
-/** webOrigin is the origin a web_url's pages send, or '' when it is empty or invalid. */
+/** webOrigin is the origin a web_url's pages send, or '' when empty; invalid URLs throw. */
 export function webOrigin(raw: string): string {
 	if (!raw) return '';
 	let u: URL;

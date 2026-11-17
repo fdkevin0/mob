@@ -52,7 +52,8 @@ amp orb service start mob --command './build/mob serve --demo' --port 8787 --por
 
 `just test` runs the core and host typecheck and tests (`bun run test:core`),
 the npm install and publish scripts' tests (`bun run test:release`),
-the UI typecheck and Vitest suite (`bun run test:web`), and
+the UI typecheck and Vitest suite (`bun run test:web`), the documentation sync,
+typecheck and link checks (`bun run test:docs`), and
 `apps/mob/scripts/check-chat.ts`, which builds the binary, starts a temporary service and
 reads its stream with the real AI SDK UI parser and shared client. It also runs
 `bun run test:dsh`, the optional DSH bridge's typecheck and runtime tests; the
