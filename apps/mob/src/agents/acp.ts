@@ -1,10 +1,10 @@
 // The Agent Client Protocol driver: agents that run an ACP server on their
 // standard input and output, which is every agent Mob knows so far.
 import {
-	ClientSideConnection, PROTOCOL_VERSION, ndJsonStream,
-	type Client, type McpServer as ACPMcpServer, type PermissionOption, type RequestPermissionOutcome, type SessionConfigOption,
-	type SessionModeState, type SessionUpdate, type ToolCallContent, type ToolCallLocation, type Usage as ACPUsage,
-} from '@agentclientprotocol/sdk';
+	PROTOCOL_VERSION, client, methods, ndJsonStream,
+	type ClientConnection, type McpServer as ACPMcpServer, type NewSessionResponse, type PermissionOption, type RequestPermissionOutcome,
+	type SessionConfigOption, type SessionModeState, type SessionUpdate, type ToolCallContent, type ToolCallLocation, type Usage as ACPUsage,
+} from '@agentclientprotocol/sdk/unstable';
 import type { llm } from '@mob/core';
 import { version } from '../version';
 import { failed, signIn, type AgentSession, type Choice, type Ending, type McpServer, type ModelUsage, type Options, type Runtime, type ToolContent, type Update } from './runtime';
@@ -117,7 +117,7 @@ const servers = (list: McpServer[]): ACPMcpServer[] =>
 class Session implements AgentSession {
 	id = '';
 	model = '';
-	readonly conn: ClientSideConnection;
+	readonly conn: ClientConnection;
 	readonly closed: Promise<void>;
 	/** loading is set while the agent replays a session it loads, which the conversation already shows. */
 	private loading = false;
@@ -129,7 +129,22 @@ class Session implements AgentSession {
 
 	constructor(private o: Options) {
 		this.io = o.conn!;
-		this.conn = new ClientSideConnection(() => this.client(), ndJsonStream(this.io.input, this.io.output));
+		const h = this.o.handler;
+		this.conn = client()
+			.onNotification(methods.client.session.update, ({ params }) => {
+				if (this.loading) return;
+				const u = update(params.update);
+				if (u) h.update(u);
+			})
+			.onRequest(methods.client.session.requestPermission, async ({ params }) => {
+				const tc = params.toolCall;
+				const choice = await Promise.race([
+					h.permission({ id: tc.toolCallId, title: tc.title, kind: tc.kind, locations: paths(tc.locations), input: tc.rawInput }),
+					this.end.promise.then(() => 'cancel' as const),
+				]);
+				return { outcome: outcome(choice, params.options) };
+			})
+			.connect(ndJsonStream(this.io.input, this.io.output));
 		this.closed = this.conn.closed.then(() => {}, () => {});
 		void this.closed.then(() => this.close());
 	}
@@ -140,6 +155,7 @@ class Session implements AgentSession {
 		if (this.ended) return;
 		this.ended = true;
 		this.end.resolve();
+		this.conn.close();
 		this.io.stop();
 	}
 
@@ -155,7 +171,7 @@ class Session implements AgentSession {
 			work.then(resolve, reject).finally(() => bound.removeEventListener('abort', stop));
 		});
 		let init;
-		try { init = await within(this.conn.initialize({ protocolVersion: PROTOCOL_VERSION, clientInfo: { name: 'mob', version }, clientCapabilities: {} })); } catch (e) { throw this.failed('start', e); }
+		try { init = await within(this.conn.agent.request(methods.agent.initialize, { protocolVersion: PROTOCOL_VERSION, clientInfo: { name: 'mob', version }, clientCapabilities: {} })); } catch (e) { throw this.failed('start', e); }
 		const caps = init.agentCapabilities ?? {};
 		const mcp = servers(this.o.servers(!!caps.mcpCapabilities?.http));
 		let modes: SessionModeState | null | undefined;
@@ -163,14 +179,14 @@ class Session implements AgentSession {
 			// The agent replays the session while loading it; the conversation already shows it.
 			this.loading = true;
 			try {
-				const loaded = await within(this.conn.loadSession({ sessionId: t.session, cwd: t.worktree, mcpServers: mcp }));
+				const loaded = await within(this.conn.agent.request(methods.agent.session.load, { sessionId: t.session, cwd: t.worktree, mcpServers: mcp }));
 				[this.id, modes, this.model] = [t.session, loaded.modes, modelOption(loaded.configOptions)];
 			} catch (e) { if (bound.aborted) throw e; }
 			this.loading = false;
-		} else if (t.session && (caps.sessionCapabilities as { resume?: unknown } | undefined)?.resume) {
+		} else if (t.session && caps.sessionCapabilities?.resume) {
 			// Resuming restores the session without replaying it.
 			try {
-				const resumed = await within(this.conn.resumeSession({ sessionId: t.session, cwd: t.worktree, mcpServers: mcp }));
+				const resumed = await within(this.conn.agent.request(methods.agent.session.resume, { sessionId: t.session, cwd: t.worktree, mcpServers: mcp }));
 				[this.id, modes, this.model] = [t.session, resumed.modes, modelOption(resumed.configOptions)];
 			} catch (e) { if (bound.aborted) throw e; }
 		}
@@ -187,51 +203,34 @@ class Session implements AgentSession {
 			if (!mode || !offered(mode)) throw this.failed('work read-only', new Error(`it offers no ${JSON.stringify(mode)} mode`));
 		}
 		if (mode && modes && modes.currentModeId !== mode && offered(mode)) {
-			try { await within(this.conn.setSessionMode({ sessionId: this.id, modeId: mode })); } catch (e) { throw this.failed('set its mode', e); }
+			try { await within(this.conn.agent.request(methods.agent.session.setMode, { sessionId: this.id, modeId: mode })); } catch (e) { throw this.failed('set its mode', e); }
 		}
 	}
 
 	/** newSession creates a session in the task's worktree, signing in first with the environment variables an agent accepts, when it asks to and they are set. */
-	private async newSession(within: <T>(p: Promise<T>) => Promise<T>, methods: unknown[], mcp: ACPMcpServer[]) {
+	private async newSession(within: <T>(p: Promise<T>) => Promise<T>, authMethods: unknown[], mcp: ACPMcpServer[]): Promise<NewSessionResponse> {
 		const request = { cwd: this.o.task.worktree, mcpServers: mcp };
-		try { return await within(this.conn.newSession(request)); } catch (e) {
+		try { return await within(this.conn.agent.request(methods.agent.session.new, request)); } catch (e) {
 			if (!authRequired(e)) throw this.failed('start a session', e);
 		}
-		for (const m of methods as { type?: string; id: string; vars?: { name: string }[] }[]) {
+		for (const m of authMethods as { type?: string; id: string; vars?: { name: string }[] }[]) {
 			if (m.type !== 'env_var' || !m.vars?.some(v => process.env[v.name])) continue;
 			try {
-				await within(this.conn.authenticate({ methodId: m.id }));
-				return await within(this.conn.newSession(request));
+				await within(this.conn.agent.request(methods.agent.authenticate, { methodId: m.id }));
+				return await within(this.conn.agent.request(methods.agent.session.new, request));
 			} catch { /* the next method */ }
 		}
 		throw signIn(this.o.preset);
 	}
 
 	prompt(text: string): Promise<Ending> {
-		return this.conn.prompt({ sessionId: this.id, prompt: [{ type: 'text', text }] }).then(
+		return this.conn.agent.request(methods.agent.session.prompt, { sessionId: this.id, prompt: [{ type: 'text', text }] }).then(
 			r => ({ reason: r.stopReason, usage: reported(r.usage, r._meta) }),
 			// Claude Agent finds out it is not signed in only when it answers.
 			err => ({ err, signedOut: authRequired(err), usage: [] }));
 	}
 
-	cancel() { this.conn.cancel({ sessionId: this.id }).catch(() => {}); }
-
-	/** client answers the agent's requests for the session. Mob offers agents no file system or terminal of its own: they use their own in the worktree. */
-	private client(): Client {
-		const h = this.o.handler;
-		return {
-			sessionUpdate: async n => {
-				if (this.loading) return;
-				const u = update(n.update);
-				if (u) h.update(u);
-			},
-			requestPermission: async request => {
-				const tc = request.toolCall;
-				const choice = await Promise.race([h.permission({ id: tc.toolCallId, title: tc.title, kind: tc.kind, locations: paths(tc.locations), input: tc.rawInput }), this.end.promise.then(() => 'cancel' as const)]);
-				return { outcome: outcome(choice, request.options) };
-			},
-		};
-	}
+	cancel() { this.conn.agent.notify(methods.agent.session.cancel, { sessionId: this.id }).catch(() => {}); }
 }
 
 export const acp: Runtime = {
