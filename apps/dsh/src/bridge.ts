@@ -40,7 +40,7 @@ export async function createBridge(plugins: LoadedPlugin[]) {
 		await Promise.all(fibers);
 		for (let i = 0; i < fibers.length; i++) {
 			const fiber = await fibers[i];
-			if (fiber.store === undefined) {
+			if (fiber.committed === undefined) {
 				throw new Error(`DSH plugin ${plugins[i].name} is not active; supply its required services in this configuration`);
 			}
 		}
