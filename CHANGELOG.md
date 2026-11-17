@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/fdkevin0/mob/compare/v0.3.0...v0.4.0) (2026-11-17)
+
+
+### Features
+
+* **agents:** run Claude Agent on the Claude Agent SDK and let confined agents work without asking ([#187](https://github.com/fdkevin0/mob/issues/187)) ([a874f1b](https://github.com/fdkevin0/mob/commit/a874f1b96b6195bbcc7fe37da78a87a1b63e240a))
+
+
+### Bug Fixes
+
+* **core:** settle remembered approvals, restore deleted conversation titles and default datetime to UTC ([#185](https://github.com/fdkevin0/mob/issues/185)) ([67783bf](https://github.com/fdkevin0/mob/commit/67783bf0ba86eee22322c2ca33b06913fbc26492))
+* **desktop:** version, attest and package multi-arch installers ([#196](https://github.com/fdkevin0/mob/issues/196)) ([b7e5404](https://github.com/fdkevin0/mob/commit/b7e5404b4b09d1d33b47dfba584f39cf4516a341))
+* **release:** build mob.exe directly on windows-latest ([#198](https://github.com/fdkevin0/mob/issues/198)) ([8803328](https://github.com/fdkevin0/mob/commit/88033287a7a5e84786aee861b5b3482416a4608d))
+* **release:** extract windows archive with pwsh and set GH_REPO in checksums ([#197](https://github.com/fdkevin0/mob/issues/197)) ([c93afc0](https://github.com/fdkevin0/mob/commit/c93afc0ac0def9cd0c3363ba91bf308065a88579))
+* **server/client:** allow web dev origin 5174 and support headless encryptedFetch ([#191](https://github.com/fdkevin0/mob/issues/191)) ([151c11c](https://github.com/fdkevin0/mob/commit/151c11cbdbc0f9d4a7ece222850787fc3f4ffbba))
+
 ## [0.3.0](https://github.com/fdkevin0/mob/compare/v0.2.0...v0.3.0) (2026-11-05)
 
 
