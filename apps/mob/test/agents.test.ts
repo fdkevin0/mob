@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
 import {
-	AgentSideConnection, PROTOCOL_VERSION, RequestError, ndJsonStream,
-	type Agent, type McpServer, type PromptRequest, type PromptResponse, type SessionUpdate, type ToolCallLocation, type ToolKind,
-} from '@agentclientprotocol/sdk';
+	PROTOCOL_VERSION, RequestError, agent, methods, ndJsonStream,
+	type AgentConnection, type McpServer, type PromptRequest, type PromptResponse, type SessionUpdate, type ToolCallLocation, type ToolKind,
+} from '@agentclientprotocol/sdk/unstable';
 import { ConversationService, describeApproval, newID, rememberAlways, Store, type Answer, type llm, type Message, type Models, type Task, type Tool, type Turn } from '@mob/core';
 import { openBun } from '@mob/core/sqlite/bun';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -35,7 +35,7 @@ const models = [{ type: 'select' as const, id: 'model', name: 'Model', category:
 const modes = { currentModeId: 'read-only', availableModes: [{ id: 'read-only', name: 'Read only' }, { id: 'auto', name: 'Auto' }, { id: 'acceptEdits', name: 'Accept edits' }] };
 
 /** Fake is an ACP agent that acts on the words of each prompt. */
-class Fake implements Agent {
+class Fake {
 	dir = '';
 	prompts: string[] = [];
 	mode = '';
@@ -44,15 +44,26 @@ class Fake implements Agent {
 	servers: McpServer[] = [];
 	spent = 0;
 	release = Promise.withResolvers<void>();
+	readonly conn: AgentConnection;
 	private cancels = new Map<string, () => void>();
-	constructor(readonly conn: AgentSideConnection, readonly options: { resumes?: boolean; signedOut?: boolean; session?: string; failLoad?: boolean }) {}
+	constructor(stream: ReturnType<typeof ndJsonStream>, readonly options: { resumes?: boolean; signedOut?: boolean; session?: string; failLoad?: boolean }) {
+		this.conn = agent()
+			.onRequest(methods.agent.initialize, () => this.initialize())
+			.onRequest(methods.agent.authenticate, () => ({}))
+			.onNotification(methods.agent.session.cancel, ({ params }) => this.cancel(params))
+			.onRequest(methods.agent.session.resume, ({ params }) => this.resumeSession(params))
+			.onRequest(methods.agent.session.new, ({ params }) => this.newSession(params))
+			.onRequest(methods.agent.session.load, ({ params }) => this.loadSession(params))
+			.onRequest(methods.agent.session.setMode, ({ params }) => this.setSessionMode(params))
+			.onRequest(methods.agent.session.prompt, ({ params }) => this.prompt(params))
+			.connect(stream);
+	}
 
 	initialize() {
 		// Like DeepSeek Harness: sessions are resumed, not loaded.
-		if (this.options.resumes) return { protocolVersion: PROTOCOL_VERSION, agentCapabilities: { sessionCapabilities: { resume: {} } } as never };
+		if (this.options.resumes) return { protocolVersion: PROTOCOL_VERSION, agentCapabilities: { sessionCapabilities: { resume: {} } } };
 		return { protocolVersion: PROTOCOL_VERSION, agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } } };
 	}
-	authenticate() { return {}; }
 	cancel({ sessionId }: { sessionId: string }) { this.cancels.get(sessionId)?.(); }
 	resumeSession(r: { sessionId: string; cwd: string }) { this.dir = r.cwd; this.resumed = r.sessionId; return {}; }
 	newSession(r: { cwd: string; mcpServers: McpServer[] }) {
@@ -71,7 +82,7 @@ class Fake implements Agent {
 	}
 	setSessionMode(r: { modeId: string }) { this.mode = r.modeId; return {}; }
 
-	say(sessionId: string, update: SessionUpdate) { return this.conn.sessionUpdate({ sessionId, update }); }
+	say(sessionId: string, update: SessionUpdate) { return this.conn.client.notify(methods.client.session.update, { sessionId, update }); }
 	text(sessionId: string, text: string) { return this.say(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } }); }
 
 	async prompt(p: PromptRequest): Promise<PromptResponse> {
@@ -89,7 +100,7 @@ class Fake implements Agent {
 			let kind: ToolKind = 'execute', title = 'npm test', files: ToolCallLocation[] = [];
 			if (text === 'edit') [kind, title, files] = ['edit', 'Edit main.go', [{ path: join(this.dir, 'main.go') }]];
 			await this.say(id, { sessionUpdate: 'tool_call', toolCallId: 'call1', title, kind, status: 'pending', locations: files });
-			const answer = await this.conn.requestPermission({ sessionId: id, toolCall: { toolCallId: 'call1', title, kind, locations: files }, options: [
+			const answer = await this.conn.client.request(methods.client.session.requestPermission, { sessionId: id, toolCall: { toolCallId: 'call1', title, kind, locations: files }, options: [
 				{ kind: 'allow_once', name: 'Allow', optionId: 'allow' }, { kind: 'allow_always', name: 'Always', optionId: 'always' }, { kind: 'reject_once', name: 'Reject', optionId: 'reject' },
 			] });
 			if (answer.outcome.outcome !== 'selected') return { stopReason: 'cancelled' };
@@ -122,7 +133,7 @@ class Fake implements Agent {
 			// The call first edits a file in the worktree; an update clears its files before the request names only the call.
 			await this.say(id, { sessionUpdate: 'tool_call', toolCallId: 'call-cleared', title: 'Edit', kind: 'edit', status: 'pending', locations: [{ path: join(this.dir, 'main.go') }] });
 			await this.say(id, { sessionUpdate: 'tool_call_update', toolCallId: 'call-cleared', locations: [] });
-			const answer = await this.conn.requestPermission({ sessionId: id, toolCall: { toolCallId: 'call-cleared' }, options: [
+			const answer = await this.conn.client.request(methods.client.session.requestPermission, { sessionId: id, toolCall: { toolCallId: 'call-cleared' }, options: [
 				{ kind: 'allow_once', name: 'Allow once', optionId: 'allow-once' }, { kind: 'reject_once', name: 'Reject', optionId: 'reject-once' },
 			] });
 			if (answer.outcome.outcome !== 'selected') return { stopReason: 'cancelled' };
@@ -131,7 +142,7 @@ class Fake implements Agent {
 			// The call is shown before its input is known; an update fills it in, then the request names only the call.
 			await this.say(id, { sessionUpdate: 'tool_call', toolCallId: 'call-late', title: '', kind: 'other', status: 'pending' });
 			await this.say(id, { sessionUpdate: 'tool_call_update', toolCallId: 'call-late', title: 'bash', kind: 'execute', rawInput: { command: text.slice(5) } });
-			const answer = await this.conn.requestPermission({ sessionId: id, toolCall: { toolCallId: 'call-late' }, options: [
+			const answer = await this.conn.client.request(methods.client.session.requestPermission, { sessionId: id, toolCall: { toolCallId: 'call-late' }, options: [
 				{ kind: 'allow_once', name: 'Allow once', optionId: 'allow-once' }, { kind: 'reject_once', name: 'Reject', optionId: 'reject-once' },
 			] });
 			if (answer.outcome.outcome !== 'selected') return { stopReason: 'cancelled' };
@@ -142,7 +153,7 @@ class Fake implements Agent {
 			await this.say(id, text === 'bare'
 				? { sessionUpdate: 'tool_call', toolCallId: call, title: '', kind: 'other', status: 'pending' }
 				: { sessionUpdate: 'tool_call', toolCallId: call, title: 'bash', kind: 'other', status: 'pending', rawInput: { command: text.slice(4) } });
-			const answer = await this.conn.requestPermission({ sessionId: id, toolCall: { toolCallId: call }, options: [
+			const answer = await this.conn.client.request(methods.client.session.requestPermission, { sessionId: id, toolCall: { toolCallId: call }, options: [
 				{ kind: 'allow_once', name: 'Allow once', optionId: 'allow-once' }, { kind: 'reject_once', name: 'Reject', optionId: 'reject-once' },
 			] });
 			if (answer.outcome.outcome !== 'selected') return { stopReason: 'cancelled' };
@@ -196,9 +207,7 @@ class Fakes {
 			throw signal.reason;
 		}
 		const toAgent = new TransformStream<Uint8Array, Uint8Array>(), toClient = new TransformStream<Uint8Array, Uint8Array>();
-		let fake!: Fake;
-		new AgentSideConnection(conn => (fake = new Fake(conn, { ...this.options })), ndJsonStream(toClient.writable, toAgent.readable));
-		this.agents.push(fake);
+		this.agents.push(new Fake(ndJsonStream(toClient.writable, toAgent.readable), { ...this.options }));
 		return { input: toAgent.writable, output: toClient.readable, stop: () => { void toAgent.writable.abort().catch(() => {}); void toClient.writable.abort().catch(() => {}); } };
 	};
 	last() { return this.agents[this.agents.length - 1]!; }
