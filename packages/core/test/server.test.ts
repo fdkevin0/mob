@@ -228,3 +228,56 @@ test('management data and deletion require authentication and preserve other ent
 	expect(store.grants()).toEqual([]);
 	store.close();
 });
+
+test('allowed origins permit dev servers and reject untrusted origins', async () => {
+	const store = new Store(openBun(':memory:')).open();
+	const server = new Server({ store, providers: new ProviderRegistry(undefined, undefined, true), token: 'test', version: 'test' });
+	const call = (headers: Record<string, string>) =>
+		server.fetch(new Request('http://127.0.0.1:8787/api/config', { headers: { Authorization: 'Bearer test', ...headers } }));
+
+	expect((await call({})).status).toBe(200);
+	expect((await call({ Origin: 'http://127.0.0.1:8787' })).status).toBe(200);
+	expect((await call({ Origin: 'http://localhost:5173' })).status).toBe(200);
+	expect((await call({ Origin: 'http://127.0.0.1:5173' })).status).toBe(200);
+	expect((await call({ Origin: 'http://localhost:5174' })).status).toBe(200);
+	expect((await call({ Origin: 'http://127.0.0.1:5174' })).status).toBe(200);
+	const deniedOrigin = await call({ Origin: 'http://evil.com' });
+	expect(deniedOrigin.status).toBe(403);
+	expect(deniedOrigin.headers.get('Access-Control-Allow-Origin')).toBeNull();
+	expect((await call({ Host: '[::1]:8787' })).status).toBe(200);
+	expect((await call({ Host: '[::1X' })).status).toBe(403);
+	expect((await call({ Host: '[::1]evil.com' })).status).toBe(403);
+	const preflight = await server.fetch(
+		new Request('http://127.0.0.1:8787/api/config', {
+			method: 'OPTIONS',
+			headers: { Host: 'evil.com:8787', Origin: 'http://evil.com:8787', 'Access-Control-Request-Private-Network': 'true' },
+		}),
+	);
+	expect(preflight.status).toBe(403);
+	expect(preflight.headers.get('Access-Control-Allow-Origin')).toBeNull();
+	expect(preflight.headers.get('Access-Control-Allow-Private-Network')).toBeNull();
+	expect(preflight.headers.get('X-Content-Type-Options')).toBe('nosniff');
+
+	const live = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: server.fetch });
+	const rawGet = (hostHeader: string) => {
+		const chunks: Uint8Array[] = [];
+		return new Promise<string>((resolve, reject) => {
+			void Bun.connect({
+				hostname: '127.0.0.1',
+				port: live.port!,
+				socket: {
+					open(s) { s.write(`GET /api/config HTTP/1.1\r\nHost: ${hostHeader}\r\nAuthorization: Bearer test\r\nConnection: close\r\n\r\n`); },
+					data(_s, data) { chunks.push(new Uint8Array(data)); },
+					close() { resolve(new Blob(chunks).text()); },
+					error(_s, err) { reject(err); },
+				},
+			});
+		});
+	};
+	expect(await rawGet('[::1X')).toMatch(/^HTTP\/1\.1 403 [\s\S]*x-content-type-options: nosniff[\s\S]*\r\n\r\nhost denied\n$/i);
+	expect(await rawGet('[::1]evil.com')).toMatch(/^HTTP\/1\.1 403 [\s\S]*\r\n\r\nhost denied\n$/i);
+	expect(await rawGet(`[::1]:${live.port}`)).toMatch(/^HTTP\/1\.1 200 /);
+	live.stop(true);
+	await server.close();
+	store.close();
+});

@@ -1,14 +1,28 @@
 // The relay receives only envelopes. Pairing keys never enter a request URL, header or body.
 import { open, seal, unbase64, type Envelope, type RelayReply as Reply } from '@mob/core/relay';
+import { secureURL } from '@mob/core/url';
 
-export async function cloud<T>(path: string, init?: RequestInit): Promise<T> {
-	const response = await fetch(`/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
+function parseOrigin(raw = globalThis.location?.origin): string {
+	const u = raw ? URL.parse(raw) : null;
+	if (!u?.host || u.username || u.password || u.search || raw?.includes('?') || u.hash || raw?.includes('#') || u.pathname !== '/')
+		throw new Error('Runner origin is required');
+	if (!secureURL(u)) throw new Error('Runner origin requires HTTPS except on loopback');
+	return u.origin;
+}
+
+async function requestCloud<T>(baseOrigin: string, path: string, init?: RequestInit): Promise<T> {
+	const response = await fetch(`${baseOrigin}/api/runners${path}`, { ...init, credentials: 'same-origin', cache: 'no-store' });
 	if (!response.ok)
 		throw new Error(response.status === 401 ? 'Sign in to the website again.' : `Runner request failed (HTTP ${response.status}).`);
 	return response.json();
 }
 
-export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
+export async function cloud<T>(path: string, init?: RequestInit, origin?: string): Promise<T> {
+	return requestCloud(parseOrigin(origin), path, init);
+}
+
+export function encryptedFetch(runner: string, rawKey: string, origin?: string): typeof fetch {
+	const baseOrigin = parseOrigin(origin);
 	let cachedSession = '';
 	return async (input, init) => {
 		const request = new Request(input, init);
@@ -19,14 +33,14 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 		}
 		const url = new URL(request.url);
 		const prefix = `/api/runners/${runner}`;
-		if (url.origin !== location.origin || !url.pathname.startsWith(prefix + '/api/')) throw new Error('Invalid runner API path');
+		if (url.origin !== baseOrigin || !url.pathname.startsWith(prefix + '/api/')) throw new Error('Invalid runner API path');
 		const payload = await request.text();
 		let id = '',
 			session = '',
 			response: Response | undefined;
 		for (let attempt = 0; attempt < 2; attempt++) {
 			if (!cachedSession) {
-				const current = (await cloud<{ session: string | null }>(`/${runner}`, { signal: request.signal })).session;
+				const current = (await requestCloud<{ session: string | null }>(baseOrigin, `/${runner}`, { signal: request.signal })).session;
 				if (!current || !/^[a-f0-9]{64}$/.test(current)) throw new Error('Runner is offline.');
 				cachedSession = current;
 			}
@@ -45,7 +59,7 @@ export function encryptedFetch(runner: string, rawKey: string): typeof fetch {
 					expires: Date.now() + 45_000,
 				},
 			);
-			response = await fetch(`/api/runners/${runner}/relay`, {
+			response = await fetch(`${baseOrigin}/api/runners/${runner}/relay`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(envelope),

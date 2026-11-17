@@ -1,7 +1,7 @@
 // Capture a page of the web app the same way every time: each size in each
 // theme, at twice the pixel density, with motion reduced. See docs/screenshots.md.
 //
-//   bun scripts/screenshot.ts http://127.0.0.1:5173/ --name workspace
+//   bun scripts/screenshot.ts http://127.0.0.1:5174/app.html --name workspace
 import { parseArgs } from 'node:util';
 import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

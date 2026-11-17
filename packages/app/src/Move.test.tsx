@@ -9,7 +9,7 @@ it('copies the chosen conversations from a local Mob into this browser and opens
 	const transfer = { v: 1, title: 'Plan', model: '', summary: '', summaryThrough: '', messages: [], facts: [], usage: [] };
 	const imported: unknown[] = [];
 	vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-		if (url === '/api/runners') return Response.json([]);
+		if (url === `${location.origin}/api/runners`) return Response.json([]);
 		if (url === 'http://127.0.0.1:8787/api/conversations/one/export') return Response.json(transfer);
 		if (url === 'http://localhost/api/conversations/import') { imported.push(JSON.parse(String(init?.body))); return Response.json({ id: 'new', title: 'Plan', updatedAt: 1 }); }
 		return new Response('unexpected ' + url, { status: 500 });

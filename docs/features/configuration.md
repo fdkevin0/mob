@@ -59,5 +59,5 @@ Model providers and keys live in `providers.json` beside it (see
   (`chmod 600`). Prefer a file or environment variable for secrets: CLI flags
   are visible in the invoking process's arguments. Background startup forwards
   secret flags through its child environment instead of child arguments.
-- Browser dev origins on localhost port 5173 and the `web_url` origin are
-  allowed; the desktop window loads the service itself.
+- Browser dev origins on loopback ports 5173 and 5174 and the `web_url` origin
+  are allowed; the desktop window loads the service itself.
