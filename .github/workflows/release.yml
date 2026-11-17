@@ -147,22 +147,18 @@ jobs:
       - name: Stage release binaries and package
         shell: bash
         run: |
+          bun run --cwd apps/desktop build
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            gh release download "$VERSION" -D archive -p "mob_${VERSION}_windows_amd64.zip"
-            pwsh -NoProfile -Command "Expand-Archive -LiteralPath 'archive/mob_${VERSION}_windows_amd64.zip' -DestinationPath archive -Force"
-            stage_args=(--x64 "archive/mob_${VERSION}_windows_amd64/mob.exe")
+            MOB_BUILD_VERSION="$VERSION" bun apps/desktop/scripts/stage.ts
           else
             for arch in amd64 arm64; do
               gh release download "$VERSION" -D archive -p "mob_${VERSION}_${{ matrix.platform }}_${arch}.tar.gz"
               tar -xzf "archive/mob_${VERSION}_${{ matrix.platform }}_${arch}.tar.gz" -C archive
             done
-            stage_args=(
-              --x64 "archive/mob_${VERSION}_${{ matrix.platform }}_amd64/mob"
+            bun apps/desktop/scripts/stage.ts \
+              --x64 "archive/mob_${VERSION}_${{ matrix.platform }}_amd64/mob" \
               --arm64 "archive/mob_${VERSION}_${{ matrix.platform }}_arm64/mob"
-            )
           fi
-          bun run --cwd apps/desktop build
-          bun apps/desktop/scripts/stage.ts "${stage_args[@]}"
           bun run --cwd apps/desktop electron-builder --publish never ${{ matrix.arches }} -c.extraMetadata.version="$SEMVER"
           shopt -s nullglob
           mkdir -p apps/desktop/release/out
