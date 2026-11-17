@@ -133,6 +133,7 @@ jobs:
       attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release.outputs.version }}
       SEMVER: ${{ needs.release.outputs.semver }}
     steps:
@@ -148,7 +149,7 @@ jobs:
         run: |
           if [ "${{ matrix.platform }}" = "windows" ]; then
             gh release download "$VERSION" -D archive -p "mob_${VERSION}_windows_amd64.zip"
-            unzip -q "archive/mob_${VERSION}_windows_amd64.zip" -d archive
+            pwsh -NoProfile -Command "Expand-Archive -LiteralPath 'archive/mob_${VERSION}_windows_amd64.zip' -DestinationPath archive -Force"
             stage_args=(--x64 "archive/mob_${VERSION}_windows_amd64/mob.exe")
           else
             for arch in amd64 arm64; do
@@ -183,6 +184,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.release.outputs.version }}
     steps:
       - name: Include desktop installers in SHA256SUMS
