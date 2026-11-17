@@ -29,8 +29,8 @@ commands, approvals, delivery records and replies behave the same everywhere.
   background run (see [Extensions](extensions.md)).
 - `/help`, `/new`, `/model`, `/models`, `/compact`, `/usage`, `/approve`, `/deny`,
   `/grants`, `/revoke`, `/memories`, `/forget` and `/signin` are offered to every
-  channel (`/stop` is also offered to Telegram); owner-only commands refuse other
-  senders.
+  channel (`/list`, `/open`, `/stop`, `/schedules`, `/unschedule` and `/tasks`
+  are also offered to Telegram); owner-only commands refuse other senders.
 
 ## Replies are the turn's conclusion
 
