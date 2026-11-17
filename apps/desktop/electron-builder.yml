@@ -1,7 +1,6 @@
 # Packages the window with the mob binary that scripts/stage.ts put in bin/<arch>/.
 appId: app.usemob.desktop
 productName: Mob
-executableName: mob-desktop
 artifactName: mob-desktop-${version}-${os}-${arch}.${ext}
 copyright: Mob contributors
 directories:
@@ -16,8 +15,10 @@ mac:
   category: public.app-category.developer-tools
   target: [dmg, zip]
 win:
+  executableName: mob-desktop
   target: [nsis]
 linux:
+  executableName: mob-desktop
   category: Development
   maintainer: Mob contributors <mob@usemob.app>
   target: [AppImage, deb]

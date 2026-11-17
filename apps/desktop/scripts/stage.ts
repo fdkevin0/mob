@@ -28,6 +28,7 @@ if (values.x64 || values.arm64) {
 } else {
 	mkdirSync(`${root}/bin/${process.arch}`, { recursive: true });
 	await $`bun run build && bun apps/mob/scripts/build.ts --outfile ${root}/bin/${process.arch}/${name}`.cwd(`${import.meta.dir}/../../..`);
+	rmSync(`${root}/bin/${process.arch}/${name.replace(/(\.exe)?$/, '.map')}`, { force: true });
 }
 
 mkdirSync(`${root}/build`, { recursive: true });

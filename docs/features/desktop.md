@@ -13,9 +13,11 @@ inside, so no separate CLI or Node.js installation is needed):
 - **macOS** (`arm64` and `x64`): open `mob-desktop-VERSION-mac-ARCH.dmg` (or
   extract the `.zip`) and drag **Mob** into `/Applications`.
 - **Windows** (`x64`): run `mob-desktop-VERSION-win-x64.exe`.
-- **Linux** (`x64` and `arm64`): install `mob-desktop-VERSION-linux-ARCH.deb`
-  (`sudo apt install ./mob-desktop-VERSION-linux-ARCH.deb`) or mark
-  `mob-desktop-VERSION-linux-ARCH.AppImage` executable (`chmod +x`) and run it.
+- **Linux** (`x64` and `arm64`): install
+  `mob-desktop-VERSION-linux-amd64.deb` or `-arm64.deb`
+  (`sudo apt install ./mob-desktop-VERSION-linux-amd64.deb`), or mark
+  `mob-desktop-VERSION-linux-x86_64.AppImage` or `-arm64.AppImage` executable
+  (`chmod +x`) and run it.
 
 Packages are not signed or notarized yet, so macOS and Windows block the first
 launch:

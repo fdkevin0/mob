@@ -37,7 +37,7 @@ appear in the changelog; other commit types are left out.
   arm64, each for glibc and for musl), macOS (amd64, arm64) and Windows
   (amd64), plus `SHA256SUMS`. A musl build tells OpenTUI to load its musl
   library (`OPENTUI_LIBC`, set at build time). The release job installs
-  every platform's native packages (`bun install --os='*' --cpu='*'`) so each
+  every platform's native packages (`bun install --frozen-lockfile --os='*' --cpu='*' --libc='*'`) so each
   target finds them. The `desktop` job packages those `mob` binaries into
   Electron installers for Linux (`x64`, `arm64`), macOS (`x64`, `arm64`) and
   Windows (`x64`) with the same SemVer version as npm, and `checksums` updates
