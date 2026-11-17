@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/fdkevin0/mob/compare/v0.4.0...v0.4.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @agentclientprotocol/sdk to v2 ([#194](https://github.com/fdkevin0/mob/issues/194)) ([e0f17bb](https://github.com/fdkevin0/mob/commit/e0f17bb0dca67ea5b7466aa77ce1b945a5c4b049))
+* **deps:** update js dependencies ([#188](https://github.com/fdkevin0/mob/issues/188)) ([20fac4c](https://github.com/fdkevin0/mob/commit/20fac4cb6981aba032efb3d324ddac7443345b1f))
+
 ## [0.4.0](https://github.com/fdkevin0/mob/compare/v0.3.0...v0.4.0) (2026-11-17)
 
 
