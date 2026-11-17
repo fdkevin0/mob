@@ -55,6 +55,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     outputs:
       version: ${{ steps.version.outputs.version }}
+      semver: ${{ steps.version.outputs.semver }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -75,6 +76,7 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           bun run build
           bun scripts/release.ts --version "$version" --npm
+          echo "semver=$(jq -r .version dist/npm/publish.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
@@ -104,37 +106,89 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  # Packages the Electron app around this release's mob for each platform and
-  # attaches the installers to the release the release job created.
+  # Packages the Electron app around this release's mob binaries for each
+  # platform and architecture, attests the installers and attaches them to the
+  # GitHub release.
   desktop:
     name: Desktop app (${{ matrix.os }})
-    needs: release
+    needs: [release-please, release]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arches: --x64 --arm64
+          - os: macos-latest
+            platform: darwin
+            arches: --x64 --arm64
+          - os: windows-latest
+            platform: windows
+            arches: --x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.release.outputs.version }}
+      SEMVER: ${{ needs.release.outputs.semver }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag || github.event.workflow_run.head_sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Stage release binaries and package
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            gh release download "$VERSION" -D archive -p "mob_${VERSION}_windows_amd64.zip"
+            unzip -q "archive/mob_${VERSION}_windows_amd64.zip" -d archive
+            stage_args=(--x64 "archive/mob_${VERSION}_windows_amd64/mob.exe")
+          else
+            for arch in amd64 arm64; do
+              gh release download "$VERSION" -D archive -p "mob_${VERSION}_${{ matrix.platform }}_${arch}.tar.gz"
+              tar -xzf "archive/mob_${VERSION}_${{ matrix.platform }}_${arch}.tar.gz" -C archive
+            done
+            stage_args=(
+              --x64 "archive/mob_${VERSION}_${{ matrix.platform }}_amd64/mob"
+              --arm64 "archive/mob_${VERSION}_${{ matrix.platform }}_arm64/mob"
+            )
+          fi
+          bun run --cwd apps/desktop build
+          bun apps/desktop/scripts/stage.ts "${stage_args[@]}"
+          bun run --cwd apps/desktop electron-builder --publish never ${{ matrix.arches }} -c.extraMetadata.version="$SEMVER"
+          shopt -s nullglob
+          mkdir -p apps/desktop/release/out
+          mv apps/desktop/release/*.{dmg,zip,exe,AppImage,deb} apps/desktop/release/out/
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: apps/desktop/release/out/*
+      - name: Upload desktop installers
+        shell: bash
+        run: gh release upload "$VERSION" apps/desktop/release/out/* --clobber
+
+  checksums:
+    name: Update SHA256SUMS
+    needs: [release, desktop]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - run: bun install --frozen-lockfile
-      - name: Package
-        run: bun run build:desktop
-        env:
-          MOB_BUILD_VERSION: ${{ needs.release.outputs.version }}
-      - name: Upload desktop installers
-        shell: bash
+      - name: Include desktop installers in SHA256SUMS
         run: |
-          shopt -s nullglob
-          files=(apps/desktop/release/*.{dmg,zip,exe,AppImage,deb})
-          gh release upload "$VERSION" "${files[@]}" --clobber
+          gh release view "$VERSION" --json assets \
+            --jq '.assets[] | select(.name != "SHA256SUMS" and ((.digest // "") | startswith("sha256:"))) | "\(.digest | sub("^sha256:"; ""))  \(.name)"' \
+            | LC_ALL=C sort -k2 > SHA256SUMS
+          test -s SHA256SUMS
+          gh release upload "$VERSION" SHA256SUMS --clobber

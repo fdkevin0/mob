@@ -43,12 +43,22 @@ machine. On Alpine and other musl systems the binary needs `libstdc++` and
 - **Windows**: `mob` is always that launcher, so it needs Node.js on your
   `PATH`. Use an archive below to run Mob without it.
 
+## Desktop app
+
+Installers for macOS (`arm64`, `x64`), Windows (`x64`) and Linux (`x64`,
+`arm64`) are on the [releases page](https://github.com/fdkevin0/mob/releases).
+Each bundles `mob` inside the Electron app so no separate CLI or Node.js
+installation is needed. See [Desktop app](features/desktop.md#install) for
+installation, upgrading and first-launch steps on macOS and Windows while builds
+are unsigned.
+
 ## Without npm
 
-Archives with the same binary are on the
-[releases page](https://github.com/fdkevin0/mob/releases): unpack one and put
-`mob` on your `PATH`. Each release lists `SHA256SUMS`, and
-`gh attestation verify ARCHIVE --repo fdkevin0/mob` checks where it was built.
+Archives with the same binary and desktop installers are on the
+[releases page](https://github.com/fdkevin0/mob/releases): unpack an archive and
+put `mob` on your `PATH`, or install the desktop package for your OS. Each
+release lists `SHA256SUMS`, and
+`gh attestation verify FILE --repo fdkevin0/mob` checks where either was built.
 To build from source, see [Contributing](../CONTRIBUTING.md).
 
 ## Troubleshooting

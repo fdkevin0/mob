@@ -1,4 +1,4 @@
-# Packages the window with the mob binary that scripts/stage.ts put in bin/.
+# Packages the window with the mob binary that scripts/stage.ts put in bin/<arch>/.
 appId: app.usemob.desktop
 productName: Mob
 executableName: mob-desktop
@@ -10,7 +10,7 @@ files:
   - dist/**
   - package.json
 extraResources:
-  - from: bin
+  - from: bin/${arch}
     to: bin
 mac:
   category: public.app-category.developer-tools

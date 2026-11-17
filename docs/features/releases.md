@@ -38,10 +38,12 @@ appear in the changelog; other commit types are left out.
   (amd64), plus `SHA256SUMS`. A musl build tells OpenTUI to load its musl
   library (`OPENTUI_LIBC`, set at build time). The release job installs
   every platform's native packages (`bun install --os='*' --cpu='*'`) so each
-  target finds them. The desktop app is built by the `desktop` job (see
-  [Desktop app](desktop.md)).
-- Both channels attest their archives with `actions/attest-build-provenance`,
-  verified with `gh attestation verify`.
+  target finds them. The `desktop` job packages those `mob` binaries into
+  Electron installers for Linux (`x64`, `arm64`), macOS (`x64`, `arm64`) and
+  Windows (`x64`) with the same SemVer version as npm, and `checksums` updates
+  `SHA256SUMS` to include them (see [Desktop app](desktop.md)).
+- Both channels attest their CLI archives and desktop installers with
+  `actions/attest-build-provenance`, verified with `gh attestation verify`.
 - With `--npm`, `scripts/release.ts` also writes the npm packages to
   `dist/npm`, and `scripts/npm/publish.ts` publishes them with provenance once
   the GitHub release exists. `usemob` holds the `mob` launcher
