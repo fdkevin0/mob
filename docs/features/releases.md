@@ -17,13 +17,15 @@ migration window, so old schema code does not stay in the tree forever.
 `.github/workflows/release.yml` runs once CI passes on a commit pushed to
 `main`:
 
-- **nightly**: the commit is published as a prerelease tagged `{date}.{sha}`,
-  never marked as the latest release. Nightly releases may be pruned.
+- **nightly**: any other commit is published as a prerelease tagged
+  `{date}.{sha}` (titled `Mob {date}.{sha} (nightly)`), never marked as the
+  latest release. Nightly releases may be pruned.
 - **stable**: [release-please](https://github.com/googleapis/release-please)
-  keeps one release PR open with the next `vX.Y.Z` and a `CHANGELOG.md` built
-  from the `type(scope):` commit messages, which are the titles of the
-  squash-merged pull requests. Merging it tags the release, which
-  becomes the latest one.
+  keeps one release PR (`chore(main): release X.Y.Z`) open, updating
+  `.release-please-manifest.json` (`"X.Y.Z"`) and `CHANGELOG.md` built from
+  the `type(scope):` commit messages, which are the titles of the
+  squash-merged pull requests. Merging it and passing CI creates the `vX.Y.Z`
+  tag and GitHub release, which becomes the latest one instead of a nightly.
 
 Stable releases start at `v0.1.0`. Below 1.0, a `feat` raises the minor version,
 a `fix`, `perf` or `revert` the patch version, and a breaking change (`!` or
@@ -56,8 +58,9 @@ appear in the changelog; other commit types are left out.
   Windows, or when install scripts are skipped, the launcher runs the binary
   with Node.js. A stable `vX.Y.Z` is published as `X.Y.Z` under
   the `latest` tag. A nightly is published under the `nightly` tag as a
-  prerelease of the next minor version, ordered by commit time, e.g.
-  `0.3.0-nightly.20261030220535.g5caa651`.
+  prerelease of the next minor version from `.release-please-manifest.json`,
+  ordered by UTC commit time, e.g.
+  `0.5.0-nightly.20261117133514.g20fac4c`.
   Installing them is described in [Install](../install.md).
 - An experimental workflow reports how much of the host
   [scriptc](https://github.com/vercel-labs/scriptc) can compile natively, after
