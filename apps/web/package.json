@@ -12,12 +12,12 @@
 		"check:runner": "bun scripts/check-runner.ts"
 	},
 	"dependencies": {
-		"@better-auth/passkey": "1.7.23",
-		"@lobehub/icons-static-svg": "1.102.0",
+		"@better-auth/passkey": "1.7.28",
+		"@lobehub/icons-static-svg": "1.106.0",
 		"@mob/app": "workspace:*",
 		"@mob/core": "workspace:*",
 		"@mob/ui": "workspace:*",
-		"better-auth": "1.7.23",
+		"better-auth": "1.7.28",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0"
 	},
@@ -28,7 +28,7 @@
 		"@mob/mob": "workspace:*",
 		"@tailwindcss/vite": "^4.3.3",
 		"@testing-library/react": "^16.3.3",
-		"@types/bun": "1.4.4",
+		"@types/bun": "1.4.5",
 		"@types/node": "^26.5.1",
 		"@types/react": "^19.3.0",
 		"@types/react-dom": "^19.3.0",
@@ -37,6 +37,6 @@
 		"tailwindcss": "^4.3.3",
 		"vite": "^8.3.0",
 		"vitest": "^5.0.0",
-		"wrangler": "4.162.0"
+		"wrangler": "4.168.0"
 	}
 }
